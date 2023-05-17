@@ -2,25 +2,52 @@
 
 conda create -n piqopiqo python~=3.11.0   
 
+digikam
+  Thumbs database https://www.digikam.org/about/features/
+  map view
+  Synchronized panning and zooming https://userbase.kde.org/Digikam/LightTable
+  color space
+Adobe Bridge
+
 - load folder => Thumbnails
 - Full Screen hi DPI
 - cache
-- configuration : zoom etapes > full ; cache config; clear cache
+
+- configuration : zoom etapes > full ; cache config; clear cache ; size Thumbnails
 - slideshow FS
 - sorting
-- size Thumbnails
+- list view
+- keyboard shortcuts
+
+- tool for comparing images  : Synchronized panning and zooming
+- selection : different modes (keep selected)
+- stacks
+
+
 - Docking dialogs
+- list of folders ; copy Adobe Bridge
+- favorites
+- open Gimp
+- Duplicate
+
 - read Exif => import into SQL Lite DB
 - config mapping
 - Metadata edition
 - Set Label or arbitrary fields
+- Filter
 - Edit EXIF / XMP => write into file
+- Tag tree
+- Tag path edition
+- tag replace batch
+- config tag format : , or ;
+
+- autodetect changes to meta
+
+- delta date
+
 - GPX
 - open KML or map / generate KML
-- Virtual folder => multiple folders edit
-- favorites
-- open Gimp
-- Duplicate
+- Virtual folder => multiple folders edit or specific photo files
 - Simple editing : rotate, crop ?, contrast, exposure (gegl), brightness
 - batch operations : + delete
 
