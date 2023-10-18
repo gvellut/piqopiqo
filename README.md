@@ -5,7 +5,7 @@ conda create -n piqopiqo python~=3.11.0
 digikam
   Thumbs database https://www.digikam.org/about/features/
   map view
-  Synchronized panning and zooming https://userbase.kde.org/Digikam/LightTable
+  Synchronized panning and zooming https://userbase.kde.org/Digikam/LightTable pour comparaison
   color space
 Adobe Bridge
 
@@ -75,3 +75,9 @@ Adobe Bridge
 
 - generer Slideshow video avec images Flickr + transitions + carte avec Google Earth Video
 - voir opensource video editor
+- cf http://ffdiaporama.tuxfamily.org/
+- voir si choix photo + video + enregistrement audio dans l'appli mais montage export vers Shortcut
+- voir si utiliser Audacity pour l'enregistrement audio ou montage : ou pyaudio
+
+- https://openclipart.org/
+- videoporama : https://www.videoporama.tuxfamily.org/
