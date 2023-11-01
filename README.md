@@ -2,6 +2,9 @@
 
 conda create -n piqopiqo python~=3.11.0   
 
+PyExifTool
+
+
 digikam
   Thumbs database https://www.digikam.org/about/features/
   map view
@@ -9,9 +12,12 @@ digikam
   color space
 Adobe Bridge
 
-- load folder => Thumbnails
-- Full Screen hi DPI
-- cache
+- load folder command line => Thumbnails
+- View image Full Screen hi DPI support
+  - shortcuts
+- zoom image until full resolution
+  - shortcuts
+- thumbnail cache
 
 - configuration : zoom etapes > full ; cache config; clear cache ; size Thumbnails
 - slideshow FS
