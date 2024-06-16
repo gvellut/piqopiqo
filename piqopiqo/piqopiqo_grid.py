@@ -22,6 +22,14 @@ IMAGE_SIZE = QSize(300, 200)
 
 TITLE = "PiqoPiqo"
 
+# https://stackoverflow.com/a/13184390
+
+# Optimize grid layout + scrollbar area
+# https://forum.qt.io/topic/137658/table-with-large-amount-of-widgets-100-000/6
+
+# Hi DPI
+
+
 # setup logging
 logging.basicConfig(
     level=logging.DEBUG,

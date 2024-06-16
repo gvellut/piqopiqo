@@ -14,11 +14,11 @@ Adobe Bridge
 
 https://doc.qt.io/qtforpython-5/overviews/qtwidgets-widgets-imageviewer-example.html
 https://github.com/shkolovy/simple-photo-editor
+https://github.com/ap193uee/PyQt-Image-Viewer
 
 
 - load folder command line => Thumbnails
   - optimize : show only visible
-https://www.pythonguis.com/faq/file-image-browser-app-with-thumbnails/
 - View image Full Screen hi DPI support
   - shortcuts : using space
 - thumbnail cache
@@ -39,8 +39,19 @@ EXIF:
   - for the flicker upload tool to work
   - or update the tool to read inside SQL Liste DB outside photos
 
+HiDPI
+https://doc.qt.io/qt-6/highdpi.html
+  https://doc.qt.io/qt-6/qpainter.html#drawing-high-resolution-versions-of-pixmaps-and-images
+
 - test pyside6-deploy
  voir https://pypi.org/project/hatchling/
+ set CFBundleName (or maybe as arg to BUNDLE) :
+ app = BUNDLE(
+    ...
+    info_plist={
+      "NSBluetoothAlwaysUsageDescription": "I want your bluetooth and I want it now",
+   },
+)
 
 - zoom image until full resolution
   - shortcuts
