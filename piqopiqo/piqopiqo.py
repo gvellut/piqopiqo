@@ -1,7 +1,10 @@
 import random
 import sys
 
+import click
 from PySide6 import QtCore, QtWidgets
+
+DIR_PATH = "/Volumes/CrucialX8/__test/piqopiqo"
 
 
 class MyWidget(QtWidgets.QWidget):
@@ -24,7 +27,14 @@ class MyWidget(QtWidgets.QWidget):
         self.text.setText(random.choice(self.hello))
 
 
-if __name__ == "__main__":
+@click.command()
+@click.option(
+    "-f",
+    "--folder",
+    "dir_path",
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+)
+def main(dir_path):
     app = QtWidgets.QApplication([])
 
     widget = MyWidget()
@@ -32,3 +42,7 @@ if __name__ == "__main__":
     widget.show()
 
     sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

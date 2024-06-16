@@ -1,9 +1,8 @@
 # piqopiqo
 
-conda create -n piqopiqo python~=3.11.0   
+micromamba create -n piqopiqo_312 python~=3.12.0
 
-PyExifTool
-
+PyExifTool ?
 
 digikam
   Thumbs database https://www.digikam.org/about/features/
@@ -12,40 +11,77 @@ digikam
   color space
 Adobe Bridge
 
+
+https://doc.qt.io/qtforpython-5/overviews/qtwidgets-widgets-imageviewer-example.html
+https://github.com/shkolovy/simple-photo-editor
+
+
 - load folder command line => Thumbnails
+  - optimize : show only visible
+https://www.pythonguis.com/faq/file-image-browser-app-with-thumbnails/
 - View image Full Screen hi DPI support
-  - shortcuts
-- zoom image until full resolution
-  - shortcuts
+  - shortcuts : using space
 - thumbnail cache
 
-- configuration : zoom etapes > full ; cache config; clear cache ; size Thumbnails
-- slideshow FS
-- sorting
-- list view
-- keyboard shortcuts
+- Read EXIF including XMP
+    - start with the date original only
+- write exif data in DB SQL lite outside
+  - centralized location
+
+- labels + display colors : assign labels
+- shortcuts : use layout independent keys
+https://stackoverflow.com/questions/76889721/how-can-i-get-the-key-without-modifiers-on-keypressevent-in-qt
+
+EXIF:
+- display in widget
+- edit exif data
+- write exif data in file (optional)
+  - for the flicker upload tool to work
+  - or update the tool to read inside SQL Liste DB outside photos
+
+- test pyside6-deploy
+ voir https://pypi.org/project/hatchling/
+
+- zoom image until full resolution
+  - shortcuts
+- pan image
+QGraphicsView ?
+https://doc.qt.io/qt-6/examples-graphicsview.html
+https://svenssonjoel.github.io/pages/qt_game_loadimage/index.html
+- ou QScrollBar to start with
+
+- size of thumbnails
+
+- Docking dialogs
+- navigate folders : show directories
+- open menu
+- favorites
+- list of folders ; copy Adobe Bridge
+
+- open Gimp
+- Duplicate
+
+- sorting (other than by date original)
+- filtering
+
+Keywords management:
+- Tag tree
+- Tag path edition
+- tag replace batch
+
+- configuration
+  - keyboard shortcuts
+  - list of labels
+  - cache parameters : location, size, generation, parallel processes
+  
+  - zoom etapes > full ; cache config; clear cache ; size Thumbnails
+  - config tag format : , or ;
+
 
 - tool for comparing images  : Synchronized panning and zooming
 - selection : different modes (keep selected)
 - stacks
 
-
-- Docking dialogs
-- list of folders ; copy Adobe Bridge
-- favorites
-- open Gimp
-- Duplicate
-
-- read Exif => import into SQL Lite DB
-- config mapping
-- Metadata edition
-- Set Label or arbitrary fields
-- Filter
-- Edit EXIF / XMP => write into file
-- Tag tree
-- Tag path edition
-- tag replace batch
-- config tag format : , or ;
 
 - autodetect changes to meta
 
