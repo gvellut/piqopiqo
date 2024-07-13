@@ -17,8 +17,13 @@ https://github.com/shkolovy/simple-photo-editor
 https://github.com/ap193uee/PyQt-Image-Viewer
 
 
+https://stackoverflow.com/questions/42673010/how-to-correctly-load-images-asynchronously-in-pyqt5
+
+Borders
+https://doc.qt.io/qt-6/qml-qtquick-controls-frame.html
+
 - load folder command line => Thumbnails
-  - optimize : show only visible
+  - optimize : show only visible    
 - View image Full Screen hi DPI support
   - shortcuts : using space
 - thumbnail cache
