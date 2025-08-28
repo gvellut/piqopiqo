@@ -37,5 +37,10 @@ This repository contains the source code for "Piqopiqo", a native macOS photo br
     -   Follow standard `rustfmt` for Rust and `swift-format` for Swift.
     -   Write clear comments, especially for `unsafe` blocks in Rust and Swift that deal with the FFI boundary.
 
-8. **Ignore**
+8. **Ignore and don't**
     -   Completely disregard the py_test folder, prompts folder and the NOTES.md file
+    -   don't use node or npx ever
+
+9. **Versions**
+    -   Use Rust 2024 (do not change to Rust 2021)
+    -   Use Swift 6.2

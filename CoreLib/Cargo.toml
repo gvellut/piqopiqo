@@ -3,4 +3,12 @@ name = "core_lib"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "core_lib"
+crate-type = ["staticlib"]
+
 [dependencies]
+
+
+[build-dependencies]
+cbindgen = "0.29.0"
