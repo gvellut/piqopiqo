@@ -13,15 +13,20 @@ let package = Package(
     ],
     targets: [
         .systemLibrary(
-            name: "RustBridge",
-            path: "Sources/GuiApp/RustBridge",
+            name: "CRustCore",
+            path: "Sources/CRustCore",
             pkgConfig: nil,
             providers: []
+        ),
+        .target(
+            name: "RustBridge",
+            dependencies: ["CRustCore"],
+            path: "Sources/RustBridge"
         ),
         .executableTarget(
             name: "GuiApp",
             dependencies: ["RustBridge"],
-            path: "Sources/GuiApp"
+            path: "Sources/App"
         )
     ]
 )

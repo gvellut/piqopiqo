@@ -12,7 +12,7 @@ const GREETING: &[u8] = b"Hello from Rust!\0";
 /// # Safety
 /// The returned pointer is valid for the lifetime of the program and must not
 /// be freed. It points to immutable memory containing a NUL-terminated string.
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub unsafe extern "C" fn hello_from_rust() -> *const c_char {
     GREETING.as_ptr() as *const c_char
 }
