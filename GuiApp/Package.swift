@@ -24,7 +24,10 @@ let package = Package(
             path: "Sources/RustBridge",
             linkerSettings: [
                 .linkedLibrary("core_lib"),
-                .unsafeFlags(["-L", "../CoreLib/target/debug"])
+                // Link against the release build of the Rust library
+                .unsafeFlags(["-L", "../CoreLib/target/release"], .when(configuration: .release)),
+                // Link against the debug build of the Rust library
+                .unsafeFlags(["-L", "../CoreLib/target/debug"], .when(configuration: .debug))
             ]
         ),
         .executableTarget(

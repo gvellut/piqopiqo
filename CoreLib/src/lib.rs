@@ -3,7 +3,6 @@ use std::os::raw::c_char;
 
 /// The greeting message shared between the safe and unsafe functions.
 /// It includes a NUL terminator for C-compatibility.
-#[cfg_attr(cbindgen, cbindgen(skip))]
 const GREETING: &[u8] = b"Hello from Rust!\0";
 
 /// Returns a pointer to a null-terminated static C string "Hello from Rust!".

@@ -15,5 +15,5 @@ fn main() {
         .with_config(config)
         .generate()
         .expect("Unable to generate bindings")
-        .write_to_file("core_lib.h");
+        .write_to_file("../GuiApp/Sources/CBindings/core_lib.h");
 }
