@@ -44,3 +44,6 @@ This repository contains the source code for "Piqopiqo", a native macOS photo br
 9. **Versions**
     -   Use Rust 2024 (do not change to Rust 2021)
     -   Use Swift 6.2
+
+10. **Rust**
+    -   Do not use async. Use threads only.
