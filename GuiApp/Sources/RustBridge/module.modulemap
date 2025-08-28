@@ -1,4 +1,4 @@
-module RustBridge {
+module CRustCore {
     header "core_lib.h"
     export *
 }
