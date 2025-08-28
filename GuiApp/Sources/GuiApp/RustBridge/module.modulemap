@@ -1,0 +1,4 @@
+module RustBridge {
+    header "core_lib.h"
+    export *
+}

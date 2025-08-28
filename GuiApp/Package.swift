@@ -12,9 +12,16 @@ let package = Package(
     dependencies: [
     ],
     targets: [
+        .systemLibrary(
+            name: "RustBridge",
+            path: "Sources/GuiApp/RustBridge",
+            pkgConfig: nil,
+            providers: []
+        ),
         .executableTarget(
             name: "GuiApp",
-            path: "Sources"
+            dependencies: ["RustBridge"],
+            path: "Sources/GuiApp"
         )
     ]
 )
