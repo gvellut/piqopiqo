@@ -5,6 +5,7 @@ fn main() {
 
     println!("cargo:rerun-if-changed=src/lib.rs");
     println!("cargo:rerun-if-changed=cbindgen.toml");
+    println!("cargo:rustc-check-cfg=cfg(cbindgen)");
 
     let config =
         cbindgen::Config::from_file("cbindgen.toml").expect("Failed to read cbindgen.toml");
