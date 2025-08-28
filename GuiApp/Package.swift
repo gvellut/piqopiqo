@@ -13,15 +13,19 @@ let package = Package(
     ],
     targets: [
         .systemLibrary(
-            name: "CRustCore",
-            path: "Sources/CRustCore",
+            name: "CBindings",
+            path: "Sources/CBindings",
             pkgConfig: nil,
             providers: []
         ),
         .target(
             name: "RustBridge",
-            dependencies: ["CRustCore"],
-            path: "Sources/RustBridge"
+            dependencies: ["CBindings"],
+            path: "Sources/RustBridge",
+            linkerSettings: [
+                .linkedLibrary("core_lib"),
+                .unsafeFlags(["-L", "../CoreLib/target/debug"])
+            ]
         ),
         .executableTarget(
             name: "GuiApp",
