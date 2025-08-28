@@ -18,7 +18,7 @@ SWIFT_EXE_NAME="GuiApp"
 FINAL_EXE_NAME="Piqopiqo" # Conventionally, the executable matches the app name
 
 # The final location of the app bundle will be in the root of the project
-APP_PATH="./$APP_NAME"
+APP_PATH="./release/$APP_NAME"
 TARGET_EXE_PATH="$APP_PATH/Contents/MacOS/$FINAL_EXE_NAME"
 
 echo "--- Creating .app bundle structure for $APP_NAME ---"
