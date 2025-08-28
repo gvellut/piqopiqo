@@ -1,0 +1,67 @@
+For now rephrase all this and give detailed instructions of what should be created and how. Detail the libraries and the build system. I will pass this to a local agent on my machine so you should give enough instructions to make it complete my instructions.
+
+For things that I have marked "for later", don't  mention them in the instruction I will pass to the agent. These are just for you to tell me if not possible or choices to be made.
+
+If you see problems : If there are things that should be decided, mention them, tell me why and give a few pros/cons. If things are simply not possible, tell me also. Start with the problems you see, I will tell you if I need more details and when to output the final instructions. Do not output them yet.
+
+
+My goal is to write a replacement for Adobe Bridge https://www.adobe.com/products/bridge.html to use inside macOS only. But it will only have a subset of functionalities :
+- the GUI and main program will be programmed in Swift for macOS with the mac API's (no cross-platform)
+- the processing will be a Rust library. The GUI in Swift will need to call that library to perform processing and access the files (original or cached) or metadata for display, acess the configuration, file deletion. ie most things that are not purely about the GUI.
+- On launch, the program will open a folder and see thumbnails of photos (JPEG, PNG)
+    - RAW and movie files are out of scope
+    - that folder will be passed as argument to the main program
+- the GUI will include multiple panels : the central panel will be a scollable grid of thumbnails (the Grid View), with some data about the image below : filename, data created (in the file system)
+    - The grid will split the width of the panel into a predetermined number of columns (for now fixed, but later changeable by the user)
+    - A cell in the Grid will have a fixed (in the configuration) horizontal padding => using the available width of the panel, that padding and the number of columns : a pixel size available for the thumbnail will be computed
+    - The available height for the space image will be the same as the width. The image will be vertically and horizonally centered so it may not take all the availabe space
+    - There will vertical padding (identical to the horizontal padding)
+    - there can be space below the thumbnail for data about the image : that space will the same for all the images. If the filename (for example) is too big, the program will uses ellipsis to cut it
+    - so a cell will have top padding, image diplayed with a certain height, a fixed space with the metadata, the metadata, then bottom padding
+    - Based on the available height of the Grid View, this will give a computed number of lines for the grid to display the rows in full : There should be some space left : the space available for the height of the images will be increased equally for all rows
+    - you must write pseudo python-code of the computation of the height and width based on the parameters (number of columns, padding, line size for the data, number of pieces of data)
+- the Grid will initially sort by file name ascending
+- The program will initially use the Rust library to pregenerate the the thumbnails as fast as possible (with a set number of threads set in the configuration). The max dimension (max width or max height) will be 1024 px (defined in configuration)
+    - a folder will be defined in the configuration for storing those thumbnails
+- There can be a large number (1000's) of images in a folder so care must be taken to optimize the rendering, both of the thumbnails and the texts below the images (ie not in the render tree at once, but only the necessary ones based on the scrolling)
+- The configuration will need to be a structure with values defined in Rust code for easy changing. It will be accessible from Swift through an API in Rust.
+- a cell of the grid can be selected with the mouse.
+    - that selection can be changed using the arrow keys 
+- another panel on the right will include some data of the image in the file system like filename, date created, date modified (that list of fields to show must be set in the configuration : so can be only filename in it)
+    - the panel will show the field names + a field value (empty if field not there or empty). The value must be formatted suitably (for example date in YYYY/MM/DD HH:MM:SS but this should be sewt in the hardcoded configuration)
+    - there will be other fields for the images later (from EXIF, XMP, ITPC) so make sure to indicate the origin of the data (filesystem) in the configuration structure
+    - that data will be read by Rust library. You will need to mention the 
+- The 2 panel widths can be resized with dragging the border (indicate the name for that GUI pattern)
+
+
+You will need to create the structure of the project : Swift GUI, Rust library and make sure they interoperate.  Ignore the py_test, prompts and .github folders in this project. You will need to setup a debug build system and launch config in launch.json (create if needed) + release build. Create tests for the Rust library. 
+
+The Swift project will not be worked on with XCode at all but with VSCode so build with SwiftPM and command-line and or VSCode (using Swift Extension). Use GUI definition that can be modified and compiled without XCode. For the Rust, a cargo project can be used.
+
+
+
+
+
+
+- sort automatically by EXIF date created or file name (in the file system)
+    - possibly sort manually by drag and dropping a photos
+- The GUI will offer a panel to see and modified EXIF tags of the image: If an image is selected with the mouse, or the arrow keys are used to select an image, the data shown will apply to that image:
+    - see the EXIF data : base EXIF, IPTC, Geo, XMP, more fields
+        - a subset is sufficient : the ones that are included after shooting with a digital photo camera
+    - a way to edit the EXIF data in 2 ways :
+        - first : a way to store them OUTSIDE the image, ie a SQLlite database (for example) that will refer to images in a certain folder and include either all the EXIF data (exported, possibly modified), or just the data that was modified by the user => the full data wil be a merge of the EXIF data in the image AND the data in the external database
+        - second : a way to write that external metadata inside the image files => this is not a core requirements. However, I need to know if libraries are available for that
+        - this is different from Adobe Bridge which writes the EXIF directly into the files (no outside database).
+    - multiple images can be selected in 
+- the program will have a way to view an image as full screen by pressing a shortcut (space by default)
+
+ title, description, label, other EXIF metadata 
+ - another panel will include EXIF tags of the image: If an image is selected with the mouse or with the arrow keys : that panel will show them :
+    - for now, only some of the base EXIF, IPTC, Geo amd XMP tags will need to be shown. Define in the spec a small subset (but include "Date Time Original", title, description, keyword, camera model, lens model, focal, aperture, shutter speed)
+        - the list of fields to show will be listed in the configuration
+        - it will also show some data of the image in the file system like filename, date create, date modified (that list of fields must also be listed in the configuration)
+        - the origin of the metadata (exif, IPTC, geo, XMP, File system) must be clear (for example use a prefix ie "fs:..." or have multiple parts for the origin of the field) in the list of fields to display
+    - the panel will show the field names + a field value (empty if field not there or empty) separated into sections
+    - can you get the field names + technical field names (for access through EXIF library) from a library : or must the names be defined separately : if separately, there must be a structure with all the known posibble fields (with the configuration a subset of references to them)
+    - those tags will be access through the Rust library
+    - mention the exif libraries you intend to use.
