@@ -1,6 +1,5 @@
 /test/
 /*.epub
-.vscode
 .python-version
 cover.jpg
 __pycache__

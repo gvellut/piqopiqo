@@ -1,0 +1,13 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:piqopiqo}/GuiApp",
+            "name": "Debug GuiApp (GuiApp)",
+            "program": "${workspaceFolder:piqopiqo}/GuiApp/.build/debug/GuiApp",
+            "preLaunchTask": "swift-build"
+        }
+    ]
+}
