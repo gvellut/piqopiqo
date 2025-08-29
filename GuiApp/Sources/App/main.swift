@@ -1,12 +1,10 @@
 import AppKit
 
-// import RustBridge
-
-// Custom AppKit view to replace the SwiftUI ContentView
 class MainView: NSView {
-    private var splitView: NSSplitView!
+    private(set) var splitView: NSSplitView!
     private var leftPanel: NSView!
     private var rightPanel: NSView!
+    private let splitAutosaveKey = "NSSplitView Subview Frames MainSplitView"
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -22,14 +20,12 @@ class MainView: NSView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 
-        // Create the split view
         splitView = NSSplitView()
-        splitView.isVertical = true  // Horizontal split (vertical divider)
+        splitView.isVertical = true
         splitView.dividerStyle = .thin
         splitView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(splitView)
 
-        // Create left panel (Grid Panel)
         leftPanel = NSView()
         leftPanel.wantsLayer = true
         leftPanel.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
@@ -40,7 +36,6 @@ class MainView: NSView {
         gridLabel.translatesAutoresizingMaskIntoConstraints = false
         leftPanel.addSubview(gridLabel)
 
-        // Create right panel (Detail Panel)
         rightPanel = NSView()
         rightPanel.wantsLayer = true
         rightPanel.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
@@ -51,37 +46,30 @@ class MainView: NSView {
         detailLabel.translatesAutoresizingMaskIntoConstraints = false
         rightPanel.addSubview(detailLabel)
 
-        // Add placeholder for Rust message to right panel
-        // let rustMessage = RustFFI.getGreetingFromRust()
         let rustLabel = NSTextField(labelWithString: "Rust integration pending...")
         rustLabel.font = NSFont.systemFont(ofSize: 12)
         rustLabel.alignment = .center
-        rustLabel.backgroundColor = NSColor.lightGray.withAlphaComponent(0.1)
         rustLabel.isBordered = false
         rustLabel.isEditable = false
         rustLabel.translatesAutoresizingMaskIntoConstraints = false
         rightPanel.addSubview(rustLabel)
 
-        // Add panels to split view
+        // Add subviews BEFORE assigning autosaveName so NSSplitView can restore them.
         splitView.addArrangedSubview(leftPanel)
         splitView.addArrangedSubview(rightPanel)
 
-        // Set up constraints for split view
+        // Now enable autosave.
+        splitView.autosaveName = "MainSplitView"
+
         NSLayoutConstraint.activate([
             splitView.topAnchor.constraint(equalTo: topAnchor),
             splitView.leadingAnchor.constraint(equalTo: leadingAnchor),
             splitView.trailingAnchor.constraint(equalTo: trailingAnchor),
             splitView.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
 
-        // Set up constraints for grid label in left panel
-        NSLayoutConstraint.activate([
             gridLabel.centerXAnchor.constraint(equalTo: leftPanel.centerXAnchor),
             gridLabel.centerYAnchor.constraint(equalTo: leftPanel.centerYAnchor),
-        ])
 
-        // Set up constraints for detail label and rust message in right panel
-        NSLayoutConstraint.activate([
             detailLabel.centerXAnchor.constraint(equalTo: rightPanel.centerXAnchor),
             detailLabel.centerYAnchor.constraint(equalTo: rightPanel.centerYAnchor, constant: -20),
 
@@ -93,75 +81,95 @@ class MainView: NSView {
                 lessThanOrEqualTo: rightPanel.trailingAnchor, constant: -10),
         ])
 
-        // Set minimum and maximum widths for panels
         leftPanel.widthAnchor.constraint(greaterThanOrEqualToConstant: 500).isActive = true
         rightPanel.widthAnchor.constraint(greaterThanOrEqualToConstant: 200).isActive = true
         rightPanel.widthAnchor.constraint(lessThanOrEqualToConstant: 400).isActive = true
-
-        // Set initial split position (approximately 70% left, 30% right)
-        splitView.setPosition(700, ofDividerAt: 0)
-    }
-}  // Create a delegate to handle the application's lifecycle events
-class AppDelegate: NSObject, NSApplicationDelegate {
-    var window: NSWindow!
-
-    func applicationDidFinishLaunching(_ aNotification: Notification) {
-        // Create the menu bar
-        let mainMenu = NSMenu()
-        NSApp.mainMenu = mainMenu
-
-        // Create the application menu
-        let appMenuItem = NSMenuItem()
-        mainMenu.addItem(appMenuItem)
-
-        let appMenu = NSMenu()
-        appMenuItem.submenu = appMenu
-
-        // Add a "Quit" item
-        let quitItem = NSMenuItem(
-            title: "Quit Piqopiqo", action: #selector(NSApplication.terminate(_:)),
-            keyEquivalent: "q")
-        appMenu.addItem(quitItem)
-
-        // Get screen dimensions for maximized window (minus menu bar and dock)
-        guard let screen = NSScreen.main else { return }
-        let screenFrame = screen.visibleFrame  // This excludes the menu bar and dock
-
-        // Create the window to fill the available screen space
-        window = NSWindow(
-            contentRect: screenFrame,
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered, defer: false)
-        window.title = "Piqopiqo Photo Browser"
-        window.setFrameAutosaveName("Main Window")
-        window.minSize = NSSize(width: 800, height: 600)
-
-        // Use our custom AppKit view instead of SwiftUI
-        window.contentView = MainView()
-
-        // Set the window frame to fill the visible screen area
-        window.setFrame(screenFrame, display: true)
-
-        window.makeKeyAndOrderFront(nil)
-
-        // Force the application to the foreground
-        NSApp.activate(ignoringOtherApps: true)
     }
 
-    func applicationWillTerminate(_ aNotification: Notification) {
-        // Insert code here to tear down your application
-    }
-
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        return true
+    /// Call after the view is in a window & laid out.
+    func restoreOrInitializeDivider() {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: splitAutosaveKey) == nil {
+            // First launch (no saved frames) — set an initial position once layout done.
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                // 700pt left if possible, else 2/3 of width.
+                let fallback = self.bounds.width * 0.66
+                let target = min(max(500, fallback), self.bounds.width - 200)
+                self.splitView.setPosition(target, ofDividerAt: 0)
+            }
+        }
+        // If there IS saved state, NSSplitView already applied it when autosaveName was set
+        // (after subviews were added). No manual action needed.
     }
 }
 
-// Manually create and run the application
+class AppDelegate: NSObject, NSApplicationDelegate {
+    var window: NSWindow!
+    private var mainView: MainView!
+
+    private func buildMainMenu() {
+        let mainMenu = NSMenu()
+        let appItem = NSMenuItem()
+        mainMenu.addItem(appItem)
+
+        let appMenu = NSMenu()
+        let appName = "Piqopiqo"
+
+        appMenu.addItem(
+            withTitle: "About \(appName)",
+            action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+            keyEquivalent: "")
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(
+            withTitle: "Quit \(appName)",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q")
+
+        appItem.submenu = appMenu
+        NSApp.mainMenu = mainMenu
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        buildMainMenu()
+
+        let screenFrame =
+            NSScreen.main?.visibleFrame ?? NSRect(x: 200, y: 200, width: 1200, height: 800)
+
+        let defaultRect = NSRect(
+            x: screenFrame.origin.x,
+            y: screenFrame.origin.y,
+            width: min(screenFrame.width, 1600),
+            height: min(screenFrame.height, 1000))
+
+        window = NSWindow(
+            contentRect: defaultRect,
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false)
+
+        window.title = "Piqopiqo Photo Browser"
+        window.minSize = NSSize(width: 900, height: 600)
+        window.setFrameAutosaveName("MainWindow")
+        _ = window.setFrameUsingName("MainWindow")  // ignore result; defaultRect already set
+
+        mainView = MainView()
+        window.contentView = mainView
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+
+        // Defer restoration until layout pass is done.
+        DispatchQueue.main.async { [weak self] in
+            self?.mainView.restoreOrInitializeDivider()
+        }
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+}
+
 let delegate = AppDelegate()
 NSApplication.shared.delegate = delegate
-
-// Set the activation policy to make this a regular app
 NSApp.setActivationPolicy(.regular)
-
 NSApplication.shared.run()
