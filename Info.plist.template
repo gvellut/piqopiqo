@@ -5,13 +5,13 @@
     <key>CFBundleExecutable</key>
     <string>__FINAL_EXE_NAME__</string>
     <key>CFBundleIdentifier</key>
-    <string>com.yourcompany.piqopiqo</string>
+    <string>__BUNDLE_ID__</string>
     <key>CFBundleName</key>
     <string>__APP_NAME__</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>__APP_VERSION__</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
@@ -20,5 +20,10 @@
     <string>NSApplication</string>
     <key>NSMainNibFile</key>
     <string></string>
+    <!-- Privacy usage descriptions -->
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>Piqopiqo is a photo browser that will need access to your photo folders to display and organize images.</string>
+    <key>NSFileProviderPresenceUsageDescription</key>
+    <string>Piqopiqo accesses image files to generate thumbnails and display metadata.</string>
 </dict>
 </plist>

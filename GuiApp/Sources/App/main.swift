@@ -1,10 +1,12 @@
 import AppKit
-import RustBridge
+
+// import RustBridge
 
 // Custom AppKit view to replace the SwiftUI ContentView
 class MainView: NSView {
-    private var titleLabel: NSTextField!
-    private var rustLabel: NSTextField!
+    private var splitView: NSSplitView!
+    private var leftPanel: NSView!
+    private var rightPanel: NSView!
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -18,44 +20,88 @@ class MainView: NSView {
 
     private func setupUI() {
         wantsLayer = true
-        layer?.backgroundColor = NSColor.white.cgColor
+        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 
-        // Title label
-        titleLabel = NSTextField(labelWithString: "Piqopiqo Photo Browser")
-        titleLabel.font = NSFont.systemFont(ofSize: 24, weight: .bold)
-        titleLabel.alignment = .center
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(titleLabel)
+        // Create the split view
+        splitView = NSSplitView()
+        splitView.isVertical = true  // Horizontal split (vertical divider)
+        splitView.dividerStyle = .thin
+        splitView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(splitView)
 
-        // Rust message label
-        let rustMessage = RustFFI.getGreetingFromRust()
-        rustLabel = NSTextField(labelWithString: "Rust says: \(rustMessage)")
-        rustLabel.font = NSFont.systemFont(ofSize: 16)
+        // Create left panel (Grid Panel)
+        leftPanel = NSView()
+        leftPanel.wantsLayer = true
+        leftPanel.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+
+        let gridLabel = NSTextField(labelWithString: "Grid Panel")
+        gridLabel.font = NSFont.systemFont(ofSize: 18, weight: .medium)
+        gridLabel.alignment = .center
+        gridLabel.translatesAutoresizingMaskIntoConstraints = false
+        leftPanel.addSubview(gridLabel)
+
+        // Create right panel (Detail Panel)
+        rightPanel = NSView()
+        rightPanel.wantsLayer = true
+        rightPanel.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+
+        let detailLabel = NSTextField(labelWithString: "Detail Panel")
+        detailLabel.font = NSFont.systemFont(ofSize: 18, weight: .medium)
+        detailLabel.alignment = .center
+        detailLabel.translatesAutoresizingMaskIntoConstraints = false
+        rightPanel.addSubview(detailLabel)
+
+        // Add placeholder for Rust message to right panel
+        // let rustMessage = RustFFI.getGreetingFromRust()
+        let rustLabel = NSTextField(labelWithString: "Rust integration pending...")
+        rustLabel.font = NSFont.systemFont(ofSize: 12)
         rustLabel.alignment = .center
         rustLabel.backgroundColor = NSColor.lightGray.withAlphaComponent(0.1)
         rustLabel.isBordered = false
         rustLabel.isEditable = false
         rustLabel.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(rustLabel)
+        rightPanel.addSubview(rustLabel)
 
-        // Set up constraints
+        // Add panels to split view
+        splitView.addArrangedSubview(leftPanel)
+        splitView.addArrangedSubview(rightPanel)
+
+        // Set up constraints for split view
         NSLayoutConstraint.activate([
-            // Title label constraints
-            titleLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
-            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 50),
-            titleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 20),
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -20),
-
-            // Rust label constraints
-            rustLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
-            rustLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 30),
-            rustLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 20),
-            rustLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -20),
+            splitView.topAnchor.constraint(equalTo: topAnchor),
+            splitView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            splitView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            splitView.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
-    }
-}
 
-// Create a delegate to handle the application's lifecycle events
+        // Set up constraints for grid label in left panel
+        NSLayoutConstraint.activate([
+            gridLabel.centerXAnchor.constraint(equalTo: leftPanel.centerXAnchor),
+            gridLabel.centerYAnchor.constraint(equalTo: leftPanel.centerYAnchor),
+        ])
+
+        // Set up constraints for detail label and rust message in right panel
+        NSLayoutConstraint.activate([
+            detailLabel.centerXAnchor.constraint(equalTo: rightPanel.centerXAnchor),
+            detailLabel.centerYAnchor.constraint(equalTo: rightPanel.centerYAnchor, constant: -20),
+
+            rustLabel.centerXAnchor.constraint(equalTo: rightPanel.centerXAnchor),
+            rustLabel.topAnchor.constraint(equalTo: detailLabel.bottomAnchor, constant: 20),
+            rustLabel.leadingAnchor.constraint(
+                greaterThanOrEqualTo: rightPanel.leadingAnchor, constant: 10),
+            rustLabel.trailingAnchor.constraint(
+                lessThanOrEqualTo: rightPanel.trailingAnchor, constant: -10),
+        ])
+
+        // Set minimum and maximum widths for panels
+        leftPanel.widthAnchor.constraint(greaterThanOrEqualToConstant: 500).isActive = true
+        rightPanel.widthAnchor.constraint(greaterThanOrEqualToConstant: 200).isActive = true
+        rightPanel.widthAnchor.constraint(lessThanOrEqualToConstant: 400).isActive = true
+
+        // Set initial split position (approximately 70% left, 30% right)
+        splitView.setPosition(700, ofDividerAt: 0)
+    }
+}  // Create a delegate to handle the application's lifecycle events
 class AppDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow!
 
@@ -77,16 +123,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: "q")
         appMenu.addItem(quitItem)
 
-        // Create the window and set its content
+        // Get screen dimensions for maximized window (minus menu bar and dock)
+        guard let screen = NSScreen.main else { return }
+        let screenFrame = screen.visibleFrame  // This excludes the menu bar and dock
+
+        // Create the window to fill the available screen space
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 400),
+            contentRect: screenFrame,
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
-        window.center()
+        window.title = "Piqopiqo Photo Browser"
         window.setFrameAutosaveName("Main Window")
+        window.minSize = NSSize(width: 800, height: 600)
 
         // Use our custom AppKit view instead of SwiftUI
         window.contentView = MainView()
+
+        // Set the window frame to fill the visible screen area
+        window.setFrame(screenFrame, display: true)
 
         window.makeKeyAndOrderFront(nil)
 

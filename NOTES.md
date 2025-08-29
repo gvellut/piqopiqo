@@ -145,3 +145,6 @@ Keywords management:
 Exif :
 https://github.com/photostructure/exif-oxide
 https://crates.io/crates/exiftool
+
+
+See https://github.com/chinedufn/swift-bridge?tab=readme-ov-file

@@ -134,10 +134,11 @@ The Swift project now has the necessary structure to find the C header and link 
 ### **Prompt 6: Implement Basic SwiftUI Layout**
 
 **Instructions:**
-1.  In `GuiApp/Sources/GuiApp/Views/ContentView.swift`, replace the current `Text` view.
-2.  Implement a two-panel layout using `HSplitView`.
-3.  The left panel should be a placeholder for the grid view. Give it a `minWidth` of 300. For now, it can just contain `Text("Grid Panel")`.
-4.  The right panel will be for details. Give it a `minWidth` of 200 and a `maxWidth` of 400. It can contain `Text("Detail Panel")`.
+1.  In `GuiApp/Sources/GuiApp/Views/ContentView.swift`, replace the current text view.
+2.  Implement a two-panel layout with a draggable divider.
+3.  The left panel should be a placeholder for the grid view. Give it a `minWidth` of 500. For now, it can just contain a text "Grid Panel".
+4.  The right panel will be for details. Give it a `minWidth` of 200 and a `maxWidth` of 400. It can contain a text "Detail Panel".
+5.  Open the main window to take the full screen (with menu bar visible). Make sure the panels width scale accordingly
 
 **Success Condition:**
 The application launches showing a window with two horizontally arranged panels separated by a draggable divider.

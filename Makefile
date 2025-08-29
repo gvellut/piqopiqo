@@ -5,6 +5,8 @@ APP_NAME = Piqopiqo
 FINAL_EXE_NAME = Piqopiqo
 RELEASE_DIR = release
 APP_BUNDLE = $(RELEASE_DIR)/$(APP_NAME).app
+BUNDLE_ID = com.yourcompany.piqopiqo
+APP_VERSION = 1.0.0
 
 # Build configuration (debug or release)
 BUILD_MODE ?= release
@@ -71,6 +73,8 @@ $(APP_BUNDLE): $(SWIFT_EXE)
 	@cp $(SWIFT_EXE) $(BUNDLE_EXE)
 	@sed -e 's/__APP_NAME__/$(APP_NAME)/g' \
 	     -e 's/__FINAL_EXE_NAME__/$(FINAL_EXE_NAME)/g' \
+	     -e 's/__BUNDLE_ID__/$(BUNDLE_ID)/g' \
+	     -e 's/__APP_VERSION__/$(APP_VERSION)/g' \
 	     Info.plist.template > $(BUNDLE_PLIST)
 	@echo "--- Build complete. Application bundle created at: ./$(APP_BUNDLE) ---"
 
