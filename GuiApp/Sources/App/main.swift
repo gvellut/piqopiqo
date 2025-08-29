@@ -171,5 +171,4 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 let delegate = AppDelegate()
 NSApplication.shared.delegate = delegate
-NSApp.setActivationPolicy(.regular)
 NSApplication.shared.run()

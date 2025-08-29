@@ -3,11 +3,12 @@
         {
             "type": "swift",
             "request": "launch",
+            "name": "Debug Piqopiqo.app",
+            "program": "${workspaceFolder}/debug/Piqopiqo.app/Contents/MacOS/Piqopiqo",
             "args": [],
-            "cwd": "${workspaceFolder:piqopiqo}/GuiApp",
-            "name": "Debug GuiApp (GuiApp)",
-            "program": "${workspaceFolder:piqopiqo}/GuiApp/.build/debug/GuiApp",
-            "preLaunchTask": "swift-build"
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Build .app Bundle"
         }
     ]
+]
 }

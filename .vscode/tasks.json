@@ -2,20 +2,16 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "swift-build",
+            "label": "Build .app Bundle",
             "type": "shell",
-            "command": "swift build && codesign --force --deep --sign - ${workspaceFolder}/GuiApp/.build/debug/GuiApp",
-            "args": [],
+            "command": "make app-debug",
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
             "problemMatcher": [
                 "$swiftc"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}/GuiApp"
-            }
+            ]
         }
     ]
 }

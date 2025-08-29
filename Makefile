@@ -3,8 +3,6 @@
 # --- Variables ---
 APP_NAME = Piqopiqo
 FINAL_EXE_NAME = Piqopiqo
-RELEASE_DIR = release
-APP_BUNDLE = $(RELEASE_DIR)/$(APP_NAME).app
 BUNDLE_ID = com.yourcompany.piqopiqo
 APP_VERSION = 1.0.0
 
@@ -14,10 +12,14 @@ ifeq ($(BUILD_MODE),debug)
     RUST_TARGET_DIR = debug
     SWIFT_BUILD_FLAGS = 
     SWIFT_BUILD_DIR = $(GUI_APP_DIR)/.build/debug
+    APP_DIR = debug
+    APP_BUNDLE = $(APP_DIR)/$(APP_NAME).app
 else
     RUST_TARGET_DIR = release
     SWIFT_BUILD_FLAGS = -c release
     SWIFT_BUILD_DIR = $(GUI_APP_DIR)/.build/release
+    APP_DIR = release
+    APP_BUNDLE = $(APP_DIR)/$(APP_NAME).app
 endif
 
 # Paths
@@ -49,8 +51,11 @@ BUNDLE_PLIST = $(APP_BUNDLE)/Contents/Info.plist
 # Default target
 all: build
 
-# Build the entire application in release mode (if BUILD+MODE not defined)
+# Build the entire application in release mode (if BUILD_MODE not defined)
 app: $(APP_BUNDLE)
+
+app-debug:
+	@$(MAKE) BUILD_MODE=debug app
 
 # Build rust library only
 lib:
@@ -76,6 +81,8 @@ $(APP_BUNDLE): $(SWIFT_EXE)
 	     -e 's/__BUNDLE_ID__/$(BUNDLE_ID)/g' \
 	     -e 's/__APP_VERSION__/$(APP_VERSION)/g' \
 	     Info.plist.template > $(BUNDLE_PLIST)
+	@echo "--- Signing application bundle (ad-hoc) ---"
+	@codesign --force --deep --sign - $(APP_BUNDLE)
 	@echo "--- Build complete. Application bundle created at: ./$(APP_BUNDLE) ---"
 
 # Build the Swift executable, which depends on the C header being in the correct location.
