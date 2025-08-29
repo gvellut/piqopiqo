@@ -65,3 +65,8 @@ The Swift project will not be worked on with XCode at all but with VSCode so bui
     - can you get the field names + technical field names (for access through EXIF library) from a library : or must the names be defined separately : if separately, there must be a structure with all the known posibble fields (with the configuration a subset of references to them)
     - those tags will be access through the Rust library
     - mention the exif libraries you intend to use.
+
+
+
+How would you architect the following (the bridge):
+I have a GUI app in Swift using AppKit for macOS and a 

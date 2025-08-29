@@ -1,12 +1,14 @@
 ## About This Repository
 
-This repository contains the source code for "Piqopiqo", a native macOS photo browser. The goal is to create a high-performance application with a clean, responsive user interface.
+This repository contains the source code for "Piqopiqo", a native macOS photo browser and metadata viewer and filler, that could act as a replacement for Adobe Bridge for a subset of functionalities.
+
+The goal is to create a high-performance application with a clean, responsive user interface.
 
 ## Core Architecture Principles
 
 1.  **Strict UI/Logic Separation:** The application is composed of two main parts:
-    -   **`GuiApp` (Swift/SwiftUI):** This is responsible ONLY for the user interface, user interactions, and view state management. It should contain no file system access or image processing logic.
-    -   **`CoreLib` (Rust):** This is the backend engine. It handles all file operations, thumbnail generation, metadata parsing, and configuration management. It is a completely self-contained library with no knowledge of the UI.
+    -   **`GuiApp` (Swift/SwiftUI):** This is responsible ONLY for the user interface, user interactions, and view state management. It should contain no image processing logic or file system access beyond opening image for displaying the pixels.
+    -   **`CoreLib` (Rust):** This is the backend engine. It handles all file operations, thumbnail generation, metadata (EXIF) parsing, and configuration management. It gives to the GuiApp the paths to the image to render (cached Thumbnail, cached image prerendered at the size of the current display, full image). It is a completely self-contained library with no knowledge of the UI (the UI could be replaced with another technology on another OS).
 
 2.  **Swift-Rust Interoperability:**
     -   Communication between Swift and Rust is handled exclusively through a C Foreign Function Interface (FFI).
@@ -15,9 +17,9 @@ This repository contains the source code for "Piqopiqo", a native macOS photo br
     -   **Memory Management is Critical:** Any memory allocated by Rust and passed to Swift (e.g., strings, structs) MUST have a corresponding Rust `free_...` function. The Swift wrapper (`RustBridge.swift`) is responsible for calling this `free` function to prevent memory leaks. Do not use Swift's memory management for pointers coming from Rust.
 
 3.  **User Interface:**
-    -   The UI must be built using SwiftUI. Do not use AppKit or Storyboards.
+    -   The UI must be built using `AppKit` (or `SwiftUI` depending on knowledge and need for performance). Do not use Storyboards.
     -   Define all UI programmatically in `.swift` files.
-    -   Prioritize performance for the image grid. Use `LazyVGrid` to ensure only visible cells are rendered.
+    -   Prioritize performance for the image grid. Use a lazy grid to ensure only visible cells are rendered.
 
 4.  **Build System:**
     -   The entire project must be buildable from the command line.
@@ -27,7 +29,8 @@ This repository contains the source code for "Piqopiqo", a native macOS photo br
 
 5.  **Key Dependencies:**
     -   **Rust:** `image`, `rayon` (for parallelism), `serde` and `toml` (for configuration), `walkdir`.
-    -   **Swift:** `SwiftUI`. Target macOS v14 or later.
+    -   **Swift:** `AppKit` (or optionalla `SwiftUI`). Target macOS v14 or later.
+    -   JPEG and PNG are the only image formats targetted (no RAW or video files).
 
 6.  **Error Handling:**
     -   Rust functions exposed via FFI should return nullable pointers or status codes to indicate failure.
