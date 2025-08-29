@@ -9,8 +9,7 @@ let package = Package(
     products: [
         .executable(name: "GuiApp", targets: ["GuiApp"])
     ],
-    dependencies: [
-    ],
+    dependencies: [],
     targets: [
         .systemLibrary(
             name: "CBindings",
@@ -27,13 +26,13 @@ let package = Package(
                 // Link against the release build of the Rust library
                 .unsafeFlags(["-L", "../CoreLib/target/release"], .when(configuration: .release)),
                 // Link against the debug build of the Rust library
-                .unsafeFlags(["-L", "../CoreLib/target/debug"], .when(configuration: .debug))
+                .unsafeFlags(["-L", "../CoreLib/target/debug"], .when(configuration: .debug)),
             ]
         ),
         .executableTarget(
             name: "GuiApp",
             dependencies: ["RustBridge"],
             path: "Sources/App"
-        )
+        ),
     ]
 )

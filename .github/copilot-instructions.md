@@ -15,6 +15,7 @@ The goal is to create a high-performance application with a clean, responsive us
     -   The public API of the `CoreLib` Rust library must be exposed as `#[no_mangle] extern "C"` functions.
     -   `cbindgen` will be used to automatically generate the C header file (`core_lib.h`) from the Rust source.
     -   **Memory Management is Critical:** Any memory allocated by Rust and passed to Swift (e.g., strings, structs) MUST have a corresponding Rust `free_...` function. The Swift wrapper (`RustBridge.swift`) is responsible for calling this `free` function to prevent memory leaks. Do not use Swift's memory management for pointers coming from Rust.
+    -   There is only ONE header file : core_lib.h found in the GuiApp/Sources/CBindings folder
 
 3.  **User Interface:**
     -   The UI must be built using `AppKit` (or `SwiftUI` depending on knowledge and need for performance). Do not use Storyboards.
