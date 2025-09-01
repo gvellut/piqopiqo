@@ -1,0 +1,21 @@
+namespace corelib {
+  // Define a data structure to pass back to Swift
+  [Record]
+  interface ThumbnailResult {
+    original_path: string;
+    thumbnail_path: string;
+  };
+
+  // This is the object Swift will interact with
+  [Object]
+  interface CoreEngine {
+    constructor();
+
+    // This is the key function. uniffi will make this `async` in Swift.
+    [Throws=string]
+    Task<ThumbnailResult> generate_thumbnail(string image_path);
+
+    // A synchronous example
+    string get_version();
+  };
+};

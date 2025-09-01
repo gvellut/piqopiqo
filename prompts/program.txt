@@ -69,4 +69,100 @@ The Swift project will not be worked on with XCode at all but with VSCode so bui
 
 
 How would you architect the following (the bridge):
-I have a GUI app in Swift using AppKit for macOS and a 
+
+I have a GUI app in Swift using AppKit for macOS and a rust core library. It is a native macOS photo browser and metadata viewer and filler, that could act as a replacement for Adobe Bridge for a subset of functionalities.
+    -   **`GuiApp` (Swift/SwiftUI):** This is responsible ONLY for the user interface, user interactions, and view state management. It should contain no image processing logic or file system access beyond opening image for displaying the pixels.
+    -   **`CoreLib` (Rust):** This is the backend engine. It handles all file operations, thumbnail generation, metadata (EXIF) parsing, and configuration management. It gives to the GuiApp the paths to the image to render (cached Thumbnail, cached image prerendered at the size of the current display, full image). It is a completely self-contained library with no knowledge of the UI (the UI could be replaced with another technology on another OS).
+
+The Rust corelib can be busy doing IO like generating thumbnails, reading EXIF tags, generating screen-size previews. To dispolay a thumbnail, the GUI app needs to wait for the suitable images (those that should be displayed in its grid) to be generated and cached. While waiting, a placeholder can be displayed. It will display the image using a path to the image handed by the Rust CoreLib. How should the code between Swift and the Rust Corelib be architected ? Can the Rust CoreLib have a main thread, with a couple of background threads that do the IO and processing ? The main thread will reply (in process, through FFI) to the requests of the GUI App while synchronizing with the background threads. If the reply is not ready (for example, a thumbnail has not finished generating), can the the GUI app suspend part of its processing (eg load and display the thumbnail) while waiting to be notificed ? how ? Or should it repeatledly poll ? can the swift code use async and suspend itself? Can async straddle both Swift and Rust ? ie the swift call an async Rust function ? With FFI, cam a Swift notification handler be passed to the rust side ?
+
+> Gemini 2.5 pro (Copilot)
+
+This is an excellent and classic architectural problem. You've correctly identified the core challenge: creating a responsive, non-blocking GUI that communicates with a powerful but potentially slow backend engine. Your proposed separation of concerns between the Swift GUI and the Rust CoreLib is the right way to start.
+
+Here is a detailed architectural proposal addressing your specific questions.
+High-Level Architecture: The Asynchronous FFI Bridge
+
+The best approach is an asynchronous FFI bridge with callbacks. The Swift GUI will never block waiting for Rust. Instead, it will make a request and provide a callback function. The Rust CoreLib will perform the work on a background thread and invoke the callback when the data is ready.
+
+Here's a visual representation of the flow:
+Mermaid
+
+sequenceDiagram
+    participant GuiApp (Swift)
+    participant FFI Bridge
+    participant CoreLib (Rust)
+    participant Worker Threads (Rust)
+
+    GuiApp (Swift)->>+FFI Bridge: Request thumbnail for "image.raw" (with completion callback)
+    FFI Bridge->>+CoreLib (Rust): request_thumbnail("image.raw", swift_callback)
+    CoreLib (Rust)->>-FFI Bridge: Return immediately (e.g., with a request ID)
+    FFI Bridge->>-GuiApp (Swift): Returns request ID
+    Note over GuiApp (Swift): Displays placeholder for "image.raw"
+
+    CoreLib (Rust)->>+Worker Threads (Rust): Enqueue thumbnail generation task
+    Worker Threads (Rust)-->>Worker Threads (Rust): Process "image.raw", generate thumbnail, save to cache
+    Worker Threads (Rust)-->>-CoreLib (Rust): Task complete! Path: "/cache/image.jpg"
+
+    CoreLib (Rust)->>+FFI Bridge: Invoke swift_callback("/cache/image.jpg")
+    FFI Bridge->>+GuiApp (Swift): Calls the Swift completion handler
+    Note over GuiApp (Swift): Updates UI, replaces placeholder with the new thumbnail
+
+Answering Your Questions Directly
+
+    How should the code be architected? Use a C-style FFI layer, but I strongly recommend using a tool like uniffi-rs from Mozilla. It automates the generation of the "scaffolding" code (the FFI boilerplate) on both the Rust and Swift sides, making the integration much safer and easier. It handles complex types, enums, records, and even protocol/trait implementations across the language boundary.
+
+    Can the Rust CoreLib have a main thread and background threads? Yes, absolutely. This is the recommended model. You can use a library like tokio or async-std in Rust to manage an asynchronous runtime.
+        FFI-Safe "Main" Thread: Your extern "C" functions will be called by Swift. These functions should be very fast. Their job is to accept the request, package it into a task, and hand it off to the async runtime (the worker pool). They should not block.
+        Worker Threads: The tokio runtime will manage a pool of worker threads. These threads will execute the actual I/O-bound (reading files) and CPU-bound (image processing) tasks.
+
+    How does the GUI wait without blocking? Polling or notifications? Notifications (Callbacks) are far superior to polling. Polling is inefficient and introduces latency. You can pass a callback from Swift to Rust. When you call a Rust function, you'll pass it a closure. The Rust side will store this closure and invoke it from its worker thread once the result is available.
+
+    Can the Swift code use async/await and suspend itself? Yes! This is the magic of modern Swift concurrency. When you combine uniffi with Swift's async/await, you get a beautiful, clean API. uniffi can automatically generate async Swift functions from your Rust code.
+
+    Here’s how it works under the hood:
+        The generated Swift async function calls the Rust FFI function.
+        It passes a completionHandler (a callback) to Rust.
+        The Swift async function then suspends itself using withCheckedContinuation.
+        When Rust finishes its work, it calls the completionHandler.
+        Inside the handler, continuation.resume(returning: result) is called, which wakes up the suspended Swift task with the final result.
+
+    You don't even have to write this logic yourself; uniffi does it for you!
+
+    Can async straddle both Swift and Rust? Yes, conceptually. While you can't directly await a Rust Future in Swift, uniffi creates a seamless bridge that makes it feel like you are. The Swift await waits on the callback mechanism, which is triggered by the completion of the Rust async task.
+
+Recommended Tooling & Implementation Sketch
+1. Rust CoreLib with uniffi and tokio
+
+First, set up your Cargo.toml:
+TOML
+
+[lib]
+name = "corelib"
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+uniffi = { version = "0.25", features = ["tokio"] }
+# Other dependencies: image, exif, etc.
+
+[build-dependencies]
+uniffi = { version = "0.25", features = ["build"] }
+
+Create a uniffi definition file (src/corelib.udl):
+
+Now, your Rust code (src/lib.rs):
+
+You'll also need a build.rs to generate the code:
+2. Swift GuiApp
+
+After running cargo build, uniffi will generate corelib.swift (and a C-header). Add these files and the compiled library (.a or .dylib) to your Xcode project.
+
+Your Swift code will look incredibly clean:
+
+This architecture provides the best of all worlds:
+
+    Performance: Rust handles the heavy lifting on a dedicated thread pool.
+    Responsiveness: The Swift UI never blocks.
+    Developer Experience: uniffi and async/await make the cross-language calls feel native and type-safe, hiding the complexity of the FFI layer.
+    Maintainability: The concerns are cleanly separated, just as you designed.
