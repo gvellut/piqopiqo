@@ -1,4 +1,5 @@
 import AppKit
+import UniffiBindings
 
 class MainView: NSView {
     private(set) var splitView: NSSplitView!
@@ -46,7 +47,8 @@ class MainView: NSView {
         detailLabel.translatesAutoresizingMaskIntoConstraints = false
         rightPanel.addSubview(detailLabel)
 
-        let rustLabel = NSTextField(labelWithString: "Rust integration pending...")
+        let rustString = helloFromRust()
+        let rustLabel = NSTextField(labelWithString: rustString)
         rustLabel.font = NSFont.systemFont(ofSize: 12)
         rustLabel.alignment = .center
         rustLabel.isBordered = false

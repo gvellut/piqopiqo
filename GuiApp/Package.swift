@@ -12,13 +12,14 @@ let package = Package(
     dependencies: [],
     targets: [
         .systemLibrary(
-            name: "CBindings",
-            path: "Sources/CBindings",
+            name: "core_libFFI",
+            path: "Sources/UniffiBindings",
             pkgConfig: nil,
             providers: []
         ),
         .target(
             name: "UniffiBindings",
+            dependencies: ["core_libFFI"],
             path: "Sources/UniffiBindings",
             linkerSettings: [
                 .linkedLibrary("core_lib"),

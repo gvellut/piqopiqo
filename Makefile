@@ -30,7 +30,9 @@ CORE_LIB_DIR = CoreLib
 SWIFT_EXE = $(SWIFT_BUILD_DIR)/GuiApp
 
 # Rust build artifacts
-RUST_LIB = $(CORE_LIB_DIR)/target/$(RUST_TARGET_DIR)/libcore_lib.a
+RUST_LIB = $(CORE_LIB_DIR)/target/$(RUST_TARGET_DIR)/libcore_lib.dylib
+
+UNIFFI_BINDING = $(SWIFT_EXE)/Sources/UniffiBindings/core_lib.swift
 
 # FFI artifacts
 # written directly by build.rs to dst_c_HEADER
@@ -86,11 +88,13 @@ $(APP_BUNDLE): $(SWIFT_EXE)
 	@echo "--- Build complete. Application bundle created at: ./$(APP_BUNDLE) ---"
 
 # Build the Swift executable, which depends on the C header being in the correct location.
-$(SWIFT_EXE): $(RUST_LIB)
+$(SWIFT_EXE): $(RUST_LIB) $(UNIFFI_BINDING)
 	@echo "--- Building GuiApp (Swift) in $(BUILD_MODE) mode ---"
 	(cd $(GUI_APP_DIR) && swift build $(SWIFT_BUILD_FLAGS))
 
-# Build the Rust static library. The build.rs script handles C header generation.
+$(UNIFFI_BINDING): $(RUST_LIB)
+	(cd $(CORE_LIB_DIR) && cargo run -p uniffi-bindgen generate --language swift --out-dir ../GuiApp/Sources/UniffiBindings --library target/release/libcore_lib.dylib )
+
 $(RUST_LIB):
 	@echo "--- Building CoreLib (Rust) in $(BUILD_MODE) mode ---"
 ifeq ($(BUILD_MODE),debug)

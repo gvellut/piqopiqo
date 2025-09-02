@@ -1,4 +1,5 @@
 import AppKit
+import UniffiBindings
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow!
