@@ -87,14 +87,14 @@ $(APP_BUNDLE): $(SWIFT_EXE)
 	@echo "--- Build complete. Application bundle created at: ./$(APP_BUNDLE) ---"
 
 # Build the Swift executable, which depends on the C header being in the correct location.
-$(SWIFT_EXE): $(UNIFFI_BINDING)
+$(SWIFT_EXE): $(UNIFFI_BINDING) $(shell find $(GUI_APP_DIR)/Sources -name '*.swift')
 	@echo "--- Building GuiApp (Swift) in $(BUILD_MODE) mode ---"
 	(cd $(GUI_APP_DIR) && swift build $(SWIFT_BUILD_FLAGS))
 
 $(UNIFFI_BINDING): $(RUST_LIB)
 	(cd $(CORE_LIB_DIR) && cargo run -p uniffi-bindgen -- target/$(BUILD_MODE)/libcore_lib.dylib ../GuiApp/Sources/UniffiBindings --swift-sources --headers --modulemap --modulemap-filename module.modulemap  --module-name core_libFFI)
 
-$(RUST_LIB):
+$(RUST_LIB): $(shell find $(CORE_LIB_DIR)/src -name '*.rs')
 	@echo "--- Building CoreLib (Rust) in $(BUILD_MODE) mode ---"
 	(cd $(CORE_LIB_DIR) && cargo build $(RUST_BUILD_FLAG))
 

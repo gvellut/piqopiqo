@@ -31,7 +31,7 @@ class MainView: NSView {
         leftPanel.wantsLayer = true
         leftPanel.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
 
-        let gridLabel = NSTextField(labelWithString: "Grid Panel B")
+        let gridLabel = NSTextField(labelWithString: "Grid Panel D")
         gridLabel.font = NSFont.systemFont(ofSize: 18, weight: .medium)
         gridLabel.alignment = .center
         gridLabel.translatesAutoresizingMaskIntoConstraints = false
