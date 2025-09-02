@@ -18,9 +18,8 @@ let package = Package(
             providers: []
         ),
         .target(
-            name: "RustBridge",
-            dependencies: ["CBindings"],
-            path: "Sources/RustBridge",
+            name: "UniffiBindings",
+            path: "Sources/UniffiBindings",
             linkerSettings: [
                 .linkedLibrary("core_lib"),
                 // Link against the release build of the Rust library
@@ -31,7 +30,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "GuiApp",
-            dependencies: ["RustBridge"],
+            dependencies: ["UniffiBindings"],
             path: "Sources/App"
         ),
     ]

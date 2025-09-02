@@ -1,4 +1,0 @@
-module CBindings {
-    header "core_lib.h"
-    export *
-}
