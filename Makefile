@@ -10,12 +10,14 @@ APP_VERSION = 1.0.0
 BUILD_MODE ?= release
 ifeq ($(BUILD_MODE),debug)
     RUST_TARGET_DIR = debug
+	RUST_BUILD_FLAG = 
     SWIFT_BUILD_FLAGS = 
     SWIFT_BUILD_DIR = $(GUI_APP_DIR)/.build/debug
     APP_DIR = debug
     APP_BUNDLE = $(APP_DIR)/$(APP_NAME).app
 else
     RUST_TARGET_DIR = release
+	RUST_BUILD_FLAG = --release
     SWIFT_BUILD_FLAGS = -c release
     SWIFT_BUILD_DIR = $(GUI_APP_DIR)/.build/release
     APP_DIR = release
@@ -34,7 +36,7 @@ RUST_LIB = $(CORE_LIB_DIR)/target/$(RUST_TARGET_DIR)/libcore_lib.dylib
 
 UNIFFI_BINDING = $(SWIFT_EXE)/Sources/UniffiBindings/core_lib.swift
 
-DST_C_HEADER = $(GUI_APP_DIR)/Sources/UniffiBindings/core_lib.swift $(GUI_APP_DIR)/Sources/UniffiBindings/core_libFFI.h
+UNIFFI_BINDING_FILES = $(GUI_APP_DIR)/Sources/UniffiBindings/*
 
 # Bundle paths
 BUNDLE_MACOS_DIR = $(APP_BUNDLE)/Contents/MacOS
@@ -90,15 +92,11 @@ $(SWIFT_EXE): $(RUST_LIB) $(UNIFFI_BINDING)
 	(cd $(GUI_APP_DIR) && swift build $(SWIFT_BUILD_FLAGS))
 
 $(UNIFFI_BINDING): $(RUST_LIB)
-	(cd $(CORE_LIB_DIR) && cargo run -p uniffi-bindgen generate --language swift --out-dir ../GuiApp/Sources/UniffiBindings --library target/release/libcore_lib.dylib )
+	(cd $(CORE_LIB_DIR) && cargo run -p uniffi-bindgen -- target/$(BUILD_MODE)/libcore_lib.dylib ../GuiApp/Sources/UniffiBindings --swift-sources --headers --modulemap --modulemap-filename module.modulemap  --module-name core_libFFI)
 
 $(RUST_LIB):
 	@echo "--- Building CoreLib (Rust) in $(BUILD_MODE) mode ---"
-ifeq ($(BUILD_MODE),debug)
-	(cd $(CORE_LIB_DIR) && cargo build)
-else
-	(cd $(CORE_LIB_DIR) && cargo build --release)
-endif
+	(cd $(CORE_LIB_DIR) && cargo build $(RUST_BUILD_FLAG))
 
 # Clean up all build artifacts
 clean:
@@ -106,5 +104,5 @@ clean:
 	(cd $(CORE_LIB_DIR) && cargo clean)
 	(cd $(GUI_APP_DIR) && swift package clean)
 	@rm -rf $(APP_BUNDLE)
-	@rm -f $(DST_C_HEADER)
+	@rm -f $(UNIFFI_BINDING_FILES)
 	@echo "--- Cleanup complete ---"
