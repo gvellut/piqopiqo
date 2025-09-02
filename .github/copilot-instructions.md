@@ -11,11 +11,10 @@ The goal is to create a high-performance application with a clean, responsive us
     -   **`CoreLib` (Rust):** This is the backend engine. It handles all file operations, thumbnail generation, metadata (EXIF) parsing, and configuration management. It gives to the GuiApp the paths to the image to render (cached Thumbnail, cached image prerendered at the size of the current display, full image). It is a completely self-contained library with no knowledge of the UI (the UI could be replaced with another technology on another OS).
 
 2.  **Swift-Rust Interoperability:**
-    -   Communication between Swift and Rust is handled exclusively through a C Foreign Function Interface (FFI).
-    -   The public API of the `CoreLib` Rust library must be exposed as `#[no_mangle] extern "C"` functions.
-    -   `cbindgen` will be used to automatically generate the C header file (`core_lib.h`) from the Rust source.
-    -   **Memory Management is Critical:** Any memory allocated by Rust and passed to Swift (e.g., strings, structs) MUST have a corresponding Rust `free_...` function. The Swift wrapper (`RustBridge.swift`) is responsible for calling this `free` function to prevent memory leaks. Do not use Swift's memory management for pointers coming from Rust.
-    -   There is only ONE header file : core_lib.h found in the GuiApp/Sources/CBindings folder
+    -   Communication between Swift and Rust is handled exclusively through `uniffi-rs` and not `cbindgen`.
+    -   The public API of the `CoreLib` Rust library must be exposed.
+    -   `uniffi-rs` will be used to automatically generate the Swift binding from the Rust source.
+    -   **Memory Management is Critical**
 
 3.  **User Interface:**
     -   The UI must be built using `AppKit` (or `SwiftUI` depending on knowledge and need for performance). Do not use Storyboards.

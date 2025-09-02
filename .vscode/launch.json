@@ -8,6 +8,24 @@
             "args": [],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "Build .app Bundle"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:piqopiqo}/GuiApp",
+            "name": "Debug GuiApp (GuiApp)",
+            "program": "${workspaceFolder:piqopiqo}/GuiApp/.build/debug/GuiApp",
+            "preLaunchTask": "swift: Build Debug GuiApp (GuiApp)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:piqopiqo}/GuiApp",
+            "name": "Release GuiApp (GuiApp)",
+            "program": "${workspaceFolder:piqopiqo}/GuiApp/.build/release/GuiApp",
+            "preLaunchTask": "swift: Build Release GuiApp (GuiApp)"
         }
     ]
 }

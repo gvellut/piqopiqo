@@ -166,3 +166,9 @@ This architecture provides the best of all worlds:
     Responsiveness: The Swift UI never blocks.
     Developer Experience: uniffi and async/await make the cross-language calls feel native and type-safe, hiding the complexity of the FFI layer.
     Maintainability: The concerns are cleanly separated, just as you designed.
+
+
+
+
+uniffi-rs : https://github.com/mozilla/uniffi-rs
+https://github.com/ryanmcgrath/cacao : appkit in rust
