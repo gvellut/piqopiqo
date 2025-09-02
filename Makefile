@@ -34,10 +34,7 @@ RUST_LIB = $(CORE_LIB_DIR)/target/$(RUST_TARGET_DIR)/libcore_lib.dylib
 
 UNIFFI_BINDING = $(SWIFT_EXE)/Sources/UniffiBindings/core_lib.swift
 
-# FFI artifacts
-# written directly by build.rs to dst_c_HEADER
-# Destination path for the header required by the Swift project
-DST_C_HEADER = $(GUI_APP_DIR)/Sources/CBindings/core_lib.h
+DST_C_HEADER = $(GUI_APP_DIR)/Sources/UniffiBindings/core_lib.swift $(GUI_APP_DIR)/Sources/UniffiBindings/core_libFFI.h
 
 # Bundle paths
 BUNDLE_MACOS_DIR = $(APP_BUNDLE)/Contents/MacOS
