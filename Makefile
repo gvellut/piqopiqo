@@ -3,8 +3,10 @@
 # --- Variables ---
 APP_NAME = Piqopiqo
 FINAL_EXE_NAME = Piqopiqo
-BUNDLE_ID = com.yourcompany.piqopiqo
+BUNDLE_ID = com.vellut.piqopiqo
 APP_VERSION = 1.0.0
+
+APP_BUILD = .appBuild
 
 # Build configuration (debug or release)
 BUILD_MODE ?= release
@@ -13,14 +15,14 @@ ifeq ($(BUILD_MODE),debug)
 	RUST_BUILD_FLAG = 
     SWIFT_BUILD_FLAGS = 
     SWIFT_BUILD_DIR = $(GUI_APP_DIR)/.build/debug
-    APP_DIR = debug
+    APP_DIR = $(APP_BUILD)/debug
     APP_BUNDLE = $(APP_DIR)/$(APP_NAME).app
 else
     RUST_TARGET_DIR = release
 	RUST_BUILD_FLAG = --release
     SWIFT_BUILD_FLAGS = -c release
     SWIFT_BUILD_DIR = $(GUI_APP_DIR)/.build/release
-    APP_DIR = release
+    APP_DIR = $(APP_BUILD)/release
     APP_BUNDLE = $(APP_DIR)/$(APP_NAME).app
 endif
 
@@ -34,9 +36,7 @@ SWIFT_EXE = $(SWIFT_BUILD_DIR)/GuiApp
 # Rust build artifacts
 RUST_LIB = $(CORE_LIB_DIR)/target/$(RUST_TARGET_DIR)/libcore_lib.dylib
 
-UNIFFI_BINDING = $(SWIFT_EXE)/Sources/UniffiBindings/core_lib.swift
-
-UNIFFI_BINDING_FILES = $(GUI_APP_DIR)/Sources/UniffiBindings/*
+UNIFFI_BINDING = $(GUI_APP_DIR)/Sources/UniffiBindings/*
 
 # Bundle paths
 BUNDLE_MACOS_DIR = $(APP_BUNDLE)/Contents/MacOS
@@ -45,7 +45,7 @@ BUNDLE_EXE = $(BUNDLE_MACOS_DIR)/$(FINAL_EXE_NAME)
 BUNDLE_PLIST = $(APP_BUNDLE)/Contents/Info.plist
 
 # Phony targets are not files
-.PHONY: all build build-default lib lib-default clean debug release app
+.PHONY: all build build-default lib lib-default clean debug app app-debug release app certificate
 
 # --- Targets ---
 
@@ -83,11 +83,11 @@ $(APP_BUNDLE): $(SWIFT_EXE)
 	     -e 's/__APP_VERSION__/$(APP_VERSION)/g' \
 	     Info.plist.template > $(BUNDLE_PLIST)
 	@echo "--- Signing application bundle (ad-hoc) ---"
-	@codesign --force --deep --sign - $(APP_BUNDLE)
+	@codesign --force --deep --sign "My Swift Dev Cert" $(APP_BUNDLE)
 	@echo "--- Build complete. Application bundle created at: ./$(APP_BUNDLE) ---"
 
 # Build the Swift executable, which depends on the C header being in the correct location.
-$(SWIFT_EXE): $(RUST_LIB) $(UNIFFI_BINDING)
+$(SWIFT_EXE): $(UNIFFI_BINDING)
 	@echo "--- Building GuiApp (Swift) in $(BUILD_MODE) mode ---"
 	(cd $(GUI_APP_DIR) && swift build $(SWIFT_BUILD_FLAGS))
 
@@ -103,6 +103,6 @@ clean:
 	@echo "--- Cleaning up build artifacts ---"
 	(cd $(CORE_LIB_DIR) && cargo clean)
 	(cd $(GUI_APP_DIR) && swift package clean)
-	@rm -rf $(APP_BUNDLE)
-	@rm -f $(UNIFFI_BINDING_FILES)
+	@rm -rf $(APP_BUILD)
+	@rm -f $(UNIFFI_BINDING)
 	@echo "--- Cleanup complete ---"

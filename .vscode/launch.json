@@ -4,28 +4,28 @@
             "type": "swift",
             "request": "launch",
             "name": "Debug Piqopiqo.app",
-            "program": "${workspaceFolder}/debug/Piqopiqo.app/Contents/MacOS/Piqopiqo",
+            "program": "${workspaceFolder}/.appBuild/debug/Piqopiqo.app/Contents/MacOS/Piqopiqo",
             "args": [],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "Build .app Bundle"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:piqopiqo}/GuiApp",
+            "name": "Debug GuiApp (GuiApp)",
+            "program": "${workspaceFolder:piqopiqo}/GuiApp/.build/debug/GuiApp",
+            "preLaunchTask": "swift: Build Debug GuiApp (GuiApp)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:piqopiqo}/GuiApp",
+            "name": "Release GuiApp (GuiApp)",
+            "program": "${workspaceFolder:piqopiqo}/GuiApp/.build/release/GuiApp",
+            "preLaunchTask": "swift: Build Release GuiApp (GuiApp)"
         }
-        // {
-        //     "type": "swift",
-        //     "request": "launch",
-        //     "args": [],
-        //     "cwd": "${workspaceFolder:piqopiqo}/GuiApp",
-        //     "name": "Debug GuiApp (GuiApp)",
-        //     "program": "${workspaceFolder:piqopiqo}/GuiApp/.build/debug/GuiApp",
-        //     "preLaunchTask": "swift: Build Debug GuiApp (GuiApp)"
-        // },
-        // {
-        //     "type": "swift",
-        //     "request": "launch",
-        //     "args": [],
-        //     "cwd": "${workspaceFolder:piqopiqo}/GuiApp",
-        //     "name": "Release GuiApp (GuiApp)",
-        //     "program": "${workspaceFolder:piqopiqo}/GuiApp/.build/release/GuiApp",
-        //     "preLaunchTask": "swift: Build Release GuiApp (GuiApp)"
-        // }
     ]
 }
