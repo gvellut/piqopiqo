@@ -41,6 +41,9 @@ BUNDLE_EXE = $(BUNDLE_MACOS_DIR)/$(FINAL_EXE_NAME)
 BUNDLE_PLIST = $(APP_BUNDLE)/Contents/Info.plist
 BUNDLE_PLIST_TEMPLATE = Info.plist.template
 
+SVG_ICON=AppIcon.svg
+ICNS_ICON=$(APP_BUILD)/icons/AppIcon.icns
+
 # Phony targets are not files
 .PHONY: all build build-default lib lib-default clean debug app app-debug release app certificate
 
@@ -68,13 +71,13 @@ build-default: $(SWIFT_EXE)
 
 
 # Create the .app bundle
-$(APP_BUNDLE): $(SWIFT_EXE) $(BUNDLE_PLIST_TEMPLATE) $(CONFIG_FILE)
+$(APP_BUNDLE): $(SWIFT_EXE) $(BUNDLE_PLIST_TEMPLATE) $(CONFIG_FILE) $(ICNS_ICON)
 	@echo "--- Creating application bundle: $(APP_BUNDLE) ---"
 	@rm -rf $(APP_BUNDLE)
 	@mkdir -p $(BUNDLE_MACOS_DIR)
 	@mkdir -p $(BUNDLE_RESOURCES_DIR)
 	@cp $(SWIFT_EXE) $(BUNDLE_EXE)
-	@cp $(GUI_APP_DIR)/Sources/App/Resources/AppIcon.svg $(BUNDLE_RESOURCES_DIR)/
+	@cp $(ICNS_ICON) $(BUNDLE_RESOURCES_DIR)/
 	@sed -e 's/__APP_NAME__/$(APP_NAME)/g' \
 	     -e 's/__FINAL_EXE_NAME__/$(FINAL_EXE_NAME)/g' \
 	     -e 's/__BUNDLE_ID__/$(BUNDLE_ID)/g' \
@@ -83,6 +86,9 @@ $(APP_BUNDLE): $(SWIFT_EXE) $(BUNDLE_PLIST_TEMPLATE) $(CONFIG_FILE)
 	@echo "--- Signing application bundle (ad-hoc) ---"
 	@codesign --force --deep --sign "My Swift Dev Cert" $(APP_BUNDLE)
 	@echo "--- Build complete. Application bundle created at: ./$(APP_BUNDLE) ---"
+
+$(ICNS_ICON): $(SVG_ICON)
+	@./svg2icns.sh $(SVG_ICON)
 
 # Build the Swift executable, which depends on the C header being in the correct location.
 $(SWIFT_EXE): $(UNIFFI_BINDING) $(shell find $(GUI_APP_DIR)/Sources -name '*.swift')
