@@ -1,0 +1,50 @@
+Here is a detailed architectural proposal addressing your specific questions.
+High-Level Architecture: The Asynchronous FFI Bridge
+
+The best approach is an asynchronous FFI bridge with callbacks. The Swift GUI will never block waiting for Rust. Instead, it will make a request and provide a callback function. The Rust CoreLib will perform the work on a background thread and invoke the callback when the data is ready.
+
+Here's a visual representation of the flow:
+Mermaid
+
+sequenceDiagram
+    participant GuiApp (Swift)
+    participant FFI Bridge
+    participant CoreLib (Rust)
+    participant Worker Threads (Rust)
+
+    GuiApp (Swift)->>+FFI Bridge: Request thumbnail for "image.raw" (with completion callback)
+    FFI Bridge->>+CoreLib (Rust): request_thumbnail("image.raw", swift_callback)
+    CoreLib (Rust)->>-FFI Bridge: Return immediately (e.g., with a request ID)
+    FFI Bridge->>-GuiApp (Swift): Returns request ID
+    Note over GuiApp (Swift): Displays placeholder for "image.raw"
+
+    CoreLib (Rust)->>+Worker Threads (Rust): Enqueue thumbnail generation task
+    Worker Threads (Rust)-->>Worker Threads (Rust): Process "image.raw", generate thumbnail, save to cache
+    Worker Threads (Rust)-->>-CoreLib (Rust): Task complete! Path: "/cache/image.jpg"
+
+    CoreLib (Rust)->>+FFI Bridge: Invoke swift_callback("/cache/image.jpg")
+    FFI Bridge->>+GuiApp (Swift): Calls the Swift completion handler
+    Note over GuiApp (Swift): Updates UI, replaces placeholder with the new thumbnail
+
+Answering Your Questions Directly
+
+    How should the code be architected? Use a C-style FFI layer, but I strongly recommend using a tool like uniffi-rs from Mozilla. It automates the generation of the "scaffolding" code (the FFI boilerplate) on both the Rust and Swift sides, making the integration much safer and easier. It handles complex types, enums, records, and even protocol/trait implementations across the language boundary.
+
+    Can the Rust CoreLib have a main thread and background threads? Yes, absolutely. This is the recommended model. You can use a library like tokio or async-std in Rust to manage an asynchronous runtime.
+        FFI-Safe "Main" Thread: Your extern "C" functions will be called by Swift. These functions should be very fast. Their job is to accept the request, package it into a task, and hand it off to the async runtime (the worker pool). They should not block.
+        Worker Threads: The tokio runtime will manage a pool of worker threads. These threads will execute the actual I/O-bound (reading files) and CPU-bound (image processing) tasks.
+
+    How does the GUI wait without blocking? Polling or notifications? Notifications (Callbacks) are far superior to polling. Polling is inefficient and introduces latency. You can pass a callback from Swift to Rust. When you call a Rust function, you'll pass it a closure. The Rust side will store this closure and invoke it from its worker thread once the result is available.
+
+    Can the Swift code use async/await and suspend itself? Yes! This is the magic of modern Swift concurrency. When you combine uniffi with Swift's async/await, you get a beautiful, clean API. uniffi can automatically generate async Swift functions from your Rust code.
+
+    Here’s how it works under the hood:
+        The generated Swift async function calls the Rust FFI function.
+        It passes a completionHandler (a callback) to Rust.
+        The Swift async function then suspends itself using withCheckedContinuation.
+        When Rust finishes its work, it calls the completionHandler.
+        Inside the handler, continuation.resume(returning: result) is called, which wakes up the suspended Swift task with the final result.
+
+    You don't even have to write this logic yourself; uniffi does it for you!
+
+    Can async straddle both Swift and Rust? Yes, conceptually. While you can't directly await a Rust Future in Swift, uniffi creates a seamless bridge that makes it feel like you are. The Swift await waits on the callback mechanism, which is triggered by the completion of the Rust async task.

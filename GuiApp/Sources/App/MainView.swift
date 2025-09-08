@@ -5,6 +5,7 @@ class MainView: NSView {
     private(set) var splitView: NSSplitView!
     private var leftPanel: NSView!
     private var rightPanel: NSView!
+    private var statusBar: NSView!
     private let splitAutosaveKey = "NSSplitView Subview Frames MainSplitView"
 
     override init(frame frameRect: NSRect) {
@@ -56,9 +57,24 @@ class MainView: NSView {
         rustLabel.translatesAutoresizingMaskIntoConstraints = false
         rightPanel.addSubview(rustLabel)
 
+        statusBar = NSView()
+        statusBar.translatesAutoresizingMaskIntoConstraints = false
+        statusBar.wantsLayer = true
+        statusBar.layer?.backgroundColor = NSColor.separatorColor.cgColor
+
+        let statusLabel = NSTextField(labelWithString: "Status: Ready")
+        statusLabel.font = NSFont.systemFont(ofSize: 12)
+        statusLabel.alignment = .left
+        statusLabel.isBordered = false
+        statusLabel.isEditable = false
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        statusBar.addSubview(statusLabel)
+
         // Add subviews BEFORE assigning autosaveName so NSSplitView can restore them.
         splitView.addArrangedSubview(leftPanel)
         splitView.addArrangedSubview(rightPanel)
+
+        addSubview(statusBar)
 
         // Now enable autosave.
         splitView.autosaveName = "MainSplitView"
@@ -67,7 +83,7 @@ class MainView: NSView {
             splitView.topAnchor.constraint(equalTo: topAnchor),
             splitView.leadingAnchor.constraint(equalTo: leadingAnchor),
             splitView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            splitView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            splitView.bottomAnchor.constraint(equalTo: statusBar.topAnchor),
 
             gridLabel.centerXAnchor.constraint(equalTo: leftPanel.centerXAnchor),
             gridLabel.centerYAnchor.constraint(equalTo: leftPanel.centerYAnchor),
@@ -81,11 +97,29 @@ class MainView: NSView {
                 greaterThanOrEqualTo: rightPanel.leadingAnchor, constant: 10),
             rustLabel.trailingAnchor.constraint(
                 lessThanOrEqualTo: rightPanel.trailingAnchor, constant: -10),
+
+            statusBar.leadingAnchor.constraint(equalTo: leadingAnchor),
+            statusBar.trailingAnchor.constraint(equalTo: trailingAnchor),
+            statusBar.bottomAnchor.constraint(equalTo: bottomAnchor),
+            statusBar.heightAnchor.constraint(equalToConstant: 30),
+
+            statusLabel.leadingAnchor.constraint(equalTo: statusBar.leadingAnchor, constant: 10),
+            statusLabel.centerYAnchor.constraint(equalTo: statusBar.centerYAnchor),
+            statusLabel.trailingAnchor.constraint(
+                lessThanOrEqualTo: statusBar.trailingAnchor, constant: -10),
         ])
 
-        leftPanel.widthAnchor.constraint(greaterThanOrEqualToConstant: 500).isActive = true
-        rightPanel.widthAnchor.constraint(greaterThanOrEqualToConstant: 200).isActive = true
-        rightPanel.widthAnchor.constraint(lessThanOrEqualToConstant: 400).isActive = true
+        let leftWidth = leftPanel.widthAnchor.constraint(greaterThanOrEqualToConstant: 500)
+        leftWidth.priority = .defaultLow
+        leftWidth.isActive = true
+
+        let rightMinWidth = rightPanel.widthAnchor.constraint(greaterThanOrEqualToConstant: 200)
+        rightMinWidth.priority = .defaultLow
+        rightMinWidth.isActive = true
+
+        let rightMaxWidth = rightPanel.widthAnchor.constraint(lessThanOrEqualToConstant: 400)
+        rightMaxWidth.priority = .defaultLow
+        rightMaxWidth.isActive = true
     }
 
     /// Call after the view is in a window & laid out.
