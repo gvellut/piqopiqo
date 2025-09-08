@@ -30,7 +30,7 @@ class MainView: NSView {
 
         leftPanel = NSView()
         leftPanel.wantsLayer = true
-        leftPanel.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        leftPanel.layer?.backgroundColor = NSColor.black.cgColor
 
         let gridLabel = NSTextField(labelWithString: "Grid Panel D")
         gridLabel.font = NSFont.systemFont(ofSize: 18, weight: .medium)
@@ -109,17 +109,9 @@ class MainView: NSView {
                 lessThanOrEqualTo: statusBar.trailingAnchor, constant: -10),
         ])
 
-        let leftWidth = leftPanel.widthAnchor.constraint(greaterThanOrEqualToConstant: 500)
-        leftWidth.priority = .defaultLow
-        leftWidth.isActive = true
-
-        let rightMinWidth = rightPanel.widthAnchor.constraint(greaterThanOrEqualToConstant: 200)
-        rightMinWidth.priority = .defaultLow
-        rightMinWidth.isActive = true
-
-        let rightMaxWidth = rightPanel.widthAnchor.constraint(lessThanOrEqualToConstant: 400)
-        rightMaxWidth.priority = .defaultLow
-        rightMaxWidth.isActive = true
+        leftPanel.widthAnchor.constraint(greaterThanOrEqualToConstant: 500).isActive = true
+        rightPanel.widthAnchor.constraint(greaterThanOrEqualToConstant: 200).isActive = true
+        rightPanel.widthAnchor.constraint(lessThanOrEqualToConstant: 400).isActive = true
     }
 
     /// Call after the view is in a window & laid out.
