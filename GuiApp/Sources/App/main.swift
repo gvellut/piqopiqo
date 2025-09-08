@@ -24,6 +24,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: "q")
 
         appItem.submenu = appMenu
+
+        // File menu
+        let fileMenuItem = NSMenuItem()
+        fileMenuItem.submenu = NSMenu(title: "File")
+        let openFolderItem = NSMenuItem(
+            title: "Open Folder...", action: #selector(openFolder(_:)), keyEquivalent: "o")
+        openFolderItem.target = self
+        fileMenuItem.submenu?.addItem(openFolderItem)
+        mainMenu.addItem(fileMenuItem)
+
         NSApp.mainMenu = mainMenu
     }
 
@@ -63,6 +73,40 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    @objc private func openFolder(_ sender: NSMenuItem) {
+        openFolderDialog()
+    }
+
+    private func openFolderDialog() {
+        let openPanel = NSOpenPanel()
+        openPanel.canChooseFiles = false
+        openPanel.canChooseDirectories = true
+        openPanel.allowsMultipleSelection = false
+        openPanel.canCreateDirectories = false  // Ensure folder must exist
+
+        // Create accessory view with recursive checkbox
+        let accessoryView = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 40))
+        let checkbox = NSButton(checkboxWithTitle: "Recursive", target: nil, action: nil)
+        checkbox.frame = NSRect(x: 10, y: 10, width: 180, height: 20)
+        accessoryView.addSubview(checkbox)
+        openPanel.accessoryView = accessoryView
+
+        openPanel.begin { [weak self] response in
+            if response == .OK, let url = openPanel.url {
+                let isRecursive = checkbox.state == .on
+                // Pass to CoreLib (Rust) for processing
+                self?.handleFolderSelection(url: url, recursive: isRecursive)
+            }
+        }
+    }
+
+    private func handleFolderSelection(url: URL, recursive: Bool) {
+        // Call Rust function via UniffiBindings to process the folder
+        // Example: CoreLib.openFolder(path: url.path, recursive: recursive)
+        // Update UI state as needed (e.g., notify MainView or a view model)
+        print("Selected folder: \(url.path), Recursive: \(recursive)")
     }
 }
 
