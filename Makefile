@@ -1,10 +1,6 @@
-# Makefile for Piqopiqo
-
-# --- Variables ---
-APP_NAME = Piqopiqo
-FINAL_EXE_NAME = Piqopiqo
-BUNDLE_ID = com.vellut.piqopiqo
-APP_VERSION = 1.0.0
+# Load configuration from file
+CONFIG_FILE = app_config.env
+include $(CONFIG_FILE)
 
 APP_BUILD = .appBuild
 
@@ -43,6 +39,7 @@ BUNDLE_MACOS_DIR = $(APP_BUNDLE)/Contents/MacOS
 BUNDLE_RESOURCES_DIR = $(APP_BUNDLE)/Contents/Resources
 BUNDLE_EXE = $(BUNDLE_MACOS_DIR)/$(FINAL_EXE_NAME)
 BUNDLE_PLIST = $(APP_BUNDLE)/Contents/Info.plist
+BUNDLE_PLIST_TEMPLATE = Info.plist.template
 
 # Phony targets are not files
 .PHONY: all build build-default lib lib-default clean debug app app-debug release app certificate
@@ -71,17 +68,18 @@ build-default: $(SWIFT_EXE)
 
 
 # Create the .app bundle
-$(APP_BUNDLE): $(SWIFT_EXE)
+$(APP_BUNDLE): $(SWIFT_EXE) $(BUNDLE_PLIST_TEMPLATE) $(CONFIG_FILE)
 	@echo "--- Creating application bundle: $(APP_BUNDLE) ---"
 	@rm -rf $(APP_BUNDLE)
 	@mkdir -p $(BUNDLE_MACOS_DIR)
 	@mkdir -p $(BUNDLE_RESOURCES_DIR)
 	@cp $(SWIFT_EXE) $(BUNDLE_EXE)
+	@cp $(GUI_APP_DIR)/Sources/App/Resources/AppIcon.svg $(BUNDLE_RESOURCES_DIR)/
 	@sed -e 's/__APP_NAME__/$(APP_NAME)/g' \
 	     -e 's/__FINAL_EXE_NAME__/$(FINAL_EXE_NAME)/g' \
 	     -e 's/__BUNDLE_ID__/$(BUNDLE_ID)/g' \
 	     -e 's/__APP_VERSION__/$(APP_VERSION)/g' \
-	     Info.plist.template > $(BUNDLE_PLIST)
+	     $(BUNDLE_PLIST_TEMPLATE) > $(BUNDLE_PLIST)
 	@echo "--- Signing application bundle (ad-hoc) ---"
 	@codesign --force --deep --sign "My Swift Dev Cert" $(APP_BUNDLE)
 	@echo "--- Build complete. Application bundle created at: ./$(APP_BUNDLE) ---"

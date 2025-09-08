@@ -32,7 +32,8 @@ let package = Package(
         .executableTarget(
             name: "GuiApp",
             dependencies: ["UniffiBindings"],
-            path: "Sources/App"
+            path: "Sources/App",
+            resources: [.process("Resources")]
         ),
     ]
 )
