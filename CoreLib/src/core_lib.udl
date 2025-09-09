@@ -1,3 +1,19 @@
 namespace core_lib {
     string hello_from_rust();
+    Core core_new();
+};
+
+dictionary Item {
+    u32 id;
+    string text;
+};
+
+dictionary Config {
+    u32 num_columns;
+};
+
+interface Core {
+    Config get_config();
+    u32 get_total_item_count();
+    sequence<Item> get_items(u32 start, u32 count);
 };
