@@ -50,3 +50,6 @@ The goal is to create a high-performance application with a clean, responsive us
 
 10. **Rust**
     -   Do not use async. Use threads only.
+
+11. **Initial State**
+    -   A project is already set up with a Swift app, a Rust library, and a working uniffi-rs bridge.
