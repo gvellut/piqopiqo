@@ -149,43 +149,72 @@ Add the ability for the Swift client to modify the number of columns stored in t
 
 ---
 
-### Work Item 6: Implement Dynamic Column Changes and Scrolling Logic
+### Work Item 6: Implement Dynamic Column Changes and Scrolling Logic Programmatically
 
 **Description:**
-Connect UI elements (menu items) to modify the number of columns and implement the logic for row-by-row scrolling. A column change must trigger a full layout and data refresh.
+This work item focuses on bringing the grid to life. All UI components for interaction—menus and the scrollable collection view—will be created in code. You will implement the logic to handle dynamic column changes triggered by menu items. Crucially, you will also implement the custom row-by-row scrolling behavior by intercepting scroll wheel events, updating the application's state, and fetching the corresponding data from the Rust core.
 
 **Tasks:**
-1.  **Add Menu Items:**
-    *   In `MainMenu.xib`, add "Increase Columns" and "Decrease Columns" menu items.
-    *   Connect these menu items to new `@IBAction` functions in `MainViewController`: `increaseColumns(_:)` and `decreaseColumns(_:)`.
-2.  **Implement Column Change Actions:**
-    *   Inside `increaseColumns(_:)`:
-        *   Call `core.increaseColumns()`.
-        *   Update the local state: `numColumns = core.getConfig().numColumns`.
-        *   Call `calculateGridLayout()`.
-        *   Re-fetch the visible data and reload: `fetchAndReloadVisibleData()`.
-    *   Implement `decreaseColumns(_:)` similarly.
-3.  **Scrolling State and Logic:**
-    *   Add state properties to `MainViewController`: `private var currentRow: Int = 0`, `private var totalRows: Int = 0`, `private var maxScrollRow: Int = 0`.
-    *   Update these values inside `calculateGridLayout()`.
-    *   **For now, use menu items for scrolling.** Add "Scroll Up" and "Scroll Down" menu items and connect them to `@IBAction` functions.
-    *   Inside the `scrollDown(_:)` action: `if currentRow < maxScrollRow { currentRow += 1; fetchAndReloadVisibleData() }`. Implement `scrollUp` similarly.
-4.  **Create `fetchAndReloadVisibleData()`:**
-    *   Create a central function to handle data fetching.
-    *   Calculate the start index: `let startIndex = UInt32(currentRow * Int(numColumns))`.
-    *   Calculate the item count: `let count = UInt32(visibleRows * Int(numColumns))`.
-    *   **Perform fetch on a background thread and update UI on main:**
+
+1.  **Programmatically Create Menus in `AppDelegate` or `MainViewController`:**
+    *   In your application setup (likely the `AppDelegate`'s `applicationDidFinishLaunching` or within the `MainViewController`'s initialization), create the main menu bar.
+    *   Create a "View" menu (`NSMenu`).
+    *   Create three menu items: "Increase Columns", "Decrease Columns", and a separator.
+    *   Assign an `action` selector to each item (e.g., `#selector(MainViewController.increaseColumns)`). The `target` for these actions will be your `MainViewController` instance. You may need to route this through the responder chain or set the target explicitly.
+    *   Add this "View" menu to the application's main menu bar.
+
+2.  **Create a Custom `NSScrollView` for Row-by-Row Scrolling:**
+    *   Create a new Swift file for a class named `RowBasedScrollView`, subclassing `NSScrollView`.
+    *   Define a delegate protocol for this class:
         ```swift
-        DispatchQueue.global().async {
-            let items = self.core.getItems(start: startIndex, count: count)
-            DispatchQueue.main.async {
-                self.displayedItems = items
-                self.collectionView.reloadData()
-            }
+        protocol RowBasedScrollViewDelegate: AnyObject {
+            func scrollViewDidScroll(direction: ScrollDirection)
+        }
+        enum ScrollDirection {
+            case up, down
         }
         ```
+    *   Add a `weak var rowScrollDelegate: RowBasedScrollViewDelegate?` property to your `RowBasedScrollView` class.
+    *   Add a property to prevent rapid-fire events, e.g., `private var lastScrollEventTimestamp: TimeInterval = 0`.
+    *   Override the `scrollWheel(with event: NSEvent)` method.
+        *   Inside, check if the event is a scrolling event (`event.phase == .changed`).
+        *   Check the vertical delta: `event.scrollingDeltaY`.
+        *   Implement a debounce/throttling mechanism. For example, if less than 0.3 seconds have passed since the last processed scroll event, `return`.
+        *   If `scrollingDeltaY` is significantly negative (e.g., `< -0.5`), call `rowScrollDelegate?.scrollViewDidScroll(direction: .down)` and update `lastScrollEventTimestamp`.
+        *   If `scrollingDeltaY` is significantly positive (e.g., `> 0.5`), call `rowScrollDelegate?.scrollViewDidScroll(direction: .up)` and update `lastScrollEventTimestamp`.
+        *   **Do not call `super.scrollWheel(with: event)`** to prevent the default pixel-based scrolling.
+
+3.  **Integrate the Custom Scroll View in `MainViewController`:**
+    *   In `MainViewController`'s `loadView()` method, where you programmatically create your views:
+        *   Instantiate your `RowBasedScrollView` instead of a standard `NSScrollView`.
+        *   Instantiate the `NSCollectionView`.
+        *   Set the `collectionView` as the `documentView` of your `RowBasedScrollView` instance.
+        *   Set the controller as the delegate: `scrollView.rowScrollDelegate = self`.
+        *   Add the scroll view to the controller's main view and set up its Auto Layout constraints to fill the view.
+
+4.  **Implement Action and Delegate Methods in `MainViewController`:**
+    *   Make `MainViewController` conform to the `RowBasedScrollViewDelegate` protocol.
+    *   Create the `@objc func increaseColumns()` method:
+        *   Call `core.increaseColumns()`.
+        *   Update state: `numColumns = core.getConfig().numColumns`.
+        *   To keep the top item in view, calculate the index of the top-left item *before* the layout change: `let firstVisibleIndex = currentRow * Int(numColumnsBeforeChange)`.
+        *   Recalculate the layout: `calculateGridLayout()`.
+        *   Adjust `currentRow` to show the `firstVisibleIndex`: `currentRow = firstVisibleIndex / Int(numColumns)`.
+        *   Fetch and reload data: `fetchAndReloadVisibleData()`.
+    *   Implement `@objc func decreaseColumns()` similarly.
+    *   Implement the delegate method `scrollViewDidScroll(direction: ScrollDirection)`:
+        *   Use a `switch` on the `direction`.
+        *   For `.down`: `if currentRow < maxScrollRow { currentRow += 1; fetchAndReloadVisibleData() }`.
+        *   For `.up`: `if currentRow > 0 { currentRow -= 1; fetchAndReloadVisibleData() }`.
+
+5.  **Centralize Data Fetching and Reloading:**
+    *   Ensure the `fetchAndReloadVisibleData()` function from Work Item 4 is robust. It should be the single source of truth for loading data into the collection view based on the current state (`currentRow`, `numColumns`, `visibleRows`).
+    *   This function must perform the Rust call on a background thread and update the `displayedItems` property and call `collectionView.reloadData()` on the main thread to prevent UI freezing.
 
 **Success Criteria:**
-1.  **Column Change Works:** Choosing "Increase Columns" from the menu must immediately re-render the grid with 6 columns. The item heights should adjust to fill the vertical space. The grid should attempt to keep the previously top-visible items in view.
-2.  **Scrolling Works:** Choosing "Scroll Down" from the menu must replace the content of the `NSCollectionView` with the next page of items fetched from the Rust library.
-3.  **Thread Safety:** The app must remain responsive, and UI updates must not cause crashes, proving the main-thread dispatch is correct.
+
+1.  **Programmatic UI Verified:** The application launches and displays the grid and menus correctly without relying on any XIB or Storyboard files. There are no `@IBOutlet` or `@IBAction` keywords in the `MainViewController`.
+2.  **Menu Actions Work:** Clicking "Increase Columns" or "Decrease Columns" in the "View" menu correctly changes the number of columns in the grid, recalculates the layout, and reloads the appropriate items.
+3.  **Row-by-Row Scrolling:** Using the mouse scroll wheel or a two-finger trackpad gesture triggers discrete, row-by-row scrolling. One "tick" or "flick" of the scroll gesture moves the grid up or down by exactly one full row. There is no smooth, pixel-based scrolling.
+4.  **State Integrity:** Scrolling and column changes are correctly bounded. The user cannot scroll past the beginning or end of the item list. The number of columns is kept within the limits defined in Rust.
+5.  **Responsiveness:** The application UI remains responsive and does not stutter or freeze, even during fast scrolling or column changes, validating the background data fetching pattern.
