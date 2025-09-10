@@ -1,6 +1,6 @@
 //! Core library exposing uniffi bindings for Swift interop.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 /// Represents an individual item in the application.
 #[derive(Clone, Debug, PartialEq)]
@@ -18,7 +18,7 @@ pub struct Config {
 /// Main state container for the application.
 pub struct Core {
     items: Vec<Item>,
-    config: Config,
+    config: Mutex<Config>,
 }
 
 impl Core {
@@ -29,7 +29,7 @@ impl Core {
 
     /// Gets the current configuration.
     pub fn get_config(&self) -> Config {
-        self.config.clone()
+        self.config.lock().unwrap().clone()
     }
 
     /// Gets the total number of items.
@@ -55,6 +55,22 @@ impl Core {
         // Return the slice as a new vector
         self.items[start_idx..end_idx].to_vec()
     }
+
+    /// Increases the number of columns by 1, up to a maximum of 20.
+    pub fn increase_columns(&self) {
+        let mut config = self.config.lock().unwrap();
+        if config.num_columns < 20 {
+            config.num_columns += 1;
+        }
+    }
+
+    /// Decreases the number of columns by 1, down to a minimum of 1.
+    pub fn decrease_columns(&self) {
+        let mut config = self.config.lock().unwrap();
+        if config.num_columns > 1 {
+            config.num_columns -= 1;
+        }
+    }
 }
 
 impl Core {
@@ -68,7 +84,7 @@ impl Core {
 
 impl Default for Core {
     fn default() -> Self {
-        let config = Config { num_columns: 5 };
+        let config = Mutex::new(Config { num_columns: 5 });
 
         let items = (1..=100)
             .map(|id| Item {
@@ -105,7 +121,7 @@ mod tests {
         let core = Core::new_for_test();
 
         // Assert that core.config.num_columns is equal to 5
-        assert_eq!(core.config.num_columns, 5);
+        assert_eq!(core.config.lock().unwrap().num_columns, 5);
 
         // Assert that core.items.len() is equal to 100
         assert_eq!(core.items.len(), 100);
@@ -165,5 +181,45 @@ mod tests {
         // Test getting more than available
         let items = core.get_items(0, 150);
         assert_eq!(items.len(), 100);
+    }
+
+    #[test]
+    fn test_column_modification() {
+        let core = Core::new();
+
+        // Test initial state
+        assert_eq!(core.get_config().num_columns, 5);
+
+        // Test increasing columns
+        core.increase_columns();
+        assert_eq!(core.get_config().num_columns, 6);
+
+        // Test increasing to maximum (20)
+        for _ in 0..14 {
+            core.increase_columns();
+        }
+        assert_eq!(core.get_config().num_columns, 20);
+
+        // Test that it doesn't go beyond maximum
+        core.increase_columns();
+        assert_eq!(core.get_config().num_columns, 20);
+
+        // Test decreasing columns
+        core.decrease_columns();
+        assert_eq!(core.get_config().num_columns, 19);
+
+        // Test decreasing to minimum (1)
+        for _ in 0..18 {
+            core.decrease_columns();
+        }
+        assert_eq!(core.get_config().num_columns, 1);
+
+        // Test that it doesn't go below minimum
+        core.decrease_columns();
+        assert_eq!(core.get_config().num_columns, 1);
+
+        // Test increasing from minimum
+        core.increase_columns();
+        assert_eq!(core.get_config().num_columns, 2);
     }
 }

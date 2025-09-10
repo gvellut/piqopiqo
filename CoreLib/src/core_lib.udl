@@ -16,4 +16,6 @@ interface Core {
     Config get_config();
     u32 get_total_item_count();
     sequence<Item> get_items(u32 start, u32 count);
+    void increase_columns();
+    void decrease_columns();
 };
