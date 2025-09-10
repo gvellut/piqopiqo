@@ -3,7 +3,7 @@ import UniffiBindings
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow!
-    private var mainView: MainView!
+    private var mainViewController: MainViewController!
 
     private func buildMainMenu() {
         let mainMenu = NSMenu()
@@ -60,14 +60,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.setFrameAutosaveName("MainWindow")
         _ = window.setFrameUsingName("MainWindow")  // ignore result; defaultRect already set
 
-        mainView = MainView()
-        window.contentView = mainView
+        mainViewController = MainViewController()
+        window.contentViewController = mainViewController
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
         // Defer restoration until layout pass is done.
         DispatchQueue.main.async { [weak self] in
-            self?.mainView.restoreOrInitializeDivider()
+            if let mainView = self?.mainViewController.view as? MainView {
+                mainView.restoreOrInitializeDivider()
+            }
         }
     }
 
@@ -105,7 +107,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleFolderSelection(url: URL, recursive: Bool) {
         // Call Rust function via UniffiBindings to process the folder
         // Example: CoreLib.openFolder(path: url.path, recursive: recursive)
-        // Update UI state as needed (e.g., notify MainView or a view model)
+        // Update UI state as needed (e.g., notify MainViewController or a view model)
         print("Selected folder: \(url.path), Recursive: \(recursive)")
     }
 }

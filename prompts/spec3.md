@@ -132,8 +132,6 @@ Use an `NSCollectionView` to display the initial, non-scrollable grid of items. 
 
 ### Work Item 5: Expose Configuration Mutators in Rust
 
-**(This work item is identical to the previous version.)**
-
 **Description:**
 Add the ability for the Swift client to modify the number of columns stored in the Rust `Core`'s configuration. The operations will be simple increments and decrements, with sensible bounds.
 
