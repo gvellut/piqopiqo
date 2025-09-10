@@ -1,7 +1,7 @@
 import AppKit
 import UniffiBindings
 
-class MainViewController: NSViewController {
+class MainViewController: NSViewController, NSCollectionViewDataSource {
     // MARK: - Properties for state storage
     private var core: Core!
     private var panelWidth: CGFloat = 0
@@ -11,8 +11,12 @@ class MainViewController: NSViewController {
     private var itemHeight: CGFloat = 0
     private var visibleRows: Int = 0
 
+    // MARK: - Data
+    private var displayedItems: [Item] = []
+
     // MARK: - UI Components
     private var mainView: MainView!
+    private var collectionView: NSCollectionView!
 
     override func loadView() {
         mainView = MainView()
@@ -31,6 +35,9 @@ class MainViewController: NSViewController {
 
         print("📋 Core initialized with \(numColumns) columns")
 
+        // Set up collection view
+        setupCollectionView()
+
         // Set up view layout observation
         setupLayoutObservation()
     }
@@ -44,6 +51,38 @@ class MainViewController: NSViewController {
 
         // Calculate and update grid layout
         calculateGridLayout()
+    }
+
+    // MARK: - Collection View Setup
+    private func setupCollectionView() {
+        // Create collection view
+        collectionView = NSCollectionView()
+        collectionView.translatesAutoresizingMaskIntoConstraints = false
+
+        // Configure the grid layout
+        let layout = NSCollectionViewGridLayout()
+        collectionView.collectionViewLayout = layout
+
+        // Register the GridItem class for the collection view
+        collectionView.register(
+            GridItem.self, forItemWithIdentifier: NSUserInterfaceItemIdentifier("GridItem"))
+
+        // Set data source
+        collectionView.dataSource = self
+
+        // Add collection view to left panel
+        mainView.leftPanel.addSubview(collectionView)
+
+        // Set up constraints
+        NSLayoutConstraint.activate([
+            collectionView.topAnchor.constraint(equalTo: mainView.leftPanel.topAnchor, constant: 8),
+            collectionView.leadingAnchor.constraint(
+                equalTo: mainView.leftPanel.leadingAnchor, constant: 8),
+            collectionView.trailingAnchor.constraint(
+                equalTo: mainView.leftPanel.trailingAnchor, constant: -8),
+            collectionView.bottomAnchor.constraint(
+                equalTo: mainView.leftPanel.bottomAnchor, constant: -8),
+        ])
     }
 
     // MARK: - Layout Calculation
@@ -93,11 +132,53 @@ class MainViewController: NSViewController {
         print("   Item size: \(Int(itemWidth))×\(Int(itemHeight))")
         print("   Visible rows: \(visibleRows)")
         print("   Total visible items: \(Int(numColumns) * visibleRows)")
+
+        // Update collection view layout if it exists
+        if let gridLayout = collectionView?.collectionViewLayout as? NSCollectionViewGridLayout {
+            gridLayout.minimumItemSize = NSSize(width: itemWidth, height: itemHeight)
+            gridLayout.maximumItemSize = NSSize(width: itemWidth, height: itemHeight)
+            gridLayout.minimumLineSpacing = 8
+            gridLayout.minimumInteritemSpacing = 8
+            gridLayout.maximumNumberOfColumns = Int(numColumns)
+        }
+
+        // Fetch data from Rust core
+        let totalVisibleItems = Int(numColumns) * visibleRows
+        displayedItems = core.getItems(start: 0, count: UInt32(totalVisibleItems))
+
+        print("📦 Fetched \(displayedItems.count) items from Rust core")
+        if !displayedItems.isEmpty {
+            print("   First item: id=\(displayedItems[0].id), text='\(displayedItems[0].text)'")
+        }
+
+        // Reload collection view data
+        collectionView?.reloadData()
     }
 
     // MARK: - Private Methods
     private func setupLayoutObservation() {
         // Additional setup for layout observation if needed
         // The viewDidLayout method will be called automatically when the view's frame changes
+    }
+}
+
+// MARK: - NSCollectionViewDataSource
+extension MainViewController {
+    func collectionView(_ collectionView: NSCollectionView, numberOfItemsInSection section: Int)
+        -> Int
+    {
+        return displayedItems.count
+    }
+
+    func collectionView(
+        _ collectionView: NSCollectionView, itemForRepresentedObjectAt indexPath: IndexPath
+    ) -> NSCollectionViewItem {
+        let item =
+            collectionView.makeItem(
+                withIdentifier: NSUserInterfaceItemIdentifier("GridItem"), for: indexPath)
+            as! GridItem
+        let dataItem = displayedItems[indexPath.item]
+        item.configure(with: dataItem)
+        return item
     }
 }

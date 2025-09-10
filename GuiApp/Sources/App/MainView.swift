@@ -3,7 +3,7 @@ import UniffiBindings
 
 class MainView: NSView {
     private(set) var splitView: NSSplitView!
-    private var leftPanel: NSView!
+    private(set) var leftPanel: NSView!
     private var rightPanel: NSView!
     private var statusBar: NSView!
     private let splitAutosaveKey = "NSSplitView Subview Frames MainSplitView"
@@ -30,13 +30,7 @@ class MainView: NSView {
 
         leftPanel = NSView()
         leftPanel.wantsLayer = true
-        leftPanel.layer?.backgroundColor = NSColor.black.cgColor
-
-        let gridLabel = NSTextField(labelWithString: "Grid Panel D")
-        gridLabel.font = NSFont.systemFont(ofSize: 18, weight: .medium)
-        gridLabel.alignment = .center
-        gridLabel.translatesAutoresizingMaskIntoConstraints = false
-        leftPanel.addSubview(gridLabel)
+        leftPanel.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 
         rightPanel = NSView()
         rightPanel.wantsLayer = true
@@ -84,9 +78,6 @@ class MainView: NSView {
             splitView.leadingAnchor.constraint(equalTo: leadingAnchor),
             splitView.trailingAnchor.constraint(equalTo: trailingAnchor),
             splitView.bottomAnchor.constraint(equalTo: statusBar.topAnchor),
-
-            gridLabel.centerXAnchor.constraint(equalTo: leftPanel.centerXAnchor),
-            gridLabel.centerYAnchor.constraint(equalTo: leftPanel.centerYAnchor),
 
             detailLabel.centerXAnchor.constraint(equalTo: rightPanel.centerXAnchor),
             detailLabel.centerYAnchor.constraint(equalTo: rightPanel.centerYAnchor, constant: -20),
