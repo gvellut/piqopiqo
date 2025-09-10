@@ -1,7 +1,7 @@
 import AppKit
 import UniffiBindings
 
-class MainViewController: NSViewController, NSCollectionViewDataSource {
+class MainViewController: NSViewController, NSCollectionViewDataSource, RowBasedScrollViewDelegate {
     // MARK: - Properties for state storage
     private var core: Core!
     private var panelWidth: CGFloat = 0
@@ -10,6 +10,8 @@ class MainViewController: NSViewController, NSCollectionViewDataSource {
     private var itemWidth: CGFloat = 0
     private var itemHeight: CGFloat = 0
     private var visibleRows: Int = 0
+    private var currentRow: Int = 0
+    private var maxScrollRow: Int = 0
 
     // MARK: - Data
     private var displayedItems: [Item] = []
@@ -17,6 +19,7 @@ class MainViewController: NSViewController, NSCollectionViewDataSource {
     // MARK: - UI Components
     private var mainView: MainView!
     private var collectionView: NSCollectionView!
+    private var scrollView: RowBasedScrollView!
 
     override func loadView() {
         mainView = MainView()
@@ -55,6 +58,11 @@ class MainViewController: NSViewController, NSCollectionViewDataSource {
 
     // MARK: - Collection View Setup
     private func setupCollectionView() {
+        // Create custom scroll view
+        scrollView = RowBasedScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.rowScrollDelegate = self
+
         // Create collection view
         collectionView = NSCollectionView()
         collectionView.translatesAutoresizingMaskIntoConstraints = false
@@ -70,17 +78,20 @@ class MainViewController: NSViewController, NSCollectionViewDataSource {
         // Set data source
         collectionView.dataSource = self
 
-        // Add collection view to left panel
-        mainView.leftPanel.addSubview(collectionView)
+        // Set collection view as document view of scroll view
+        scrollView.documentView = collectionView
+
+        // Add scroll view to left panel
+        mainView.leftPanel.addSubview(scrollView)
 
         // Set up constraints
         NSLayoutConstraint.activate([
-            collectionView.topAnchor.constraint(equalTo: mainView.leftPanel.topAnchor, constant: 8),
-            collectionView.leadingAnchor.constraint(
+            scrollView.topAnchor.constraint(equalTo: mainView.leftPanel.topAnchor, constant: 8),
+            scrollView.leadingAnchor.constraint(
                 equalTo: mainView.leftPanel.leadingAnchor, constant: 8),
-            collectionView.trailingAnchor.constraint(
+            scrollView.trailingAnchor.constraint(
                 equalTo: mainView.leftPanel.trailingAnchor, constant: -8),
-            collectionView.bottomAnchor.constraint(
+            scrollView.bottomAnchor.constraint(
                 equalTo: mainView.leftPanel.bottomAnchor, constant: -8),
         ])
     }
@@ -142,23 +153,114 @@ class MainViewController: NSViewController, NSCollectionViewDataSource {
             gridLayout.maximumNumberOfColumns = Int(numColumns)
         }
 
-        // Fetch data from Rust core
+        // Calculate max scroll row based on total items
+        let totalItems = Int(core.getTotalItemCount())
+        let totalRows = (totalItems + Int(numColumns) - 1) / Int(numColumns)  // Ceiling division
+        maxScrollRow = max(0, totalRows - visibleRows)
+
+        // Ensure currentRow is within bounds
+        currentRow = min(currentRow, maxScrollRow)
+
+        // Fetch and reload visible data
+        fetchAndReloadVisibleData()
+    }
+
+    // MARK: - Data Fetching
+    private func fetchAndReloadVisibleData() {
         let totalVisibleItems = Int(numColumns) * visibleRows
-        displayedItems = core.getItems(start: 0, count: UInt32(totalVisibleItems))
+        let startIndex = currentRow * Int(numColumns)
 
-        print("📦 Fetched \(displayedItems.count) items from Rust core")
-        if !displayedItems.isEmpty {
-            print("   First item: id=\(displayedItems[0].id), text='\(displayedItems[0].text)'")
+        // Perform Rust call on background thread
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+
+            let items = self.core.getItems(
+                start: UInt32(startIndex), count: UInt32(totalVisibleItems))
+
+            // Update UI on main thread
+            DispatchQueue.main.async {
+                self.displayedItems = items
+                self.collectionView?.reloadData()
+
+                print(
+                    "📦 Fetched \(items.count) items from Rust core (row \(self.currentRow)/\(self.maxScrollRow))"
+                )
+                if !items.isEmpty {
+                    print("   First item: id=\(items[0].id), text='\(items[0].text)'")
+                }
+            }
         }
-
-        // Reload collection view data
-        collectionView?.reloadData()
     }
 
     // MARK: - Private Methods
     private func setupLayoutObservation() {
         // Additional setup for layout observation if needed
         // The viewDidLayout method will be called automatically when the view's frame changes
+    }
+
+    // MARK: - Menu Actions
+    @objc func increaseColumns() {
+        let numColumnsBeforeChange = numColumns
+
+        // Call Rust core to increase columns
+        core.increaseColumns()
+
+        // Update state
+        numColumns = core.getConfig().numColumns
+
+        // Calculate the index of the top-left item before layout change
+        let firstVisibleIndex = currentRow * Int(numColumnsBeforeChange)
+
+        // Recalculate layout
+        calculateGridLayout()
+
+        // Adjust currentRow to show the firstVisibleIndex
+        currentRow = firstVisibleIndex / Int(numColumns)
+        currentRow = min(currentRow, maxScrollRow)
+
+        // Fetch and reload data
+        fetchAndReloadVisibleData()
+    }
+
+    @objc func decreaseColumns() {
+        let numColumnsBeforeChange = numColumns
+
+        // Call Rust core to decrease columns
+        core.decreaseColumns()
+
+        // Update state
+        numColumns = core.getConfig().numColumns
+
+        // Calculate the index of the top-left item before layout change
+        let firstVisibleIndex = currentRow * Int(numColumnsBeforeChange)
+
+        // Recalculate layout
+        calculateGridLayout()
+
+        // Adjust currentRow to show the firstVisibleIndex
+        currentRow = firstVisibleIndex / Int(numColumns)
+        currentRow = min(currentRow, maxScrollRow)
+
+        // Fetch and reload data
+        fetchAndReloadVisibleData()
+    }
+}
+
+// MARK: - RowBasedScrollViewDelegate
+extension MainViewController {
+    func scrollViewDidScroll(direction: ScrollDirection) {
+        switch direction {
+        case .down:
+            if currentRow < maxScrollRow {
+                currentRow += 1
+                fetchAndReloadVisibleData()
+            }
+        case .up:
+            if currentRow > 0 {
+                currentRow -= 1
+                fetchAndReloadVisibleData()
+            }
+        }
     }
 }
 

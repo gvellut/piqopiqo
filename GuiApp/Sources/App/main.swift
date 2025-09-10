@@ -34,6 +34,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         fileMenuItem.submenu?.addItem(openFolderItem)
         mainMenu.addItem(fileMenuItem)
 
+        // View menu
+        let viewMenuItem = NSMenuItem()
+        viewMenuItem.submenu = NSMenu(title: "View")
+
+        let increaseColumnsItem = NSMenuItem(
+            title: "Increase Columns", action: #selector(MainViewController.increaseColumns),
+            keyEquivalent: "+")
+        let decreaseColumnsItem = NSMenuItem(
+            title: "Decrease Columns", action: #selector(MainViewController.decreaseColumns),
+            keyEquivalent: "-")
+
+        viewMenuItem.submenu?.addItem(increaseColumnsItem)
+        viewMenuItem.submenu?.addItem(decreaseColumnsItem)
+        mainMenu.addItem(viewMenuItem)
+
         NSApp.mainMenu = mainMenu
     }
 
