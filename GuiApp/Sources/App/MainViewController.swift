@@ -12,6 +12,7 @@ class MainViewController: NSViewController, NSCollectionViewDataSource, RowBased
     private var visibleRows: Int = 0
     private var currentRow: Int = 0
     private var maxScrollRow: Int = 0
+    private var totalRows: Int = 0
 
     // MARK: - Data
     private var displayedItems: [Item] = []
@@ -62,6 +63,8 @@ class MainViewController: NSViewController, NSCollectionViewDataSource, RowBased
         scrollView = RowBasedScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.rowScrollDelegate = self
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
 
         // Create collection view
         collectionView = NSCollectionView()
@@ -153,10 +156,10 @@ class MainViewController: NSViewController, NSCollectionViewDataSource, RowBased
             gridLayout.maximumNumberOfColumns = Int(numColumns)
         }
 
-        // Calculate max scroll row based on total items
-        let totalItems = Int(core.getTotalItemCount())
-        let totalRows = (totalItems + Int(numColumns) - 1) / Int(numColumns)  // Ceiling division
-        maxScrollRow = max(0, totalRows - visibleRows)
+    // Calculate max scroll row based on total items
+    let totalItems = Int(core.getTotalItemCount())
+    totalRows = (totalItems + Int(numColumns) - 1) / Int(numColumns)  // Ceiling division
+    maxScrollRow = max(0, totalRows - visibleRows)
 
         // Ensure currentRow is within bounds
         currentRow = min(currentRow, maxScrollRow)
@@ -181,6 +184,13 @@ class MainViewController: NSViewController, NSCollectionViewDataSource, RowBased
             DispatchQueue.main.async {
                 self.displayedItems = items
                 self.collectionView?.reloadData()
+
+                // Update the scroll bar position to reflect currentRow
+                self.scrollView?.updateScrollPosition(
+                    currentRow: self.currentRow,
+                    totalRows: self.totalRows,
+                    visibleRows: self.visibleRows
+                )
 
                 print(
                     "📦 Fetched \(items.count) items from Rust core (row \(self.currentRow)/\(self.maxScrollRow))"
