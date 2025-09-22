@@ -13,6 +13,13 @@ class MainViewController: NSViewController, NSCollectionViewDataSource, RowBased
     private var currentRow: Int = 0
     private var maxScrollRow: Int = 0
     private var totalRows: Int = 0
+    private var lastStartIndex: Int = 0
+    private var isSnappingScroll: Bool = false
+    // Layout constants
+    private let horizontalEdgeInset: CGFloat = 8  // matches scroll view constraints
+    private let verticalEdgeInset: CGFloat = 8  // matches scroll view constraints
+    private let interItemSpacing: CGFloat = 8
+    private let lineSpacing: CGFloat = 8
 
     // MARK: - Data
     private var displayedItems: [Item] = []
@@ -50,8 +57,8 @@ class MainViewController: NSViewController, NSCollectionViewDataSource, RowBased
         super.viewDidLayout()
 
         // Update panel dimensions from view bounds
-        panelWidth = view.bounds.width
-        panelHeight = view.bounds.height
+        panelWidth = mainView.leftPanel.bounds.width
+        panelHeight = mainView.leftPanel.bounds.height
 
         // Calculate and update grid layout
         calculateGridLayout()
@@ -65,13 +72,19 @@ class MainViewController: NSViewController, NSCollectionViewDataSource, RowBased
         scrollView.rowScrollDelegate = self
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
+        scrollView.contentView.postsBoundsChangedNotifications = true
 
         // Create collection view
         collectionView = NSCollectionView()
-        collectionView.translatesAutoresizingMaskIntoConstraints = false
+        // As a documentView, Auto Layout is not used; rely on autoresizing mask.
+        collectionView.translatesAutoresizingMaskIntoConstraints = true
+        collectionView.autoresizingMask = [.width]
 
-        // Configure the grid layout
-        let layout = NSCollectionViewGridLayout()
+        // Configure a flow layout to strictly control columns via itemSize
+        let layout = NSCollectionViewFlowLayout()
+        layout.minimumInteritemSpacing = interItemSpacing
+        layout.minimumLineSpacing = lineSpacing
+        layout.sectionInset = NSEdgeInsets(top: lineSpacing, left: 0, bottom: lineSpacing, right: 0)
         collectionView.collectionViewLayout = layout
 
         // Register the GridItem class for the collection view
@@ -81,8 +94,19 @@ class MainViewController: NSViewController, NSCollectionViewDataSource, RowBased
         // Set data source
         collectionView.dataSource = self
 
+        // Match collection view frame to scroll view's visible bounds initially
+        collectionView.frame = scrollView.contentView.bounds
+
         // Set collection view as document view of scroll view
         scrollView.documentView = collectionView
+
+        // Observe clip view scrolling to snap to row boundaries (handles scrollbar drags)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(clipViewBoundsDidChange(_:)),
+            name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView
+        )
 
         // Add scroll view to left panel
         mainView.leftPanel.addSubview(scrollView)
@@ -109,34 +133,41 @@ class MainViewController: NSViewController, NSCollectionViewDataSource, RowBased
             return
         }
 
-        // Grid layout algorithm implementation
-        // Based on the typical photo grid layout with square-ish items
-
-        // Calculate item width based on available width and number of columns
-        let padding: CGFloat = 16  // Total horizontal padding
-        let itemSpacing: CGFloat = 8  // Space between items
-        let totalSpacing = itemSpacing * CGFloat(numColumns - 1)  // Space between columns
-        let availableWidth = panelWidth - padding - totalSpacing
+        // Compute available content size inside scroll view insets
+        // Horizontal: account for our scroll view constraints (8pt each side) and inter-item spacing
+        let totalInterItemSpacing = interItemSpacing * CGFloat(numColumns - 1)
+        let availableWidth = max(0, panelWidth - 2 * horizontalEdgeInset - totalInterItemSpacing)
         itemWidth = availableWidth / CGFloat(numColumns)
 
-        // For photo grids, maintain approximately square aspect ratio
-        // Add a bit of height for potential caption/metadata area
-        itemHeight = itemWidth * 1.1
+        // Vertical: compute available vertical height minus top/bottom insets (match constraints)
+        let availableHeight = max(0, panelHeight - 2 * verticalEdgeInset)
 
-        // Calculate how many rows can fit in the visible area
-        let headerHeight: CGFloat = 40  // Space for potential header
-        let footerHeight: CGFloat = 30  // Space for status bar
-        let verticalPadding: CGFloat = 16
-        let rowSpacing: CGFloat = 8
+        // Start with square item height
+        var computedItemHeight = itemWidth
+        let totalItems = Int(core.getTotalItemCount())
 
-        let availableHeight = panelHeight - headerHeight - footerHeight - verticalPadding
+        // Base rows that fit without cutting, using floor, and considering line spacing
+        let rowUnit = computedItemHeight + lineSpacing
+        let baseVisibleRows = max(1, Int(floor((availableHeight + lineSpacing) / rowUnit)))
+        visibleRows = baseVisibleRows
 
-        // Calculate number of visible rows
-        if itemHeight > 0 {
-            let totalRowHeight = itemHeight + rowSpacing
-            visibleRows = max(1, Int(availableHeight / totalRowHeight))
+        // If we have enough items to fill baseVisibleRows completely, stretch height to fill
+        let capacityAtBase = Int(numColumns) * baseVisibleRows
+        if totalItems >= capacityAtBase {
+            let totalSpacingHeight = lineSpacing * CGFloat(max(0, baseVisibleRows - 1))
+            let filledHeight = (availableHeight - totalSpacingHeight) / CGFloat(baseVisibleRows)
+            computedItemHeight = max(computedItemHeight, filledHeight)
         } else {
-            visibleRows = 1
+            // Not enough items: keep square height and leave empty space below
+            computedItemHeight = itemWidth
+        }
+        itemHeight = computedItemHeight
+
+        // Update flow layout with final item size
+        if let flow = collectionView.collectionViewLayout as? NSCollectionViewFlowLayout {
+            flow.itemSize = NSSize(width: itemWidth, height: itemHeight)
+            flow.minimumInteritemSpacing = interItemSpacing
+            flow.minimumLineSpacing = lineSpacing
         }
 
         // Log calculated values for verification
@@ -147,19 +178,19 @@ class MainViewController: NSViewController, NSCollectionViewDataSource, RowBased
         print("   Visible rows: \(visibleRows)")
         print("   Total visible items: \(Int(numColumns) * visibleRows)")
 
-        // Update collection view layout if it exists
-        if let gridLayout = collectionView?.collectionViewLayout as? NSCollectionViewGridLayout {
-            gridLayout.minimumItemSize = NSSize(width: itemWidth, height: itemHeight)
-            gridLayout.maximumItemSize = NSSize(width: itemWidth, height: itemHeight)
-            gridLayout.minimumLineSpacing = 8
-            gridLayout.minimumInteritemSpacing = 8
-            gridLayout.maximumNumberOfColumns = Int(numColumns)
-        }
+        // Update document view frame height to reflect total content (for proper scrollbar/thumb)
+        let totalRowsCount = max(1, Int(ceil(Double(totalItems) / Double(numColumns))))
+        let contentHeight =
+            CGFloat(totalRowsCount) * itemHeight
+            + CGFloat(max(0, totalRowsCount - 1)) * lineSpacing
+        var docFrame = collectionView.frame
+        docFrame.size.width = scrollView.contentView.bounds.width
+        docFrame.size.height = contentHeight
+        collectionView.frame = docFrame
 
-    // Calculate max scroll row based on total items
-    let totalItems = Int(core.getTotalItemCount())
-    totalRows = (totalItems + Int(numColumns) - 1) / Int(numColumns)  // Ceiling division
-    maxScrollRow = max(0, totalRows - visibleRows)
+        // Calculate max scroll row based on total items and visible rows
+        totalRows = totalRowsCount
+        maxScrollRow = max(0, totalRows - visibleRows)
 
         // Ensure currentRow is within bounds
         currentRow = min(currentRow, maxScrollRow)
@@ -172,18 +203,42 @@ class MainViewController: NSViewController, NSCollectionViewDataSource, RowBased
     private func fetchAndReloadVisibleData() {
         let totalVisibleItems = Int(numColumns) * visibleRows
         let startIndex = currentRow * Int(numColumns)
+        let prevDisplayed = self.displayedItems
+        let prevStartIndex = self.lastStartIndex
 
         // Perform Rust call on background thread
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-
-            let items = self.core.getItems(
-                start: UInt32(startIndex), count: UInt32(totalVisibleItems))
+            let items: [Item]
+            let step = Int(self.numColumns)
+            if !prevDisplayed.isEmpty && totalVisibleItems == prevDisplayed.count {
+                let delta = startIndex - prevStartIndex
+                if delta == step {
+                    // Scrolled down by one row: reuse top items
+                    let reuse = Array(prevDisplayed.dropFirst(step))
+                    let fetchStart = startIndex + (totalVisibleItems - step)
+                    let fetched = self.core.getItems(start: UInt32(fetchStart), count: UInt32(step))
+                    items = reuse + fetched
+                } else if delta == -step {
+                    // Scrolled up by one row: reuse bottom items
+                    let reuse = Array(prevDisplayed.prefix(totalVisibleItems - step))
+                    let fetchStart = startIndex
+                    let fetched = self.core.getItems(start: UInt32(fetchStart), count: UInt32(step))
+                    items = fetched + reuse
+                } else {
+                    items = self.core.getItems(
+                        start: UInt32(startIndex), count: UInt32(totalVisibleItems))
+                }
+            } else {
+                items = self.core.getItems(
+                    start: UInt32(startIndex), count: UInt32(totalVisibleItems))
+            }
 
             // Update UI on main thread
             DispatchQueue.main.async {
                 self.displayedItems = items
                 self.collectionView?.reloadData()
+                self.lastStartIndex = startIndex
 
                 // Update the scroll bar position to reflect currentRow
                 self.scrollView?.updateScrollPosition(
@@ -206,6 +261,32 @@ class MainViewController: NSViewController, NSCollectionViewDataSource, RowBased
     private func setupLayoutObservation() {
         // Additional setup for layout observation if needed
         // The viewDidLayout method will be called automatically when the view's frame changes
+    }
+
+    @objc private func clipViewBoundsDidChange(_ notification: Notification) {
+        guard !isSnappingScroll else { return }
+        guard let clip = notification.object as? NSClipView, clip === scrollView.contentView else {
+            return
+        }
+        let unit = itemHeight + lineSpacing
+        guard unit > 0 else { return }
+        let y = clip.bounds.origin.y
+        let targetRow = max(0, min(maxScrollRow, Int(round(y / unit))))
+        let targetY = CGFloat(targetRow) * unit
+        if abs(targetY - y) > 0.5 {
+            isSnappingScroll = true
+            clip.scroll(to: NSPoint(x: 0, y: targetY))
+            scrollView.reflectScrolledClipView(clip)
+            isSnappingScroll = false
+        }
+        if targetRow != currentRow {
+            currentRow = targetRow
+            fetchAndReloadVisibleData()
+        }
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     // MARK: - Menu Actions

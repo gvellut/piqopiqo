@@ -86,7 +86,7 @@ impl Default for Core {
     fn default() -> Self {
         let config = Mutex::new(Config { num_columns: 5 });
 
-        let items = (1..=100)
+        let items = (1..=102)
             .map(|id| Item {
                 id,
                 text: format!("Item #{}", id),
@@ -123,16 +123,16 @@ mod tests {
         // Assert that core.config.num_columns is equal to 5
         assert_eq!(core.config.lock().unwrap().num_columns, 5);
 
-        // Assert that core.items.len() is equal to 100
-        assert_eq!(core.items.len(), 100);
+        // Assert that core.items.len() is equal to 102
+        assert_eq!(core.items.len(), 102);
 
         // Assert that core.items[0].id is 1 and core.items[0].text is "Item #1"
         assert_eq!(core.items[0].id, 1);
         assert_eq!(core.items[0].text, "Item #1");
 
-        // Assert that core.items[99].id is 100 and core.items[99].text is "Item #100"
-        assert_eq!(core.items[99].id, 100);
-        assert_eq!(core.items[99].text, "Item #100");
+        // Assert that core.items[101].id is 102 and core.items[101].text is "Item #102"
+        assert_eq!(core.items[101].id, 102);
+        assert_eq!(core.items[101].text, "Item #102");
     }
 
     #[test]
@@ -141,13 +141,13 @@ mod tests {
 
         // Test that we can access the core through Arc
         assert_eq!(core_arc.get_config().num_columns, 5);
-        assert_eq!(core_arc.get_total_item_count(), 100);
+        assert_eq!(core_arc.get_total_item_count(), 102);
 
-        let items = core_arc.get_items(0, 100);
+        let items = core_arc.get_items(0, 102);
         assert_eq!(items[0].id, 1);
         assert_eq!(items[0].text, "Item #1");
-        assert_eq!(items[99].id, 100);
-        assert_eq!(items[99].text, "Item #100");
+        assert_eq!(items[101].id, 102);
+        assert_eq!(items[101].text, "Item #102");
     }
 
     #[test]
@@ -160,14 +160,14 @@ mod tests {
         assert_eq!(items[0].id, 1);
         assert_eq!(items[9].id, 10);
 
-        // Test getting items near the end (95, 10) should return only 5 items
+        // Test getting items near the end (95, 10) should return only 7 items
         let items = core.get_items(95, 10);
-        assert_eq!(items.len(), 5);
+        assert_eq!(items.len(), 7);
         assert_eq!(items[0].id, 96);
-        assert_eq!(items[4].id, 100);
+        assert_eq!(items[6].id, 102);
 
         // Test out-of-bounds start
-        let items = core.get_items(100, 10);
+        let items = core.get_items(102, 10);
         assert_eq!(items.len(), 0);
 
         // Test out-of-bounds start beyond total
@@ -175,12 +175,12 @@ mod tests {
         assert_eq!(items.len(), 0);
 
         // Test getting all items
-        let items = core.get_items(0, 100);
-        assert_eq!(items.len(), 100);
+        let items = core.get_items(0, 102);
+        assert_eq!(items.len(), 102);
 
         // Test getting more than available
         let items = core.get_items(0, 150);
-        assert_eq!(items.len(), 100);
+        assert_eq!(items.len(), 102);
     }
 
     #[test]
