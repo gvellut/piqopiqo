@@ -1,55 +1,30 @@
 ## About This Repository
 
-This repository contains the source code for "Piqopiqo", a native macOS photo browser and metadata viewer and filler, that could act as a replacement for Adobe Bridge for a subset of functionalities.
+This repository contains the source code for "Piqopiqo", a macOS photo browser and metadata viewer and filler, that could act as a replacement for Adobe Bridge for a subset of functionalities.
 
-The goal is to create a high-performance application with a clean, responsive user interface.
+The goal is to create a high-performance application with a clean, streamlined user interface.
 
 ## Core Architecture Principles
 
-1.  **Strict UI/Logic Separation:** The application is composed of two main parts:
-    -   **`GuiApp` (Swift/SwiftUI):** This is responsible ONLY for the user interface, user interactions, and view state management. It should contain no image processing logic or file system access beyond opening image for displaying the pixels.
-    -   **`CoreLib` (Rust):** This is the backend engine. It handles all file operations, thumbnail generation, metadata (EXIF) parsing, and configuration management. It gives to the GuiApp the paths to the image to render (cached Thumbnail, cached image prerendered at the size of the current display, full image). It is a completely self-contained library with no knowledge of the UI (the UI could be replaced with another technology on another OS).
+0.  **Python**
+    -   uv as the dependency manager
+    -   Python 3.13 as the python version
 
-2.  **Swift-Rust Interoperability:**
-    -   Communication between Swift and Rust is handled exclusively through `uniffi-rs` and not `cbindgen`.
-    -   The public API of the `CoreLib` Rust library must be exposed.
-    -   `uniffi-rs` will be used to automatically generate the Swift binding from the Rust source.
-    -   **Memory Management is Critical**
-
-3.  **User Interface:**
-    -   The UI must be built using `AppKit` (or `SwiftUI` depending on knowledge and need for performance). Do not use Storyboards.
-    -   Define all UI programmatically in `.swift` files.
+1.  **User Interface:**
     -   Prioritize performance for the image grid. Use a lazy grid to ensure only visible cells are rendered.
 
-4.  **Build System:**
-    -   The entire project must be buildable from the command line.
-    -   Use Swift Package Manager (SwiftPM) for the Swift application and Cargo for the Rust library.
-    -   A master `build.sh` script will be used to coordinate the build process (compiling Rust, generating the C header, and compiling Swift). Do not rely on Xcode's build system (`.xcodeproj`).
-    -   XCode will not be used for development: only command-line or VS Code.
-
-5.  **Key Dependencies:**
-    -   **Rust:** `image`, `rayon` (for parallelism), `serde` and `toml` (for configuration), `walkdir`.
-    -   **Swift:** `AppKit` (or optionalla `SwiftUI`). Target macOS v14 or later.
+2.  **Key Dependencies:**
     -   JPEG and PNG are the only image formats targetted (no RAW or video files).
-
-6.  **Error Handling:**
-    -   Rust functions exposed via FFI should return nullable pointers or status codes to indicate failure.
-    -   The Swift FFI bridge layer is responsible for checking for these null pointers and translating them into Swift errors or optional types.
+    -   Use pyexiftool for exif reading
+    -   pyside6 as the GUI libary
 
 7.  **Coding Style:**
-    -   Follow standard `rustfmt` for Rust and `swift-format` for Swift.
-    -   Write clear comments, especially for `unsafe` blocks in Rust and Swift that deal with the FFI boundary.
+    -   no async
 
 8. **Ignore and don't**
-    -   Completely disregard the py_test folder, prompts folder and the NOTES.md file
+    -   Completely disregard the pprevious_py_test folder, prompts folder and the NOTES.md file
     -   don't use node or npx ever
 
-9. **Versions**
-    -   Use Rust 2024 (do not change to Rust 2021)
-    -   Use Swift 6.2
-
-10. **Rust**
-    -   Do not use async. Use threads only.
 
 11. **Initial State**
-    -   A project is already set up with a Swift app, a Rust library, and a working uniffi-rs bridge.
+    -   A project is already set up with a python project

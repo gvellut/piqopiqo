@@ -1,0 +1,34 @@
+
+- rephrase the spec but do not make it too big. There is some redudancy below. Integrate them if differs slightly. Make note of it if too divergent.
+- summarize the configuration options
+- Create a list of ordered tasks (a plan) that can be given to an agent for creating the envisioned application. The "you" below is addressing the agent.
+- the program will be all in Python (possibly with the exiftool as an external executable for obtaining the metadata). If there is some mention of a Swift GUI and a Rust Core Lib below, disregard it : it is no longer current.
+- handle 
+
+My goal is to write a replacement for Adobe Bridge https://www.adobe.com/products/bridge.html to use inside macOS only. But it will only have a subset of functionalities :
+- the GUI and main program will be programmed in Swift for macOS with the mac API's (no cross-platform)
+- the processing will be a all Python 3. The GUI will use Pyside (Qt).
+- On launch, the program will accept a folder as argument. The program will use click for the processing of args.
+- the app will open a folder and see thumbnails of photos (JPEG, PNG)
+    - RAW and video files are out of scope and shall not be processed (simply ignored)
+    - the images may not be directly below the folder passed as argument, but any level below. The imges found in the hierarchy will be processed / displayed as if they were in the same folder.
+- The configuration will need to be a structure with values. It is a config structure maintained in memory for now by the program (not serialized ; intialized from default).  The default must be easy to change in the code for testing.      
+    -There is no need for a screen to change them interactively for now.
+- the GUI will include a signle panel : it will be a scollable grid of thumbnails (the Grid View), with some data about the image below : filename, data created (in the file system : no EXIF)
+    - The grid will split the width of the panel into a predetermined number of columns (for now fixed, but later changeable by the user)
+    - A cell in the Grid will have a fixed (in the configuration) horizontal padding => using the available width of the panel, that padding and the number of columns : a pixel size available for the thumbnail will be computed
+    - The available height for the space image will be the same as the width. The image will be vertically and horizonally centered so it may not take all the availabe space
+    - There will vertical padding (identical to the horizontal padding)
+    - there can be space below the thumbnail for data about the image : that space will the same for all the images. If the filename (for example) is too big, the program will uses ellipsis to cut it
+    - so a cell will have top padding, image diplayed with a certain height, a fixed space with the metadata, the metadata, then bottom padding
+    - Based on the available height of the Grid View, this will give a computed number of lines for the grid to display the rows in full : There should be some space left : the space available for the height of the images will be increased equally for all rows
+    - you must write pseudo python-code of the computation of the height and width based on the parameters (number of columns, padding, line size for the data, number of pieces of data)
+- the Grid will initially sort by file name ascending
+- The program will initially pregenerate thumbnails as fast as possible (with a set number of processes set in the configuration). The max dimension (max width or max height) will be 1024 px (defined in configuration)
+    - a folder will be defined in the configuration for storing those thumbnails
+- initially, the space for the thumbnail will be populated by a black rectangle and quickly replaced by a low res image found in the JPEG (if available). In exiftool, that low res should be retrievable with exiftool -b -ThumbnailImage source.jpg > thumbnail.jpg so use exiftool or other method to extract.
+    - then the low res image will be replaced by the processed thumbnail 
+- Use a number of outside processes to generate the thumnbails / extract the low res image. The number of processes should be configurable 
+- There can be a large number (1000's) of images in a folder so care must be taken to optimize the rendering, both of the thumbnails and the texts below the images (ie not in the render tree at once, but only the necessary ones based on the scrolling) ie lazy
+- a cell of the grid can be selected with the mouse.
+    - that selection can be changed using the arrow keys (the four of them)
