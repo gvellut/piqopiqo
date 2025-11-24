@@ -4,10 +4,14 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = ["click>=8.3.1", "pyside6>=6.10.1"]
+dependencies = [
+    "click>=8.3.1",
+    "pillow>=12.0.0",
+    "pyside6>=6.10.1",
+]
 
 [project.scripts]
-piqopiqo = "piqopiqo:__main__:cli"
+piqopiqo = "piqopiqo.__main__:cli"
 
 [build-system]
 requires = ["uv_build>=0.9.11,<0.10.0"]
