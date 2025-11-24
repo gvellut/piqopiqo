@@ -1,8 +1,8 @@
+from collections import defaultdict
 import operator
 import os
-from collections import defaultdict
 
-from PyQt5.QtWidgets import QWidget, QTableWidget, QHBoxLayout
+from PyQt5.QtWidgets import QHBoxLayout, QTableWidget, QWidget
 from pyqt_resource_helper import PyQtResourceHelper
 
 from pyqt_image_file_explorer_table_widget.imageLabelWidget import ImageLabelWidget
@@ -24,7 +24,7 @@ class ImageFileExplorerTableWidget(QTableWidget):
         self.setShowGrid(False)
         self.horizontalHeader().setVisible(False)
         self.verticalHeader().setVisible(False)
-        PyQtResourceHelper.setStyleSheet([self], ['style/table.css'])
+        PyQtResourceHelper.setStyleSheet([self], ["style/table.css"])
 
     def resizeEvent(self, e):
         self.setAllCellsAsSquare()
@@ -67,7 +67,7 @@ class ImageFileExplorerTableWidget(QTableWidget):
         filenames_filtered_duplicated = []
         for filename in filenames:
             basename = os.path.basename(filename)
-            if self.__basename_absname_dict.get(basename, '') == filename:
+            if self.__basename_absname_dict.get(basename, "") == filename:
                 pass
             else:
                 filenames_filtered_duplicated.append(filename)
@@ -89,7 +89,12 @@ class ImageFileExplorerTableWidget(QTableWidget):
 
         lay = QHBoxLayout()
         lay.addWidget(innerWidget)
-        lay.setContentsMargins(self.__cellPadding, self.__cellPadding, self.__cellPadding, self.__cellPadding)
+        lay.setContentsMargins(
+            self.__cellPadding,
+            self.__cellPadding,
+            self.__cellPadding,
+            self.__cellPadding,
+        )
 
         widget = QWidget()
         widget.setLayout(lay)
@@ -115,7 +120,9 @@ class ImageFileExplorerTableWidget(QTableWidget):
             r1, c1, r2, c2 = idx1.row(), idx1.column(), idx2.row(), idx2.column()
             r_diff, c_diff = abs(r2 - r1), abs(c1 - c2)
             group_unit.append(idx1)
-            if (r_diff == 0 and c_diff == 1) or (r_diff == 1 and c_diff == self.columnCount() - 1):
+            if (r_diff == 0 and c_diff == 1) or (
+                r_diff == 1 and c_diff == self.columnCount() - 1
+            ):
                 pass
             else:
                 group_unit_lst.append(group_unit)
@@ -136,7 +143,9 @@ class ImageFileExplorerTableWidget(QTableWidget):
             for j in group_unit:
                 r_to_remove = j.row()
                 c_to_remove = j.column()
-                r_to_move, c_to_remove = divmod(c_to_remove - cell_cnt_to_move_whole, self.columnCount())
+                r_to_move, c_to_remove = divmod(
+                    c_to_remove - cell_cnt_to_move_whole, self.columnCount()
+                )
                 r_to_remove += r_to_move
                 widget = self.cellWidget(r_to_remove, c_to_remove)
                 if widget:
@@ -175,8 +184,9 @@ class ImageFileExplorerTableWidget(QTableWidget):
 
             if innerWidget:
                 if c_end < 0:
-                    self.moveImageCell(r_end - 1, self.columnCount() + c_end,
-                                       innerWidget)
+                    self.moveImageCell(
+                        r_end - 1, self.columnCount() + c_end, innerWidget
+                    )
                 else:
                     self.moveImageCell(r_end, c_end, innerWidget)
 
@@ -193,7 +203,12 @@ class ImageFileExplorerTableWidget(QTableWidget):
     def moveImageCell(self, r, c, innerWidget):
         lay = QHBoxLayout()
         lay.addWidget(innerWidget)
-        lay.setContentsMargins(self.__cellPadding, self.__cellPadding, self.__cellPadding, self.__cellPadding)
+        lay.setContentsMargins(
+            self.__cellPadding,
+            self.__cellPadding,
+            self.__cellPadding,
+            self.__cellPadding,
+        )
 
         widget = QWidget()
         widget.setLayout(lay)
@@ -205,7 +220,7 @@ class ImageFileExplorerTableWidget(QTableWidget):
         if widget:
             filename = widget.getText()
             basename = os.path.basename(filename)
-            del (self.__basename_absname_dict[basename])
+            del self.__basename_absname_dict[basename]
             return super().removeCellWidget(r, c)
 
     def setCellPadding(self, cell_padding: int):
@@ -213,7 +228,9 @@ class ImageFileExplorerTableWidget(QTableWidget):
 
     def setCellMargin(self, cell_margin: int):
         self.__cellMargin = cell_margin
-        self.setStyleSheet(self.styleSheet() + f'QTableView::item {{ margin: {self.__cellMargin}; }}')
+        self.setStyleSheet(
+            self.styleSheet() + f"QTableView::item {{ margin: {self.__cellMargin}; }}"
+        )
 
     def showTinyImageBigger(self, f: bool):
         self.__showTinyImageBiggerFlag = f

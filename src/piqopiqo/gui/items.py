@@ -1,6 +1,7 @@
-from PySide6.QtCore import QAbstractListModel, Qt, QSize
-from PySide6.QtWidgets import QStyledItemDelegate, QStyle
+from PySide6.QtCore import QAbstractListModel, QSize, Qt
 from PySide6.QtGui import QColor, QPen
+from PySide6.QtWidgets import QStyle, QStyledItemDelegate
+
 
 class PhotoModel(QAbstractListModel):
     Role_Path = Qt.UserRole + 1
@@ -12,23 +13,23 @@ class PhotoModel(QAbstractListModel):
         super().__init__(parent)
         self.items = images
         for item in self.items:
-            item['state'] = 0
-            item['pixmap'] = None
+            item["state"] = 0
+            item["pixmap"] = None
 
     def data(self, index, role):
         if not index.isValid():
             return None
         item = self.items[index.row()]
         if role == Qt.DisplayRole:
-            return item['name']
+            return item["name"]
         elif role == self.Role_Path:
-            return item['path']
+            return item["path"]
         elif role == self.Role_Date:
-            return item['created']
+            return item["created"]
         elif role == self.Role_State:
-            return item['state']
+            return item["state"]
         elif role == self.Role_Thumb:
-            return item['pixmap']
+            return item["pixmap"]
         return None
 
     def rowCount(self, parent=None):
@@ -36,9 +37,10 @@ class PhotoModel(QAbstractListModel):
 
     def update_thumbnail(self, index, pixmap, state):
         if index.isValid():
-            self.items[index.row()]['pixmap'] = pixmap
-            self.items[index.row()]['state'] = state
+            self.items[index.row()]["pixmap"] = pixmap
+            self.items[index.row()]["state"] = state
             self.dataChanged.emit(index, index)
+
 
 class PhotoDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
@@ -57,17 +59,17 @@ class PhotoDelegate(QStyledItemDelegate):
 
         # Layout
         layout_info = option.widget.layout_info
-        pad = layout_info['pad']
-        img_rect_w = layout_info['img_rect_w']
-        img_rect_h = layout_info['img_rect_h']
-        meta_h = layout_info['meta_h']
+        pad = layout_info["pad"]
+        img_rect_w = layout_info["img_rect_w"]
+        img_rect_h = layout_info["img_rect_h"]
+        meta_h = layout_info["meta_h"]
 
         # Image
         img_rect = option.rect.adjusted(pad, pad, -pad, -(pad + meta_h))
         if state == 0:
             painter.fillRect(img_rect, QColor("black"))
             # Trigger lazy load
-            if hasattr(option.widget, 'request_thumb'):
+            if hasattr(option.widget, "request_thumb"):
                 option.widget.request_thumb(index)
         else:
             if pixmap:

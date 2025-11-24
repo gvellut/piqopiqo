@@ -1,8 +1,10 @@
-from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
 from PySide6.QtGui import QPixmap
-from src.gui.grid import PhotoGrid
-from src.gui.items import PhotoModel, PhotoDelegate
-from src.thumb_man import ThumbnailManager
+from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
+
+from piqopiqo.gui.grid import PhotoGrid
+from piqopiqo.gui.items import PhotoDelegate, PhotoModel
+from piqopiqo.thumb_man import ThumbnailManager
+
 
 class MainWindow(QMainWindow):
     def __init__(self, images):
@@ -37,7 +39,7 @@ class MainWindow(QMainWindow):
     def on_thumb_ready(self, file_path, thumb_type, cache_path):
         # Find index for file_path
         for i, item in enumerate(self.model.items):
-            if item['path'] == file_path:
+            if item["path"] == file_path:
                 index = self.model.index(i)
                 if index.isValid():
                     pixmap = QPixmap(cache_path)

@@ -1,5 +1,5 @@
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsItem
+from PyQt5.QtWidgets import QGraphicsItem, QGraphicsScene, QGraphicsView
 from pyqt_resource_helper import PyQtResourceHelper
 
 
@@ -10,14 +10,14 @@ class ImageWidget(QGraphicsView):
 
     def __initUi(self):
         self.__showTinyImageBiggerFlag = False
-        self.__p = ''
-        self.__scene = ''
-        self.__graphicItem = ''
+        self.__p = ""
+        self.__scene = ""
+        self.__graphicItem = ""
 
         self.verticalScrollBar().blockSignals(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        PyQtResourceHelper.setStyleSheet([self], ['style/image.css'])
+        PyQtResourceHelper.setStyleSheet([self], ["style/image.css"])
 
     def setPixmap(self, p):
         self.__set_pixmap(p)
@@ -44,6 +44,9 @@ class ImageWidget(QGraphicsView):
             if self.__isTinyImageBiggerFlagActivated():
                 self.fitInView(self.__graphicItem, Qt.KeepAspectRatio)
             else:
-                if real_size.width() > view_size.width() or real_size.height() > view_size.height():
+                if (
+                    real_size.width() > view_size.width()
+                    or real_size.height() > view_size.height()
+                ):
                     self.fitInView(self.__graphicItem, Qt.KeepAspectRatio)
         return super().resizeEvent(e)

@@ -1,7 +1,10 @@
-import subprocess
 import os
+import subprocess
+
 from PIL import Image
-from src.config import Config
+
+from piqopiqo.config import Config
+
 
 def generate_embedded(source, dest_path):
     """
@@ -14,6 +17,7 @@ def generate_embedded(source, dest_path):
         return os.path.getsize(dest_path) > 0
     except Exception:
         return False
+
 
 def generate_hq(source, dest_path, max_dim):
     """

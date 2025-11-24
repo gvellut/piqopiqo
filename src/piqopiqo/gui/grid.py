@@ -1,6 +1,8 @@
-from PySide6.QtWidgets import QListView
 from PySide6.QtCore import QSize, Qt
-from src.config import Config
+from PySide6.QtWidgets import QListView
+
+from piqopiqo.config import Config
+
 
 class PhotoGrid(QListView):
     def __init__(self, parent=None):
@@ -28,9 +30,11 @@ class PhotoGrid(QListView):
         row_base_h = pad + img_box_side + meta_h + pad
 
         # Vertical Stretching (Fit to View)
-        if row_base_h < 1: row_base_h = 1
+        if row_base_h < 1:
+            row_base_h = 1
         visible_rows = int(panel_h / row_base_h)
-        if visible_rows < 1: visible_rows = 1
+        if visible_rows < 1:
+            visible_rows = 1
 
         used_h = visible_rows * row_base_h
         remaining = panel_h - used_h
@@ -45,7 +49,7 @@ class PhotoGrid(QListView):
             "img_rect_w": img_box_side,
             "img_rect_h": img_box_side + extra_per_row,
             "meta_h": meta_h,
-            "pad": pad
+            "pad": pad,
         }
 
         self.setGridSize(QSize(self.cell_w, self.cell_h))

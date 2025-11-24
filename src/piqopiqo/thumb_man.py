@@ -1,13 +1,20 @@
-from PySide6.QtCore import QObject, Signal
 import multiprocessing
 import os
-from src.config import Config
-from src.thumb_proc import generate_embedded, generate_hq
+
+from PySide6.QtCore import QObject, Signal
+
+from piqopiqo.config import Config
+from piqopiqo.thumb_proc import generate_embedded, generate_hq
+
 
 def worker_task(file_path):
     filename = os.path.basename(file_path)
-    cache_path_embedded = os.path.join(Config.CACHE_DIR, f"{os.path.splitext(filename)[0]}_embedded.jpg")
-    cache_path_hq = os.path.join(Config.CACHE_DIR, f"{os.path.splitext(filename)[0]}_hq.jpg")
+    cache_path_embedded = os.path.join(
+        Config.CACHE_DIR, f"{os.path.splitext(filename)[0]}_embedded.jpg"
+    )
+    cache_path_hq = os.path.join(
+        Config.CACHE_DIR, f"{os.path.splitext(filename)[0]}_hq.jpg"
+    )
 
     # Embedded
     if generate_embedded(file_path, cache_path_embedded):
@@ -19,12 +26,16 @@ def worker_task(file_path):
 
     return (None, None, None)
 
+
 def hq_worker_task(file_path):
     filename = os.path.basename(file_path)
-    cache_path_hq = os.path.join(Config.CACHE_DIR, f"{os.path.splitext(filename)[0]}_hq.jpg")
+    cache_path_hq = os.path.join(
+        Config.CACHE_DIR, f"{os.path.splitext(filename)[0]}_hq.jpg"
+    )
     if generate_hq(file_path, cache_path_hq, Config.THUMB_MAX_DIM):
         return ("hq", file_path, cache_path_hq)
     return (None, None, None)
+
 
 class ThumbnailManager(QObject):
     thumb_ready = Signal(str, str, str)
@@ -41,7 +52,9 @@ class ThumbnailManager(QObject):
         self.pending.add(file_path)
 
         filename = os.path.basename(file_path)
-        cache_path_hq = os.path.join(Config.CACHE_DIR, f"{os.path.splitext(filename)[0]}_hq.jpg")
+        cache_path_hq = os.path.join(
+            Config.CACHE_DIR, f"{os.path.splitext(filename)[0]}_hq.jpg"
+        )
 
         if os.path.exists(cache_path_hq):
             self.thumb_ready.emit(file_path, "hq", cache_path_hq)
@@ -66,7 +79,9 @@ class ThumbnailManager(QObject):
             return
 
         self.pending.add(file_path)
-        self.pool.apply_async(hq_worker_task, (file_path,), callback=self.on_hq_task_done)
+        self.pool.apply_async(
+            hq_worker_task, (file_path,), callback=self.on_hq_task_done
+        )
 
     def on_hq_task_done(self, result):
         thumb_type, file_path, cache_path = result
