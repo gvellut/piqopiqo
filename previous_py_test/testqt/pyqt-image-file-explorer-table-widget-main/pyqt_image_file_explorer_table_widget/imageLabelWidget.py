@@ -1,19 +1,19 @@
 import os.path
 
-from PyQt5.QtGui import QPixmap
-from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPixmap
+from PyQt5.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from pyqt_image_file_explorer_table_widget.imageWidget import ImageWidget
 
 
 class ImageLabelWidget(QWidget):
-    def __init__(self, filename='', parent=None):
+    def __init__(self, filename="", parent=None):
         super().__init__(parent)
         self.__absname = filename
         self.__initUi(filename)
 
-    def __initUi(self, filename=''):
+    def __initUi(self, filename=""):
         self.__topWidget = ImageWidget()
         self.__topWidget.setPixmap(QPixmap(filename))
 

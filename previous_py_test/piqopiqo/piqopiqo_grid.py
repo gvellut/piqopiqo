@@ -86,7 +86,6 @@ class PreviewTableView(qw.QTableView):
 
 
 class PreviewDelegate(qw.QStyledItemDelegate):
-
     def paint(self, painter, option, index):
         # data is our preview object
         data = index.model().data(index, Qt.DisplayRole)

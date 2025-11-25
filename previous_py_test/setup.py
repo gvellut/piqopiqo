@@ -20,9 +20,7 @@ with open("requirements-dev.txt") as f:
 setup_args = dict(
     name="jncep",
     version=version,
-    description=(
-        "Picture browser"
-    ),
+    description=("Picture browser"),
     long_description=readme,
     long_description_content_type="text/markdown",
     url="https://github.com/gvellut/jncep",
