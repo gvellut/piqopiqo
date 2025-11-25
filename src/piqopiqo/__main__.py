@@ -2,6 +2,7 @@ import os
 import sys
 
 import click
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication
 
 from piqopiqo.config import Config
@@ -24,6 +25,10 @@ def cli(folder):
 
     # 3. Launch GUI
     app = QApplication(sys.argv)
+
+    app.setApplicationName(Config.APP_NAME)
+    app.setApplicationDisplayName(Config.APP_NAME)
+
     window = MainWindow(images)
     window.show()
     sys.exit(app.exec())

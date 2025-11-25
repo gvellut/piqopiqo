@@ -6,7 +6,7 @@ class Config:
     APP_NAME = "PiqoPiqo"
 
     # Paths
-    CACHE_DIR = os.path.join(os.getcwd(), "thumbnails")
+    CACHE_DIR = "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
     EXIFTOOL_PATH = "exiftool"  # Assumes in PATH
 
     # Concurrency
