@@ -33,6 +33,7 @@ def hq_worker_task(file_path):
         Config.CACHE_DIR, f"{os.path.splitext(filename)[0]}_hq.jpg"
     )
     if generate_hq(file_path, cache_path_hq, Config.THUMB_MAX_DIM):
+        # since process : just the path is sent (must be reread from main workers)
         return ("hq", file_path, cache_path_hq)
     return (None, None, None)
 

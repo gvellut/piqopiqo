@@ -1,19 +1,22 @@
+import logging
 import os
 import sys
 
 import click
-from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication
 
-from piqopiqo.config import Config
-from piqopiqo.gui.window import MainWindow
-from piqopiqo.scanner import scan_folder
+from .config import Config
+from .gui.window import MainWindow
+from .scanner import scan_folder
+from .utils import setup_logging
 
 
 @click.command()
 @click.argument("folder", type=click.Path(exists=True))
 def cli(folder):
-    """PiqoPiqo Image Viewer"""
+    logger = logging.getLogger(__package__)
+    setup_logging(logger)
+
     # 1. Ensure Cache Dir Exists
     if not os.path.exists(Config.CACHE_DIR):
         os.makedirs(Config.CACHE_DIR)
@@ -25,7 +28,8 @@ def cli(folder):
                 if os.path.isfile(fp):
                     os.remove(fp)
 
-    # 2. Scan Data
+    # TODO keep a watcher for the folder ; instead of scanning only at the beginning
+    # TODO or at least : support duplicating images
     print(f"Scanning {folder}...")
     images = scan_folder(folder)
     print(f"Found {len(images)} images.")

@@ -1,6 +1,3 @@
-import os
-
-
 class Config:
     # Application Settings
     APP_NAME = "PiqoPiqo"

@@ -1,4 +1,4 @@
-from PySide6.QtGui import QAction, QIcon, QPixmap
+from PySide6.QtGui import QAction, QPixmap
 from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
 
 from piqopiqo.config import Config
