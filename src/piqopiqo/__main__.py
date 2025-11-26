@@ -17,6 +17,13 @@ def cli(folder):
     # 1. Ensure Cache Dir Exists
     if not os.path.exists(Config.CACHE_DIR):
         os.makedirs(Config.CACHE_DIR)
+    else:
+        if Config.CLEAR_CACHE_ON_START:
+            # Clear existing cache
+            for f in os.listdir(Config.CACHE_DIR):
+                fp = os.path.join(Config.CACHE_DIR, f)
+                if os.path.isfile(fp):
+                    os.remove(fp)
 
     # 2. Scan Data
     print(f"Scanning {folder}...")
