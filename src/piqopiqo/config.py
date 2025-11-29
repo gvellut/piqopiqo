@@ -12,6 +12,7 @@ class Config:
     # Grid Layout Options
     NUM_COLUMNS = 5
     PADDING = 10  # Pixels between cells/edges
+    # TODO remove
     METADATA_LINES = 2  # Rows of text below image
     FONT_SIZE = 12  # Approx pixel height of text
 
