@@ -19,3 +19,22 @@ pip install -r requirements.txt
 # Run the application
 python src/main.py /path/to/your/images
 ```
+
+
+## Exiftool
+
+Export JSON for all files in DIR:
+
+`exiftool -j -q dir > data.json`
+
+Write keywords : 
+
+`exiftool -sep "," -keywords+="september,2025,automney" -subject+="september,2025,automne" your_image.jpg`
+
+=> standard IPTC Keywords tag + Subject
+
+`-overwrite_original`
+
+Preview image (640x480 in Fujifilm):
+
+`exiftool -b -PreviewImage -w _preview.jpg dir`
