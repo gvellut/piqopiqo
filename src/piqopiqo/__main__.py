@@ -6,7 +6,7 @@ import click
 from PySide6.QtWidgets import QApplication
 
 from .config import Config
-from .gui.window import MainWindow
+from .gui.gemini_photos import MainWindow
 from .scanner import scan_folder
 from .utils import setup_logging
 

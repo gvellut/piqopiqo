@@ -47,6 +47,13 @@ class PhotoModel(QAbstractListModel):
 
 
 class PhotoDelegate(QStyledItemDelegate):
+    def sizeHint(self, option, index):
+        # Use the cell height from the grid's layout_info
+        layout_info = option.widget.layout_info
+        img_rect_w = layout_info["img_rect_w"]
+        img_rect_h = layout_info["img_rect_h"]
+        return QSize(img_rect_w, img_rect_h)
+
     def paint(self, painter, option, index):
         # We don't use the default paint method
         # super().paint(painter, option, index)
@@ -78,12 +85,11 @@ class PhotoDelegate(QStyledItemDelegate):
             if hasattr(option.widget, "request_thumb"):
                 option.widget.request_thumb(index)
         else:
-            pass
-            # if pixmap:
-            #     # Center pixmap in img_rect
-            #     pixmap_rect = pixmap.rect()
-            #     pixmap_rect.moveCenter(img_rect.center())
-            #     painter.drawPixmap(pixmap_rect, pixmap)
+            if pixmap:
+                # Center pixmap in img_rect
+                pixmap_rect = pixmap.rect()
+                pixmap_rect.moveCenter(img_rect.center())
+                painter.drawPixmap(pixmap_rect, pixmap)
 
         # Text
         text_rect = option.rect.adjusted(pad, pad + img_rect_h, -pad, -pad)

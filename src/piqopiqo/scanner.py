@@ -15,6 +15,7 @@ def scan_folder(root_path):
                     {
                         "path": path,
                         "name": file,
+                        "state": 0,  # not processed
                         "created": datetime.fromtimestamp(
                             os.path.getctime(path)
                         ).strftime("%Y-%m-%d %H:%M:%S"),
