@@ -1,6 +1,10 @@
+import logging
+
 from PySide6.QtCore import QAbstractListModel, QSize, Qt
 from PySide6.QtGui import QColor, QPen
 from PySide6.QtWidgets import QStyle, QStyledItemDelegate
+
+logger = logging.getLogger(__name__)
 
 
 class PhotoModel(QAbstractListModel):
@@ -47,6 +51,8 @@ class PhotoDelegate(QStyledItemDelegate):
         # We don't use the default paint method
         # super().paint(painter, option, index)
 
+        logger.debug(f"rect {option.rect}")
+
         # Selection
         if option.state & QStyle.State_Selected:
             painter.fillRect(option.rect, option.palette.highlight())
@@ -72,11 +78,12 @@ class PhotoDelegate(QStyledItemDelegate):
             if hasattr(option.widget, "request_thumb"):
                 option.widget.request_thumb(index)
         else:
-            if pixmap:
-                # Center pixmap in img_rect
-                pixmap_rect = pixmap.rect()
-                pixmap_rect.moveCenter(img_rect.center())
-                painter.drawPixmap(pixmap_rect, pixmap)
+            pass
+            # if pixmap:
+            #     # Center pixmap in img_rect
+            #     pixmap_rect = pixmap.rect()
+            #     pixmap_rect.moveCenter(img_rect.center())
+            #     painter.drawPixmap(pixmap_rect, pixmap)
 
         # Text
         text_rect = option.rect.adjusted(pad, pad + img_rect_h, -pad, -pad)
@@ -87,3 +94,7 @@ class PhotoDelegate(QStyledItemDelegate):
         painter.drawText(text_rect, Qt.AlignTop | Qt.AlignHCenter, elided_name)
         # Date
         painter.drawText(text_rect, Qt.AlignBottom | Qt.AlignHCenter, date)
+
+        # Draw red border around item
+        painter.setPen(QPen(QColor("red"), 2))
+        painter.drawRect(option.rect.adjusted(1, 1, -1, -1))

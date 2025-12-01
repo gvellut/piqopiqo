@@ -1,7 +1,11 @@
+import logging
+
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QListView
 
 from piqopiqo.config import Config
+
+logger = logging.getLogger(__name__)
 
 
 class PhotoGrid(QListView):
@@ -9,12 +13,18 @@ class PhotoGrid(QListView):
         super().__init__(parent)
         self.setViewMode(QListView.IconMode)
         self.setResizeMode(QListView.Adjust)
-        self.setUniformItemSizes(False)
+        self.setUniformItemSizes(True)
+        self.setSpacing(0)
+        self.setContentsMargins(0, 0, 0, 0)
         self.layout_info = {}
 
+    # TODO change : only on first resize : do computations of numbers of rows / cols
+    # otherwise when changing number of cols
     def resizeEvent(self, event):
         panel_w = event.size().width()
         panel_h = event.size().height()
+
+        logger.debug(f"{panel_w},{panel_h}")
 
         cfg = Config
         cols = cfg.NUM_COLUMNS
@@ -26,6 +36,8 @@ class PhotoGrid(QListView):
         img_box_side = avail_w / cols
 
         # Vertical Calculation (Base)
+        # TODO font size : dynamic : max + smaller if not enough size
+        # Or remove the meta if not enough size for the lines at defined font size
         meta_h = (cfg.METADATA_LINES * cfg.FONT_SIZE) + pad
         row_base_h = pad + img_box_side + meta_h + pad
 
@@ -36,13 +48,22 @@ class PhotoGrid(QListView):
         if visible_rows < 1:
             visible_rows = 1
 
+        logger.debug(f"Cols {cols} Row {visible_rows}")
+
         used_h = visible_rows * row_base_h
         remaining = panel_h - used_h
-        extra_per_row = remaining / visible_rows if visible_rows > 0 else 0
+        if visible_rows > 0:
+            extra_per_row = remaining / visible_rows
+        else:
+            extra_per_row = 0
+
+        logger.debug(f"remaining {remaining}")
 
         # Final Dimensions
         self.cell_w = int(img_box_side + (2 * pad))
         self.cell_h = int(row_base_h + extra_per_row)
+
+        logger.debug(f"{self.cell_w},{self.cell_h}")
 
         # Store calculated rects for the Delegate to use
         self.layout_info = {

@@ -11,7 +11,10 @@
             "module": "piqopiqo",
             "args": [
                 "/Volumes/CrucialX9Pro/projects/piqopiqo/photos"
-            ]
+            ],
+            "env": {
+                "DEBUG": "1"
+            }
         }
     ]
 }
