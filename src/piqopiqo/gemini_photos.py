@@ -1,6 +1,8 @@
+import atexit  # ADDED: For safety cleanup of macOS UI state
 import logging
 import math
 
+import AppKit
 from PySide6.QtCore import QRect, Qt, Signal
 from PySide6.QtGui import (
     QAction,
@@ -38,30 +40,87 @@ class FullscreenOverlay(QWidget):
         super().__init__()
         self.image_path = image_path
         self._pixmap = QPixmap(image_path)
+        self._prev_presentation_opts = None  # ADDED: Store previous macOS state
 
         # Window setup
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        # CHANGE 1: Use Qt.Window instead of Qt.Tool to ensure it acts as a standalone
+        # top-level window that can accept focus reliably on macOS.
+        self.setWindowFlags(
+            Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
+
         self.setAttribute(Qt.WA_DeleteOnClose)
+
         bg_color = Config.FULLSCREEN_BACKGROUND_COLOR
         self.setStyleSheet(f"background-color: {bg_color};")
         self._background_color = QColor(bg_color)
 
+        # ADDED: Register safety cleanup
+        atexit.register(self.restore_macos_ui)
+
     def show_on_screen(self, target_screen: QScreen):
         """Moves the overlay to the specific screen and shows it fullscreen."""
-        # Move window to the target screen
+
+        # 1. Hide macOS Chrome (Menu Bar & Dock) strictly
+        self.hide_macos_ui()
+
+        # 2. Move window to the target screen
         self.setScreen(target_screen)
 
-        # Set geometry to the screen's geometry
-        self.setGeometry(target_screen.geometry())
+        # CHANGE: Show the window FIRST.
+        # If we setGeometry before show(), macOS constrains the window
+        # to the 'available' area (excluding dock/menu).
+        # Showing it first creates the window, then we stretch it.
+        self.show()
 
-        # Show fullscreen
-        self.showFullScreen()
+        # 3. Force geometry to the screen's full geometry manually
+        rect = target_screen.geometry()
+        self.setGeometry(rect)
 
-        # Force focus so we catch keyboard events immediately
+        # Redundant safety: explicitly set size and position to ensure
+        # Qt applies the update even if it thinks the geometry hasn't changed.
+        self.resize(rect.size())
+        self.move(rect.topLeft())
+
+        # 4. Force focus
+        self.raise_()
+        self.activateWindow()
         self.setFocus()
+
+    # --- ADDED: macOS Specific Logic ---
+    def hide_macos_ui(self):
+        """Uses AppKit to strictly hide Dock and Menu Bar."""
+        app = AppKit.NSApplication.sharedApplication()
+
+        # Save current options to restore later
+        self._prev_presentation_opts = app.presentationOptions()
+
+        # Options to hide Dock and Menu Bar nicely
+        new_opts = (
+            AppKit.NSApplicationPresentationHideDock
+            | AppKit.NSApplicationPresentationHideMenuBar
+        )
+        app.setPresentationOptions_(new_opts)
+
+    def restore_macos_ui(self):
+        """Restores the Menu Bar and Dock."""
+        if self._prev_presentation_opts is None:
+            return
+
+        app = AppKit.NSApplication.sharedApplication()
+        app.setPresentationOptions_(self._prev_presentation_opts)
+        self._prev_presentation_opts = None
+
+    def closeEvent(self, event):
+        """Handle window closing."""
+        self.restore_macos_ui()  # Restore UI when closed
+        super().closeEvent(event)
+
+    # -----------------------------------
 
     def paintEvent(self, event: QPaintEvent):
         """Custom painting to handle aspect ratio and letterboxing."""
+        # (Logic kept exactly as provided)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
@@ -603,7 +662,10 @@ class MainWindow(QMainWindow):
         """Display the selected image in a fullscreen overlay."""
         # Close any existing overlay first
         if self._fullscreen_overlay is not None:
-            self._fullscreen_overlay.close()
+            try:
+                self._fullscreen_overlay.close()
+            except Exception:
+                pass
             self._fullscreen_overlay = None
 
         # Validate the index
