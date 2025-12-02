@@ -238,6 +238,7 @@ class PhotoCell(QFrame):
 class PagedPhotoGrid(QWidget):
     request_thumb = Signal(int)
     selection_changed = Signal(int)
+    request_fullscreen = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -470,6 +471,10 @@ class PagedPhotoGrid(QWidget):
         elif key == Qt.Key_Down:
             if new_index + self.n_cols < total_items:
                 new_index += self.n_cols
+        elif key == Qt.Key_Space:
+            # Request fullscreen display when a photo is selected
+            self.request_fullscreen.emit(self.selected_index)
+            return
         else:
             # Let parent handle other keys (like Tab, Escape, etc)
             super().keyPressEvent(event)
@@ -522,6 +527,7 @@ class MainWindow(QMainWindow):
         self.thumb_manager.thumb_ready.connect(self.on_thumb_ready)
 
         self.grid.request_thumb.connect(self.request_thumb_handler)
+        self.grid.request_fullscreen.connect(self._handle_fullscreen_overlay)
 
         # In the previous code, model wrapped the list. Here we pass the list
         # directly.
@@ -593,17 +599,16 @@ class MainWindow(QMainWindow):
 
         return phy_width, phy_height
 
-    def _handle_fullscreen_overlay(self):
+    def _handle_fullscreen_overlay(self, selected_index: int):
         """Display the selected image in a fullscreen overlay."""
         # Close any existing overlay first
         if self._fullscreen_overlay is not None:
             self._fullscreen_overlay.close()
             self._fullscreen_overlay = None
 
-        # Get the currently selected image index
-        selected_index = self.grid.selected_index
+        # Validate the index
         if selected_index < 0 or selected_index >= len(self.images_data):
-            logger.debug("No image selected for fullscreen display")
+            logger.debug("Invalid image index for fullscreen display")
             return
 
         # Get the image path
@@ -632,13 +637,6 @@ class MainWindow(QMainWindow):
         # Create and show the overlay
         self._fullscreen_overlay = FullscreenOverlay(image_path)
         self._fullscreen_overlay.show_on_screen(current_screen)
-
-    def keyPressEvent(self, event: QKeyEvent):
-        """Handle keyboard events."""
-        if event.key() == Qt.Key_Space:
-            self._handle_fullscreen_overlay()
-        else:
-            super().keyPressEvent(event)
 
     def closeEvent(self, event):
         self.thumb_manager.stop()
