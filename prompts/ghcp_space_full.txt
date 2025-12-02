@@ -1,0 +1,11 @@
+Add handling of the space bar to display a image fullscreen (no window or macos menubar) on the same screen where the MainWindow is located. It should preferrrably not change the state of the MainWindow, just add an overlay.
+
+It should obtain which screen the MainWindow is on, as well as the full resolution (physical, not the scaled resoluition as configured in the OS) of that screen (logger.debug that resolution). 
+
+Then :
+- in all cases, it should always keep the ratio width / height identical to the original image
+- if the full resolution of the image in both dimensions is smaller than the screen, it should center the image on the screen and display the full resolution of the original image
+- otherwise, it should downscale the image to follow the resolution of the screen so one of the dimensions is the same as the resolution of the screen (or both if the ration of the screen is exactly the same as the image).It should center the image on the screen : always keep the same ratio width / height of the original image
+- in all cases, if some parts of the screen are not covered by pixels of the image, when centered, there should be bars surrounding the image : the background should be configured in the Config structure (black by default)
+
+Pressing space or escape while in full screen should exit and go back to exactly the state the GUI was in before entering the full screen
