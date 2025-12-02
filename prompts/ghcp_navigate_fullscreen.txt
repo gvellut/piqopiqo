@@ -1,0 +1,5 @@
+When in the fullscreen mode (FullscreenOverlay shown and taking the fullscreen), handle the arrows left and right :
+- in the items_data list of the grid, show the next or previous image in fullscreen. No transition effect : display as fast as possible.
+- if currentl showing the last photo, and press right : go back to the first photo. If at the first and press left, go back to the last => Circular. !!!! Only in fullscreen (do not change the current behavious on the grid when not in fullscreen ; ie not circular)
+- do not handle up or down in fullscreen : it should have no effect
+- when exiting fullscreen, the last shown fullscreen image must be selected and visible (so the grid may have scrolled ; similar to what happens in the not fullscreen mode). If possible, that selection and scrolling must have happened while the fullscreen overlay is open (so no sudden change like sudden scrolling or selecting when exiting fullscreen).
