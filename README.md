@@ -38,3 +38,13 @@ Write keywords :
 Preview image (640x480 in Fujifilm):
 
 `exiftool -b -PreviewImage -w _preview.jpg dir`
+
+## gh
+
+`gh pr merge xx --merge --delete-branch`
+`gh pr merge xx --rebase --delete-branch`
+`--squash`
+
+`gh pr checkout 4`
+
+`git fetch --prune`
