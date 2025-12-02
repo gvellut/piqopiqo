@@ -1,16 +1,20 @@
+import atexit  # ADDED: For safety cleanup of macOS UI state
 import logging
 import math
 
+import AppKit
 from PySide6.QtCore import QRect, Qt, Signal
 from PySide6.QtGui import (
     QAction,
     QColor,
+    QKeyEvent,
     QMouseEvent,
     QPainter,
     QPaintEvent,
     QPalette,
     QPen,
     QPixmap,
+    QScreen,
 )
 from PySide6.QtWidgets import (
     QFrame,
@@ -27,6 +31,137 @@ from piqopiqo.config import Config
 from piqopiqo.thumb_man import ThumbnailManager
 
 logger = logging.getLogger(__name__)
+
+
+class FullscreenOverlay(QWidget):
+    """A fullscreen overlay widget for displaying an image at full resolution."""
+
+    def __init__(self, image_path: str):
+        super().__init__()
+        self.image_path = image_path
+        self._pixmap = QPixmap(image_path)
+        self._prev_presentation_opts = None  # ADDED: Store previous macOS state
+
+        # Window setup
+        # CHANGE 1: Use Qt.Window instead of Qt.Tool to ensure it acts as a standalone
+        # top-level window that can accept focus reliably on macOS.
+        self.setWindowFlags(
+            Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
+
+        self.setAttribute(Qt.WA_DeleteOnClose)
+
+        bg_color = Config.FULLSCREEN_BACKGROUND_COLOR
+        self.setStyleSheet(f"background-color: {bg_color};")
+        self._background_color = QColor(bg_color)
+
+        # ADDED: Register safety cleanup
+        atexit.register(self.restore_macos_ui)
+
+    def show_on_screen(self, target_screen: QScreen):
+        """Moves the overlay to the specific screen and shows it fullscreen."""
+
+        # 1. Hide macOS Chrome (Menu Bar & Dock) strictly
+        self.hide_macos_ui()
+
+        # 2. Move window to the target screen
+        self.setScreen(target_screen)
+
+        # CHANGE: Show the window FIRST.
+        # If we setGeometry before show(), macOS constrains the window
+        # to the 'available' area (excluding dock/menu).
+        # Showing it first creates the window, then we stretch it.
+        self.show()
+
+        # 3. Force geometry to the screen's full geometry manually
+        rect = target_screen.geometry()
+        self.setGeometry(rect)
+
+        # Redundant safety: explicitly set size and position to ensure
+        # Qt applies the update even if it thinks the geometry hasn't changed.
+        self.resize(rect.size())
+        self.move(rect.topLeft())
+
+        # 4. Force focus
+        self.raise_()
+        self.activateWindow()
+        self.setFocus()
+
+    # --- ADDED: macOS Specific Logic ---
+    def hide_macos_ui(self):
+        """Uses AppKit to strictly hide Dock and Menu Bar."""
+        app = AppKit.NSApplication.sharedApplication()
+
+        # Save current options to restore later
+        self._prev_presentation_opts = app.presentationOptions()
+
+        # Options to hide Dock and Menu Bar nicely
+        new_opts = (
+            AppKit.NSApplicationPresentationHideDock
+            | AppKit.NSApplicationPresentationHideMenuBar
+        )
+        app.setPresentationOptions_(new_opts)
+
+    def restore_macos_ui(self):
+        """Restores the Menu Bar and Dock."""
+        if self._prev_presentation_opts is None:
+            return
+
+        app = AppKit.NSApplication.sharedApplication()
+        app.setPresentationOptions_(self._prev_presentation_opts)
+        self._prev_presentation_opts = None
+
+    def closeEvent(self, event):
+        """Handle window closing."""
+        self.restore_macos_ui()  # Restore UI when closed
+        super().closeEvent(event)
+
+    # -----------------------------------
+
+    def paintEvent(self, event: QPaintEvent):
+        """Custom painting to handle aspect ratio and letterboxing."""
+        # (Logic kept exactly as provided)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+
+        # Fill background with configured color
+        painter.fillRect(self.rect(), self._background_color)
+
+        if self._pixmap.isNull():
+            return
+
+        # Get the geometry of the widget (logical pixels)
+        target_rect = self.rect()
+        pixmap_size = self._pixmap.size()
+
+        # Check if image is smaller than screen in both dimensions
+        if (
+            pixmap_size.width() <= target_rect.width()
+            and pixmap_size.height() <= target_rect.height()
+        ):
+            # Image is smaller - display at original resolution, centered
+            x = (target_rect.width() - pixmap_size.width()) // 2
+            y = (target_rect.height() - pixmap_size.height()) // 2
+            painter.drawPixmap(x, y, self._pixmap)
+        else:
+            # Image is larger - scale to fit while keeping aspect ratio
+            scaled_pixmap = self._pixmap.scaled(
+                target_rect.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+
+            # Calculate position to center the image
+            x = (target_rect.width() - scaled_pixmap.width()) // 2
+            y = (target_rect.height() - scaled_pixmap.height()) // 2
+
+            painter.drawPixmap(x, y, scaled_pixmap)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        """Handle keyboard events to dismiss the overlay."""
+        if event.key() in (Qt.Key_Escape, Qt.Key_Space):
+            self.close()
+        else:
+            super().keyPressEvent(event)
 
 
 class PhotoCell(QFrame):
@@ -162,6 +297,7 @@ class PhotoCell(QFrame):
 class PagedPhotoGrid(QWidget):
     request_thumb = Signal(int)
     selection_changed = Signal(int)
+    request_fullscreen = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -394,6 +530,10 @@ class PagedPhotoGrid(QWidget):
         elif key == Qt.Key_Down:
             if new_index + self.n_cols < total_items:
                 new_index += self.n_cols
+        elif key == Qt.Key_Space:
+            # Request fullscreen display when a photo is selected
+            self.request_fullscreen.emit(self.selected_index)
+            return
         else:
             # Let parent handle other keys (like Tab, Escape, etc)
             super().keyPressEvent(event)
@@ -431,6 +571,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(Config.APP_NAME)
         self.showMaximized()
 
+        self._fullscreen_overlay = None
+
         self._create_menu_bar()
 
         central_widget = QWidget()
@@ -444,6 +586,7 @@ class MainWindow(QMainWindow):
         self.thumb_manager.thumb_ready.connect(self.on_thumb_ready)
 
         self.grid.request_thumb.connect(self.request_thumb_handler)
+        self.grid.request_fullscreen.connect(self._handle_fullscreen_overlay)
 
         # In the previous code, model wrapped the list. Here we pass the list
         # directly.
@@ -504,6 +647,58 @@ class MainWindow(QMainWindow):
         if 0 <= index < len(self.images_data):
             file_path = self.images_data[index]["path"]
             self.thumb_manager.queue_image(file_path)
+
+    def _get_physical_resolution(self, screen: QScreen) -> tuple[int, int]:
+        """Calculates physical resolution based on logical size and pixel density."""
+        geometry = screen.geometry()
+        dpr = screen.devicePixelRatio()
+
+        phy_width = int(geometry.width() * dpr)
+        phy_height = int(geometry.height() * dpr)
+
+        return phy_width, phy_height
+
+    def _handle_fullscreen_overlay(self, selected_index: int):
+        """Display the selected image in a fullscreen overlay."""
+        # Close any existing overlay first
+        if self._fullscreen_overlay is not None:
+            try:
+                self._fullscreen_overlay.close()
+            except Exception:
+                pass
+            self._fullscreen_overlay = None
+
+        # Validate the index
+        if selected_index < 0 or selected_index >= len(self.images_data):
+            logger.debug("Invalid image index for fullscreen display")
+            return
+
+        # Get the image path
+        image_data = self.images_data[selected_index]
+        image_path = image_data.get("path")
+        if not image_path:
+            logger.debug("Selected image has no path")
+            return
+
+        # Identify the screen the window is currently on
+        current_screen = self.screen()
+        if not current_screen:
+            logger.debug("Could not determine screen")
+            return
+
+        # Log resolution info
+        log_geo = current_screen.geometry()
+        dpr = current_screen.devicePixelRatio()
+        phy_w, phy_h = self._get_physical_resolution(current_screen)
+
+        logger.debug(f"Screen Detected: {current_screen.name()}")
+        logger.debug(f"Logical Size: {log_geo.width()} x {log_geo.height()}")
+        logger.debug(f"Device Pixel Ratio: {dpr}")
+        logger.debug(f"Physical Resolution: {phy_w} x {phy_h}")
+
+        # Create and show the overlay
+        self._fullscreen_overlay = FullscreenOverlay(image_path)
+        self._fullscreen_overlay.show_on_screen(current_screen)
 
     def closeEvent(self, event):
         self.thumb_manager.stop()
