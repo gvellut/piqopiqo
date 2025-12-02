@@ -71,6 +71,10 @@ class FullscreenOverlay(QWidget):
             self.image_path = image_data.get("path", "")
             if self.image_path:
                 self._pixmap = QPixmap(self.image_path)
+                if self._pixmap.isNull():
+                    logger.warning(f"Failed to load image: {self.image_path}")
+                    # Create an empty pixmap as fallback
+                    self._pixmap = QPixmap()
                 self.update()  # Trigger a repaint
     
     def _navigate_to(self, new_index: int):
@@ -79,8 +83,9 @@ class FullscreenOverlay(QWidget):
         if total_items == 0:
             return
         
-        # Circular navigation: wrap around
-        new_index = new_index % total_items
+        # Circular navigation: wrap around (handles both positive and negative indices)
+        # Using double modulo to ensure positive result for negative indices
+        new_index = (new_index % total_items + total_items) % total_items
         
         if new_index != self.current_index:
             self.current_index = new_index
