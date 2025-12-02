@@ -437,7 +437,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout(central_widget)
 
-        # Replaces PhotoGrid with PagedPhotoGrid
         self.grid = PagedPhotoGrid()
         layout.addWidget(self.grid)
 
@@ -446,8 +445,7 @@ class MainWindow(QMainWindow):
 
         self.grid.request_thumb.connect(self.request_thumb_handler)
 
-        # Init Data (mimicking PhotoModel structure locally)
-        # Note: In the previous code, model wrapped the list. Here we pass the list
+        # In the previous code, model wrapped the list. Here we pass the list
         # directly.
         self.images_data = images
         self.grid.set_data(self.images_data)

@@ -9,6 +9,8 @@ from PySide6.QtCore import QObject, Signal
 from piqopiqo.config import Config
 
 
+# TODO separate extraction of embedded preview and gen of HQ thumb
+# if no preview embedded, should be black : while waiting for the HQ (other queue)
 def worker_task(file_path):
     filename = os.path.basename(file_path)
     cache_path_embedded = os.path.join(
@@ -46,6 +48,11 @@ class ThumbnailManager(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.pool = multiprocessing.Pool(Config.MAX_WORKERS)
+        # TODO different queuee for lowqal embedded preview and HQ
+        # TODO use real queue : need to reorder (give priority to the images visible
+        # in window when scrolling)
+        # TODO third queue for extraction of current screen base resolution Or see
+        # if simply reading when requested will be fast enough
         self.pending = set()
 
     def queue_image(self, file_path):
@@ -71,6 +78,8 @@ class ThumbnailManager(QObject):
         if file_path and file_path in self.pending:
             self.pending.remove(file_path)
 
+        # TODO correct : if no preview, should still gen the HQ
+        # use different queue
         if thumb_type:
             self.thumb_ready.emit(file_path, thumb_type, cache_path)
 
@@ -125,7 +134,8 @@ def generate_embedded(source, dest_path):
     Extracts embedded thumbnail from an image using exiftool.
     """
     try:
-        cmd = [Config.EXIFTOOL_PATH, "-b", "-ThumbnailImage", source]
+        cmd = [Config.EXIFTOOL_PATH, "-b", "-PreviewImage", source]
+        # TODO why subprocess ? and not in the same process or process pool ?
         with open(dest_path, "wb") as f:
             subprocess.run(cmd, stdout=f, stderr=subprocess.DEVNULL)
         return os.path.getsize(dest_path) > 0

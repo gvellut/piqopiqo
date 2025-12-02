@@ -19,4 +19,4 @@ class Config:
     # Image Specs
     THUMB_MAX_DIM = 1024  # Max width/height for high-res cache
 
-    CLEAR_CACHE_ON_START = False
+    CLEAR_CACHE_ON_START = True

@@ -13,6 +13,5 @@ __pycache__
 /*.jpg
 /sample
 .DS_Store
-.build
-/.appBuild
-/GuiApp/Sources/UniffiBindings
+
+.vscode
