@@ -36,11 +36,17 @@ logger = logging.getLogger(__name__)
 class FullscreenOverlay(QWidget):
     """A fullscreen overlay widget for displaying an image at full resolution."""
 
-    def __init__(self, image_path: str):
+    # Signal to notify when the current index changes
+    index_changed = Signal(int)
+
+    def __init__(self, items_data: list, current_index: int):
         super().__init__()
-        self.image_path = image_path
-        self._pixmap = QPixmap(image_path)
+        self.items_data = items_data
+        self.current_index = current_index
         self._prev_presentation_opts = None  # ADDED: Store previous macOS state
+        
+        # Load the initial image
+        self._load_current_image()
 
         # Window setup
         # CHANGE 1: Use Qt.Window instead of Qt.Tool to ensure it acts as a standalone
@@ -57,6 +63,30 @@ class FullscreenOverlay(QWidget):
 
         # ADDED: Register safety cleanup
         atexit.register(self.restore_macos_ui)
+    
+    def _load_current_image(self):
+        """Load the image at the current index."""
+        if 0 <= self.current_index < len(self.items_data):
+            image_data = self.items_data[self.current_index]
+            self.image_path = image_data.get("path", "")
+            if self.image_path:
+                self._pixmap = QPixmap(self.image_path)
+                self.update()  # Trigger a repaint
+    
+    def _navigate_to(self, new_index: int):
+        """Navigate to a new image index with circular wrapping."""
+        total_items = len(self.items_data)
+        if total_items == 0:
+            return
+        
+        # Circular navigation: wrap around
+        new_index = new_index % total_items
+        
+        if new_index != self.current_index:
+            self.current_index = new_index
+            self._load_current_image()
+            # Emit signal to update grid selection
+            self.index_changed.emit(self.current_index)
 
     def show_on_screen(self, target_screen: QScreen):
         """Moves the overlay to the specific screen and shows it fullscreen."""
@@ -157,9 +187,20 @@ class FullscreenOverlay(QWidget):
             painter.drawPixmap(x, y, scaled_pixmap)
 
     def keyPressEvent(self, event: QKeyEvent):
-        """Handle keyboard events to dismiss the overlay."""
-        if event.key() in (Qt.Key_Escape, Qt.Key_Space):
+        """Handle keyboard events to dismiss the overlay and navigate images."""
+        key = event.key()
+        
+        if key in (Qt.Key_Escape, Qt.Key_Space):
             self.close()
+        elif key == Qt.Key_Left:
+            # Navigate to previous image (circular)
+            self._navigate_to(self.current_index - 1)
+        elif key == Qt.Key_Right:
+            # Navigate to next image (circular)
+            self._navigate_to(self.current_index + 1)
+        elif key in (Qt.Key_Up, Qt.Key_Down):
+            # Ignore up/down keys in fullscreen
+            pass
         else:
             super().keyPressEvent(event)
 
@@ -673,13 +714,6 @@ class MainWindow(QMainWindow):
             logger.debug("Invalid image index for fullscreen display")
             return
 
-        # Get the image path
-        image_data = self.images_data[selected_index]
-        image_path = image_data.get("path")
-        if not image_path:
-            logger.debug("Selected image has no path")
-            return
-
         # Identify the screen the window is currently on
         current_screen = self.screen()
         if not current_screen:
@@ -696,9 +730,22 @@ class MainWindow(QMainWindow):
         logger.debug(f"Device Pixel Ratio: {dpr}")
         logger.debug(f"Physical Resolution: {phy_w} x {phy_h}")
 
-        # Create and show the overlay
-        self._fullscreen_overlay = FullscreenOverlay(image_path)
+        # Create and show the overlay with items_data and current index
+        self._fullscreen_overlay = FullscreenOverlay(self.images_data, selected_index)
+        
+        # Connect the index_changed signal to update grid selection
+        self._fullscreen_overlay.index_changed.connect(self._on_fullscreen_index_changed)
+        
         self._fullscreen_overlay.show_on_screen(current_screen)
+    
+    def _on_fullscreen_index_changed(self, new_index: int):
+        """Update grid selection when navigating in fullscreen mode."""
+        # Update the grid's selected index
+        self.grid.selected_index = new_index
+        # Ensure the item is visible in the grid
+        self.grid._ensure_visible(new_index)
+        # Refresh the grid to show the new selection
+        self.grid.on_scroll(self.grid.scrollbar.value())
 
     def closeEvent(self, event):
         self.thumb_manager.stop()
