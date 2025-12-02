@@ -1,7 +1,7 @@
 import logging
 import math
 
-from PySide6.QtCore import QEvent, QRect, QSize, Qt, Signal
+from PySide6.QtCore import QRect, Qt, Signal
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -13,14 +13,12 @@ from PySide6.QtGui import (
     QPixmap,
 )
 from PySide6.QtWidgets import (
-    QApplication,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QMainWindow,
     QScrollBar,
     QSizePolicy,
-    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -58,7 +56,8 @@ class PhotoCell(QFrame):
 
     def mousePressEvent(self, event: QMouseEvent):
         if self.current_data and event.button() == Qt.LeftButton:
-            # We assume current_data has the globally injected index or we handle it in the grid
+            # We assume current_data has the globally injected index or we handle it in
+            # the grid
             # Here we just emit the grid index, the parent logic can map it if needed,
             # but usually the data item itself carries its identity.
             global_index = self.current_data.get("_global_index", -1)
@@ -95,7 +94,8 @@ class PhotoCell(QFrame):
         # Unpack Layout Info (computed in parent resizeEvent)
         pad = self.layout_info.get("pad", 5)
         # Note: In the grid layout, the widget's rect() is the cell size.
-        # We rely on rect() for the actual dimensions, but use layout_info for internal proportions if needed.
+        # We rely on rect() for the actual dimensions, but use layout_info for internal
+        # proportions if needed.
         # However, to strictly follow the user's logic, we use the metrics derived.
 
         meta_h = self.layout_info.get("meta_h", 20)
@@ -115,8 +115,10 @@ class PhotoCell(QFrame):
                 pixmap_rect = pixmap.rect()
                 pixmap_rect.moveCenter(img_rect.center())
 
-                # Check if scaling is needed (if pixmap is larger than rect or specific fit mode)
-                # The user's code just did: pixmap_rect.moveCenter(img_rect.center()) and draw.
+                # Check if scaling is needed (if pixmap is larger than rect or specific
+                # fit mode)
+                # The user's code just did: pixmap_rect.moveCenter(img_rect.center())
+                # and draw.
                 # Usually we want to scale to fit if it's too big:
                 if (
                     pixmap_rect.width() > img_rect.width()
@@ -133,7 +135,8 @@ class PhotoCell(QFrame):
 
         # Text
         # Logic: text_rect = option.rect.adjusted(pad, pad + img_rect_h, -pad, -pad)
-        # Since img_rect_h is dynamic in the user's logic, we calculate the text area from the bottom up
+        # Since img_rect_h is dynamic in the user's logic, we calculate the text area
+        # from the bottom up
         text_rect = QRect(
             rect.left() + pad,
             rect.bottom() - meta_h - pad,
@@ -283,7 +286,8 @@ class PagedPhotoGrid(QWidget):
             self._rebuild_grid(visible_rows, cols)
         else:
             self._recalculate_scrollbar()
-            # Just refresh content in case data range changed due to scroll limit changes
+            # Just refresh content in case data range changed due to scroll limit
+            # changes
             self.on_scroll(self.scrollbar.value())
 
         super().resizeEvent(event)
@@ -443,7 +447,8 @@ class MainWindow(QMainWindow):
         self.grid.request_thumb.connect(self.request_thumb_handler)
 
         # Init Data (mimicking PhotoModel structure locally)
-        # Note: In the previous code, model wrapped the list. Here we pass the list directly.
+        # Note: In the previous code, model wrapped the list. Here we pass the list
+        # directly.
         self.images_data = images
         self.grid.set_data(self.images_data)
 

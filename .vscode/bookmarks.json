@@ -1,10 +1,10 @@
 {
 	"files": [
 		{
-			"path": "src/piqopiqo/gui/gemini_photos.py",
+			"path": "src/piqopiqo/gemini_photos.py",
 			"bookmarks": [
 				{
-					"line": 323,
+					"line": 327,
 					"column": 42,
 					"label": ""
 				}

@@ -1,10 +1,12 @@
+from datetime import datetime
 import multiprocessing
 import os
+import subprocess
 
+from PIL import Image
 from PySide6.QtCore import QObject, Signal
 
 from piqopiqo.config import Config
-from piqopiqo.thumb_proc import generate_embedded, generate_hq
 
 
 def worker_task(file_path):
@@ -94,3 +96,53 @@ class ThumbnailManager(QObject):
     def stop(self):
         self.pool.close()
         self.pool.join()
+
+
+def scan_folder(root_path):
+    """
+    Recursively scans a folder for images.
+    """
+    images = []
+    for root, _, files in os.walk(root_path):
+        for file in files:
+            if file.lower().endswith((".jpg", ".jpeg", ".png")):
+                path = os.path.join(root, file)
+                images.append(
+                    {
+                        "path": path,
+                        "name": file,
+                        "state": 0,  # not processed
+                        "created": datetime.fromtimestamp(
+                            os.path.getctime(path)
+                        ).strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+                )
+    return sorted(images, key=lambda x: x["name"])
+
+
+def generate_embedded(source, dest_path):
+    """
+    Extracts embedded thumbnail from an image using exiftool.
+    """
+    try:
+        cmd = [Config.EXIFTOOL_PATH, "-b", "-ThumbnailImage", source]
+        with open(dest_path, "wb") as f:
+            subprocess.run(cmd, stdout=f, stderr=subprocess.DEVNULL)
+        return os.path.getsize(dest_path) > 0
+    except Exception:
+        return False
+
+
+def generate_hq(source, dest_path, max_dim):
+    """
+    Generates a high-quality thumbnail from an image.
+    """
+    try:
+        img = Image.open(source)
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+        img.thumbnail((max_dim, max_dim))
+        img.save(dest_path, "JPEG", quality=80)
+        return True
+    except Exception:
+        return False

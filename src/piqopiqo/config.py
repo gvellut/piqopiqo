@@ -10,7 +10,7 @@ class Config:
     MAX_WORKERS = 4
 
     # Grid Layout Options
-    NUM_COLUMNS = 5
+    NUM_COLUMNS = 8
     PADDING = 10  # Pixels between cells/edges
     # TODO remove
     METADATA_LINES = 2  # Rows of text below image
