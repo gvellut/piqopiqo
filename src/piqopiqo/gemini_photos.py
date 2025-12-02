@@ -507,6 +507,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(Config.APP_NAME)
         self.showMaximized()
 
+        self._fullscreen_overlay = None
+
         self._create_menu_bar()
 
         central_widget = QWidget()
@@ -593,6 +595,11 @@ class MainWindow(QMainWindow):
 
     def _handle_fullscreen_overlay(self):
         """Display the selected image in a fullscreen overlay."""
+        # Close any existing overlay first
+        if self._fullscreen_overlay is not None:
+            self._fullscreen_overlay.close()
+            self._fullscreen_overlay = None
+
         # Get the currently selected image index
         selected_index = self.grid.selected_index
         if selected_index < 0 or selected_index >= len(self.images_data):
