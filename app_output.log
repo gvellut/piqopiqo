@@ -1,3 +1,4 @@
-Scanning ../test_images...
-Found 3 images.
+Scanning dummy_images...
+Found 0 images.
+This plugin does not support propagateSizeHints()
 This plugin does not support propagateSizeHints()
