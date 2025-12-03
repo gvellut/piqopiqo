@@ -1,9 +1,12 @@
-import atexit  # ADDED: For safety cleanup of macOS UI state
+import atexit
 import logging
 import math
+import sys
 
-import AppKit
-from PySide6.QtCore import QRect, Qt, Signal
+if sys.platform == "darwin":
+    import AppKit
+
+from PySide6.QtCore import QRect, Qt, Signal, QPointF
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -15,6 +18,7 @@ from PySide6.QtGui import (
     QPen,
     QPixmap,
     QScreen,
+    QTransform,
 )
 from PySide6.QtWidgets import (
     QFrame,
@@ -43,7 +47,14 @@ class FullscreenOverlay(QWidget):
         super().__init__()
         self.items_data = items_data
         self.current_index = current_index
-        self._prev_presentation_opts = None  # ADDED: Store previous macOS state
+        self._prev_presentation_opts = None
+
+        self._transform = QTransform()
+        self._zoom_level = 1.0
+        self._panning = False
+        self._pan_start_pos = QPointF()
+
+        self._wheel_acc = 0
         
         # Load the initial image
         self._load_current_image()
@@ -65,7 +76,13 @@ class FullscreenOverlay(QWidget):
         atexit.register(self.restore_macos_ui)
     
     def _load_current_image(self):
-        """Load the image at the current index."""
+        """Load the image at the current index and reset zoom/pan state."""
+        # Reset transformation state
+        self._transform.reset()
+        self._zoom_level = 1.0
+        self._panning = False
+        self._pan_start_pos = QPointF()
+
         if 0 <= self.current_index < len(self.items_data):
             image_data = self.items_data[self.current_index]
             self.image_path = image_data.get("path", "")
@@ -73,9 +90,8 @@ class FullscreenOverlay(QWidget):
                 self._pixmap = QPixmap(self.image_path)
                 if self._pixmap.isNull():
                     logger.warning(f"Failed to load image: {self.image_path}")
-                    # Create an empty pixmap as fallback
-                    self._pixmap = QPixmap()
-                self.update()  # Trigger a repaint
+                    self._pixmap = QPixmap()  # Fallback to empty pixmap
+                self.update()
     
     def _navigate_to(self, new_index: int):
         """Navigate to a new image index with circular wrapping."""
@@ -125,6 +141,8 @@ class FullscreenOverlay(QWidget):
     # --- ADDED: macOS Specific Logic ---
     def hide_macos_ui(self):
         """Uses AppKit to strictly hide Dock and Menu Bar."""
+        if sys.platform != "darwin":
+            return
         app = AppKit.NSApplication.sharedApplication()
 
         # Save current options to restore later
@@ -139,6 +157,8 @@ class FullscreenOverlay(QWidget):
 
     def restore_macos_ui(self):
         """Restores the Menu Bar and Dock."""
+        if sys.platform != "darwin":
+            return
         if self._prev_presentation_opts is None:
             return
 
@@ -154,42 +174,38 @@ class FullscreenOverlay(QWidget):
     # -----------------------------------
 
     def paintEvent(self, event: QPaintEvent):
-        """Custom painting to handle aspect ratio and letterboxing."""
-        # (Logic kept exactly as provided)
+        """Custom painting to handle aspect ratio, letterboxing, zoom, and pan."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
 
-        # Fill background with configured color
+        # Fill background
         painter.fillRect(self.rect(), self._background_color)
 
         if self._pixmap.isNull():
             return
 
-        # Get the geometry of the widget (logical pixels)
+        # --- Base Image Positioning (Letterboxing) ---
+        scaled_pixmap = self._get_base_scaled_pixmap()
+
+        # Calculate the centered position of the scaled pixmap
         target_rect = self.rect()
-        pixmap_size = self._pixmap.size()
+        base_x = (target_rect.width() - scaled_pixmap.width()) / 2
+        base_y = (target_rect.height() - scaled_pixmap.height()) / 2
 
-        # Check if image is smaller than screen in both dimensions
-        if (
-            pixmap_size.width() <= target_rect.width()
-            and pixmap_size.height() <= target_rect.height()
-        ):
-            # Image is smaller - display at original resolution, centered
-            x = (target_rect.width() - pixmap_size.width()) // 2
-            y = (target_rect.height() - pixmap_size.height()) // 2
-            painter.drawPixmap(x, y, self._pixmap)
-        else:
-            # Image is larger - scale to fit while keeping aspect ratio
-            scaled_pixmap = self._pixmap.scaled(
-                target_rect.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
+        # --- Apply Zoom and Pan Transformation ---
+        painter.save()
 
-            # Calculate position to center the image
-            x = (target_rect.width() - scaled_pixmap.width()) // 2
-            y = (target_rect.height() - scaled_pixmap.height()) // 2
+        # The base position is now the origin for transformations
+        painter.translate(base_x, base_y)
 
-            painter.drawPixmap(x, y, scaled_pixmap)
+        # Apply the current zoom/pan transform
+        painter.setTransform(self._transform, combine=True)
+
+        # Draw the scaled pixmap at the new origin (0,0)
+        painter.drawPixmap(0, 0, scaled_pixmap)
+
+        painter.restore()
 
     def keyPressEvent(self, event: QKeyEvent):
         """Handle keyboard events to dismiss the overlay and navigate images."""
@@ -208,6 +224,156 @@ class FullscreenOverlay(QWidget):
             pass
         else:
             super().keyPressEvent(event)
+
+    def wheelEvent(self, event):
+        """Handle mouse wheel events for zooming."""
+        self._wheel_acc += event.angleDelta().y()
+
+        if abs(self._wheel_acc) >= 120 * Config.ZOOM_WHEEL_SENSITIVITY:
+            scaled_pixmap = self._get_base_scaled_pixmap()
+            base_x = (self.rect().width() - scaled_pixmap.width()) / 2
+            base_y = (self.rect().height() - scaled_pixmap.height()) / 2
+
+            # Translate mouse position to image's coordinate space
+            center_pos = event.position() - QPointF(base_x, base_y)
+
+            # Clamp to image rect
+            img_rect = scaled_pixmap.rect()
+            if not img_rect.contains(center_pos.toPoint()):
+                center_pos.setX(max(img_rect.left(), min(center_pos.x(), img_rect.right())))
+                center_pos.setY(max(img_rect.top(), min(center_pos.y(), img_rect.bottom())))
+
+            if self._wheel_acc > 0:
+                self._zoom_in(center_pos)
+            else:
+                self._zoom_out(center_pos)
+
+            self._wheel_acc = 0
+
+    def _get_base_scaled_pixmap(self):
+        """Calculates the base scaled pixmap."""
+        target_rect = self.rect()
+        pixmap_size = self._pixmap.size()
+
+        if pixmap_size.width() <= target_rect.width() and pixmap_size.height() <= target_rect.height():
+            return self._pixmap
+        else:
+            return self._pixmap.scaled(
+                target_rect.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+
+    def _zoom_in(self, center_pos):
+        """Zoom in, centered on the given position."""
+        if self._zoom_level >= Config.ZOOM_MAX:
+            return
+
+        base_scaled_pixmap = self._get_base_scaled_pixmap()
+        real_size_zoom = self._pixmap.width() / base_scaled_pixmap.width()
+
+        factor = Config.ZOOM_FACTOR
+        next_zoom_level = self._zoom_level * factor
+
+        if self._zoom_level < real_size_zoom and next_zoom_level > real_size_zoom:
+            factor = real_size_zoom / self._zoom_level
+            self._zoom_level = real_size_zoom
+            logging.debug("Snapped to real size zoom")
+        else:
+            self._zoom_level = next_zoom_level
+
+        if self._zoom_level > Config.ZOOM_MAX:
+            self._zoom_level = Config.ZOOM_MAX
+
+        self._apply_zoom(factor, center_pos)
+
+    def _zoom_out(self, center_pos):
+        """Zoom out, centered on the given position."""
+        if self._zoom_level <= 1.0:
+            return
+
+        base_scaled_pixmap = self._get_base_scaled_pixmap()
+        real_size_zoom = self._pixmap.width() / base_scaled_pixmap.width()
+
+        factor = 1.0 / Config.ZOOM_FACTOR
+        next_zoom_level = self._zoom_level * factor
+
+        if self._zoom_level > real_size_zoom and next_zoom_level < real_size_zoom:
+            factor = real_size_zoom / self._zoom_level
+            self._zoom_level = real_size_zoom
+            logging.debug("Snapped to real size zoom")
+        else:
+            self._zoom_level = next_zoom_level
+
+        if self._zoom_level < 1.0:
+            self._zoom_level = 1.0
+
+        if self._zoom_level == 1.0:
+            self._transform.reset()
+            self.update()
+        else:
+            self._apply_zoom(factor, center_pos)
+
+    def _apply_zoom(self, factor, center_pos):
+        """Apply zoom transformation."""
+        transform = QTransform()
+        transform.translate(center_pos.x(), center_pos.y())
+        transform.scale(factor, factor)
+        transform.translate(-center_pos.x(), -center_pos.y())
+        self._transform = self._transform * transform
+        self.update()
+
+    def mousePressEvent(self, event: QMouseEvent):
+        """Handle mouse press events to initiate panning."""
+        if event.button() == Qt.LeftButton and self._zoom_level > 1.0:
+            self._panning = True
+            self._pan_start_pos = event.position()
+            self.setCursor(Qt.ClosedHandCursor)
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        """Handle mouse move events to perform panning."""
+        if not self._panning:
+            return
+
+        delta = event.position() - self._pan_start_pos
+        self._pan_start_pos = event.position()
+
+        # Translate the view
+        self._transform.translate(delta.x() / self._zoom_level, delta.y() / self._zoom_level)
+
+        # Clamp the view
+        scaled_pixmap = self._get_base_scaled_pixmap()
+        img_rect = self._transform.mapRect(scaled_pixmap.rect())
+        view_rect = self.rect()
+
+        empty_space = Config.PAN_EMPTY_SPACE
+
+        dx = 0
+        if img_rect.width() < view_rect.width():
+            # Center the image horizontally
+            dx = view_rect.center().x() - img_rect.center().x()
+        elif img_rect.left() > view_rect.left() + empty_space:
+            dx = view_rect.left() + empty_space - img_rect.left()
+        elif img_rect.right() < view_rect.right() - empty_space:
+            dx = view_rect.right() - empty_space - img_rect.right()
+
+        dy = 0
+        if img_rect.height() < view_rect.height():
+            # Center the image vertically
+            dy = view_rect.center().y() - img_rect.center().y()
+        elif img_rect.top() > view_rect.top() + empty_space:
+            dy = view_rect.top() + empty_space - img_rect.top()
+        elif img_rect.bottom() < view_rect.bottom() - empty_space:
+            dy = view_rect.bottom() - empty_space - img_rect.bottom()
+
+        if dx or dy:
+            self._transform.translate(dx / self._zoom_level, dy / self._zoom_level)
+
+        self.update()
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        """Handle mouse release events to stop panning."""
+        if event.button() == Qt.LeftButton and self._panning:
+            self._panning = False
+            self.setCursor(Qt.ArrowCursor)
 
 
 class PhotoCell(QFrame):
