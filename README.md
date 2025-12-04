@@ -45,6 +45,6 @@ Preview image (640x480 in Fujifilm):
 `gh pr merge xx --rebase --delete-branch`
 `--squash`
 
-`gh pr checkout 4`
+`gh pr checkout 4` or `co`
 
 `git fetch --prune`

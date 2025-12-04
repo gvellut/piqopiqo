@@ -3,10 +3,11 @@ import logging
 import math
 import sys
 
+# TODO refactor : add variable to indicate loading
 if sys.platform == "darwin":
     import AppKit
 
-from PySide6.QtCore import QRect, Qt, Signal, QPointF
+from PySide6.QtCore import QPointF, QRect, Qt, Signal
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -55,7 +56,7 @@ class FullscreenOverlay(QWidget):
         self._pan_start_pos = QPointF()
 
         self._wheel_acc = 0
-        
+
         # Load the initial image
         self._load_current_image()
 
@@ -74,7 +75,7 @@ class FullscreenOverlay(QWidget):
 
         # ADDED: Register safety cleanup
         atexit.register(self.restore_macos_ui)
-    
+
     def _load_current_image(self):
         """Load the image at the current index and reset zoom/pan state."""
         # Reset transformation state
@@ -92,17 +93,17 @@ class FullscreenOverlay(QWidget):
                     logger.warning(f"Failed to load image: {self.image_path}")
                     self._pixmap = QPixmap()  # Fallback to empty pixmap
                 self.update()
-    
+
     def _navigate_to(self, new_index: int):
         """Navigate to a new image index with circular wrapping."""
         total_items = len(self.items_data)
         if total_items == 0:
             return
-        
+
         # Circular navigation: wrap around (handles both positive and negative indices)
         # Using double modulo to ensure positive result for negative indices
         new_index = (new_index % total_items + total_items) % total_items
-        
+
         if new_index != self.current_index:
             self.current_index = new_index
             self._load_current_image()
@@ -210,7 +211,7 @@ class FullscreenOverlay(QWidget):
     def keyPressEvent(self, event: QKeyEvent):
         """Handle keyboard events to dismiss the overlay and navigate images."""
         key = event.key()
-        
+
         if key in (Qt.Key_Escape, Qt.Key_Space):
             self.close()
         elif key == Qt.Key_Left:
@@ -240,8 +241,12 @@ class FullscreenOverlay(QWidget):
             # Clamp to image rect
             img_rect = scaled_pixmap.rect()
             if not img_rect.contains(center_pos.toPoint()):
-                center_pos.setX(max(img_rect.left(), min(center_pos.x(), img_rect.right())))
-                center_pos.setY(max(img_rect.top(), min(center_pos.y(), img_rect.bottom())))
+                center_pos.setX(
+                    max(img_rect.left(), min(center_pos.x(), img_rect.right()))
+                )
+                center_pos.setY(
+                    max(img_rect.top(), min(center_pos.y(), img_rect.bottom()))
+                )
 
             if self._wheel_acc > 0:
                 self._zoom_in(center_pos)
@@ -255,7 +260,10 @@ class FullscreenOverlay(QWidget):
         target_rect = self.rect()
         pixmap_size = self._pixmap.size()
 
-        if pixmap_size.width() <= target_rect.width() and pixmap_size.height() <= target_rect.height():
+        if (
+            pixmap_size.width() <= target_rect.width()
+            and pixmap_size.height() <= target_rect.height()
+        ):
             return self._pixmap
         else:
             return self._pixmap.scaled(
@@ -337,7 +345,9 @@ class FullscreenOverlay(QWidget):
         self._pan_start_pos = event.position()
 
         # Translate the view
-        self._transform.translate(delta.x() / self._zoom_level, delta.y() / self._zoom_level)
+        self._transform.translate(
+            delta.x() / self._zoom_level, delta.y() / self._zoom_level
+        )
 
         # Clamp the view
         scaled_pixmap = self._get_base_scaled_pixmap()
@@ -903,12 +913,14 @@ class MainWindow(QMainWindow):
 
         # Create and show the overlay with items_data and current index
         self._fullscreen_overlay = FullscreenOverlay(self.images_data, selected_index)
-        
+
         # Connect the index_changed signal to update grid selection
-        self._fullscreen_overlay.index_changed.connect(self._on_fullscreen_index_changed)
-        
+        self._fullscreen_overlay.index_changed.connect(
+            self._on_fullscreen_index_changed
+        )
+
         self._fullscreen_overlay.show_on_screen(current_screen)
-    
+
     def _on_fullscreen_index_changed(self, new_index: int):
         """Update grid selection when navigating in fullscreen mode."""
         # Update the grid's selected index
