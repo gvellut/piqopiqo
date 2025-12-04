@@ -23,3 +23,8 @@ class Config:
 
     # Fullscreen overlay settings
     FULLSCREEN_BACKGROUND_COLOR = "black"
+
+    ZOOM_FACTOR = 1.5
+    ZOOM_WHEEL_SENSITIVITY = 1
+    ZOOM_MAX = 2
+    PAN_EMPTY_SPACE = 300
