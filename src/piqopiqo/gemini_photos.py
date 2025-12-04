@@ -354,25 +354,41 @@ class FullscreenOverlay(QWidget):
         img_rect = self._transform.mapRect(scaled_pixmap.rect())
         view_rect = self.rect()
 
-        empty_space = Config.PAN_EMPTY_SPACE
+        # Calculate the configured empty space, scaled to the current view
+        if self._pixmap.width() > 0:
+            base_scale = scaled_pixmap.width() / self._pixmap.width()
+            configured_empty_space = (
+                Config.PAN_EMPTY_SPACE * base_scale * self._zoom_level
+            )
+        else:
+            configured_empty_space = 0
+
+        # Calculate the size of the initial black bars
+        black_bar_x = (view_rect.width() - scaled_pixmap.width()) / 2
+        black_bar_y = (view_rect.height() - scaled_pixmap.height()) / 2
+
+        # The effective empty space is the larger of the configured space or the
+        # initial black bar (if it exists) for each axis.
+        effective_h_space = max(configured_empty_space, max(0, black_bar_x))
+        effective_v_space = max(configured_empty_space, max(0, black_bar_y))
 
         dx = 0
         if img_rect.width() < view_rect.width():
-            # Center the image horizontally
+            # Center the image horizontally if it's smaller than the view
             dx = view_rect.center().x() - img_rect.center().x()
-        elif img_rect.left() > view_rect.left() + empty_space:
-            dx = view_rect.left() + empty_space - img_rect.left()
-        elif img_rect.right() < view_rect.right() - empty_space:
-            dx = view_rect.right() - empty_space - img_rect.right()
+        elif img_rect.left() > view_rect.left() + effective_h_space:
+            dx = view_rect.left() + effective_h_space - img_rect.left()
+        elif img_rect.right() < view_rect.right() - effective_h_space:
+            dx = view_rect.right() - effective_h_space - img_rect.right()
 
         dy = 0
         if img_rect.height() < view_rect.height():
-            # Center the image vertically
+            # Center the image vertically if it's smaller than the view
             dy = view_rect.center().y() - img_rect.center().y()
-        elif img_rect.top() > view_rect.top() + empty_space:
-            dy = view_rect.top() + empty_space - img_rect.top()
-        elif img_rect.bottom() < view_rect.bottom() - empty_space:
-            dy = view_rect.bottom() - empty_space - img_rect.bottom()
+        elif img_rect.top() > view_rect.top() + effective_v_space:
+            dy = view_rect.top() + effective_v_space - img_rect.top()
+        elif img_rect.bottom() < view_rect.bottom() - effective_v_space:
+            dy = view_rect.bottom() - effective_v_space - img_rect.bottom()
 
         if dx or dy:
             self._transform.translate(dx / self._zoom_level, dy / self._zoom_level)
