@@ -273,6 +273,7 @@ class FullscreenOverlay(QWidget):
     def _zoom_in(self, center_pos):
         """Zoom in, centered on the given position."""
         if self._zoom_level >= Config.ZOOM_MAX:
+            logging.debug("Already at max zoom level.")
             return
 
         base_scaled_pixmap = self._get_base_scaled_pixmap()
@@ -296,6 +297,7 @@ class FullscreenOverlay(QWidget):
     def _zoom_out(self, center_pos):
         """Zoom out, centered on the given position."""
         if self._zoom_level <= 1.0:
+            logging.debug("Already at base zoom level.")
             return
 
         base_scaled_pixmap = self._get_base_scaled_pixmap()
@@ -327,6 +329,8 @@ class FullscreenOverlay(QWidget):
         transform.scale(factor, factor)
         transform.translate(-center_pos.x(), -center_pos.y())
         self._transform = self._transform * transform
+        logging.debug(f"Zoom level updated to: {self._zoom_level}")
+        self._clamp_pan()
         self.update()
 
     def mousePressEvent(self, event: QMouseEvent):
@@ -348,36 +352,78 @@ class FullscreenOverlay(QWidget):
         self._transform.translate(
             delta.x() / self._zoom_level, delta.y() / self._zoom_level
         )
+        self._clamp_pan()
 
-        # Clamp the view
+    def _clamp_pan(self):
+        """Clamps the panning transformation to stay within the defined boundaries."""
+        # This function calculates the final visible rectangle of the image on the screen
+        # and corrects the transformation if it's outside the allowed panning boundaries.
+
+        # Get the base scaled pixmap and its initial centered position (letterboxing)
         scaled_pixmap = self._get_base_scaled_pixmap()
-        img_rect = self._transform.mapRect(scaled_pixmap.rect())
         view_rect = self.rect()
+        base_x = (view_rect.width() - scaled_pixmap.width()) / 2
+        base_y = (view_rect.height() - scaled_pixmap.height()) / 2
 
-        empty_space = Config.PAN_EMPTY_SPACE
+        # This is the rectangle of the image *if it were drawn on the screen* with the
+        # current zoom/pan transform, including the initial centering.
+        final_img_rect = self._transform.mapRect(scaled_pixmap.rect()).translated(
+            base_x, base_y
+        )
+
+        # --- Calculate Panning Boundaries ---
+
+        # 1. Configured empty space, scaled to the current view
+        if self._pixmap.width() > 0:
+            base_scale = scaled_pixmap.width() / self._pixmap.width()
+            configured_empty_space = (
+                Config.PAN_EMPTY_SPACE * base_scale * self._zoom_level
+            )
+        else:
+            configured_empty_space = 0
+
+        # 2. Size of the initial black bars (only if they exist, i.e., positive)
+        black_bar_x = max(0, (view_rect.width() - scaled_pixmap.width()) / 2)
+        black_bar_y = max(0, (view_rect.height() - scaled_pixmap.height()) / 2)
+
+        # The effective empty space is the larger of the two for each axis
+        effective_h_space = max(configured_empty_space, black_bar_x)
+        effective_v_space = max(configured_empty_space, black_bar_y)
+
+        logging.debug(
+            f"Clamping: HSpace={effective_h_space:.2f}, VSpace={effective_v_space:.2f}"
+        )
+
+        # --- Apply Clamping ---
 
         dx = 0
-        if img_rect.width() < view_rect.width():
-            # Center the image horizontally
-            dx = view_rect.center().x() - img_rect.center().x()
-        elif img_rect.left() > view_rect.left() + empty_space:
-            dx = view_rect.left() + empty_space - img_rect.left()
-        elif img_rect.right() < view_rect.right() - empty_space:
-            dx = view_rect.right() - empty_space - img_rect.right()
+        # If image is narrower than view, center it.
+        if final_img_rect.width() < view_rect.width():
+            dx = view_rect.center().x() - final_img_rect.center().x()
+        # If left edge is too far right, pull it back left.
+        elif final_img_rect.left() > effective_h_space:
+            dx = effective_h_space - final_img_rect.left()
+        # If right edge is too far left, push it back right.
+        elif final_img_rect.right() < view_rect.width() - effective_h_space:
+            dx = view_rect.width() - effective_h_space - final_img_rect.right()
 
         dy = 0
-        if img_rect.height() < view_rect.height():
-            # Center the image vertically
-            dy = view_rect.center().y() - img_rect.center().y()
-        elif img_rect.top() > view_rect.top() + empty_space:
-            dy = view_rect.top() + empty_space - img_rect.top()
-        elif img_rect.bottom() < view_rect.bottom() - empty_space:
-            dy = view_rect.bottom() - empty_space - img_rect.bottom()
+        # If image is shorter than view, center it.
+        if final_img_rect.height() < view_rect.height():
+            dy = view_rect.center().y() - final_img_rect.center().y()
+        # If top edge is too far down, pull it back up.
+        elif final_img_rect.top() > effective_v_space:
+            dy = effective_v_space - final_img_rect.top()
+        # If bottom edge is too far up, push it back down.
+        elif final_img_rect.bottom() < view_rect.height() - effective_v_space:
+            dy = view_rect.height() - effective_v_space - final_img_rect.bottom()
 
+        # If a correction is needed, apply it to the transformation matrix
         if dx or dy:
+            # The correction is in screen pixels, so we must divide by the zoom level
+            # to apply it correctly to the transformation's coordinate space.
             self._transform.translate(dx / self._zoom_level, dy / self._zoom_level)
-
-        self.update()
+            self.update()
 
     def mouseReleaseEvent(self, event: QMouseEvent):
         """Handle mouse release events to stop panning."""
