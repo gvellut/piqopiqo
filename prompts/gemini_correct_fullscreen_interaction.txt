@@ -1,0 +1,6 @@
+- make it impossible to resize the full screen when dragging borders : currently, at least on the bottom + right side, the mouse pointer changes to a resize pointer when hovering the boundary. And it is then possible to change the fullscreen window size by dragging the boundary. It should not happen. The fullscreen of piqopiqo should never be resizable or resized
+- make it possible to switch app (for exemple with cmd-tab) : currently, when cmd-Tab, the switcher is shown (normal) then, if another app is selected, the menubar for the other app is displayed but not its windows. Instead, the windows for that other app should be displayed, with its menubar, while the piqopiqo app fullscreen is still in the background
+- cmd-q when fullscreen : currently not exiting. Need first to exit the full-screen (escape), then the app quits by itself (with no further action beyond the first cmd-q when the app was fullscreen). In fullscreen too, cmd-q should exit the application.
+
+- Adobe Bridge (whose piqopiqo is inteded to replace for my use) can do all those.
+- If you think any of those is impossible, explain how by adding a PR.md file in the root of the repo.
