@@ -1,4 +1,3 @@
-import atexit
 import logging
 import math
 import sys
@@ -63,18 +62,13 @@ class FullscreenOverlay(QWidget):
         # Window setup
         # CHANGE 1: Use Qt.Window instead of Qt.Tool to ensure it acts as a standalone
         # top-level window that can accept focus reliably on macOS.
-        self.setWindowFlags(
-            Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-        )
+        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
 
         self.setAttribute(Qt.WA_DeleteOnClose)
 
         bg_color = Config.FULLSCREEN_BACKGROUND_COLOR
         self.setStyleSheet(f"background-color: {bg_color};")
         self._background_color = QColor(bg_color)
-
-        # ADDED: Register safety cleanup
-        atexit.register(self.restore_macos_ui)
 
     def _load_current_image(self):
         """Load the image at the current index and reset zoom/pan state."""
@@ -112,64 +106,12 @@ class FullscreenOverlay(QWidget):
 
     def show_on_screen(self, target_screen: QScreen):
         """Moves the overlay to the specific screen and shows it fullscreen."""
-
-        # 1. Hide macOS Chrome (Menu Bar & Dock) strictly
-        self.hide_macos_ui()
-
-        # 2. Move window to the target screen
         self.setScreen(target_screen)
-
-        # CHANGE: Show the window FIRST.
-        # If we setGeometry before show(), macOS constrains the window
-        # to the 'available' area (excluding dock/menu).
-        # Showing it first creates the window, then we stretch it.
-        self.show()
-
-        # 3. Force geometry to the screen's full geometry manually
-        rect = target_screen.geometry()
-        self.setGeometry(rect)
-
-        # Redundant safety: explicitly set size and position to ensure
-        # Qt applies the update even if it thinks the geometry hasn't changed.
-        self.resize(rect.size())
-        self.move(rect.topLeft())
-
-        # 4. Force focus
-        self.raise_()
-        self.activateWindow()
-        self.setFocus()
-
-    # --- ADDED: macOS Specific Logic ---
-    def hide_macos_ui(self):
-        """Uses AppKit to strictly hide Dock and Menu Bar."""
-        if sys.platform != "darwin":
-            return
-        app = AppKit.NSApplication.sharedApplication()
-
-        # Save current options to restore later
-        self._prev_presentation_opts = app.presentationOptions()
-
-        # Options to hide Dock and Menu Bar nicely
-        new_opts = (
-            AppKit.NSApplicationPresentationHideDock
-            | AppKit.NSApplicationPresentationHideMenuBar
-        )
-        app.setPresentationOptions_(new_opts)
-
-    def restore_macos_ui(self):
-        """Restores the Menu Bar and Dock."""
-        if sys.platform != "darwin":
-            return
-        if self._prev_presentation_opts is None:
-            return
-
-        app = AppKit.NSApplication.sharedApplication()
-        app.setPresentationOptions_(self._prev_presentation_opts)
-        self._prev_presentation_opts = None
+        self.showFullScreen()
 
     def closeEvent(self, event):
         """Handle window closing."""
-        self.restore_macos_ui()  # Restore UI when closed
+        self.showNormal()
         super().closeEvent(event)
 
     # -----------------------------------
@@ -873,6 +815,7 @@ class MainWindow(QMainWindow):
         quit_action = QAction(f"Quit {Config.APP_NAME}", self)
         quit_action.setMenuRole(QAction.MenuRole.QuitRole)
         quit_action.setShortcut("Ctrl+Q")
+        quit_action.setShortcutContext(Qt.ApplicationShortcut)
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
 
