@@ -3,7 +3,8 @@ class Config:
     APP_NAME = "PiqoPiqo"
 
     # Paths
-    CACHE_DIR = "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
+    CACHE_DIR = "/Volumes/CrucialX8/projects/piqopiqo/cache"
+    # "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
     EXIFTOOL_PATH = "exiftool"  # Assumes in PATH
 
     # Concurrency

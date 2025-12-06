@@ -41,6 +41,8 @@ Preview image (640x480 in Fujifilm):
 
 ## gh
 
+`gh pr ready`
+
 `gh pr merge xx --merge --delete-branch`
 `gh pr merge xx --rebase --delete-branch`
 `--squash`
