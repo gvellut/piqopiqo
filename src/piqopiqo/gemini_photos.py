@@ -348,31 +348,20 @@ class FullscreenOverlay(QWidget):
         delta = event.position() - self._pan_start_pos
         self._pan_start_pos = event.position()
 
-        # Translate the view
+        # Apply the translation
         self._transform.translate(
             delta.x() / self._zoom_level, delta.y() / self._zoom_level
         )
+        
+        # Clamp immediately to prevent going beyond boundaries during drag
+        self._clamp_pan_smooth()
         self.update()
 
-    def _clamp_pan(self):
-        """Clamps the panning transformation to stay within the defined boundaries."""
-        # This function calculates the final visible rectangle of the image on the screen
-        # and corrects the transformation if it's outside the allowed panning boundaries.
-
-        # Get the base scaled pixmap and its initial centered position (letterboxing)
+    def _get_effective_empty_space(self):
+        """Calculate the effective empty space around the image at current zoom level."""
         scaled_pixmap = self._get_base_scaled_pixmap()
         view_rect = self.rect()
-        base_x = (view_rect.width() - scaled_pixmap.width()) / 2
-        base_y = (view_rect.height() - scaled_pixmap.height()) / 2
-
-        # This is the rectangle of the image *if it were drawn on the screen* with the
-        # current zoom/pan transform, including the initial centering.
-        final_img_rect = self._transform.mapRect(scaled_pixmap.rect()).translated(
-            base_x, base_y
-        )
-
-        # --- Calculate Panning Boundaries ---
-
+        
         # 1. Configured empty space, scaled to the current view
         if self._pixmap.width() > 0:
             base_scale = scaled_pixmap.width() / self._pixmap.width()
@@ -389,41 +378,49 @@ class FullscreenOverlay(QWidget):
         # The effective empty space is the larger of the two for each axis
         effective_h_space = max(configured_empty_space, black_bar_x)
         effective_v_space = max(configured_empty_space, black_bar_y)
+        
+        return effective_h_space, effective_v_space
 
-        logging.debug(
-            f"Clamping: HSpace={effective_h_space:.2f}, VSpace={effective_v_space:.2f}"
+    def _clamp_pan_smooth(self):
+        """Smoothly clamps panning during drag to prevent going beyond boundaries."""
+        scaled_pixmap = self._get_base_scaled_pixmap()
+        view_rect = self.rect()
+        base_x = (view_rect.width() - scaled_pixmap.width()) / 2
+        base_y = (view_rect.height() - scaled_pixmap.height()) / 2
+
+        # Get current image position
+        final_img_rect = self._transform.mapRect(scaled_pixmap.rect()).translated(
+            base_x, base_y
         )
 
-        # --- Apply Clamping ---
+        effective_h_space, effective_v_space = self._get_effective_empty_space()
 
+        # Calculate required corrections
         dx = 0
-        # If image is narrower than view, center it.
         if final_img_rect.width() < view_rect.width():
             dx = view_rect.center().x() - final_img_rect.center().x()
-        # If left edge is too far right, pull it back left.
         elif final_img_rect.left() > effective_h_space:
             dx = effective_h_space - final_img_rect.left()
-        # If right edge is too far left, push it back right.
         elif final_img_rect.right() < view_rect.width() - effective_h_space:
             dx = view_rect.width() - effective_h_space - final_img_rect.right()
 
         dy = 0
-        # If image is shorter than view, center it.
         if final_img_rect.height() < view_rect.height():
             dy = view_rect.center().y() - final_img_rect.center().y()
-        # If top edge is too far down, pull it back up.
         elif final_img_rect.top() > effective_v_space:
             dy = effective_v_space - final_img_rect.top()
-        # If bottom edge is too far up, push it back down.
         elif final_img_rect.bottom() < view_rect.height() - effective_v_space:
             dy = view_rect.height() - effective_v_space - final_img_rect.bottom()
 
-        # If a correction is needed, apply it to the transformation matrix
+        # Apply corrections immediately (no update() call to avoid extra redraws)
         if dx or dy:
-            # The correction is in screen pixels, so we must divide by the zoom level
-            # to apply it correctly to the transformation's coordinate space.
             self._transform.translate(dx / self._zoom_level, dy / self._zoom_level)
-            self.update()
+
+    def _clamp_pan(self):
+        """Clamps the panning transformation to stay within the defined boundaries."""
+        # This is now just a wrapper that calls the smooth version and triggers update
+        self._clamp_pan_smooth()
+        self.update()
 
     def mouseReleaseEvent(self, event: QMouseEvent):
         """Handle mouse release events to stop panning."""
