@@ -352,7 +352,7 @@ class FullscreenOverlay(QWidget):
         self._transform.translate(
             delta.x() / self._zoom_level, delta.y() / self._zoom_level
         )
-        self._clamp_pan()
+        self.update()
 
     def _clamp_pan(self):
         """Clamps the panning transformation to stay within the defined boundaries."""
@@ -430,6 +430,7 @@ class FullscreenOverlay(QWidget):
         if event.button() == Qt.LeftButton and self._panning:
             self._panning = False
             self.setCursor(Qt.ArrowCursor)
+            self._clamp_pan()
 
 
 class PhotoCell(QFrame):
