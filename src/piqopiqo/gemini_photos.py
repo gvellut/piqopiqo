@@ -371,9 +371,11 @@ class FullscreenOverlay(QWidget):
         else:
             configured_empty_space = 0
 
-        # 2. Size of the initial black bars (only if they exist, i.e., positive)
-        black_bar_x = max(0, (view_rect.width() - scaled_pixmap.width()) / 2)
-        black_bar_y = max(0, (view_rect.height() - scaled_pixmap.height()) / 2)
+        # 2. Size of the initial black bars (scaled with zoom to avoid discontinuity)
+        # The black bars represent the letterbox area at zoom_level=1.0
+        # As we zoom in, this area should also scale proportionally
+        black_bar_x = max(0, (view_rect.width() - scaled_pixmap.width()) / 2) * self._zoom_level
+        black_bar_y = max(0, (view_rect.height() - scaled_pixmap.height()) / 2) * self._zoom_level
 
         # The effective empty space is the larger of the two for each axis
         effective_h_space = max(configured_empty_space, black_bar_x)
