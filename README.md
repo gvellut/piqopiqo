@@ -39,6 +39,8 @@ Preview image (640x480 in Fujifilm):
 
 `exiftool -b -PreviewImage -w _preview.jpg dir`
 
+`-g` or `-g1`
+
 ## gh
 
 `gh pr ready`

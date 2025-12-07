@@ -1,0 +1,2 @@
+- panel on the right of the grid. It can be resized.
+- 
