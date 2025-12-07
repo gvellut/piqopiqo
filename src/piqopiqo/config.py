@@ -3,8 +3,7 @@ class Config:
     APP_NAME = "PiqoPiqo"
 
     # Paths
-    CACHE_DIR = "/Volumes/CrucialX8/projects/piqopiqo/cache"
-    # "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
+    CACHE_DIR = "cache"
     EXIFTOOL_PATH = "exiftool"  # Assumes in PATH
 
     # Concurrency
@@ -29,3 +28,8 @@ class Config:
     ZOOM_WHEEL_SENSITIVITY = 1
     ZOOM_MAX = 2
     PAN_EMPTY_SPACE = 300
+
+    # Info Panel
+    INFO_PANEL_BACKGROUND_COLOR = "black"
+    INFO_PANEL_BACKGROUND_TRANSPARENCY = 80  # Percent
+    INFO_PANEL_TEXT_COLOR = "white"

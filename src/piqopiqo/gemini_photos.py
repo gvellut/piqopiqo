@@ -1,7 +1,9 @@
 import atexit
 import logging
 import math
+import os
 import sys
+from datetime import datetime
 
 # TODO refactor : add variable to indicate loading
 if sys.platform == "darwin":
@@ -25,6 +27,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QLabel,
     QMainWindow,
     QScrollBar,
     QSizePolicy,
@@ -76,6 +79,85 @@ class FullscreenOverlay(QWidget):
         # ADDED: Register safety cleanup
         atexit.register(self.restore_macos_ui)
 
+        self._setup_info_panel()
+
+    def _setup_info_panel(self):
+        """Creates and configures the information panel."""
+        self.info_panel = QFrame(self)
+        self.info_panel.setObjectName("infoPanel")
+        self.info_panel.setFrameShape(QFrame.StyledPanel)
+        self.info_panel.setFrameShadow(QFrame.Raised)
+        self.info_panel.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        # Layout for the panel
+        panel_layout = QHBoxLayout(self.info_panel)
+        panel_layout.setContentsMargins(10, 5, 10, 5)
+        panel_layout.setSpacing(10)
+
+        # Filename Label
+        self.filename_label = QLabel(self)
+        panel_layout.addWidget(self.filename_label)
+
+        # Date Label
+        self.date_label = QLabel(self)
+        panel_layout.addWidget(self.date_label)
+
+        # Color Swatch
+        self.color_swatch = QWidget(self)
+        self.color_swatch.setFixedSize(20, 20)
+        self.color_swatch.setStyleSheet("background-color: red;")
+        panel_layout.addWidget(self.color_swatch)
+
+        self.info_panel.setLayout(panel_layout)
+
+        # Set panel stylesheet
+        bg_color = QColor(Config.INFO_PANEL_BACKGROUND_COLOR)
+        alpha = int(255 * (Config.INFO_PANEL_BACKGROUND_TRANSPARENCY / 100.0))
+        bg_color.setAlpha(alpha)
+
+        text_color = Config.INFO_PANEL_TEXT_COLOR
+        self.info_panel.setStyleSheet(
+            f"""
+            #infoPanel {{
+                background-color: rgba({bg_color.red()}, {bg_color.green()}, {bg_color.blue()}, {bg_color.alpha()});
+                border-radius: 5px;
+            }}
+            QLabel {{
+                color: {text_color};
+                background-color: transparent;
+            }}
+        """
+        )
+
+    def _update_info_panel(self):
+        """Updates the content of the info panel based on the current image."""
+        if not hasattr(self, "info_panel") or not self.image_path:
+            return
+
+        # Filename
+        filename = os.path.basename(self.image_path)
+        self.filename_label.setText(filename)
+
+        # Filesystem Date
+        try:
+            mtime = os.path.getmtime(self.image_path)
+            date_str = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+            self.date_label.setText(date_str)
+        except OSError as e:
+            logger.error(f"Could not get modification date for {self.image_path}: {e}")
+            self.date_label.setText("Unknown Date")
+
+        # Reposition and show
+        self.info_panel.adjustSize()
+        self._position_info_panel()
+        self.info_panel.show()
+
+    def _position_info_panel(self):
+        """Positions the panel in the bottom-left corner."""
+        if hasattr(self, "info_panel"):
+            margin = 10  # Margin from the window edges
+            self.info_panel.move(margin, self.height() - self.info_panel.height() - margin)
+
     def _load_current_image(self):
         """Load the image at the current index and reset zoom/pan state."""
         # Reset transformation state
@@ -92,6 +174,7 @@ class FullscreenOverlay(QWidget):
                 if self._pixmap.isNull():
                     logger.warning(f"Failed to load image: {self.image_path}")
                     self._pixmap = QPixmap()  # Fallback to empty pixmap
+                self._update_info_panel()
                 self.update()
 
     def _navigate_to(self, new_index: int):
@@ -176,6 +259,9 @@ class FullscreenOverlay(QWidget):
 
     def paintEvent(self, event: QPaintEvent):
         """Custom painting to handle aspect ratio, letterboxing, zoom, and pan."""
+        super().paintEvent(event)
+        self._position_info_panel()
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
