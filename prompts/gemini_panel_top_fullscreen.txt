@@ -1,0 +1,5 @@
+On the fullscreen : put a panel on top of the image shown, on the lower left corner of the image, in constant position in screen space.
+Currently, simply put on it labels with the file name + filesystem date of the file + a constant color swatch (red). The texts of the labels must be white (color to be configured in config.py)
+Set it up with a semi transparent color background eg black 80% (not the text or the color swatch, which must have no transparency). Color and transparency percent must be set in config.py.
+That panel must not move in any way, for ex when panning, or zooming or switching to another image with the keyboard arrows. 
+It must be dismissed at the same time as the full screen.
