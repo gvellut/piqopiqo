@@ -60,6 +60,8 @@ class FullscreenOverlay(QWidget):
 
         self._wheel_acc = 0
 
+        self._setup_info_panel()
+
         # Load the initial image
         self._load_current_image()
 
@@ -78,8 +80,6 @@ class FullscreenOverlay(QWidget):
 
         # ADDED: Register safety cleanup
         atexit.register(self.restore_macos_ui)
-
-        self._setup_info_panel()
 
     def _setup_info_panel(self):
         """Creates and configures the information panel."""
