@@ -73,10 +73,11 @@ class FullscreenOverlay(QWidget):
         self.setStyleSheet(f"background-color: {bg_color};")
         self._background_color = QColor(bg_color)
 
-        # Add quit shortcut to handle Cmd+Q in fullscreen
-        quit_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self)
-        quit_shortcut.setContext(Qt.WindowShortcut)
-        quit_shortcut.activated.connect(QApplication.instance().quit)
+        # Add quit shortcut to handle Cmd+Q in fullscreen (macOS)
+        if sys.platform == "darwin":
+            quit_shortcut = QShortcut(QKeySequence.Quit, self)
+            quit_shortcut.setContext(Qt.WindowShortcut)
+            quit_shortcut.activated.connect(QApplication.instance().quit)
 
     def _load_current_image(self):
         """Load the image at the current index and reset zoom/pan state."""
