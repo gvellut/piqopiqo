@@ -11,6 +11,7 @@ from PySide6.QtGui import (
     QAction,
     QColor,
     QKeyEvent,
+    QKeySequence,
     QMouseEvent,
     QPainter,
     QPaintEvent,
@@ -18,9 +19,11 @@ from PySide6.QtGui import (
     QPen,
     QPixmap,
     QScreen,
+    QShortcut,
     QTransform,
 )
 from PySide6.QtWidgets import (
+    QApplication,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -70,6 +73,11 @@ class FullscreenOverlay(QWidget):
         self.setStyleSheet(f"background-color: {bg_color};")
         self._background_color = QColor(bg_color)
 
+        # Add quit shortcut to handle Cmd+Q in fullscreen
+        quit_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self)
+        quit_shortcut.setContext(Qt.WindowShortcut)
+        quit_shortcut.activated.connect(QApplication.instance().quit)
+
     def _load_current_image(self):
         """Load the image at the current index and reset zoom/pan state."""
         # Reset transformation state
@@ -107,7 +115,20 @@ class FullscreenOverlay(QWidget):
     def show_on_screen(self, target_screen: QScreen):
         """Moves the overlay to the specific screen and shows it fullscreen."""
         self.setScreen(target_screen)
-        self.showFullScreen()
+        
+        # Use windowed fullscreen to allow app switching
+        # Get the screen geometry
+        screen_geometry = target_screen.geometry()
+        
+        # Set the window geometry to cover the entire screen
+        self.setGeometry(screen_geometry)
+        
+        # Show the window normally (not in native fullscreen mode)
+        self.show()
+        
+        # Raise to front and activate
+        self.raise_()
+        self.activateWindow()
 
     def closeEvent(self, event):
         """Handle window closing."""
