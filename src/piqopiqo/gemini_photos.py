@@ -4,12 +4,13 @@ import logging
 import math
 import os
 import sys
+import pyexiftool
 
 # TODO refactor : add variable to indicate loading
 if sys.platform == "darwin":
     import AppKit
 
-from PySide6.QtCore import QPointF, QRect, Qt, Signal
+from PySide6.QtCore import QObject, QPointF, QRect, Qt, QRunnable, Signal, QThreadPool
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -31,6 +32,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QScrollBar,
     QSizePolicy,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -38,8 +40,88 @@ from PySide6.QtWidgets import (
 from piqopiqo.config import Config
 from piqopiqo.model import ImageItem, OnFullscreenExitMultipleSelected
 from piqopiqo.thumb_man import ThumbnailManager
+from PySide6.QtCore import QObject, Signal
 
 logger = logging.getLogger(__name__)
+
+
+class ExifFetcher(QRunnable):
+    def __init__(self, exif_manager, file_path):
+        super().__init__()
+        self.exif_manager = exif_manager
+        self.file_path = file_path
+
+    def run(self):
+        try:
+            metadata = self.exif_manager.exiftool.get_metadata(self.file_path)
+            self.exif_manager.exif_ready.emit(self.file_path, metadata)
+        except Exception as e:
+            logger.error(f"Error fetching EXIF for {self.file_path}: {e}")
+            self.exif_manager.exif_ready.emit(self.file_path, {})
+
+
+class ExifPanel(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.layout = QGridLayout(self)
+        self.layout.setContentsMargins(10, 10, 10, 10)
+        self.layout.setSpacing(10)
+        self.layout.setColumnStretch(0, Config.EXIF_PANEL_LAYOUT[0])
+        self.layout.setColumnStretch(1, Config.EXIF_PANEL_LAYOUT[1])
+
+    def update_exif(self, items: list[ImageItem]):
+        self._clear_layout()
+        if not items:
+            return
+
+        for i, field in enumerate(Config.EXIF_FIELDS):
+            values = set()
+            for item in items:
+                if item.exif_data and field in item.exif_data:
+                    value = item.exif_data[field]
+                    if not isinstance(value, str):
+                        value = "<Unable to display>"
+                    values.add(value)
+                else:
+                    values.add("<Not Present>")
+
+            value_str = (
+                values.pop() if len(values) == 1 else f"<Multiple values>"
+            )
+
+            field_label = QLabel(field)
+            value_label = QLabel(value_str)
+
+            field_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+            field_label.setToolTip(field)
+            value_label.setToolTip(value_str)
+
+            field_label.setTextElideMode(Qt.ElideRight)
+            value_label.setTextElideMode(Qt.ElideRight)
+
+            self.layout.addWidget(field_label, i, 0)
+            self.layout.addWidget(value_label, i, 1)
+
+    def _clear_layout(self):
+        while self.layout.count():
+            child = self.layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+
+class ExifManager(QObject):
+    exif_ready = Signal(str, dict)
+
+    def __init__(self, exiftool: pyexiftool.ExifTool, parent=None):
+        super().__init__(parent)
+        self.exiftool = exiftool
+        self.thread_pool = QThreadPool()
+
+    def fetch_exif(self, file_path: str):
+        worker = ExifFetcher(self, file_path)
+        self.thread_pool.start(worker)
 
 
 class FullscreenOverlay(QWidget):
@@ -970,7 +1052,7 @@ class PagedPhotoGrid(QWidget):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, images):
+    def __init__(self, images, exiftool):
         super().__init__()
         self.setWindowTitle(Config.APP_NAME)
         self.showMaximized()
@@ -981,16 +1063,28 @@ class MainWindow(QMainWindow):
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        layout = QVBoxLayout(central_widget)
+        layout = QHBoxLayout(central_widget)
+
+        splitter = QSplitter(Qt.Horizontal)
+        layout.addWidget(splitter)
 
         self.grid = PagedPhotoGrid()
-        layout.addWidget(self.grid)
+        splitter.addWidget(self.grid)
+
+        self.exif_panel = ExifPanel()
+        splitter.addWidget(self.exif_panel)
+
+        splitter.setSizes([self.width() * 0.8, self.width() * 0.2])
 
         self.thumb_manager = ThumbnailManager()
         self.thumb_manager.thumb_ready.connect(self.on_thumb_ready)
 
+        self.exif_manager = ExifManager(exiftool)
+        self.exif_manager.exif_ready.connect(self.on_exif_ready)
+
         self.grid.request_thumb.connect(self.request_thumb_handler)
         self.grid.request_fullscreen.connect(self._handle_fullscreen_overlay)
+        self.grid.selection_changed.connect(self.on_selection_changed)
 
         self.images_data = [ImageItem(**data) for data in images]
         self.grid.set_data(self.images_data)
@@ -1044,6 +1138,33 @@ class MainWindow(QMainWindow):
                 # Refresh Grid View
                 self.grid.refresh_item(i)
                 break
+
+    def on_exif_ready(self, file_path, metadata):
+        for item in self.images_data:
+            if item.path == file_path:
+                item.exif_data = metadata
+                # If this item is currently selected, refresh the panel
+                selected_indices = {
+                    i for i, item in enumerate(self.images_data) if item.is_selected
+                }
+                if item._global_index in selected_indices:
+                    self.on_selection_changed(selected_indices)
+                break
+
+    def on_selection_changed(self, selected_indices):
+        selected_items = [self.images_data[i] for i in selected_indices]
+
+        # Check if all selected items have EXIF data
+        all_data_loaded = all(item.exif_data is not None for item in selected_items)
+
+        # If not all data is loaded, fetch it
+        for item in selected_items:
+            if item.exif_data is None:
+                self.exif_manager.fetch_exif(item.path)
+
+        # Update the panel only if all data is already loaded
+        if all_data_loaded:
+            self.exif_panel.update_exif(selected_items)
 
     def request_thumb_handler(self, index):
         if 0 <= index < len(self.images_data):
