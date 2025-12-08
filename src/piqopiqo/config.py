@@ -1,3 +1,6 @@
+from piqopiqo.model import OnFullscreenExit
+
+
 class Config:
     # Application Settings
     APP_NAME = "PiqoPiqo"
@@ -34,3 +37,6 @@ class Config:
     INFO_PANEL_BACKGROUND_COLOR = "black"
     INFO_PANEL_BACKGROUND_TRANSPARENCY = 80  # Percent
     INFO_PANEL_TEXT_COLOR = "white"
+
+    # Selection Behavior
+    ON_FULLSCREEN_EXIT = OnFullscreenExit.KEEP_SELECTION

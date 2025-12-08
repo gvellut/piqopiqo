@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.config import Config
+from piqopiqo.model import ImageItem, OnFullscreenExit
 from piqopiqo.thumb_man import ThumbnailManager
 
 logger = logging.getLogger(__name__)
@@ -47,10 +48,11 @@ class FullscreenOverlay(QWidget):
     # Signal to notify when the current index changes
     index_changed = Signal(int)
 
-    def __init__(self, items_data: list, current_index: int):
+    def __init__(self, all_items: list, visible_indices: list, start_index: int):
         super().__init__()
-        self.items_data = items_data
-        self.current_index = current_index
+        self.all_items = all_items
+        self.visible_indices = visible_indices
+        self.current_visible_idx = self.visible_indices.index(start_index)
         self._prev_presentation_opts = None
 
         self._transform = QTransform()
@@ -166,9 +168,10 @@ class FullscreenOverlay(QWidget):
         self._panning = False
         self._pan_start_pos = QPointF()
 
-        if 0 <= self.current_index < len(self.items_data):
-            image_data = self.items_data[self.current_index]
-            self.image_path = image_data.get("path", "")
+        global_index = self.visible_indices[self.current_visible_idx]
+        if 0 <= global_index < len(self.all_items):
+            image_data = self.all_items[global_index]
+            self.image_path = image_data.path
             if self.image_path:
                 self._pixmap = QPixmap(self.image_path)
                 if self._pixmap.isNull():
@@ -177,21 +180,19 @@ class FullscreenOverlay(QWidget):
                 self._update_info_panel()
                 self.update()
 
-    def _navigate_to(self, new_index: int):
-        """Navigate to a new image index with circular wrapping."""
-        total_items = len(self.items_data)
-        if total_items == 0:
+    def _navigate_to(self, new_visible_idx: int):
+        """Navigate to a new image index within the visible set."""
+        total_visible = len(self.visible_indices)
+        if total_visible == 0:
             return
 
-        # Circular navigation: wrap around (handles both positive and negative indices)
-        # Using double modulo to ensure positive result for negative indices
-        new_index = (new_index % total_items + total_items) % total_items
+        new_visible_idx = (new_visible_idx % total_visible + total_visible) % total_visible
 
-        if new_index != self.current_index:
-            self.current_index = new_index
+        if new_visible_idx != self.current_visible_idx:
+            self.current_visible_idx = new_visible_idx
             self._load_current_image()
-            # Emit signal to update grid selection
-            self.index_changed.emit(self.current_index)
+            global_index = self.visible_indices[self.current_visible_idx]
+            self.index_changed.emit(global_index)
 
     def show_on_screen(self, target_screen: QScreen):
         """Moves the overlay to the specific screen and shows it fullscreen."""
@@ -301,11 +302,9 @@ class FullscreenOverlay(QWidget):
         if key in (Qt.Key_Escape, Qt.Key_Space):
             self.close()
         elif key == Qt.Key_Left:
-            # Navigate to previous image (circular)
-            self._navigate_to(self.current_index - 1)
+            self._navigate_to(self.current_visible_idx - 1)
         elif key == Qt.Key_Right:
-            # Navigate to next image (circular)
-            self._navigate_to(self.current_index + 1)
+            self._navigate_to(self.current_visible_idx + 1)
         elif key in (Qt.Key_Up, Qt.Key_Down):
             # Ignore up/down keys in fullscreen
             pass
@@ -519,7 +518,7 @@ class FullscreenOverlay(QWidget):
 
 
 class PhotoCell(QFrame):
-    clicked = Signal(int)
+    clicked = Signal(int, bool, bool)
 
     def __init__(self, index_in_grid: int):
         super().__init__()
@@ -545,12 +544,12 @@ class PhotoCell(QFrame):
 
     def mousePressEvent(self, event: QMouseEvent):
         if self.current_data and event.button() == Qt.LeftButton:
-            # We assume current_data has the globally injected index or we handle it in
-            # the grid
-            # Here we just emit the grid index, the parent logic can map it if needed,
-            # but usually the data item itself carries its identity.
-            global_index = self.current_data.get("_global_index", -1)
-            self.clicked.emit(global_index)
+            modifiers = event.modifiers()
+            self.clicked.emit(
+                self.current_data._global_index,
+                modifiers & Qt.ShiftModifier,
+                modifiers & Qt.ControlModifier, # Use control for cross-platform
+            )
         super().mousePressEvent(event)
 
     def paintEvent(self, event: QPaintEvent):
@@ -574,11 +573,10 @@ class PhotoCell(QFrame):
             return
 
         # Unpack Data
-        # Mimicking PhotoModel.data logic
-        name = self.current_data.get("name", "")
-        date = self.current_data.get("created", "")
-        state = self.current_data.get("state", 0)
-        pixmap = self.current_data.get("pixmap", None)
+        name = self.current_data.name
+        date = self.current_data.created
+        state = self.current_data.state
+        pixmap = self.current_data.pixmap
 
         # Unpack Layout Info (computed in parent resizeEvent)
         pad = self.layout_info.get("pad", 5)
@@ -650,8 +648,8 @@ class PhotoCell(QFrame):
 
 class PagedPhotoGrid(QWidget):
     request_thumb = Signal(int)
-    selection_changed = Signal(int)
-    request_fullscreen = Signal(int)
+    selection_changed = Signal(set)
+    request_fullscreen = Signal(list)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -659,9 +657,9 @@ class PagedPhotoGrid(QWidget):
         self.setFocusPolicy(Qt.StrongFocus)
 
         self.n_cols = Config.NUM_COLUMNS
-        self.n_rows = 1  # Will be calculated in resizeEvent
+        self.n_rows = 1
         self.items_data = []
-        self.selected_index = -1
+        self._last_selected_index = -1
         self.layout_info = {}
 
         # Main Layout: Grid Container + Scrollbar
@@ -688,9 +686,10 @@ class PagedPhotoGrid(QWidget):
     def set_data(self, items):
         # Inject index for click handling
         for i, item in enumerate(items):
-            item["_global_index"] = i
+            item._global_index = i
+            item.is_selected = False
         self.items_data = items
-        self.selected_index = -1
+        self._last_selected_index = -1
         self._recalculate_scrollbar()
         self.on_scroll(0)
 
@@ -811,11 +810,10 @@ class PagedPhotoGrid(QWidget):
 
             if data_index < len(self.items_data):
                 item = self.items_data[data_index]
-                is_sel = item.get("_global_index") == self.selected_index
-                cell.set_content(item, is_sel)
+                cell.set_content(item, item.is_selected)
                 cell.show()
 
-                if item.get("state") == 0:
+                if item.state == 0:
                     self.request_thumb.emit(data_index)
             else:
                 cell.set_content(None, False)
@@ -833,14 +831,30 @@ class PagedPhotoGrid(QWidget):
             if 0 <= cell_pool_index < len(self.cells):
                 cell = self.cells[cell_pool_index]
                 item = self.items_data[global_index]
-                is_sel = global_index == self.selected_index
-                cell.set_content(item, is_sel)
+                cell.set_content(item, item.is_selected)
 
-    def on_cell_clicked(self, global_index):
+    def on_cell_clicked(self, global_index, is_shift, is_ctrl):
         if global_index == -1:
             return
-        self.selected_index = global_index
-        self.selection_changed.emit(global_index)
+
+        if is_ctrl:
+            self.items_data[global_index].is_selected = not self.items_data[global_index].is_selected
+        elif is_shift:
+            if self._last_selected_index != -1:
+                start = min(self._last_selected_index, global_index)
+                end = max(self._last_selected_index, global_index)
+                for i in range(start, end + 1):
+                    self.items_data[i].is_selected = True
+        else:
+            for item in self.items_data:
+                item.is_selected = False
+            self.items_data[global_index].is_selected = True
+
+        self._last_selected_index = global_index
+
+        selected_indices = {i for i, item in enumerate(self.items_data) if item.is_selected}
+        self.selection_changed.emit(selected_indices)
+
         self.on_scroll(self.scrollbar.value())
 
     def wheelEvent(self, event):
@@ -863,13 +877,33 @@ class PagedPhotoGrid(QWidget):
             super().keyPressEvent(event)
             return
 
-        # If nothing is selected, select the first one
-        if self.selected_index == -1:
-            self.on_cell_clicked(0)
-            self._ensure_visible(0)
+        selected_indices = [i for i, item in enumerate(self.items_data) if item.is_selected]
+
+        # If nothing is selected, do nothing
+        if not selected_indices:
+            super().keyPressEvent(event)
             return
 
-        new_index = self.selected_index
+        if len(selected_indices) > 1:
+            # Multi-selection: collapse and move
+            if key == Qt.Key_Left:
+                new_index = min(selected_indices) - 1
+            elif key == Qt.Key_Right:
+                new_index = max(selected_indices) + 1
+            elif key == Qt.Key_Up:
+                new_index = min(selected_indices) - self.n_cols
+            elif key == Qt.Key_Down:
+                new_index = max(selected_indices) + self.n_cols
+            else:
+                super().keyPressEvent(event)
+                return
+
+            new_index = max(0, min(new_index, len(self.items_data) - 1))
+            self.on_cell_clicked(new_index, False, False)
+            self._ensure_visible(new_index)
+            return
+
+        new_index = selected_indices[0]
 
         # Calculate new index based on key
         if key == Qt.Key_Left:
@@ -885,8 +919,9 @@ class PagedPhotoGrid(QWidget):
             if new_index + self.n_cols < total_items:
                 new_index += self.n_cols
         elif key == Qt.Key_Space:
-            # Request fullscreen display when a photo is selected
-            self.request_fullscreen.emit(self.selected_index)
+            selected_indices = [i for i, item in enumerate(self.items_data) if item.is_selected]
+            if selected_indices:
+                self.request_fullscreen.emit(selected_indices)
             return
         else:
             # Let parent handle other keys (like Tab, Escape, etc)
@@ -894,10 +929,8 @@ class PagedPhotoGrid(QWidget):
             return
 
         # Apply change if index moved
-        if new_index != self.selected_index:
-            self.on_cell_clicked(
-                new_index
-            )  # Updates selection variable and emits signal
+        if new_index != self._last_selected_index:
+            self.on_cell_clicked(new_index, False, False)
             self._ensure_visible(new_index)
 
     def _ensure_visible(self, index):
@@ -942,9 +975,7 @@ class MainWindow(QMainWindow):
         self.grid.request_thumb.connect(self.request_thumb_handler)
         self.grid.request_fullscreen.connect(self._handle_fullscreen_overlay)
 
-        # In the previous code, model wrapped the list. Here we pass the list
-        # directly.
-        self.images_data = images
+        self.images_data = [ImageItem(**data) for data in images]
         self.grid.set_data(self.images_data)
 
     def _create_menu_bar(self):
@@ -985,13 +1016,13 @@ class MainWindow(QMainWindow):
     def on_thumb_ready(self, file_path, thumb_type, cache_path):
         # Update the data list directly
         for i, item in enumerate(self.images_data):
-            if item["path"] == file_path:
+            if item.path == file_path:
                 pixmap = QPixmap(cache_path)
                 state = 1 if thumb_type == "embedded" else 2
 
-                # Update dict
-                item["pixmap"] = pixmap
-                item["state"] = state
+                # Update item
+                item.pixmap = pixmap
+                item.state = state
 
                 # Refresh Grid View
                 self.grid.refresh_item(i)
@@ -999,7 +1030,7 @@ class MainWindow(QMainWindow):
 
     def request_thumb_handler(self, index):
         if 0 <= index < len(self.images_data):
-            file_path = self.images_data[index]["path"]
+            file_path = self.images_data[index].path
             self.thumb_manager.queue_image(file_path)
 
     def _get_physical_resolution(self, screen: QScreen) -> tuple[int, int]:
@@ -1012,20 +1043,20 @@ class MainWindow(QMainWindow):
 
         return phy_width, phy_height
 
-    def _handle_fullscreen_overlay(self, selected_index: int):
+    def _handle_fullscreen_overlay(self, selected_indices: list):
         """Display the selected image in a fullscreen overlay."""
+        if not selected_indices:
+            return
+
         # Close any existing overlay first
         if self._fullscreen_overlay is not None:
-            try:
-                self._fullscreen_overlay.close()
-            except Exception:
-                pass
+            self._fullscreen_overlay.close()
             self._fullscreen_overlay = None
 
-        # Validate the index
-        if selected_index < 0 or selected_index >= len(self.images_data):
-            logger.debug("Invalid image index for fullscreen display")
-            return
+        if self.grid._last_selected_index != -1 and self.images_data[self.grid._last_selected_index].is_selected:
+            start_index = self.grid._last_selected_index
+        else:
+            start_index = selected_indices[0]
 
         # Identify the screen the window is currently on
         current_screen = self.screen()
@@ -1043,24 +1074,42 @@ class MainWindow(QMainWindow):
         logger.debug(f"Device Pixel Ratio: {dpr}")
         logger.debug(f"Physical Resolution: {phy_w} x {phy_h}")
 
-        # Create and show the overlay with items_data and current index
-        self._fullscreen_overlay = FullscreenOverlay(self.images_data, selected_index)
+        if len(selected_indices) > 1:
+            visible_indices = selected_indices
+        else:
+            visible_indices = list(range(len(self.images_data)))
 
-        # Connect the index_changed signal to update grid selection
-        self._fullscreen_overlay.index_changed.connect(
-            self._on_fullscreen_index_changed
+        self._fullscreen_overlay = FullscreenOverlay(
+            self.images_data, visible_indices, start_index
         )
 
+        self._fullscreen_overlay.index_changed.connect(self._on_fullscreen_index_changed)
+
+        # Handle cleanup and selection logic on close
+        def on_fullscreen_close():
+            last_viewed_idx = self._fullscreen_overlay.visible_indices[self._fullscreen_overlay.current_visible_idx]
+
+            if len(selected_indices) > 1 and Config.ON_FULLSCREEN_EXIT == OnFullscreenExit.SELECT_LAST_VIEWED:
+                self.grid.on_cell_clicked(last_viewed_idx, False, False)
+                self.grid._ensure_visible(last_viewed_idx)
+
+            self._fullscreen_overlay = None
+
+        self._fullscreen_overlay.destroyed.connect(on_fullscreen_close)
         self._fullscreen_overlay.show_on_screen(current_screen)
 
     def _on_fullscreen_index_changed(self, new_index: int):
         """Update grid selection when navigating in fullscreen mode."""
-        # Update the grid's selected index
-        self.grid.selected_index = new_index
-        # Ensure the item is visible in the grid
-        self.grid._ensure_visible(new_index)
-        # Refresh the grid to show the new selection
-        self.grid.on_scroll(self.grid.scrollbar.value())
+        if self._fullscreen_overlay and len(self._fullscreen_overlay.visible_indices) < len(self.images_data):
+            # In multi-selection mode, just update the last selected index
+            self.grid._last_selected_index = new_index
+            self.grid._ensure_visible(new_index)
+            # We still need to repaint the grid to show the new "last selected" item
+            self.grid.on_scroll(self.grid.scrollbar.value())
+        else:
+            # In single-selection (all items visible) mode, update the selection
+            self.grid.on_cell_clicked(new_index, False, False)
+            self.grid._ensure_visible(new_index)
 
     def closeEvent(self, event):
         self.thumb_manager.stop()
