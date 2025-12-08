@@ -3,6 +3,7 @@ import os
 import sys
 
 import click
+import pyexiftool
 from PySide6.QtWidgets import QApplication
 
 from .config import Config
@@ -34,15 +35,22 @@ def cli(folder):
     images = scan_folder(folder)
     print(f"Found {len(images)} images.")
 
+    # 2. Start ExifTool
+    exiftool = pyexiftool.ExifTool(executable=Config.EXIF_TOOL_PATH)
+    exiftool.run()
+
     # 3. Launch GUI
     app = QApplication(sys.argv)
 
     app.setApplicationName(Config.APP_NAME)
     app.setApplicationDisplayName(Config.APP_NAME)
 
-    window = MainWindow(images)
+    window = MainWindow(images, exiftool)
     window.show()
-    sys.exit(app.exec())
+
+    exit_code = app.exec()
+    exiftool.terminate()
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

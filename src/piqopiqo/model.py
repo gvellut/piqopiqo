@@ -13,6 +13,7 @@ class ImageItem:
     pixmap: QPixmap | None = None
     state: int = 0
     _global_index: int = -1
+    exif_data: dict | None = None
 
 
 class OnFullscreenExitMultipleSelected(Enum):
