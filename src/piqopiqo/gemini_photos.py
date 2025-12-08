@@ -1,9 +1,9 @@
 import atexit
+from datetime import datetime
 import logging
 import math
 import os
 import sys
-from datetime import datetime
 
 # TODO refactor : add variable to indicate loading
 if sys.platform == "darwin":
@@ -158,7 +158,9 @@ class FullscreenOverlay(QWidget):
         """Positions the panel in the bottom-left corner."""
         if hasattr(self, "info_panel"):
             margin = 10  # Margin from the window edges
-            self.info_panel.move(margin, self.height() - self.info_panel.height() - margin)
+            self.info_panel.move(
+                margin, self.height() - self.info_panel.height() - margin
+            )
 
     def _load_current_image(self):
         """Load the image at the current index and reset zoom/pan state."""
@@ -186,7 +188,9 @@ class FullscreenOverlay(QWidget):
         if total_visible == 0:
             return
 
-        new_visible_idx = (new_visible_idx % total_visible + total_visible) % total_visible
+        new_visible_idx = (
+            new_visible_idx % total_visible + total_visible
+        ) % total_visible
 
         if new_visible_idx != self.current_visible_idx:
             self.current_visible_idx = new_visible_idx
@@ -437,7 +441,7 @@ class FullscreenOverlay(QWidget):
         self._transform.translate(
             delta.x() / self._zoom_level, delta.y() / self._zoom_level
         )
-        
+
         # Clamp immediately to prevent going beyond boundaries during drag
         self._clamp_pan_smooth()
         self.update()
@@ -446,7 +450,7 @@ class FullscreenOverlay(QWidget):
         """Calculate the effective empty space around the image at current zoom level."""
         scaled_pixmap = self._get_base_scaled_pixmap()
         view_rect = self.rect()
-        
+
         # 1. Configured empty space, scaled to the current view
         if self._pixmap.width() > 0:
             base_scale = scaled_pixmap.width() / self._pixmap.width()
@@ -459,13 +463,17 @@ class FullscreenOverlay(QWidget):
         # 2. Size of the initial black bars (scaled with zoom to avoid discontinuity)
         # The black bars represent the letterbox area at zoom_level=1.0
         # As we zoom in, this area should also scale proportionally
-        black_bar_x = max(0, (view_rect.width() - scaled_pixmap.width()) / 2) * self._zoom_level
-        black_bar_y = max(0, (view_rect.height() - scaled_pixmap.height()) / 2) * self._zoom_level
+        black_bar_x = (
+            max(0, (view_rect.width() - scaled_pixmap.width()) / 2) * self._zoom_level
+        )
+        black_bar_y = (
+            max(0, (view_rect.height() - scaled_pixmap.height()) / 2) * self._zoom_level
+        )
 
         # The effective empty space is the larger of the two for each axis
         effective_h_space = max(configured_empty_space, black_bar_x)
         effective_v_space = max(configured_empty_space, black_bar_y)
-        
+
         return effective_h_space, effective_v_space
 
     def _clamp_pan_smooth(self):
@@ -838,7 +846,9 @@ class PagedPhotoGrid(QWidget):
             return
 
         if is_ctrl:
-            self.items_data[global_index].is_selected = not self.items_data[global_index].is_selected
+            self.items_data[global_index].is_selected = not self.items_data[
+                global_index
+            ].is_selected
         elif is_shift:
             if self._last_selected_index != -1:
                 start = min(self._last_selected_index, global_index)
@@ -852,7 +862,9 @@ class PagedPhotoGrid(QWidget):
 
         self._last_selected_index = global_index
 
-        selected_indices = {i for i, item in enumerate(self.items_data) if item.is_selected}
+        selected_indices = {
+            i for i, item in enumerate(self.items_data) if item.is_selected
+        }
         self.selection_changed.emit(selected_indices)
 
         self.on_scroll(self.scrollbar.value())
@@ -876,7 +888,9 @@ class PagedPhotoGrid(QWidget):
             super().keyPressEvent(event)
             return
 
-        selected_indices = [i for i, item in enumerate(self.items_data) if item.is_selected]
+        selected_indices = [
+            i for i, item in enumerate(self.items_data) if item.is_selected
+        ]
 
         if not selected_indices:
             super().keyPressEvent(event)
@@ -1051,10 +1065,7 @@ class MainWindow(QMainWindow):
             self._fullscreen_overlay.close()
             self._fullscreen_overlay = None
 
-        if self.grid._last_selected_index != -1 and self.images_data[self.grid._last_selected_index].is_selected:
-            start_index = self.grid._last_selected_index
-        else:
-            start_index = selected_indices[0]
+        start_index = selected_indices[0]
 
         # Identify the screen the window is currently on
         current_screen = self.screen()
@@ -1081,13 +1092,20 @@ class MainWindow(QMainWindow):
             self.images_data, visible_indices, start_index
         )
 
-        self._fullscreen_overlay.index_changed.connect(self._on_fullscreen_index_changed)
+        self._fullscreen_overlay.index_changed.connect(
+            self._on_fullscreen_index_changed
+        )
 
         # Handle cleanup and selection logic on close
         def on_fullscreen_close():
-            last_viewed_idx = self._fullscreen_overlay.visible_indices[self._fullscreen_overlay.current_visible_idx]
+            last_viewed_idx = self._fullscreen_overlay.visible_indices[
+                self._fullscreen_overlay.current_visible_idx
+            ]
 
-            if len(selected_indices) > 1 and Config.ON_FULLSCREEN_EXIT == OnFullscreenExit.SELECT_LAST_VIEWED:
+            if (
+                len(selected_indices) > 1
+                and Config.ON_FULLSCREEN_EXIT == OnFullscreenExit.SELECT_LAST_VIEWED
+            ):
                 self.grid.on_cell_clicked(last_viewed_idx, False, False)
                 self.grid._ensure_visible(last_viewed_idx)
 
@@ -1098,7 +1116,9 @@ class MainWindow(QMainWindow):
 
     def _on_fullscreen_index_changed(self, new_index: int):
         """Update grid selection when navigating in fullscreen mode."""
-        if self._fullscreen_overlay and len(self._fullscreen_overlay.visible_indices) < len(self.images_data):
+        if self._fullscreen_overlay and len(
+            self._fullscreen_overlay.visible_indices
+        ) < len(self.images_data):
             # In multi-selection mode, just update the last selected index
             self.grid._last_selected_index = new_index
             self.grid._ensure_visible(new_index)
