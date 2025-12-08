@@ -1,2 +1,32 @@
-- panel on the right of the grid. It can be resized.
-- 
+Need the EXIF info for the selected images in the grid :
+- use pyexiftool (already included in deps of pyproject.toml). Use in batch mode ie : "only a single instance needs to be launched and can be reused for many queries. This is much more efficient than launching a separate process for every single query." This should be the default. Leave the exiftool running, once it is launched. By default, launch the process at the beginning (when piqopiqo starts)
+- in the current code,  exiftool is used to extract the embedded image : switch to using 
+- add an EXIFTOOL_PATH to the config : if None : the exiftool in PATH is used (default for PyExifTool).
+- panel on the right of the grid. It can be resized by dragging the separator left of right
+
+- add an option in config.py EXIF_FIELDS which is list : with the list of exiftool fields (readable strings) to be displayed. The order of the list is important : this is the order they are going to be displayed in the panel
+example of key value from exiftool : "ExposureTime": "1/1100",
+    "FNumber": 6.4,
+    "ExposureProgram": "Program AE",
+    "ISO": 640,
+    "SensitivityType": "Standard Output Sensitivity",
+    "ExifVersion": "0232",
+    "DateTimeOriginal": "2025:10:11 17:09:39",
+    "CreateDate": "2025:10:11 17:08:51",
+    "OffsetTime": "+01:00",
+    "OffsetTimeDigitized": "+01:00",
+    "ComponentsConfiguration": "Y, Cb, Cr, -",
+    "CompressedBitsPerPixel": 3.2,
+    "ShutterSpeedValue": "1/1168",
+
+(the config option should list the keys of that dictionary).
+- the panel will display the  fields listed in the config option, in vertical layout, one below the other : using "Field" "Value" in horizontal. The field names and values are in a single column (same size for each field name, with empty space for padding). The values as well. Add a config option with a tuple to set the percent of the panel used for either fields or values eg (30, 70) and use that.
+- Use a single line for all. If the text is too large to fit in the space : add ... ellipsis (standard QT ? or simply cut off if not QT standard).
+- If a listed field (from the config) is not present in the file, write <Not Present> as the value. 
+- Do not seprate the fields in sections.
+- Use the valuees as they are read by pyexiftool (do not transform them) : it should be a string. If not and the field is listed in the option : show "<Unable to display>"
+
+- When the grid is visible : When an image is selected, obtain the exif data. Extract the fields defined in the option and display them when an other is selected (through keyboard ine arrows left right up down or mouse), display those.
+- Not in fullscreen : in the fullscreen case, while going through all the images, no need to read the EXIF, EXCEPT when exiting the fullscreen and going back to the grid : one of the images will be selected : get the exif for that image, like you would if it had been selected by mouse or keybaord arrows in the grid.
+- you can keep the exif data in memory once read (assume they will not change once obtained) so no need to later request the exif again. Add the data to the model
+- if multiple images are selected in the grid, you should fetch the exif for all of them : then for the fields to be displayed, if the values for all the selected are identical, display that value. If not, display <Multiple  values> (use the <> and set the numbers). When the selected items change (if deselected or selected), update that fields if needed. When only one item is selected, the panel should display the exif for that image
