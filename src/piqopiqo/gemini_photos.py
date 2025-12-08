@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.config import Config
-from piqopiqo.model import ImageItem, OnFullscreenExit
+from piqopiqo.model import ImageItem, OnFullscreenExitMultipleSelected
 from piqopiqo.thumb_man import ThumbnailManager
 
 logger = logging.getLogger(__name__)
@@ -118,10 +118,14 @@ class FullscreenOverlay(QWidget):
         bg_color.setAlpha(alpha)
 
         text_color = Config.INFO_PANEL_TEXT_COLOR
+        bg_color = (
+            f"rgba({bg_color.red()}, {bg_color.green()}, {bg_color.blue()}, "
+            f"{bg_color.alpha()})"
+        )
         self.info_panel.setStyleSheet(
             f"""
             #infoPanel {{
-                background-color: rgba({bg_color.red()}, {bg_color.green()}, {bg_color.blue()}, {bg_color.alpha()});
+                background-color: {bg_color};
                 border-radius: 5px;
             }}
             QLabel {{
@@ -447,7 +451,8 @@ class FullscreenOverlay(QWidget):
         self.update()
 
     def _get_effective_empty_space(self):
-        """Calculate the effective empty space around the image at current zoom level."""
+        """Calculate the effective empty space around the image at current zoom
+        level."""
         scaled_pixmap = self._get_base_scaled_pixmap()
         view_rect = self.rect()
 
@@ -1104,7 +1109,8 @@ class MainWindow(QMainWindow):
 
             if (
                 len(selected_indices) > 1
-                and Config.ON_FULLSCREEN_EXIT == OnFullscreenExit.SELECT_LAST_VIEWED
+                and Config.ON_FULLSCREEN_EXIT
+                == OnFullscreenExitMultipleSelected.SELECT_LAST_VIEWED
             ):
                 self.grid.on_cell_clicked(last_viewed_idx, False, False)
                 self.grid._ensure_visible(last_viewed_idx)

@@ -1,4 +1,4 @@
-from piqopiqo.model import OnFullscreenExit
+from piqopiqo.model import OnFullscreenExitMultipleSelected
 
 
 class Config:
@@ -39,4 +39,4 @@ class Config:
     INFO_PANEL_TEXT_COLOR = "white"
 
     # Selection Behavior
-    ON_FULLSCREEN_EXIT = OnFullscreenExit.KEEP_SELECTION
+    ON_FULLSCREEN_EXIT = OnFullscreenExitMultipleSelected.KEEP_SELECTION
