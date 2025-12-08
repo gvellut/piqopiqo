@@ -547,8 +547,8 @@ class PhotoCell(QFrame):
             modifiers = event.modifiers()
             self.clicked.emit(
                 self.current_data._global_index,
-                modifiers & Qt.ShiftModifier,
-                modifiers & Qt.ControlModifier, # Use control for cross-platform
+                bool(modifiers & Qt.ShiftModifier),
+                bool(modifiers & Qt.ControlModifier),
             )
         super().mousePressEvent(event)
 
