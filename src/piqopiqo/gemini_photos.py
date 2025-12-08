@@ -6,7 +6,7 @@ import sys
 if sys.platform == "darwin":
     import AppKit
 
-from PySide6.QtCore import QPointF, QRect, Qt, Signal
+from PySide6.QtCore import QEvent, QPointF, QRect, Qt, Signal
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -21,6 +21,7 @@ from PySide6.QtGui import (
     QTransform,
 )
 from PySide6.QtWidgets import (
+    QApplication,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -62,9 +63,14 @@ class FullscreenOverlay(QWidget):
         # Window setup
         # CHANGE 1: Use Qt.Window instead of Qt.Tool to ensure it acts as a standalone
         # top-level window that can accept focus reliably on macOS.
-        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
+        self.setWindowFlags(
+            Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
 
         self.setAttribute(Qt.WA_DeleteOnClose)
+
+        # Listen to app events to handle focus and quitting
+        QApplication.instance().installEventFilter(self)
 
         bg_color = Config.FULLSCREEN_BACKGROUND_COLOR
         self.setStyleSheet(f"background-color: {bg_color};")
@@ -111,8 +117,30 @@ class FullscreenOverlay(QWidget):
 
     def closeEvent(self, event):
         """Handle window closing."""
+        QApplication.instance().removeEventFilter(self)
         self.showNormal()
         super().closeEvent(event)
+
+    def eventFilter(self, watched, event):
+        """Global event filter to handle app focus changes and quit shortcuts."""
+        # --- Handle App Switching ---
+        if event.type() == QEvent.ApplicationDeactivate:
+            # When the app loses focus (e.g., Cmd+Tab), remove the "always on top"
+            # hint to allow other windows to come forward.
+            self.setWindowFlags(self.windowFlags() & ~Qt.WindowStaysOnTopHint)
+            self.show()
+        elif event.type() == QEvent.ApplicationActivate:
+            # When the app regains focus, restore the "always on top" hint.
+            self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+            self.show()
+
+        # --- Handle Cmd+Q ---
+        if event.type() == QEvent.KeyPress and event.modifiers() == Qt.MetaModifier:
+            if event.key() == Qt.Key_Q:
+                QApplication.instance().quit()
+                return True
+
+        return super().eventFilter(watched, event)
 
     # -----------------------------------
 
@@ -815,7 +843,6 @@ class MainWindow(QMainWindow):
         quit_action = QAction(f"Quit {Config.APP_NAME}", self)
         quit_action.setMenuRole(QAction.MenuRole.QuitRole)
         quit_action.setShortcut("Ctrl+Q")
-        quit_action.setShortcutContext(Qt.ApplicationShortcut)
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
 
