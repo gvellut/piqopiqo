@@ -872,18 +872,22 @@ class PagedPhotoGrid(QWidget):
         key = event.key()
         total_items = len(self.items_data)
 
-        # If no items, do nothing
         if total_items == 0:
             super().keyPressEvent(event)
             return
 
         selected_indices = [i for i, item in enumerate(self.items_data) if item.is_selected]
 
-        # If nothing is selected, do nothing
         if not selected_indices:
             super().keyPressEvent(event)
             return
 
+        # Handle fullscreen request first, as it applies to both single and multi-select
+        if key == Qt.Key_Space:
+            self.request_fullscreen.emit(selected_indices)
+            return
+
+        # Handle navigation
         if len(selected_indices) > 1:
             # Multi-selection: collapse and move
             if key == Qt.Key_Left:
@@ -903,9 +907,10 @@ class PagedPhotoGrid(QWidget):
             self._ensure_visible(new_index)
             return
 
+        # Single selection navigation
         new_index = selected_indices[0]
+        original_index = new_index
 
-        # Calculate new index based on key
         if key == Qt.Key_Left:
             if new_index > 0:
                 new_index -= 1
@@ -918,18 +923,11 @@ class PagedPhotoGrid(QWidget):
         elif key == Qt.Key_Down:
             if new_index + self.n_cols < total_items:
                 new_index += self.n_cols
-        elif key == Qt.Key_Space:
-            selected_indices = [i for i, item in enumerate(self.items_data) if item.is_selected]
-            if selected_indices:
-                self.request_fullscreen.emit(selected_indices)
-            return
         else:
-            # Let parent handle other keys (like Tab, Escape, etc)
             super().keyPressEvent(event)
             return
 
-        # Apply change if index moved
-        if new_index != self._last_selected_index:
+        if new_index != original_index:
             self.on_cell_clicked(new_index, False, False)
             self._ensure_visible(new_index)
 
