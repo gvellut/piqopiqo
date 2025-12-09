@@ -7,7 +7,7 @@ import exiftool
 from PySide6.QtWidgets import QApplication
 
 from .config import Config, apply_env_overrides
-from .gemini_photos import MainWindow
+from .photo_grid import MainWindow
 from .thumb_man import scan_folder
 from .utils import setup_logging
 
