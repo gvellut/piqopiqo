@@ -147,6 +147,10 @@ class ExifPanel(QWidget):
             return
 
         for i, field in enumerate(Config.EXIF_FIELDS):
+            # Defensive check in case config changed (shouldn't happen at runtime)
+            if i >= len(self.value_labels):
+                break
+                
             values = set()
             for item in items:
                 if item.exif_data and field in item.exif_data:
