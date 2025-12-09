@@ -3,7 +3,7 @@ import os
 import sys
 
 import click
-import pyexiftool
+import exiftool
 from PySide6.QtWidgets import QApplication
 
 from .config import Config
@@ -36,8 +36,6 @@ def cli(folder):
     print(f"Found {len(images)} images.")
 
     # 2. Start ExifTool
-    exiftool = pyexiftool.ExifTool(executable=Config.EXIF_TOOL_PATH)
-    exiftool.run()
 
     # 3. Launch GUI
     app = QApplication(sys.argv)
@@ -45,11 +43,15 @@ def cli(folder):
     app.setApplicationName(Config.APP_NAME)
     app.setApplicationDisplayName(Config.APP_NAME)
 
-    window = MainWindow(images, exiftool)
-    window.show()
+    # by default : the commong args are -G -n => numeric values like shutter speed
+    # are  0.0025 isntead of 1/400
+    with exiftool.ExifToolHelper(
+        executable=Config.EXIF_TOOL_PATH, common_args=["-G"]
+    ) as etHelper:
+        window = MainWindow(images, etHelper)
+        window.show()
 
     exit_code = app.exec()
-    exiftool.terminate()
     sys.exit(exit_code)
 
 
