@@ -6,7 +6,7 @@ import click
 import exiftool
 from PySide6.QtWidgets import QApplication
 
-from .config import Config
+from .config import Config, apply_env_overrides
 from .gemini_photos import MainWindow
 from .thumb_man import scan_folder
 from .utils import setup_logging
@@ -17,6 +17,9 @@ from .utils import setup_logging
 def cli(folder):
     logger = logging.getLogger(__package__)
     setup_logging(logger)
+
+    # Apply environment variable overrides to config
+    apply_env_overrides()
 
     # 1. Ensure Cache Dir Exists
     if not os.path.exists(Config.CACHE_DIR):
