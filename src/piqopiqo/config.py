@@ -24,6 +24,7 @@ class Config:
         "EXIF:LensModel",
     ]
     EXIF_PANEL_LAYOUT = (30, 70)
+    EXIF_PANEL_ROW_SPACING = 5  # Fixed spacing between rows in pixels
 
     # Concurrency
     MAX_WORKERS = 4
