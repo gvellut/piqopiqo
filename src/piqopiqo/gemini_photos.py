@@ -149,6 +149,10 @@ class ExifPanel(QWidget):
         for i, field in enumerate(Config.EXIF_FIELDS):
             # Defensive check in case config changed (shouldn't happen at runtime)
             if i >= len(self.value_labels):
+                logger.warning(
+                    f"Config.EXIF_FIELDS has more entries ({len(Config.EXIF_FIELDS)}) "
+                    f"than initialized labels ({len(self.value_labels)})"
+                )
                 break
                 
             values = set()
