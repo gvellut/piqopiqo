@@ -1,0 +1,3 @@
+- Add a way to override config option with envvar set when launching
+- define a constant to use as a prefix : it wil be : "PIQO_" and override the settings found in config.py  with the valeus of the env vars that start with that string, before the GUI starts
+- for ex PIQO_NUM_COLUMNS => replace the NUM_COLUMNS value in config.py at runtime
