@@ -1,0 +1,4 @@
+- make the space between rows in the EXIF panel configurable
+- make it constant so does not expand to take the whole space. 
+- if takes too much space, the panel must use a scroll bar.
+- also in the Exif panel : create the field labels once only (before even an image has been selected). Do not clear the layout. Just set the text of the value labels when item selected changes.
