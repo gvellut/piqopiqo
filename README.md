@@ -43,12 +43,22 @@ Preview image (640x480 in Fujifilm):
 
 ## gh
 
-`gh pr ready`
+```sh
+gh pr ready
 
-`gh pr merge xx --merge --delete-branch`
-`gh pr merge xx --rebase --delete-branch`
-`--squash`
+gh pr merge --merge --delete-branch
+gh pr merge --rebase --delete-branch
+--squash
 
-`gh pr checkout 4` or `co`
+gh pr checkout 4
+co
 
-`git fetch --prune`
+git fetch --prune
+```
+
+## pyQt
+
+```sh
+PYTHONFAULTHANDLER=1 
+QT_LOGGING_RULES="*.debug=true"
+```

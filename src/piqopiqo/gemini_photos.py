@@ -1,19 +1,24 @@
+from __future__ import annotations
+
 import atexit
 from datetime import datetime
 import logging
 import math
 import os
 import sys
-import pyexiftool
+
+import exiftool
 
 # TODO refactor : add variable to indicate loading
+# OR assumes it is going to be on macos for now
 if sys.platform == "darwin":
     import AppKit
 
-from PySide6.QtCore import QObject, QPointF, QRect, Qt, QRunnable, Signal, QThreadPool
+from PySide6.QtCore import QObject, QPointF, QRect, QRunnable, Qt, QThreadPool, Signal
 from PySide6.QtGui import (
     QAction,
     QColor,
+    QFontMetrics,
     QKeyEvent,
     QMouseEvent,
     QPainter,
@@ -33,31 +38,55 @@ from PySide6.QtWidgets import (
     QScrollBar,
     QSizePolicy,
     QSplitter,
-    QVBoxLayout,
     QWidget,
 )
 
 from piqopiqo.config import Config
 from piqopiqo.model import ImageItem, OnFullscreenExitMultipleSelected
 from piqopiqo.thumb_man import ThumbnailManager
-from PySide6.QtCore import QObject, Signal
 
 logger = logging.getLogger(__name__)
 
 
 class ExifFetcher(QRunnable):
-    def __init__(self, exif_manager, file_path):
+    def __init__(self, exif_manager: ExifManager, file_path):
         super().__init__()
         self.exif_manager = exif_manager
         self.file_path = file_path
 
     def run(self):
         try:
-            metadata = self.exif_manager.exiftool.get_metadata(self.file_path)
+            metadata = self.exif_manager.etHelper.execute_json(self.file_path)
+            # get_metadata(self.file_path)
+            # single file passed so [0] to retrieve its metadata
+            metadata = metadata[0]
             self.exif_manager.exif_ready.emit(self.file_path, metadata)
         except Exception as e:
             logger.error(f"Error fetching EXIF for {self.file_path}: {e}")
             self.exif_manager.exif_ready.emit(self.file_path, {})
+
+
+class EllidedLabel(QLabel):
+    """QLabel subclass that automatically adds ellipsis on the right
+    when text is too long."""
+
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self._full_text = text
+        self.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+    def setText(self, text: str):
+        self._full_text = text
+        self._update_elided_text()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_elided_text()
+
+    def _update_elided_text(self):
+        metrics = QFontMetrics(self.font())
+        elided = metrics.elidedText(self._full_text, Qt.ElideRight, self.width())
+        super().setText(elided)
 
 
 class ExifPanel(QWidget):
@@ -80,26 +109,22 @@ class ExifPanel(QWidget):
                 if item.exif_data and field in item.exif_data:
                     value = item.exif_data[field]
                     if not isinstance(value, str):
-                        value = "<Unable to display>"
+                        # TODO see if some should not be converted
+                        value = str(value)  # "<Unable to display>"
                     values.add(value)
                 else:
                     values.add("<Not Present>")
 
-            value_str = (
-                values.pop() if len(values) == 1 else f"<Multiple values>"
-            )
+            value_str = values.pop() if len(values) == 1 else "<Multiple values>"
 
-            field_label = QLabel(field)
-            value_label = QLabel(value_str)
+            field_label = EllidedLabel(field)
+            value_label = EllidedLabel(value_str)
 
             field_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
             value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
             field_label.setToolTip(field)
             value_label.setToolTip(value_str)
-
-            field_label.setTextElideMode(Qt.ElideRight)
-            value_label.setTextElideMode(Qt.ElideRight)
 
             self.layout.addWidget(field_label, i, 0)
             self.layout.addWidget(value_label, i, 1)
@@ -114,9 +139,9 @@ class ExifPanel(QWidget):
 class ExifManager(QObject):
     exif_ready = Signal(str, dict)
 
-    def __init__(self, exiftool: pyexiftool.ExifTool, parent=None):
+    def __init__(self, etHelper: exiftool.ExifToolHelper, parent=None):
         super().__init__(parent)
-        self.exiftool = exiftool
+        self.etHelper = etHelper
         self.thread_pool = QThreadPool()
 
     def fetch_exif(self, file_path: str):
@@ -1052,7 +1077,7 @@ class PagedPhotoGrid(QWidget):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, images, exiftool):
+    def __init__(self, images, etHelper):
         super().__init__()
         self.setWindowTitle(Config.APP_NAME)
         self.showMaximized()
@@ -1079,7 +1104,7 @@ class MainWindow(QMainWindow):
         self.thumb_manager = ThumbnailManager()
         self.thumb_manager.thumb_ready.connect(self.on_thumb_ready)
 
-        self.exif_manager = ExifManager(exiftool)
+        self.exif_manager = ExifManager(etHelper)
         self.exif_manager.exif_ready.connect(self.on_exif_ready)
 
         self.grid.request_thumb.connect(self.request_thumb_handler)
@@ -1140,6 +1165,7 @@ class MainWindow(QMainWindow):
                 break
 
     def on_exif_ready(self, file_path, metadata):
+        # TODO index the images_data so do not loop through it
         for item in self.images_data:
             if item.path == file_path:
                 item.exif_data = metadata

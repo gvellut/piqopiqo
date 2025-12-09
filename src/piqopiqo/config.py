@@ -6,22 +6,22 @@ class Config:
     APP_NAME = "PiqoPiqo"
 
     # Paths
-    CACHE_DIR = "cache"
-    # "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
+    CACHE_DIR = "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
+    # CACHE_DIR = "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
 
     # EXIF Panel
     EXIF_TOOL_PATH = None
     EXIF_FIELDS = [
-        "ExposureTime",
-        "FNumber",
-        "ExposureProgram",
-        "ISO",
-        "DateTimeOriginal",
-        "CreateDate",
-        "ShutterSpeedValue",
-        "ApertureValue",
-        "FocalLength",
-        "LensModel",
+        "EXIF:ExposureTime",
+        "EXIF:FNumber",
+        "EXIF:ExposureProgram",
+        "EXIF:ISO",
+        "EXIF:DateTimeOriginal",
+        "EXIF:CreateDate",
+        "EXIF:ShutterSpeedValue",
+        "EXIF:ApertureValue",
+        "EXIF:FocalLength",
+        "EXIF:LensModel",
     ]
     EXIF_PANEL_LAYOUT = (30, 70)
 
