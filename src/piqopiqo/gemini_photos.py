@@ -124,9 +124,6 @@ class ExifPanel(QWidget):
             field_label = EllidedLabel(field)
             value_label = EllidedLabel("")
             
-            field_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            
             field_label.setToolTip(field)
             
             self.layout.addWidget(field_label, i, 0)
