@@ -4,5 +4,4 @@ record if exif was set already by piqopiqo : using Datetime Original ; check bef
 https://aistudio.google.com/prompts/1dz6eKtA_qz3ORYYfYuSJssX21dVxp66u
 
 
-gpx2exif
 upload to flickr
