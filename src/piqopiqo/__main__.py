@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+import shutil
 import sys
 
 import click
@@ -22,9 +23,20 @@ def cli(folder):
     # Apply environment variable overrides to config
     apply_env_overrides()
 
-    # Set cache base directory from support directory (can be overridden by env var)
-    if Config.CACHE_BASE_DIR is None:
+    # Handle cache base directory
+    if Config.CACHE_BASE_DIR is not None:
+        # User specified a custom path - ensure it exists
+        cache_path = Path(Config.CACHE_BASE_DIR)
+        cache_path.mkdir(parents=True, exist_ok=True)
+    else:
+        # Not set, use support directory as fallback
         Config.CACHE_BASE_DIR = str(get_cache_base_dir())
+
+    if Config.CLEAR_CACHE_ON_START:
+        cache_dir = Path(Config.CACHE_BASE_DIR)
+        if cache_dir.exists():
+            shutil.rmtree(cache_dir)
+            cache_dir.mkdir(parents=True, exist_ok=True)
 
     # Determine which folder to open
     if folder is None:
