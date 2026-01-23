@@ -1,118 +1,289 @@
 from datetime import datetime
+import hashlib
+import logging
 import multiprocessing
 import os
+from pathlib import Path
+import shutil
 import subprocess
 
 from PIL import Image
 from PySide6.QtCore import QObject, Signal
 
-from piqopiqo.config import Config
+from .config import Config
+
+logger = logging.getLogger(__name__)
 
 
-# TODO separate extraction of embedded preview and gen of HQ thumb
-# if no preview embedded, should be black : while waiting for the HQ (other queue)
-def worker_task(file_path):
+def get_folder_cache_id(folder_path: str) -> str:
+    """Compute a unique cache ID for a folder based on its absolute path.
+
+    Args:
+        folder_path: Path to the folder.
+
+    Returns:
+        A 32-character hex string hash of the folder path.
+    """
+    abs_path = os.path.abspath(folder_path)
+    return hashlib.md5(abs_path.encode("utf-8")).hexdigest()
+
+
+def get_cache_dir_for_folder(folder_path: str) -> Path:
+    """Get the cache directory for a specific folder.
+
+    Args:
+        folder_path: Path to the source folder.
+
+    Returns:
+        Path to the cache directory for this folder.
+    """
+    cache_id = get_folder_cache_id(folder_path)
+    return Path(Config.CACHE_BASE_DIR) / cache_id
+
+
+def get_thumb_dir_for_folder(folder_path: str) -> Path:
+    """Get the thumbnail cache directory for a specific folder.
+
+    Args:
+        folder_path: Path to the source folder.
+
+    Returns:
+        Path to the thumb subdirectory in the cache.
+    """
+    return get_cache_dir_for_folder(folder_path) / "thumb"
+
+
+def ensure_thumb_dir(folder_path: str) -> Path:
+    """Ensure the thumbnail directory exists for a folder.
+
+    Args:
+        folder_path: Path to the source folder.
+
+    Returns:
+        Path to the thumb directory (created if needed).
+    """
+    thumb_dir = get_thumb_dir_for_folder(folder_path)
+    thumb_dir.mkdir(parents=True, exist_ok=True)
+    return thumb_dir
+
+
+def clear_thumb_cache_for_folder(folder_path: str) -> None:
+    """Clear the thumbnail cache for a specific folder.
+
+    Args:
+        folder_path: Path to the source folder.
+    """
+    thumb_dir = get_thumb_dir_for_folder(folder_path)
+    if thumb_dir.exists():
+        shutil.rmtree(thumb_dir)
+        logger.info(f"Cleared thumbnail cache for: {folder_path}")
+
+
+def clear_thumb_cache_for_folders(folder_paths: list[str]) -> None:
+    """Clear the thumbnail cache for multiple folders.
+
+    Args:
+        folder_paths: List of folder paths to clear cache for.
+    """
+    for folder_path in folder_paths:
+        clear_thumb_cache_for_folder(folder_path)
+
+
+# Worker functions run in separate processes, so they receive all needed params
+def worker_task(file_path: str, thumb_dir: str, exiftool_path: str, max_dim: int):
+    """Generate thumbnail for an image (embedded first, then HQ fallback).
+
+    Args:
+        file_path: Path to the source image.
+        thumb_dir: Path to the thumbnail cache directory.
+        exiftool_path: Path to exiftool executable.
+        max_dim: Maximum dimension for HQ thumbnails.
+
+    Returns:
+        Tuple of (thumb_type, file_path, cache_path) or (None, None, None).
+    """
     filename = os.path.basename(file_path)
-    cache_path_embedded = os.path.join(
-        Config.CACHE_DIR, f"{os.path.splitext(filename)[0]}_embedded.jpg"
-    )
-    cache_path_hq = os.path.join(
-        Config.CACHE_DIR, f"{os.path.splitext(filename)[0]}_hq.jpg"
-    )
+    base_name = os.path.splitext(filename)[0]
+    cache_path_embedded = os.path.join(thumb_dir, f"{base_name}_embedded.jpg")
+    cache_path_hq = os.path.join(thumb_dir, f"{base_name}_hq.jpg")
 
-    # Embedded
-    if generate_embedded(file_path, cache_path_embedded):
+    # Try embedded first
+    if generate_embedded(file_path, cache_path_embedded, exiftool_path):
         return ("embedded", file_path, cache_path_embedded)
 
-    # HQ
-    if generate_hq(file_path, cache_path_hq, Config.THUMB_MAX_DIM):
+    # Fallback to HQ
+    if generate_hq(file_path, cache_path_hq, max_dim):
         return ("hq", file_path, cache_path_hq)
 
     return (None, None, None)
 
 
-def hq_worker_task(file_path):
+def hq_worker_task(file_path: str, thumb_dir: str, max_dim: int):
+    """Generate high-quality thumbnail for an image.
+
+    Args:
+        file_path: Path to the source image.
+        thumb_dir: Path to the thumbnail cache directory.
+        max_dim: Maximum dimension for thumbnails.
+
+    Returns:
+        Tuple of (thumb_type, file_path, cache_path) or (None, None, None).
+    """
     filename = os.path.basename(file_path)
-    cache_path_hq = os.path.join(
-        Config.CACHE_DIR, f"{os.path.splitext(filename)[0]}_hq.jpg"
-    )
-    if generate_hq(file_path, cache_path_hq, Config.THUMB_MAX_DIM):
-        # since process : just the path is sent (must be reread from main workers)
+    base_name = os.path.splitext(filename)[0]
+    cache_path_hq = os.path.join(thumb_dir, f"{base_name}_hq.jpg")
+
+    if generate_hq(file_path, cache_path_hq, max_dim):
         return ("hq", file_path, cache_path_hq)
     return (None, None, None)
 
 
 class ThumbnailManager(QObject):
+    """Manages thumbnail generation for images across multiple source folders."""
+
     thumb_ready = Signal(str, str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.pool = multiprocessing.Pool(Config.MAX_WORKERS)
-        # TODO different queuee for lowqal embedded preview and HQ
-        # TODO use real queue : need to reorder (give priority to the images visible
-        # in window when scrolling)
-        # TODO third queue for extraction of current screen base resolution Or see
-        # if simply reading when requested will be fast enough
         self.pending = set()
+        # Map from source folder path to its thumb directory
+        self._folder_thumb_dirs: dict[str, Path] = {}
 
-    def queue_image(self, file_path):
+    def register_folder(self, folder_path: str) -> Path:
+        """Register a source folder and create its cache directory.
+
+        Args:
+            folder_path: Path to the source folder.
+
+        Returns:
+            Path to the thumb directory for this folder.
+        """
+        if folder_path not in self._folder_thumb_dirs:
+            thumb_dir = ensure_thumb_dir(folder_path)
+            self._folder_thumb_dirs[folder_path] = thumb_dir
+            logger.debug(f"Registered folder cache: {folder_path} -> {thumb_dir}")
+        return self._folder_thumb_dirs[folder_path]
+
+    def get_thumb_dir_for_image(self, file_path: str) -> Path:
+        """Get the thumb directory for an image based on its parent folder.
+
+        Args:
+            file_path: Path to the image file.
+
+        Returns:
+            Path to the thumb directory for this image's folder.
+        """
+        folder_path = os.path.dirname(file_path)
+        return self.register_folder(folder_path)
+
+    def queue_image(self, file_path: str):
+        """Queue an image for thumbnail generation.
+
+        Args:
+            file_path: Path to the image file.
+        """
         if file_path in self.pending:
             return
 
         self.pending.add(file_path)
 
-        filename = os.path.basename(file_path)
-        cache_path_hq = os.path.join(
-            Config.CACHE_DIR, f"{os.path.splitext(filename)[0]}_hq.jpg"
-        )
+        # Get the thumb directory for this image's source folder
+        thumb_dir = self.get_thumb_dir_for_image(file_path)
 
-        if os.path.exists(cache_path_hq):
-            self.thumb_ready.emit(file_path, "hq", cache_path_hq)
+        filename = os.path.basename(file_path)
+        base_name = os.path.splitext(filename)[0]
+        cache_path_hq = thumb_dir / f"{base_name}_hq.jpg"
+
+        # If HQ already exists, use it
+        if cache_path_hq.exists():
+            self.thumb_ready.emit(file_path, "hq", str(cache_path_hq))
             self.pending.remove(file_path)
             return
 
-        self.pool.apply_async(worker_task, (file_path,), callback=self.on_task_done)
+        # Queue the worker task
+        self.pool.apply_async(
+            worker_task,
+            (file_path, str(thumb_dir), Config.EXIFTOOL_PATH, Config.THUMB_MAX_DIM),
+            callback=self.on_task_done,
+        )
 
     def on_task_done(self, result):
+        """Handle completion of a thumbnail generation task."""
         thumb_type, file_path, cache_path = result
         if file_path and file_path in self.pending:
             self.pending.remove(file_path)
 
-        # TODO correct : if no preview, should still gen the HQ
-        # use different queue
         if thumb_type:
             self.thumb_ready.emit(file_path, thumb_type, cache_path)
 
+            # If we got an embedded preview, also queue HQ generation
             if thumb_type == "embedded":
                 self.queue_hq(file_path)
 
-    def queue_hq(self, file_path):
+    def queue_hq(self, file_path: str):
+        """Queue high-quality thumbnail generation for an image.
+
+        Args:
+            file_path: Path to the image file.
+        """
         if file_path in self.pending:
             return
 
         self.pending.add(file_path)
+        thumb_dir = self.get_thumb_dir_for_image(file_path)
+
         self.pool.apply_async(
-            hq_worker_task, (file_path,), callback=self.on_hq_task_done
+            hq_worker_task,
+            (file_path, str(thumb_dir), Config.THUMB_MAX_DIM),
+            callback=self.on_hq_task_done,
         )
 
     def on_hq_task_done(self, result):
+        """Handle completion of an HQ thumbnail generation task."""
         thumb_type, file_path, cache_path = result
         if file_path and file_path in self.pending:
             self.pending.remove(file_path)
         if thumb_type:
             self.thumb_ready.emit(file_path, thumb_type, cache_path)
 
+    def get_registered_folders(self) -> list[str]:
+        """Get list of all registered source folders.
+
+        Returns:
+            List of folder paths that have been registered.
+        """
+        return list(self._folder_thumb_dirs.keys())
+
+    def clear_all_registered_caches(self):
+        """Clear thumbnail caches for all registered folders."""
+        clear_thumb_cache_for_folders(list(self._folder_thumb_dirs.keys()))
+        # Re-create the directories
+        for folder_path in list(self._folder_thumb_dirs.keys()):
+            self._folder_thumb_dirs[folder_path] = ensure_thumb_dir(folder_path)
+
     def stop(self):
+        """Stop the thumbnail manager and close the worker pool."""
         self.pool.close()
         self.pool.join()
 
 
-def scan_folder(root_path):
-    """
-    Recursively scans a folder for images.
+def scan_folder(root_path: str) -> tuple[list[dict], list[str]]:
+    """Recursively scans a folder for images.
+
+    Args:
+        root_path: Path to the root folder to scan.
+
+    Returns:
+        Tuple of (images list, unique folders list).
+        Each image dict contains: path, name, state, created, source_folder.
+        Unique folders list contains paths of all folders with images.
     """
     images = []
+    unique_folders = set()
+
     for root, _, files in os.walk(root_path):
+        folder_has_images = False
         for file in files:
             if file.lower().endswith((".jpg", ".jpeg", ".png")):
                 path = os.path.join(root, file)
@@ -124,18 +295,33 @@ def scan_folder(root_path):
                         "created": datetime.fromtimestamp(
                             os.path.getctime(path)
                         ).strftime("%Y-%m-%d %H:%M:%S"),
+                        "source_folder": root,
                     }
                 )
-    return sorted(images, key=lambda x: x["name"])
+                folder_has_images = True
+        if folder_has_images:
+            unique_folders.add(root)
+
+    sorted_images = sorted(images, key=lambda x: x["name"])
+    sorted_folders = sorted(unique_folders)
+
+    return sorted_images, sorted_folders
 
 
-def generate_embedded(source, dest_path):
-    """
-    Extracts embedded thumbnail from an image using exiftool.
+def generate_embedded(source: str, dest_path: str, exiftool_path: str | None) -> bool:
+    """Extract embedded thumbnail from an image using exiftool.
+
+    Args:
+        source: Path to the source image.
+        dest_path: Path to save the extracted thumbnail.
+        exiftool_path: Path to exiftool executable (None uses default).
+
+    Returns:
+        True if extraction succeeded and produced a non-empty file.
     """
     try:
-        cmd = [Config.EXIFTOOL_PATH, "-b", "-PreviewImage", source]
-        # TODO why subprocess ? and not in the same process or process pool ?
+        exe = exiftool_path if exiftool_path else "exiftool"
+        cmd = [exe, "-b", "-PreviewImage", source]
         with open(dest_path, "wb") as f:
             subprocess.run(cmd, stdout=f, stderr=subprocess.DEVNULL)
         return os.path.getsize(dest_path) > 0
@@ -143,9 +329,16 @@ def generate_embedded(source, dest_path):
         return False
 
 
-def generate_hq(source, dest_path, max_dim):
-    """
-    Generates a high-quality thumbnail from an image.
+def generate_hq(source: str, dest_path: str, max_dim: int) -> bool:
+    """Generate a high-quality thumbnail from an image.
+
+    Args:
+        source: Path to the source image.
+        dest_path: Path to save the thumbnail.
+        max_dim: Maximum width/height for the thumbnail.
+
+    Returns:
+        True if generation succeeded.
     """
     try:
         img = Image.open(source)

@@ -27,6 +27,7 @@ from PySide6.QtGui import (
     QTransform,
 )
 from PySide6.QtWidgets import (
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -35,14 +36,17 @@ from PySide6.QtWidgets import (
     QScrollBar,
     QSizePolicy,
     QSplitter,
+    QVBoxLayout,
     QWidget,
 )
 
-from piqopiqo.config import Config
-from piqopiqo.model import ImageItem, OnFullscreenExitMultipleSelected
-from piqopiqo.thumb_man import ThumbnailManager
-
+from .config import Config
+from .edit_panel import EditPanel, MetadataDBManager
 from .exif_man import ExifManager, ExifPanel
+from .filter_panel import FolderFilterPanel
+from .model import ImageItem, OnFullscreenExitMultipleSelected
+from .support import save_last_folder
+from .thumb_man import ThumbnailManager, scan_folder
 
 logger = logging.getLogger(__name__)
 
@@ -974,34 +978,70 @@ class PagedPhotoGrid(QWidget):
             self.scrollbar.setValue(new_top)
 
 
-# TODO put MainWindo and photoGrid apart
+# TODO put MainWindow and PhotoGrid apart
 class MainWindow(QMainWindow):
-    def __init__(self, images, etHelper):
+    def __init__(self, images, source_folders, root_folder, etHelper):
         super().__init__()
         self.setWindowTitle(Config.APP_NAME)
         self.showMaximized()
 
         self._fullscreen_overlay = None
+        self.etHelper = etHelper
+        self.root_folder = root_folder
+        self.source_folders = source_folders
+        self._current_filter = None  # Current folder filter
+
+        # Create metadata database manager
+        self.db_manager = MetadataDBManager()
 
         self._create_menu_bar()
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        layout = QHBoxLayout(central_widget)
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        splitter = QSplitter(Qt.Horizontal)
-        layout.addWidget(splitter)
+        # Folder filter panel (at top)
+        self.filter_panel = FolderFilterPanel()
+        self.filter_panel.filter_changed.connect(self._on_filter_changed)
+        main_layout.addWidget(self.filter_panel)
+
+        # Main horizontal splitter: grid | right panel(s)
+        main_splitter = QSplitter(Qt.Horizontal)
+        main_layout.addWidget(main_splitter)
 
         self.grid = PagedPhotoGrid()
-        splitter.addWidget(self.grid)
+        main_splitter.addWidget(self.grid)
 
-        self.exif_panel = ExifPanel()
-        splitter.addWidget(self.exif_panel)
+        # Right side: vertical splitter with edit panel and EXIF panel
+        if Config.SHOW_EDIT_PANEL:
+            right_splitter = QSplitter(Qt.Vertical)
 
-        splitter.setSizes([self.width() * 0.8, self.width() * 0.2])
+            self.edit_panel = EditPanel(self.db_manager)
+            self.edit_panel.edit_finished.connect(self._on_edit_finished)
+            right_splitter.addWidget(self.edit_panel)
+
+            self.exif_panel = ExifPanel()
+            right_splitter.addWidget(self.exif_panel)
+
+            # Split evenly between edit and exif panels
+            right_splitter.setSizes([200, 200])
+
+            main_splitter.addWidget(right_splitter)
+        else:
+            self.edit_panel = None
+            self.exif_panel = ExifPanel()
+            main_splitter.addWidget(self.exif_panel)
+
+        main_splitter.setSizes([int(self.width() * 0.8), int(self.width() * 0.2)])
 
         self.thumb_manager = ThumbnailManager()
         self.thumb_manager.thumb_ready.connect(self.on_thumb_ready)
+
+        # Register all source folders with the thumbnail manager
+        for folder in source_folders:
+            self.thumb_manager.register_folder(folder)
 
         self.exif_manager = ExifManager(etHelper)
         self.exif_manager.exif_ready.connect(self.on_exif_ready)
@@ -1010,12 +1050,65 @@ class MainWindow(QMainWindow):
         self.grid.request_fullscreen.connect(self._handle_fullscreen_overlay)
         self.grid.selection_changed.connect(self.on_selection_changed)
 
-        self.images_data = [ImageItem(**data) for data in images]
+        # Store all images (unfiltered)
+        self._all_images_data = [ImageItem(**data) for data in images]
+        self.images_data = self._all_images_data
+
+        # Set up filter panel with folders
+        self.filter_panel.set_folders(source_folders)
+
         self.grid.set_data(self.images_data)
+
+    def _on_edit_finished(self):
+        """Return focus to grid after editing."""
+        self.grid.setFocus()
+
+    def _on_filter_changed(self, folder_path: str | None):
+        """Handle folder filter change.
+
+        Args:
+            folder_path: Folder to filter by, or None to show all.
+        """
+        self._current_filter = folder_path
+        self._apply_filter()
+
+    def _apply_filter(self):
+        """Apply the current filter to the images."""
+        if self._current_filter is None:
+            # Show all images
+            self.images_data = self._all_images_data
+        else:
+            # Filter by source folder
+            self.images_data = [
+                item
+                for item in self._all_images_data
+                if item.source_folder == self._current_filter
+            ]
+
+        self.grid.set_data(self.images_data)
+
+        # Clear panels since selection changed
+        self.exif_panel.update_exif([])
+        if self.edit_panel:
+            self.edit_panel.update_for_selection([])
 
     def _create_menu_bar(self):
         menubar = self.menuBar()
         file_menu = menubar.addMenu("File")
+
+        open_action = QAction("Open Folder...", self)
+        open_action.setShortcut("Ctrl+O")
+        open_action.triggered.connect(self.on_open)
+        file_menu.addAction(open_action)
+
+        file_menu.addSeparator()
+
+        regenerate_action = QAction("Regenerate Thumbnails", self)
+        regenerate_action.setShortcut("Ctrl+Shift+R")
+        regenerate_action.triggered.connect(self.on_regenerate_thumbnails)
+        file_menu.addAction(regenerate_action)
+
+        file_menu.addSeparator()
 
         settings_action = QAction("Settings...", self)
         settings_action.setMenuRole(QAction.MenuRole.PreferencesRole)
@@ -1034,11 +1127,6 @@ class MainWindow(QMainWindow):
         about_action.triggered.connect(self.on_about)
         help_menu.addAction(about_action)
 
-        open_action = QAction("Open...", self)
-        open_action.setShortcut("Ctrl+O")
-        open_action.triggered.connect(self.on_open)
-        file_menu.addAction(open_action)
-
     def on_about(self):
         pass
 
@@ -1046,7 +1134,72 @@ class MainWindow(QMainWindow):
         pass
 
     def on_open(self):
-        pass
+        """Open a folder using a file dialog."""
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Open Folder",
+            self.root_folder or "",
+            QFileDialog.Option.ShowDirsOnly,
+        )
+        if folder:
+            self._load_folder(folder)
+
+    def _load_folder(self, folder: str):
+        """Load images from a folder and update the UI."""
+        logger.info(f"Loading folder: {folder}")
+
+        # Scan the folder
+        images, source_folders = scan_folder(folder)
+        logger.info(f"Found {len(images)} images in {len(source_folders)} folder(s)")
+
+        # Save as last folder
+        save_last_folder(folder)
+
+        # Update state
+        self.root_folder = folder
+        self.source_folders = source_folders
+        self._current_filter = None
+
+        # Close old database connections and create new manager
+        self.db_manager.close_all()
+
+        # Clear and re-register folders with thumbnail manager
+        self.thumb_manager._folder_thumb_dirs.clear()
+        for src_folder in source_folders:
+            self.thumb_manager.register_folder(src_folder)
+
+        # Update images data
+        self._all_images_data = [ImageItem(**data) for data in images]
+        self.images_data = self._all_images_data
+
+        # Update filter panel
+        self.filter_panel.set_folders(source_folders)
+
+        self.grid.set_data(self.images_data)
+
+        # Clear panels
+        self.exif_panel.update_exif([])
+        if self.edit_panel:
+            self.edit_panel.update_for_selection([])
+
+    def on_regenerate_thumbnails(self):
+        """Regenerate all thumbnails for currently loaded folders."""
+        if not self.source_folders:
+            logger.warning("No folders loaded, nothing to regenerate")
+            return
+
+        logger.info(f"Regenerating thumbnails for {len(self.source_folders)} folder(s)")
+
+        # Clear the thumbnail cache for all registered folders
+        self.thumb_manager.clear_all_registered_caches()
+
+        # Reset all image states to trigger re-generation
+        for item in self.images_data:
+            item.state = 0
+            item.pixmap = None
+
+        # Refresh the grid to trigger thumbnail requests
+        self.grid.on_scroll(self.grid.scrollbar.value())
 
     def on_thumb_ready(self, file_path, thumb_type, cache_path):
         # Update the data list directly
@@ -1087,9 +1240,11 @@ class MainWindow(QMainWindow):
             if item.exif_data is None:
                 self.exif_manager.fetch_exif(item.path)
 
-        # Update the panel only if all data is already loaded
+        # Update panels only if all data is already loaded
         if all_data_loaded:
             self.exif_panel.update_exif(selected_items)
+            if self.edit_panel:
+                self.edit_panel.update_for_selection(selected_items)
 
     def request_thumb_handler(self, index):
         if 0 <= index < len(self.images_data):
@@ -1183,4 +1338,5 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self.thumb_manager.stop()
+        self.db_manager.close_all()
         super().closeEvent(event)

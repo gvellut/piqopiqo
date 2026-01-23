@@ -9,6 +9,7 @@ class ImageItem:
     path: str
     name: str
     created: str
+    source_folder: str = ""
     is_selected: bool = False
     pixmap: QPixmap | None = None
     state: int = 0

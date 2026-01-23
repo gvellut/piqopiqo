@@ -10,12 +10,13 @@ class Config:
     # Application Settings
     APP_NAME = "PiqoPiqo"
 
-    # Paths
-    CACHE_DIR = "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
-    # CACHE_DIR = "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
+    # Paths - CACHE_BASE_DIR is set dynamically from support directory
+    # Can be overridden with PIQO_CACHE_BASE_DIR environment variable
+    # Will be set in __main__.py from support.get_cache_base_dir()
+    CACHE_BASE_DIR = None
 
     # EXIF Panel
-    EXIF_TOOL_PATH = None
+    EXIFTOOL_PATH = None
     EXIF_FIELDS = [
         "EXIF:ExposureTime",
         "EXIF:FNumber",
@@ -61,6 +62,21 @@ class Config:
 
     # Selection Behavior
     ON_FULLSCREEN_EXIT = OnFullscreenExitMultipleSelected.KEEP_SELECTION
+
+    # Editable Metadata Panel
+    SHOW_EDIT_PANEL = True
+    TITLE_MAX_LENGTH = 128
+    DESCRIPTION_MAX_LENGTH = 128
+
+    # Status labels with colors (name, hex color)
+    STATUS_LABELS = [
+        ("No Label", "#808080"),
+        ("Red", "#FF0000"),
+        ("Yellow", "#FFFF00"),
+        ("Green", "#00FF00"),
+        ("Blue", "#0000FF"),
+        ("Purple", "#800080"),
+    ]
 
 
 def apply_env_overrides():

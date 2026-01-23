@@ -1,0 +1,4 @@
+- python 3 + Qt application
+- photo viewer / metadata viewer + editor
+- Grid view for photo navigation
+- panel for exif : pyexitool used for reading
