@@ -612,8 +612,8 @@ class CoordinateEdit(QLineEdit):
         super().focusOutEvent(event)
 
 
-class KeywordsEdit(QLineEdit):
-    """Keywords editor (comma-separated)."""
+class KeywordsEdit(QPlainTextEdit):
+    """Keywords editor (comma-separated) with word wrap and auto-height."""
 
     edit_finished = Signal()
     edit_cancelled = Signal()
@@ -621,11 +621,65 @@ class KeywordsEdit(QLineEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._original_value = ""
+        self.setLineWrapMode(QPlainTextEdit.WidgetWidth)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.document().contentsChanged.connect(self._adjust_height)
+        self._adjust_height()
+
+    def _adjust_height(self):
+        """Adjust height to fit content."""
+        doc = self.document()
+        # Use widget width if viewport not yet sized
+        width = self.viewport().width()
+        if width <= 0:
+            width = self.width() - self.frameWidth() * 2
+        if width > 0:
+            doc.setTextWidth(width)
+
+        # Get block count and calculate height based on actual line count
+        block_count = doc.blockCount()
+        if block_count == 0:
+            block_count = 1
+
+        # Calculate wrapped line count
+        total_lines = 0
+        block = doc.begin()
+        while block.isValid():
+            block_layout = block.layout()
+            if block_layout:
+                total_lines += max(1, block_layout.lineCount())
+            else:
+                total_lines += 1
+            block = block.next()
+
+        if total_lines == 0:
+            total_lines = 1
+
+        line_height = self.fontMetrics().lineSpacing()
+        margins = self.contentsMargins()
+        frame = self.frameWidth() * 2
+
+        height = (
+            total_lines * line_height + margins.top() + margins.bottom() + frame + 4
+        )
+        self.setFixedHeight(height)
+
+    def resizeEvent(self, event):
+        """Recalculate height on resize."""
+        super().resizeEvent(event)
+        self._adjust_height()
 
     def set_value(self, value: str):
         """Set the field value and store as original."""
         self._original_value = value or ""
-        self.setText(self._original_value)
+        self.setPlainText(self._original_value)
+        self._adjust_height()
+
+    def text(self) -> str:
+        """Return the text content (compatibility with QLineEdit interface)."""
+        return self.toPlainText()
 
     def keyPressEvent(self, event):
         key = event.key()
@@ -635,15 +689,22 @@ class KeywordsEdit(QLineEdit):
             return
 
         if key == Qt.Key_Escape:
-            self.setText(self._original_value)
+            self.setPlainText(self._original_value)
+            self._adjust_height()
             self.edit_cancelled.emit()
             return
 
         super().keyPressEvent(event)
 
+    def insertFromMimeData(self, source):
+        """Remove newlines when pasting."""
+        if source.hasText():
+            text = source.text().replace("\n", " ").replace("\r", " ")
+            self.insertPlainText(text)
+
     def focusOutEvent(self, event):
         """Save on focus out if value changed."""
-        if self.text() != self._original_value:
+        if self.toPlainText() != self._original_value:
             self.edit_finished.emit()
         super().focusOutEvent(event)
 
@@ -1050,7 +1111,7 @@ class EditPanel(QWidget):
 
         keywords = exif.get("IPTC:Keywords") or exif.get("XMP:Subject") or ""
         if isinstance(keywords, list):
-            keywords = ", ".join(keywords)
+            keywords = ", ".join(str(k) for k in keywords)
 
         return {
             "title": exif.get("XMP:Title") or exif.get("EXIF:ImageDescription"),
