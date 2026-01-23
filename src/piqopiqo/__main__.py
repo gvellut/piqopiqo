@@ -1,10 +1,12 @@
 import logging
 from pathlib import Path
 import shutil
+import signal
 import sys
 
 import click
 import exiftool
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from .config import Config, apply_env_overrides
@@ -68,6 +70,24 @@ def cli(folder):
     ) as etHelper:
         window = MainWindow(images, source_folders, folder, etHelper)
         window.show()
+
+        # Make Ctrl-C in the launching terminal behave like a graceful quit.
+        def _handle_sigint(_signum, _frame):
+            try:
+                window.close()
+            finally:
+                # If close() is ignored for some reason, ensure we still exit.
+                inst = QApplication.instance()
+                if inst is not None:
+                    inst.quit()
+
+        signal.signal(signal.SIGINT, _handle_sigint)
+
+        # Keep the Python interpreter cycling so SIGINT is handled promptly
+        # while the Qt event loop is running.
+        _sigint_timer = QTimer()
+        _sigint_timer.start(250)
+        _sigint_timer.timeout.connect(lambda: None)
 
         exit_code = app.exec()
     sys.exit(exit_code)

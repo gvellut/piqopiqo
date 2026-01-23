@@ -1493,6 +1493,13 @@ class MainWindow(QMainWindow):
             self.grid._ensure_visible(new_index)
 
     def closeEvent(self, event):
-        self.thumb_manager.stop()
-        self.db_manager.close_all()
+        # Stop background workers first to avoid noisy teardown.
+        if hasattr(self, "exif_loader"):
+            self.exif_loader.stop()
+        if hasattr(self, "exif_manager"):
+            self.exif_manager.stop()
+        if hasattr(self, "thumb_manager"):
+            self.thumb_manager.stop()
+        if hasattr(self, "db_manager"):
+            self.db_manager.close_all()
         super().closeEvent(event)

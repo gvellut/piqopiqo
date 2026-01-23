@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import multiprocessing
+import signal
 
 import exiftool
 from PySide6.QtCore import QObject, Qt, Signal
@@ -18,6 +19,14 @@ from .config import Config
 from .model import ImageItem
 
 logger = logging.getLogger(__name__)
+
+
+def _pool_worker_init() -> None:
+    """Initializer for Pool workers.
+
+    Ignore SIGINT in workers so Ctrl-C only affects the main process.
+    """
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
 def exif_worker_task(
@@ -127,7 +136,10 @@ class ExifManager(QObject):
         super().__init__(parent)
         self.exiftool_path = exiftool_path
         self.common_args = common_args or ["-G"]
-        self.pool = multiprocessing.Pool(Config.MAX_WORKERS)
+        self.pool = multiprocessing.Pool(
+            Config.MAX_WORKERS,
+            initializer=_pool_worker_init,
+        )
         self.pending: set[str] = set()
 
     def fetch_exif(self, file_path: str):

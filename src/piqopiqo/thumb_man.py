@@ -5,6 +5,7 @@ import multiprocessing
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 
 from PIL import Image
@@ -13,6 +14,14 @@ from PySide6.QtCore import QObject, Signal
 from .config import Config
 
 logger = logging.getLogger(__name__)
+
+
+def _pool_worker_init() -> None:
+    """Initializer for Pool workers.
+
+    Ignore SIGINT in workers so Ctrl-C only affects the main process.
+    """
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
 def get_folder_cache_id(folder_path: str) -> str:
@@ -147,7 +156,10 @@ class ThumbnailManager(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.pool = multiprocessing.Pool(Config.MAX_WORKERS)
+        self.pool = multiprocessing.Pool(
+            Config.MAX_WORKERS,
+            initializer=_pool_worker_init,
+        )
         self.pending = set()
         # Map from source folder path to its thumb directory
         self._folder_thumb_dirs: dict[str, Path] = {}

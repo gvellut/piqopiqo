@@ -235,3 +235,11 @@ class ExifLoaderManager(QObject):
             Tuple of (completed, total).
         """
         return self._completed, self._target_total
+
+    def stop(self, wait_ms: int = 2000) -> None:
+        """Stop background work.
+
+        Clears queued jobs and waits briefly for running jobs to finish.
+        """
+        self.thread_pool.clear()
+        self.thread_pool.waitForDone(wait_ms)
