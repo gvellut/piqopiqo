@@ -5,6 +5,12 @@ set options
 remove config.py except as initial : never used beyond default / first launch
 except with flag
 
+
+
+speed of selection feedback : seems there is some delay before the blue background appears : display the feedback before the fetching of the exif. Doies it come from that ?
+
+
+
 make it possible to switch app (for exemple with cmd-tab) => currently, the menubar for the other app is displayed but not its windows
 cmd-q when fullscreen : not exiting. Need first to exit the full-screen (escape), then the app quits by itself.
 

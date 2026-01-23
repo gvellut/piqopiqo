@@ -5,6 +5,3 @@ https://aistudio.google.com/prompts/1dz6eKtA_qz3ORYYfYuSJssX21dVxp66u
 
 
 upload to flickr
-
-
-speed of selection feedback : seems there is some delay before the blue background appears
