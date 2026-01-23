@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QHBoxLayout,
-    QLabel,
     QWidget,
 )
 
@@ -31,27 +30,26 @@ class FolderFilterPanel(QWidget):
     def _setup_ui(self):
         """Create the panel UI."""
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 5, 10, 5)
-        layout.setSpacing(10)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
 
-        # Label
-        label = QLabel("Filter by folder:")
-        layout.addWidget(label)
-
-        # Checkbox to enable/disable filter
-        self.filter_checkbox = QCheckBox()
+        # Checkbox with label text
+        self.filter_checkbox = QCheckBox("Folder:")
         self.filter_checkbox.setChecked(False)
         self.filter_checkbox.stateChanged.connect(self._on_checkbox_changed)
         layout.addWidget(self.filter_checkbox)
 
         # Combobox for folder selection
         self.folder_combo = QComboBox()
-        self.folder_combo.setMinimumWidth(200)
+        self.folder_combo.setMinimumWidth(150)
         self.folder_combo.currentIndexChanged.connect(self._on_combo_changed)
         layout.addWidget(self.folder_combo)
 
         # Stretch to push everything left
         layout.addStretch()
+
+        # Keep height minimal
+        self.setMaximumHeight(28)
 
         # Initially hidden
         self.setVisible(False)

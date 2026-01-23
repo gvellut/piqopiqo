@@ -10,10 +10,7 @@ class Config:
     # Application Settings
     APP_NAME = "PiqoPiqo"
 
-    # Paths - CACHE_BASE_DIR is set dynamically from support directory
-    # Can be overridden with PIQO_CACHE_BASE_DIR environment variable
-    # Will be set in __main__.py from support.get_cache_base_dir()
-    CACHE_BASE_DIR = None
+    CACHE_BASE_DIR = "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
 
     # EXIF Panel
     EXIFTOOL_PATH = None

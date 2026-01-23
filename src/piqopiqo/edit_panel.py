@@ -930,10 +930,10 @@ class EditPanel(QWidget):
                 fields["latitude"].add(lat if lat is not None else "")
                 fields["longitude"].add(lon if lon is not None else "")
 
-                # Keywords (may be array)
+                # Keywords (may be array, items may be int or str)
                 keywords = exif.get("IPTC:Keywords") or exif.get("XMP:Subject") or ""
                 if isinstance(keywords, list):
-                    keywords = ", ".join(keywords)
+                    keywords = ", ".join(str(k) for k in keywords)
                 fields["keywords"].add(keywords)
 
                 fields["datetime_original"].add(exif.get("EXIF:DateTimeOriginal") or "")
