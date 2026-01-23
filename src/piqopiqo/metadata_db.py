@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import threading
 
 from .db_fields import DBFields
 from .thumb_man import get_cache_dir_for_folder
@@ -213,7 +214,8 @@ class MetadataDB:
         """
         self.folder_path = folder_path
         self.db_path = get_db_path_for_folder(folder_path)
-        self._connection: sqlite3.Connection | None = None
+        self._connections: dict[int, sqlite3.Connection] = {}
+        self._connections_lock = threading.Lock()
 
     def _ensure_db(self) -> sqlite3.Connection:
         """Create database file and tables if they don't exist.
@@ -221,36 +223,53 @@ class MetadataDB:
         Returns:
             Database connection.
         """
-        if self._connection is None:
-            # Create directory if needed
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        return self._get_connection(create=True)
 
-            self._connection = sqlite3.connect(str(self.db_path))
-            self._connection.row_factory = sqlite3.Row
-            self._connection.executescript(self.SCHEMA)
-            self._connection.commit()
-
-            # Check for migration from old schema
-            self._check_migration()
-
-            logger.debug(f"Created/opened database: {self.db_path}")
-
-        return self._connection
-
-    def _check_migration(self):
+    def _check_migration(self, connection: sqlite3.Connection):
         """Check if database needs migration from datetime_original to time_taken."""
-        if self._connection is None:
-            return
-
-        cursor = self._connection.execute("PRAGMA table_info(photo_metadata)")
+        cursor = connection.execute("PRAGMA table_info(photo_metadata)")
         columns = [row[1] for row in cursor.fetchall()]
 
         if "datetime_original" in columns and "time_taken" not in columns:
             logger.info("Migrating database: datetime_original -> time_taken")
-            self._connection.execute(
+            connection.execute(
                 "ALTER TABLE photo_metadata RENAME COLUMN datetime_original TO time_taken"
             )
-            self._connection.commit()
+            connection.commit()
+
+    def _get_connection(self, create: bool) -> sqlite3.Connection | None:
+        """Get a connection bound to the current thread.
+
+        Args:
+            create: If True, create the DB file and schema if missing.
+
+        Returns:
+            SQLite connection or None if DB doesn't exist and create is False.
+        """
+        thread_id = threading.get_ident()
+        with self._connections_lock:
+            existing = self._connections.get(thread_id)
+        if existing is not None:
+            return existing
+
+        if not create and not self.db_path.exists():
+            return None
+
+        if create:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        connection = sqlite3.connect(str(self.db_path), check_same_thread=False)
+        connection.row_factory = sqlite3.Row
+
+        # Ensure schema exists for this connection
+        connection.executescript(self.SCHEMA)
+        connection.commit()
+        self._check_migration(connection)
+
+        with self._connections_lock:
+            self._connections[thread_id] = connection
+        logger.debug(f"Opened database connection: {self.db_path} (thread {thread_id})")
+        return connection
 
     def _get_readonly_connection(self) -> sqlite3.Connection | None:
         """Get a read-only connection if database exists.
@@ -258,19 +277,7 @@ class MetadataDB:
         Returns:
             Database connection or None if database doesn't exist.
         """
-        if self._connection is not None:
-            return self._connection
-
-        if not self.db_path.exists():
-            return None
-
-        self._connection = sqlite3.connect(str(self.db_path))
-        self._connection.row_factory = sqlite3.Row
-
-        # Check for migration
-        self._check_migration()
-
-        return self._connection
+        return self._get_connection(create=False)
 
     def get_metadata(self, file_path: str) -> dict | None:
         """Get metadata for a photo.
@@ -409,9 +416,12 @@ class MetadataDB:
 
     def close(self) -> None:
         """Close the database connection."""
-        if self._connection is not None:
-            self._connection.close()
-            self._connection = None
+        with self._connections_lock:
+            connections = list(self._connections.values())
+            self._connections.clear()
+
+        for connection in connections:
+            connection.close()
 
 
 class MetadataDBManager:

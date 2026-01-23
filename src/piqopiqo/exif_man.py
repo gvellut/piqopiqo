@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
+import multiprocessing
 
 import exiftool
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (
     QGridLayout,
     QScrollArea,
@@ -19,22 +20,17 @@ from .model import ImageItem
 logger = logging.getLogger(__name__)
 
 
-class ExifFetcher(QRunnable):
-    def __init__(self, exif_manager: ExifManager, file_path):
-        super().__init__()
-        self.exif_manager = exif_manager
-        self.file_path = file_path
-
-    def run(self):
-        try:
-            metadata = self.exif_manager.etHelper.execute_json(self.file_path)
-            # get_metadata(self.file_path)
-            # single file passed so [0] to retrieve its metadata
-            metadata = metadata[0]
-            self.exif_manager.exif_ready.emit(self.file_path, metadata)
-        except Exception as e:
-            logger.error(f"Error fetching EXIF for {self.file_path}: {e}")
-            self.exif_manager.exif_ready.emit(self.file_path, {})
+def exif_worker_task(
+    file_path: str, exiftool_path: str | None, common_args: list[str]
+) -> tuple[str, dict]:
+    """Fetch EXIF metadata in a separate process."""
+    with exiftool.ExifToolHelper(
+        executable=exiftool_path, common_args=common_args
+    ) as helper:
+        metadata = helper.get_metadata(file_path)
+        if not metadata:
+            return (file_path, {})
+        return (file_path, metadata[0])
 
 
 class ExifPanel(QWidget):
@@ -122,11 +118,43 @@ class ExifPanel(QWidget):
 class ExifManager(QObject):
     exif_ready = Signal(str, dict)
 
-    def __init__(self, etHelper: exiftool.ExifToolHelper, parent=None):
+    def __init__(
+        self,
+        exiftool_path: str | None,
+        common_args: list[str] | None = None,
+        parent=None,
+    ):
         super().__init__(parent)
-        self.etHelper = etHelper
-        self.thread_pool = QThreadPool()
+        self.exiftool_path = exiftool_path
+        self.common_args = common_args or ["-G"]
+        self.pool = multiprocessing.Pool(Config.MAX_WORKERS)
+        self.pending: set[str] = set()
 
     def fetch_exif(self, file_path: str):
-        worker = ExifFetcher(self, file_path)
-        self.thread_pool.start(worker)
+        if file_path in self.pending:
+            return
+
+        self.pending.add(file_path)
+        self.pool.apply_async(
+            exif_worker_task,
+            (file_path, self.exiftool_path, self.common_args),
+            callback=self._on_task_done,
+            error_callback=lambda e, fp=file_path: self._on_task_error(fp, e),
+        )
+
+    def _on_task_done(self, result: tuple[str, dict]):
+        file_path, metadata = result
+        if file_path in self.pending:
+            self.pending.remove(file_path)
+        self.exif_ready.emit(file_path, metadata)
+
+    def _on_task_error(self, file_path: str, error: Exception):
+        if file_path in self.pending:
+            self.pending.remove(file_path)
+        logger.error(f"Error fetching EXIF for {file_path}: {error}")
+        self.exif_ready.emit(file_path, {})
+
+    def stop(self):
+        """Stop the EXIF worker pool."""
+        self.pool.close()
+        self.pool.join()

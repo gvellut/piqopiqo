@@ -7,14 +7,13 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
-    QHBoxLayout,
     QLabel,
     QProgressBar,
     QPushButton,
+    QStatusBar,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
-    QWidget,
 )
 
 
@@ -66,7 +65,7 @@ class ErrorListDialog(QDialog):
         layout.addWidget(btn_box)
 
 
-class LoadingStatusBar(QWidget):
+class LoadingStatusBar(QStatusBar):
     """Status bar with photo count and loading progress."""
 
     show_errors_requested = Signal()
@@ -84,21 +83,16 @@ class LoadingStatusBar(QWidget):
         self._has_errors = False
 
     def _setup_ui(self):
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 2, 10, 2)
-
         # Photo count label (left side)
         self.count_label = QLabel("0 photos")
-        layout.addWidget(self.count_label)
-
-        layout.addStretch()
+        self.addWidget(self.count_label, 1)
 
         # Progress bar (center, hidden when complete)
         self.progress_bar = QProgressBar()
         self.progress_bar.setMaximumWidth(200)
         self.progress_bar.setTextVisible(True)
         self.progress_bar.hide()
-        layout.addWidget(self.progress_bar)
+        self.addWidget(self.progress_bar)
 
         # Error button (right side, hidden when no errors)
         self.error_btn = QPushButton()
@@ -108,7 +102,9 @@ class LoadingStatusBar(QWidget):
         self.error_btn.setFlat(True)
         self.error_btn.clicked.connect(self.show_errors_requested.emit)
         self.error_btn.hide()
-        layout.addWidget(self.error_btn)
+        self.addPermanentWidget(self.error_btn)
+
+        self.setSizeGripEnabled(False)
 
     def set_photo_count(self, total: int, filtered: int | None = None):
         """Set the photo count display.

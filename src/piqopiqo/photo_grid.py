@@ -6,6 +6,7 @@ import logging
 import math
 import os
 import sys
+import threading
 
 # TODO refactor : add variable to indicate loading
 # OR assumes it is going to be on macos for now
@@ -1085,10 +1086,10 @@ class MainWindow(QMainWindow):
 
         main_splitter.setSizes([int(self.width() * 0.8), int(self.width() * 0.2)])
 
-        # Status bar
+        # Status bar (standard QMainWindow status bar)
         self.status_bar = LoadingStatusBar()
         self.status_bar.show_errors_requested.connect(self._show_error_dialog)
-        main_layout.addWidget(self.status_bar)
+        self.setStatusBar(self.status_bar)
 
         # Thumbnail manager
         self.thumb_manager = ThumbnailManager()
@@ -1100,15 +1101,20 @@ class MainWindow(QMainWindow):
         for folder in source_folders:
             self.thumb_manager.register_folder(folder)
 
+        # Shared lock for ExifToolHelper (not thread-safe)
+        self._exif_lock = threading.Lock()
+
         # EXIF loader for editable fields (background)
-        self.exif_loader = ExifLoaderManager(etHelper, self.db_manager)
+        self.exif_loader = ExifLoaderManager(
+            etHelper, self.db_manager, exif_lock=self._exif_lock
+        )
         self.exif_loader.exif_loaded.connect(self._on_exif_loaded)
         self.exif_loader.exif_error.connect(self._on_exif_error)
         self.exif_loader.progress_updated.connect(self._on_exif_progress)
         self.exif_loader.all_completed.connect(self._on_loading_complete)
 
         # EXIF manager for display panel (on-demand)
-        self.exif_manager = ExifManager(etHelper)
+        self.exif_manager = ExifManager(Config.EXIFTOOL_PATH, common_args=["-G"])
         self.exif_manager.exif_ready.connect(self.on_exif_ready)
 
         self.grid.request_thumb.connect(self.request_thumb_handler)
@@ -1141,8 +1147,8 @@ class MainWindow(QMainWindow):
 
     def _start_background_exif_loading(self):
         """Queue all images for background EXIF loading."""
-        self.exif_loader.reset()
-        self.exif_loader.queue_images(self._all_images_data)
+        self.exif_loader.reset(target_total=len(self._all_images_data))
+        self.exif_loader.prime_from_db(self._all_images_data)
 
     def _on_thumb_progress(self, completed: int, total: int):
         """Handle thumbnail progress update."""
@@ -1154,9 +1160,7 @@ class MainWindow(QMainWindow):
 
     def _on_loading_complete(self):
         """Handle completion of loading (thumbnails or EXIF)."""
-        has_errors = (
-            self.thumb_manager.has_errors() or self.exif_loader.has_errors()
-        )
+        has_errors = self.thumb_manager.has_errors() or self.exif_loader.has_errors()
         self.status_bar.set_has_errors(has_errors)
 
     def _on_exif_loaded(self, file_path: str, metadata: dict):
@@ -1298,7 +1302,7 @@ class MainWindow(QMainWindow):
 
         # Reset progress tracking
         self.thumb_manager.reset_progress()
-        self.exif_loader.reset()
+        self.exif_loader.reset(target_total=0)
         self.status_bar.reset()
 
         # Clear and re-register folders with thumbnail manager

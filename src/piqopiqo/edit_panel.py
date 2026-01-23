@@ -2,8 +2,8 @@
 
 import logging
 
-from PySide6.QtCore import Qt, Signal, QRect, QSize
-from PySide6.QtGui import QColor, QPainter, QPen, QIcon
+from PySide6.QtCore import QRect, QRunnable, QSize, Qt, QThreadPool, Signal
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen
 from PySide6.QtWidgets import (
     QComboBox,
     QGridLayout,
@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from .config import Config
-from .db_fields import DBFields, FIELD_DISPLAY_LABELS, EDITABLE_FIELDS
+from .db_fields import EDITABLE_FIELDS, FIELD_DISPLAY_LABELS, DBFields
 from .metadata_db import (
     MetadataDBManager,
     validate_datetime,
@@ -35,6 +35,22 @@ logger = logging.getLogger(__name__)
 
 # Placeholder for multiple values
 MULTIPLE_VALUES = "<Multiple Values>"
+
+
+class DBSaveWorker(QRunnable):
+    """Background worker to save metadata without blocking the UI."""
+
+    def __init__(self, db, file_path: str, data: dict):
+        super().__init__()
+        self.db = db
+        self.file_path = file_path
+        self.data = data
+
+    def run(self):
+        try:
+            self.db.save_metadata(self.file_path, self.data)
+        except Exception as e:
+            logger.error(f"Failed to save metadata for {self.file_path}: {e}")
 
 
 class TitleEdit(QLineEdit):
@@ -470,6 +486,7 @@ class EditPanel(QWidget):
         self._current_items: list[ImageItem] = []
         self._is_multi_select = False
         self._has_missing_data = False
+        self._db_writer_pool = QThreadPool()
 
         self._setup_ui()
 
@@ -769,8 +786,9 @@ class EditPanel(QWidget):
         # Update the specific field
         data[field_name] = value
 
-        # Save to database
-        db.save_metadata(item.path, data)
+        # Save to database in background (avoid GUI thread)
+        worker = DBSaveWorker(db, item.path, data)
+        self._db_writer_pool.start(worker)
 
         # Update item's cached db_metadata
         item.db_metadata = data
