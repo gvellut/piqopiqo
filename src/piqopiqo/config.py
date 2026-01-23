@@ -75,6 +75,15 @@ class Config:
         ("Purple", "#800080"),
     ]
 
+    # Grid item metadata display
+    # List of DB field names to show below filename in grid items
+    # Available: "title", "time_taken", "keywords", "description"
+    # Note: "label" is handled separately (shown as swatch, not text)
+    GRID_ITEM_FIELDS = ["title", "time_taken"]
+
+    # Show label as colored swatch on top-right of grid item
+    GRID_ITEM_SHOW_LABEL_SWATCH = True
+
 
 def apply_env_overrides():
     """Apply environment variable overrides to Config class attributes.

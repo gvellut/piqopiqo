@@ -41,10 +41,14 @@ from PySide6.QtWidgets import (
 )
 
 from .config import Config
-from .edit_panel import EditPanel, MetadataDBManager
+from .db_fields import DBFields
+from .edit_panel import EditPanel
+from .exif_loader import ExifLoaderManager
 from .exif_man import ExifManager, ExifPanel
 from .filter_panel import FolderFilterPanel
+from .metadata_db import MetadataDBManager
 from .model import ImageItem, OnFullscreenExitMultipleSelected
+from .status_bar import ErrorListDialog, LoadingStatusBar
 from .support import save_last_folder
 from .thumb_man import ThumbnailManager, scan_folder
 
@@ -596,39 +600,26 @@ class PhotoCell(QFrame):
 
         # Unpack Data
         name = self.current_data.name
-        date = self.current_data.created
         state = self.current_data.state
         pixmap = self.current_data.pixmap
+        db_meta = self.current_data.db_metadata or {}
 
         # Unpack Layout Info (computed in parent resizeEvent)
         pad = self.layout_info.get("pad", 5)
-        # Note: In the grid layout, the widget's rect() is the cell size.
-        # We rely on rect() for the actual dimensions, but use layout_info for internal
-        # proportions if needed.
-        # However, to strictly follow the user's logic, we use the metrics derived.
-
         meta_h = self.layout_info.get("meta_h", 20)
 
-        # Logic from PhotoDelegate.paint
-
         # Image Rect
-        # Adjusted: left, top, right, bottom
         img_rect = rect.adjusted(pad, pad, -pad, -(pad + meta_h))
 
         if state == 0:
             painter.fillRect(img_rect, QColor("black"))
-            # Lazy load request is handled in the Grid on_scroll, not paint
         else:
             if pixmap:
                 # Center pixmap
                 pixmap_rect = pixmap.rect()
                 pixmap_rect.moveCenter(img_rect.center())
 
-                # Check if scaling is needed (if pixmap is larger than rect or specific
-                # fit mode)
-                # The user's code just did: pixmap_rect.moveCenter(img_rect.center())
-                # and draw.
-                # Usually we want to scale to fit if it's too big:
+                # Scale to fit if too big
                 if (
                     pixmap_rect.width() > img_rect.width()
                     or pixmap_rect.height() > img_rect.height()
@@ -642,10 +633,25 @@ class PhotoCell(QFrame):
                 else:
                     painter.drawPixmap(pixmap_rect, pixmap)
 
-        # Text
-        # Logic: text_rect = option.rect.adjusted(pad, pad + img_rect_h, -pad, -pad)
-        # Since img_rect_h is dynamic in the user's logic, we calculate the text area
-        # from the bottom up
+        # Draw label swatch (top-right corner of image area)
+        if Config.GRID_ITEM_SHOW_LABEL_SWATCH:
+            label = db_meta.get(DBFields.LABEL)
+            if label:
+                color = self._get_label_color(label)
+                if color:
+                    swatch_size = 16
+                    swatch_margin = 4
+                    swatch_rect = QRect(
+                        img_rect.right() - swatch_size - swatch_margin,
+                        img_rect.top() + swatch_margin,
+                        swatch_size,
+                        swatch_size,
+                    )
+                    painter.fillRect(swatch_rect, QColor(color))
+                    painter.setPen(QPen(Qt.black, 1))
+                    painter.drawRect(swatch_rect)
+
+        # Text area
         text_rect = QRect(
             rect.left() + pad,
             rect.bottom() - meta_h - pad,
@@ -654,18 +660,45 @@ class PhotoCell(QFrame):
         )
 
         painter.setPen(QPen(Qt.white))
-
-        # Filename
         font_metrics = painter.fontMetrics()
+        line_height = font_metrics.lineSpacing()
+
+        # Filename (first line)
         elided_name = font_metrics.elidedText(name, Qt.ElideRight, text_rect.width())
         painter.drawText(text_rect, Qt.AlignTop | Qt.AlignHCenter, elided_name)
 
-        # Date
-        painter.drawText(text_rect, Qt.AlignBottom | Qt.AlignHCenter, date)
+        # DB fields (subsequent lines)
+        y_offset = line_height
+        for field_name in Config.GRID_ITEM_FIELDS:
+            if field_name == DBFields.LABEL:
+                continue  # Label shown as swatch, not text
+
+            value = db_meta.get(field_name, "")
+            if value:
+                field_rect = QRect(
+                    text_rect.left(),
+                    text_rect.top() + y_offset,
+                    text_rect.width(),
+                    line_height,
+                )
+                elided_value = font_metrics.elidedText(
+                    str(value), Qt.ElideRight, text_rect.width()
+                )
+                painter.drawText(
+                    field_rect, Qt.AlignTop | Qt.AlignHCenter, elided_value
+                )
+            y_offset += line_height
 
         # Draw red border around item
         painter.setPen(QPen(QColor("red"), 2))
         painter.drawRect(rect.adjusted(1, 1, -1, -1))
+
+    def _get_label_color(self, label: str) -> str | None:
+        """Get color hex for a label name."""
+        for name, color in Config.STATUS_LABELS:
+            if name == label:
+                return color
+        return None
 
 
 class PagedPhotoGrid(QWidget):
@@ -740,9 +773,24 @@ class PagedPhotoGrid(QWidget):
         self._recalculate_scrollbar()
         self.on_scroll(self.scrollbar.value())
 
-    def resizeEvent(self, event):
-        # Math ported identically from User's PhotoGrid.resizeEvent
+    def _calculate_metadata_height(self) -> int:
+        """Calculate the height needed for metadata display."""
+        from PySide6.QtGui import QFont, QFontMetrics
 
+        font = QFont()
+        font.setPointSize(Config.FONT_SIZE)
+        fm = QFontMetrics(font)
+        line_height = fm.lineSpacing()
+
+        # Count lines: 1 for filename + 1 per configured field (excluding label)
+        num_lines = 1  # filename
+        for field in Config.GRID_ITEM_FIELDS:
+            if field != DBFields.LABEL:  # Label is swatch, not text line
+                num_lines += 1
+
+        return num_lines * line_height + 4  # +4 for padding
+
+    def resizeEvent(self, event):
         # Width available for the grid (Total width - Scrollbar width)
         sb_width = self.scrollbar.width() if self.scrollbar.isVisible() else 0
         panel_w = event.size().width() - sb_width
@@ -760,8 +808,8 @@ class PagedPhotoGrid(QWidget):
             cols = 1
         img_box_side = avail_w / cols
 
-        # Vertical Calculation
-        meta_h = (cfg.METADATA_LINES * cfg.FONT_SIZE) + pad
+        # Vertical Calculation - dynamic based on configured fields
+        meta_h = self._calculate_metadata_height()
         row_base_h = pad + img_box_side + meta_h + pad
 
         # Vertical Stretching (Fit to View)
@@ -1020,6 +1068,7 @@ class MainWindow(QMainWindow):
 
             self.edit_panel = EditPanel(self.db_manager)
             self.edit_panel.edit_finished.connect(self._on_edit_finished)
+            self.edit_panel.refresh_requested.connect(self._on_refresh_requested)
             right_splitter.addWidget(self.edit_panel)
 
             self.exif_panel = ExifPanel()
@@ -1036,13 +1085,29 @@ class MainWindow(QMainWindow):
 
         main_splitter.setSizes([int(self.width() * 0.8), int(self.width() * 0.2)])
 
+        # Status bar
+        self.status_bar = LoadingStatusBar()
+        self.status_bar.show_errors_requested.connect(self._show_error_dialog)
+        main_layout.addWidget(self.status_bar)
+
+        # Thumbnail manager
         self.thumb_manager = ThumbnailManager()
         self.thumb_manager.thumb_ready.connect(self.on_thumb_ready)
+        self.thumb_manager.progress_updated.connect(self._on_thumb_progress)
+        self.thumb_manager.all_completed.connect(self._on_loading_complete)
 
         # Register all source folders with the thumbnail manager
         for folder in source_folders:
             self.thumb_manager.register_folder(folder)
 
+        # EXIF loader for editable fields (background)
+        self.exif_loader = ExifLoaderManager(etHelper, self.db_manager)
+        self.exif_loader.exif_loaded.connect(self._on_exif_loaded)
+        self.exif_loader.exif_error.connect(self._on_exif_error)
+        self.exif_loader.progress_updated.connect(self._on_exif_progress)
+        self.exif_loader.all_completed.connect(self._on_loading_complete)
+
+        # EXIF manager for display panel (on-demand)
         self.exif_manager = ExifManager(etHelper)
         self.exif_manager.exif_ready.connect(self.on_exif_ready)
 
@@ -1059,9 +1124,73 @@ class MainWindow(QMainWindow):
 
         self.grid.set_data(self.images_data)
 
+        # Update status bar
+        self.status_bar.set_photo_count(len(self._all_images_data))
+
+        # Start background EXIF loading
+        self._start_background_exif_loading()
+
     def _on_edit_finished(self):
         """Return focus to grid after editing."""
         self.grid.setFocus()
+
+    def _on_refresh_requested(self, items: list[ImageItem]):
+        """Handle refresh request from edit panel."""
+        for item in items:
+            self.exif_loader.queue_image(item.path, item.source_folder, force=True)
+
+    def _start_background_exif_loading(self):
+        """Queue all images for background EXIF loading."""
+        self.exif_loader.reset()
+        self.exif_loader.queue_images(self._all_images_data)
+
+    def _on_thumb_progress(self, completed: int, total: int):
+        """Handle thumbnail progress update."""
+        self.status_bar.set_thumb_progress(completed, total)
+
+    def _on_exif_progress(self, completed: int, total: int):
+        """Handle EXIF loading progress update."""
+        self.status_bar.set_exif_progress(completed, total)
+
+    def _on_loading_complete(self):
+        """Handle completion of loading (thumbnails or EXIF)."""
+        has_errors = (
+            self.thumb_manager.has_errors() or self.exif_loader.has_errors()
+        )
+        self.status_bar.set_has_errors(has_errors)
+
+    def _on_exif_loaded(self, file_path: str, metadata: dict):
+        """Handle EXIF data loaded in background."""
+        # Find the item and update its db_metadata
+        for item in self._all_images_data:
+            if item.path == file_path:
+                item.db_metadata = metadata
+
+                # Refresh grid item if visible
+                self.grid.refresh_item(item._global_index)
+
+                # If this item is selected, update edit panel
+                selected_items = self._get_selected_items()
+                if item in selected_items and self.edit_panel:
+                    self.edit_panel.update_for_selection(selected_items)
+                break
+
+    def _on_exif_error(self, file_path: str, error_message: str):
+        """Handle EXIF loading error."""
+        logger.error(f"EXIF loading error for {file_path}: {error_message}")
+
+    def _show_error_dialog(self):
+        """Show dialog with loading errors."""
+        dialog = ErrorListDialog(
+            self.thumb_manager.get_errors(),
+            self.exif_loader.get_errors(),
+            self,
+        )
+        dialog.exec()
+
+    def _get_selected_items(self) -> list[ImageItem]:
+        """Get list of currently selected items."""
+        return [item for item in self.images_data if item.is_selected]
 
     def _on_filter_changed(self, folder_path: str | None):
         """Handle folder filter change.
@@ -1077,6 +1206,7 @@ class MainWindow(QMainWindow):
         if self._current_filter is None:
             # Show all images
             self.images_data = self._all_images_data
+            self.status_bar.set_photo_count(len(self._all_images_data))
         else:
             # Filter by source folder
             self.images_data = [
@@ -1084,6 +1214,9 @@ class MainWindow(QMainWindow):
                 for item in self._all_images_data
                 if item.source_folder == self._current_filter
             ]
+            self.status_bar.set_photo_count(
+                len(self._all_images_data), len(self.images_data)
+            )
 
         self.grid.set_data(self.images_data)
 
@@ -1163,6 +1296,11 @@ class MainWindow(QMainWindow):
         # Close old database connections and create new manager
         self.db_manager.close_all()
 
+        # Reset progress tracking
+        self.thumb_manager.reset_progress()
+        self.exif_loader.reset()
+        self.status_bar.reset()
+
         # Clear and re-register folders with thumbnail manager
         self.thumb_manager._folder_thumb_dirs.clear()
         for src_folder in source_folders:
@@ -1176,6 +1314,12 @@ class MainWindow(QMainWindow):
         self.filter_panel.set_folders(source_folders)
 
         self.grid.set_data(self.images_data)
+
+        # Update status bar
+        self.status_bar.set_photo_count(len(self._all_images_data))
+
+        # Start background EXIF loading
+        self._start_background_exif_loading()
 
         # Clear panels
         self.exif_panel.update_exif([])
@@ -1232,19 +1376,27 @@ class MainWindow(QMainWindow):
     def on_selection_changed(self, selected_indices):
         selected_items = [self.images_data[i] for i in selected_indices]
 
-        # Check if all selected items have EXIF data
-        all_data_loaded = all(item.exif_data is not None for item in selected_items)
+        # Load db_metadata for selected items if not already loaded
+        for item in selected_items:
+            if item.db_metadata is None:
+                db = self.db_manager.get_db_for_image(item.path)
+                item.db_metadata = db.get_metadata(item.path)
 
-        # If not all data is loaded, fetch it
+        # Check if all selected items have EXIF data (for display panel)
+        all_exif_loaded = all(item.exif_data is not None for item in selected_items)
+
+        # Fetch EXIF for display panel (non-editable fields)
         for item in selected_items:
             if item.exif_data is None:
                 self.exif_manager.fetch_exif(item.path)
 
-        # Update panels only if all data is already loaded
-        if all_data_loaded:
+        # Update edit panel immediately (uses DB data)
+        if self.edit_panel:
+            self.edit_panel.update_for_selection(selected_items)
+
+        # Update EXIF panel only if all EXIF data is loaded
+        if all_exif_loaded:
             self.exif_panel.update_exif(selected_items)
-            if self.edit_panel:
-                self.edit_panel.update_for_selection(selected_items)
 
     def request_thumb_handler(self, index):
         if 0 <= index < len(self.images_data):

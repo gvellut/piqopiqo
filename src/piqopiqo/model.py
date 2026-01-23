@@ -15,6 +15,7 @@ class ImageItem:
     state: int = 0
     _global_index: int = -1
     exif_data: dict | None = None
+    db_metadata: dict | None = None  # Cached DB metadata for editable fields
 
 
 class OnFullscreenExitMultipleSelected(Enum):

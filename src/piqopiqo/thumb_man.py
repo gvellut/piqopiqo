@@ -142,6 +142,8 @@ class ThumbnailManager(QObject):
     """Manages thumbnail generation for images across multiple source folders."""
 
     thumb_ready = Signal(str, str, str)
+    progress_updated = Signal(int, int)  # completed, total
+    all_completed = Signal()  # emitted when all tasks are done
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -149,6 +151,10 @@ class ThumbnailManager(QObject):
         self.pending = set()
         # Map from source folder path to its thumb directory
         self._folder_thumb_dirs: dict[str, Path] = {}
+        # Progress tracking
+        self._total_queued = 0
+        self._completed = 0
+        self._errors: dict[str, str] = {}
 
     def register_folder(self, folder_path: str) -> Path:
         """Register a source folder and create its cache directory.
@@ -187,6 +193,7 @@ class ThumbnailManager(QObject):
             return
 
         self.pending.add(file_path)
+        self._total_queued += 1
 
         # Get the thumb directory for this image's source folder
         thumb_dir = self.get_thumb_dir_for_image(file_path)
@@ -199,6 +206,9 @@ class ThumbnailManager(QObject):
         if cache_path_hq.exists():
             self.thumb_ready.emit(file_path, "hq", str(cache_path_hq))
             self.pending.remove(file_path)
+            self._completed += 1
+            self.progress_updated.emit(self._completed, self._total_queued)
+            self._check_all_completed()
             return
 
         # Queue the worker task
@@ -206,7 +216,9 @@ class ThumbnailManager(QObject):
             worker_task,
             (file_path, str(thumb_dir), Config.EXIFTOOL_PATH, Config.THUMB_MAX_DIM),
             callback=self.on_task_done,
+            error_callback=lambda e, fp=file_path: self._on_task_error(fp, e),
         )
+        self.progress_updated.emit(self._completed, self._total_queued)
 
     def on_task_done(self, result):
         """Handle completion of a thumbnail generation task."""
@@ -214,12 +226,36 @@ class ThumbnailManager(QObject):
         if file_path and file_path in self.pending:
             self.pending.remove(file_path)
 
+        self._completed += 1
+        self.progress_updated.emit(self._completed, self._total_queued)
+
+        if thumb_type is None and file_path:
+            self._errors[file_path] = "Failed to generate thumbnail"
+
         if thumb_type:
             self.thumb_ready.emit(file_path, thumb_type, cache_path)
 
             # If we got an embedded preview, also queue HQ generation
             if thumb_type == "embedded":
                 self.queue_hq(file_path)
+
+        self._check_all_completed()
+
+    def _on_task_error(self, file_path: str, error: Exception):
+        """Handle worker task error."""
+        if file_path in self.pending:
+            self.pending.remove(file_path)
+
+        self._completed += 1
+        self._errors[file_path] = str(error)
+        self.progress_updated.emit(self._completed, self._total_queued)
+        logger.error(f"Thumbnail generation error for {file_path}: {error}")
+        self._check_all_completed()
+
+    def _check_all_completed(self):
+        """Check if all tasks are completed and emit signal."""
+        if self._completed >= self._total_queued and self._total_queued > 0:
+            self.all_completed.emit()
 
     def queue_hq(self, file_path: str):
         """Queue high-quality thumbnail generation for an image.
@@ -261,6 +297,28 @@ class ThumbnailManager(QObject):
         # Re-create the directories
         for folder_path in list(self._folder_thumb_dirs.keys()):
             self._folder_thumb_dirs[folder_path] = ensure_thumb_dir(folder_path)
+
+    def get_errors(self) -> dict[str, str]:
+        """Get dictionary of file paths with errors."""
+        return self._errors.copy()
+
+    def has_errors(self) -> bool:
+        """Check if there are any errors."""
+        return len(self._errors) > 0
+
+    def reset_progress(self):
+        """Reset counters for new folder load."""
+        self._total_queued = 0
+        self._completed = 0
+        self._errors.clear()
+
+    def get_progress(self) -> tuple[int, int]:
+        """Get current progress.
+
+        Returns:
+            Tuple of (completed, total).
+        """
+        return self._completed, self._total_queued
 
     def stop(self):
         """Stop the thumbnail manager and close the worker pool."""
