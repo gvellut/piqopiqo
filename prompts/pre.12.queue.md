@@ -1,0 +1,13 @@
+launch batch image + exiftool : keep exitool process around
+priority exiftool PreviewImage for all + exif ; full preview for visble priority : if not visible => after the PreviewImages
+batch exiftool : lokky  https://aistudio.google.com/prompts/1p47fLri2-PzLeFtFmXrFaTw6R-DmCLKE 
+reorder queues (see last)
+drop idle processes
+exiftool : external process so threads : QThreadPool currently : see manage both
+
+
+
+reorder the queue for thumbnails : if scrolling
+double queues for preview + gen
+refresh photos
+add photos to folder
