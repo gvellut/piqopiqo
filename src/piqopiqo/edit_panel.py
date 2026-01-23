@@ -894,7 +894,7 @@ class EditPanel(QWidget):
         row += 1
 
         # Time
-        self.layout.addWidget(QLabel("Time:"), row, 0)
+        self.layout.addWidget(QLabel("Time taken:"), row, 0)
         self.time_edit = TimeEdit()
         self.time_edit.edit_finished.connect(
             lambda: self._on_field_saved("datetime_original")
@@ -904,7 +904,7 @@ class EditPanel(QWidget):
         row += 1
 
         # Status
-        self.layout.addWidget(QLabel("Status:"), row, 0)
+        self.layout.addWidget(QLabel("Label:"), row, 0)
         self.status_combo = StatusComboBox()
         self.status_combo.value_changed.connect(self._on_status_changed)
         self.layout.addWidget(self.status_combo, row, 1)
