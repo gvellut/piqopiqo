@@ -1495,11 +1495,11 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         # Stop background workers first to avoid noisy teardown.
         if hasattr(self, "exif_loader"):
-            self.exif_loader.stop()
+            self.exif_loader.stop(wait_ms=int(Config.SHUTDOWN_TIMEOUT_S * 1000))
         if hasattr(self, "exif_manager"):
-            self.exif_manager.stop()
+            self.exif_manager.stop(timeout_s=Config.SHUTDOWN_TIMEOUT_S)
         if hasattr(self, "thumb_manager"):
-            self.thumb_manager.stop()
+            self.thumb_manager.stop(timeout_s=Config.SHUTDOWN_TIMEOUT_S)
         if hasattr(self, "db_manager"):
             self.db_manager.close_all()
         super().closeEvent(event)

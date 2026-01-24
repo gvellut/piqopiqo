@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import multiprocessing
 import signal
+import time
 
 import exiftool
 from PySide6.QtCore import QObject, Qt, Signal
@@ -166,7 +167,38 @@ class ExifManager(QObject):
         logger.error(f"Error fetching EXIF for {file_path}: {error}")
         self.exif_ready.emit(file_path, {})
 
-    def stop(self):
-        """Stop the EXIF worker pool."""
-        self.pool.close()
-        self.pool.join()
+    def stop(self, timeout_s: float | None = None):
+        """Stop the EXIF worker pool.
+
+        If timeout_s is provided and the pool does not stop within that time,
+        the pool will be terminated.
+        """
+        if getattr(self, "pool", None) is None:
+            return
+
+        pool = self.pool
+        self.pool = None
+
+        if timeout_s is None:
+            pool.close()
+            pool.join()
+            return
+
+        deadline = time.monotonic() + max(0.0, float(timeout_s))
+        pool.close()
+
+        processes = getattr(pool, "_pool", None) or []
+        for proc in processes:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            proc.join(remaining)
+
+        if any(proc.is_alive() for proc in processes):
+            logger.warning("EXIF pool shutdown timed out; terminating workers")
+            try:
+                pool.terminate()
+            except Exception:
+                pass
+            for proc in processes:
+                proc.join(1.0)

@@ -1,8 +1,10 @@
 import logging
+import os
 from pathlib import Path
 import shutil
 import signal
 import sys
+import threading
 
 import click
 import exiftool
@@ -72,14 +74,35 @@ def cli(folder):
         window.show()
 
         # Make Ctrl-C in the launching terminal behave like a graceful quit.
+        _sigint_kill_timer: threading.Timer | None = None
+        _sigint_requested = False
+
         def _handle_sigint(_signum, _frame):
-            try:
-                window.close()
-            finally:
-                # If close() is ignored for some reason, ensure we still exit.
-                inst = QApplication.instance()
-                if inst is not None:
-                    inst.quit()
+            nonlocal _sigint_kill_timer, _sigint_requested
+
+            if _sigint_requested:
+                return
+            _sigint_requested = True
+
+            if _sigint_kill_timer is None:
+                _sigint_kill_timer = threading.Timer(
+                    float(Config.SHUTDOWN_TIMEOUT_S),
+                    lambda: os.kill(os.getpid(), signal.SIGKILL),
+                )
+                _sigint_kill_timer.daemon = True
+                _sigint_kill_timer.start()
+
+            # Schedule Qt-side shutdown on the event loop (safer than calling
+            # QWidget/QApplication methods directly from a signal handler).
+            def _request_quit():
+                try:
+                    window.close()
+                finally:
+                    inst = QApplication.instance()
+                    if inst is not None:
+                        inst.quit()
+
+            QTimer.singleShot(0, _request_quit)
 
         signal.signal(signal.SIGINT, _handle_sigint)
 

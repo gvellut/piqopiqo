@@ -32,6 +32,10 @@ class Config:
     # Concurrency
     MAX_WORKERS = 4
 
+    # Shutdown
+    # Maximum time (seconds) allowed for a graceful shutdown before forcing exit.
+    SHUTDOWN_TIMEOUT_S = 5.0
+
     # Grid Layout Options
     NUM_COLUMNS = 8
     PADDING = 10  # Pixels between cells/edges
