@@ -17,6 +17,14 @@ dependencies = [
 [project.scripts]
 piqopiqo = "piqopiqo.__main__:cli"
 
+[tool.uv.sources]
+pyqtauto = { path = "/Users/guilhem/Documents/projects/github/pyqtauto" }
+
+[project.optional-dependencies]
+dev = [
+    "pyqtauto",
+]
+
 [build-system]
 requires = ["uv_build>=0.9.11,<0.10.0"]
 build-backend = "uv_build"

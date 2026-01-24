@@ -34,16 +34,26 @@ uv sync --extra dev
 
 ### 2. Enable the Server in Your Application
 
-Add these two lines at the start of your PySide6 application:
+Add the server import with a try/except to make it optional (recommended for production code):
 
 ```python
+# Optional import - pyqtauto may not be installed in production
+try:
+    from pyqtauto.server import start_server
+except ImportError:
+    start_server = None
+
+# Later, after QApplication is created:
+if start_server is not None:
+    server = start_server()  # Checks PYQTAUTO_ENABLED env var
+    if server:
+        print(f"PyQtAuto server on port {server.port}")
+```
+
+Or for forced development mode:
+```python
 from pyqtauto.server import start_server
-
-# Start server (checks PYQTAUTO_ENABLED env var)
-start_server()
-
-# Or force start for development
-start_server(force=True)
+start_server(force=True)  # Always starts, ignores env var
 ```
 
 Complete example:
@@ -96,9 +106,11 @@ with PyQtAutoClient(port=9876) as client:
     print(f"Status: {result}")
 ```
 
-#### Location of temprary files
+#### Location of temporary files
 
 Do not write automation scripts and save screenshots in the project folder (so does not pollute the workspace). Use a temp folder or pass the string as the script directly (instead of file).
+
+However output in clear the path to the folder where the screenshots are stored, for inspection.
 
 ## Widget Selectors
 
@@ -197,10 +209,34 @@ image_bytes = client.screenshot_to_bytes()
 
 ```python
 tree = client.get_tree()
-print(tree)  # Full widget hierarchy
+# IMPORTANT: get_tree() returns a dict, not a string!
+# To save to file, use json.dumps():
+import json
+with open("widget_tree.json", "w") as f:
+    f.write(json.dumps(tree, indent=2))
 
-# Find multiple widgets
+# Find multiple widgets - returns list of dicts with widget info
 widgets = client.find("@class:QPushButton", max_results=10)
+# Each widget dict contains: objectName, class, visible, enabled, geometry
+# Example: {"objectName": "", "class": "QPushButton", "visible": true, "geometry": {...}}
+```
+
+**IMPORTANT**: `find()` returns widget info dicts, NOT selectors. You cannot pass these directly to `click()`. Use them for inspection only:
+
+```python
+# WRONG - will raise an error:
+widgets = client.find("@class:PhotoCell", max_results=5)
+client.click(widgets[0])  # Error! widgets[0] is a dict, not a selector
+
+# CORRECT - use class selector directly:
+client.click("@class:PhotoCell")  # Clicks the first matching widget
+
+# Or use find() for inspection, then construct a selector:
+widgets = client.find("@class:QPushButton", max_results=10)
+for w in widgets:
+    print(f"Found button: {w.get('objectName')} - text: {w.get('text')}")
+# Then click by name if objectName is set:
+client.click("@name:submit_btn")
 ```
 
 ## Environment Variables
@@ -316,33 +352,116 @@ except CommandError as e:
     print(f"Command failed [{e.code}]: {e.message}")
 ```
 
+## Common Gotchas and Troubleshooting
+
+### 1. `get_tree()` returns a dict, not a string
+```python
+# WRONG:
+tree = client.get_tree()
+with open("tree.txt", "w") as f:
+    f.write(tree)  # TypeError: write() argument must be str, not dict
+
+# CORRECT:
+import json
+tree = client.get_tree()
+with open("tree.json", "w") as f:
+    f.write(json.dumps(tree, indent=2))
+```
+
+### 2. `find()` returns dicts, not selectors
+The `find()` method returns widget info for inspection, not selectors for actions:
+```python
+# WRONG:
+cells = client.find("@class:PhotoCell", max_results=5)
+client.click(cells[0])  # Error: 'dict' object has no attribute 'startswith'
+
+# CORRECT:
+client.click("@class:PhotoCell")  # Clicks first matching widget
+```
+
+### 3. `@class:` selector clicks only the FIRST match
+When using `@class:WidgetClass`, it will only interact with the first widget found. If widgets don't have unique `objectName` values, you may need to click the same selector multiple times or use other identifying features.
+
+### 4. Allow time for initial UI rendering
+Even after `wait_idle()`, the UI may not be fully rendered (especially thumbnails, images, etc.):
+```python
+client.wait_idle()
+time.sleep(1)  # Give UI time to fully render before first screenshot
+client.screenshot_to_file("initial.png")
+```
+
+### 5. Starting the application
+Run the app in background with `PYQTAUTO_ENABLED=1`:
+```bash
+PYQTAUTO_ENABLED=1 uv run your_app &
+sleep 3  # Wait for app to start
+uv run python automation_script.py
+```
+
+### 6. Widgets without objectName
+Many widgets don't have `objectName` set (shows as empty string `""`). The widget tree from `get_tree()` helps identify:
+- Widget class names (use `@class:ClassName`)
+- Widget hierarchy paths
+- Text content (use `@text:ButtonLabel`)
+- Geometry for understanding layout
+
 ## Typical AI Agent Workflow
 
 For AI agents testing applications:
 
-1. **Explore**: Get the widget tree to understand the UI
-2. **Plan**: Identify the widgets to interact with
-3. **Act**: Perform actions (click, type, etc.)
+1. **Explore**: Get the widget tree to understand the UI structure
+2. **Plan**: Identify widget classes and selectors to use
+3. **Act**: Perform actions (click, type, etc.) using selectors
 4. **Verify**: Take screenshots and check widget states
 5. **Iterate**: Repeat based on screenshot analysis
 
 ```python
-# AI agent example
+# AI agent example - complete workflow
+import json
+import time
+from pathlib import Path
+from pyqtauto import PyQtAutoClient
+
+SCREENSHOT_DIR = Path("/tmp/screenshots")
+SCREENSHOT_DIR.mkdir(exist_ok=True)
+
 with PyQtAutoClient() as client:
-    # 1. Explore
-    tree = client.get_tree()
-    # AI analyzes tree...
-
-    # 2. Act based on analysis
-    client.type("@name:search_input", "query")
-    client.click("@name:search_button")
+    # 1. Wait for app and take initial screenshot
     client.wait_idle()
+    time.sleep(1)  # Allow UI to fully render
+    client.screenshot_to_file(str(SCREENSHOT_DIR / "01_initial.png"))
 
-    # 3. Verify with screenshot
-    client.screenshot_to_file("result.png")
-    # AI analyzes screenshot...
+    # 2. Explore - save widget tree for analysis
+    tree = client.get_tree()
+    with open(SCREENSHOT_DIR / "widget_tree.json", "w") as f:
+        f.write(json.dumps(tree, indent=2))
 
-    # 4. Continue based on what AI sees
-    result_text = client.get_text("@name:result_label")
-    # AI decides next steps...
+    # 3. Find widgets to understand what's available
+    buttons = client.find("@class:QPushButton", max_results=10)
+    print(f"Found {len(buttons)} buttons")
+    for btn in buttons:
+        print(f"  - {btn.get('objectName') or '(no name)'}: {btn.get('text', '')}")
+
+    # 4. Act using selectors (NOT the find() results)
+    client.click("@class:PhotoCell")  # Click first photo
+    client.wait_idle()
+    time.sleep(0.5)
+    client.screenshot_to_file(str(SCREENSHOT_DIR / "02_after_click.png"))
+
+    # 5. Verify with screenshot - AI can analyze the image
+    # The screenshot shows the current state of the application
+
+    # 6. Continue based on what AI sees in screenshots
+    client.double_click("@class:PhotoCell")
+    client.wait_idle()
+    client.screenshot_to_file(str(SCREENSHOT_DIR / "03_after_doubleclick.png"))
 ```
+
+### Recommended Workflow for AI Agents
+
+1. **Always save the widget tree first** - It's essential for understanding the UI structure
+2. **Use screenshots liberally** - They help verify actions worked correctly
+3. **Use class selectors when objectName is not set** - Many apps don't set objectName
+4. **Add delays after wait_idle()** - Especially for initial rendering and image loading
+5. **Use find() for inspection, selectors for actions** - Don't mix them up
+6. **Store files in a temp directory** - Don't pollute the project folder

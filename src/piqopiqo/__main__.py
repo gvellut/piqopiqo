@@ -11,6 +11,11 @@ import exiftool
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
+try:
+    from pyqtauto.server import start_server
+except ImportError:
+    start_server = None
+
 from .config import Config, apply_env_overrides
 from .photo_grid import MainWindow
 from .support import get_cache_base_dir, get_last_folder, save_last_folder
@@ -61,6 +66,12 @@ def cli(folder):
 
     # Launch GUI
     app = QApplication(sys.argv)
+
+    # Start pyqtauto server for automation testing
+    if start_server is not None:
+        server = start_server()
+        if server:
+            logger.info(f"PyQtAuto server on port {server.port}")
 
     app.setApplicationName(Config.APP_NAME)
     app.setApplicationDisplayName(Config.APP_NAME)
