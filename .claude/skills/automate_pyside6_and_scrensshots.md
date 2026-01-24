@@ -1,4 +1,7 @@
-# PyQtAuto - Automation Skill for PySide6 Applications
+---
+name: automate-pyside6-and-screenshots
+description: Use PyQtAuto to automate and test PySide6 applications. PyQtAuto works like Playwright for web browsers, but for Qt/PySide6 desktop applications. Screenshots can be grabbed to see what is going on.
+---
 
 This document describes how to use PyQtAuto to automate and test PySide6 applications. PyQtAuto works like Playwright for web browsers, but for Qt/PySide6 desktop applications.
 
