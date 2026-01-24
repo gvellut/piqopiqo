@@ -121,6 +121,8 @@ button = QPushButton("Click Me")
 button.setObjectName("submit_btn")  # Now use "@name:submit_btn"
 ```
 
+**Note:** You need to assign a name `objectName` (`.setObjectName`) to widgets you must target reliably in automation (e.g., grid container, scrollbar, key buttons). This avoids fragile class/text selectors. Not all the elements need a name.
+
 ### Selector Types
 
 | Selector | Example | Description |

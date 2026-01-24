@@ -710,6 +710,8 @@ class PagedPhotoGrid(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        self.setObjectName("photo_grid")
+
         self.setFocusPolicy(Qt.StrongFocus)
 
         self.n_cols = Config.NUM_COLUMNS
@@ -731,6 +733,7 @@ class PagedPhotoGrid(QWidget):
 
         # Artificial Scrollbar
         self.scrollbar = QScrollBar(Qt.Vertical)
+        self.scrollbar.setObjectName("photo_grid_scrollbar")
         self.scrollbar.setSingleStep(1)
         self.scrollbar.valueChanged.connect(self.on_scroll)
 
