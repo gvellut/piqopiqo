@@ -9,6 +9,8 @@ This document describes how to use PyQtAuto to automate and test PySide6 applica
 
 ### 1. Add PyQtAuto as a Development Dependency
 
+Do this if not already setup.
+
 In your project's `pyproject.toml`, add pyqtauto as a local source dependency:
 
 ```toml
@@ -45,16 +47,11 @@ except ImportError:
 
 # Later, after QApplication is created:
 if start_server is not None:
-    server = start_server()  # Checks PYQTAUTO_ENABLED env var
+    server = start_server(force=True)
     if server:
         print(f"PyQtAuto server on port {server.port}")
 ```
 
-Or for forced development mode:
-```python
-from pyqtauto.server import start_server
-start_server(force=True)  # Always starts, ignores env var
-```
 
 Complete example:
 
@@ -245,7 +242,6 @@ client.click("@name:submit_btn")
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PYQTAUTO_ENABLED` | - | Set to `1`, `true`, or `yes` to enable server |
 | `PYQTAUTO_PORT` | `9876` | Server port |
 
 ## CLI Tool

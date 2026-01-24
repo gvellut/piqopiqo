@@ -69,7 +69,7 @@ def cli(folder):
 
     # Start pyqtauto server for automation testing
     if start_server is not None:
-        server = start_server()
+        server = start_server(force=True)
         if server:
             logger.info(f"PyQtAuto server on port {server.port}")
 
