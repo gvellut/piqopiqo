@@ -1,10 +1,14 @@
-- application wide shortcut : physical key : so works in any layout : in the grid + in fullscreen
-- in the config for the status (Label) : configure 
+- Add a param + ENV VAR to set initial resolution of the window. It is usefull for agent to setup the window size so screnshot grabs are not too big. Document in CLAUDE.md
+
+- Add  application wide shortcut : physical key ie A in AZERTY or Q in QWWERTY keyboards should be the same shortcuts
+- Need to so works in any layout : in the grid + in fullscreen
+- keyboard shortcuts : 
+    - zoom (in full screen) : qWERTY = to zoom int, QWERTY - to zoom out. Same effect as scroll wheel.
+    - labels : update STATUS_LABELS in config.py. Add a keyboard shortcut : using the . Setup an attrs class using @define 
 
 
-keyboard shortcuts : zoom, grid only, labels
-mouse zoom : when clicking => to real size
-
+Here is some info about hardware keyboard key shortcuts :
+(not the example uses PyQt6 imports : I use Pyside 6 => so adapt)
 
 
 In Qt and PyQt6, the standard shortcut system (`QShortcut` and `QKeySequence`) is designed to be **logical** and **layout-dependent**. When you define a shortcut for `Qt.Key.Key_Q`, Qt looks for the key that currently produces the character 'Q' in the active keyboard layout.

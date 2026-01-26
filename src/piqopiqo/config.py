@@ -73,10 +73,9 @@ class Config:
     STATUS_LABELS = [
         ("No Label", "#808080"),
         ("Approved", "#FF0000"),
-        ("Yellow", "#FFFF00"),
-        ("Green", "#00FF00"),
-        ("Blue", "#0000FF"),
-        ("Purple", "#800080"),
+        ("Rejected", "#FFFF00"),
+        ("Uploaded", "#00FF00"),
+        ("Verification", "#0000FF"),
     ]
 
     # Grid item metadata display
