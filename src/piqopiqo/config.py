@@ -71,7 +71,7 @@ class Config:
 
     # Status labels with colors (name, hex color)
     STATUS_LABELS = [
-        ("No Label", "#808080"),
+        ("No Label", "#808080"),  # TO REMOVE
         ("Approved", "#FF0000"),
         ("Rejected", "#FFFF00"),
         ("Uploaded", "#00FF00"),
