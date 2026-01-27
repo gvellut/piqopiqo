@@ -46,6 +46,8 @@ class Config:
         "EXIF:ApertureValue",
         "EXIF:FocalLength",
         "EXIF:LensModel",
+        "File:FileName",
+        "File:FileModifyDate",
     ]
     EXIF_PANEL_LAYOUT = (30, 70)
     EXIF_PANEL_ROW_SPACING = 5  # Fixed spacing between rows in pixels
