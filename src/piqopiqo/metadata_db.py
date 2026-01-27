@@ -157,30 +157,45 @@ def validate_longitude(value: str) -> tuple[bool, float | None]:
         return False, None
 
 
-def validate_datetime(value: str) -> tuple[bool, str | None]:
-    """Validate a datetime string in EXIF format.
+def parse_exif_datetime(value: str) -> datetime | None:
+    """Parse an EXIF datetime string to a datetime object.
 
     Args:
-        value: String value to validate (expected: YYYY:MM:DD HH:MM:SS)
+        value: EXIF format string (YYYY:MM:DD HH:MM:SS)
 
     Returns:
-        Tuple of (is_valid, parsed_value or None)
+        datetime object or None if parsing fails.
+    """
+    if not value or not value.strip():
+        return None
+    try:
+        return datetime.strptime(value.strip(), "%Y:%m:%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
+def validate_datetime(value: str) -> tuple[bool, datetime | None]:
+    """Validate a datetime string (ISO or EXIF format).
+
+    Args:
+        value: String value to validate (YYYY-MM-DD HH:MM:SS or YYYY:MM:DD HH:MM:SS)
+
+    Returns:
+        Tuple of (is_valid, parsed datetime or None)
     """
     if not value or not value.strip():
         return True, None
+    text = value.strip()
+    # Try ISO format first (preferred display/edit format)
     try:
-        # EXIF format: YYYY:MM:DD HH:MM:SS
-        datetime.strptime(value.strip(), "%Y:%m:%d %H:%M:%S")
-        return True, value.strip()
+        return True, datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
     except ValueError:
-        # Also accept ISO format
-        try:
-            datetime.strptime(value.strip(), "%Y-%m-%d %H:%M:%S")
-            # Convert to EXIF format
-            dt = datetime.strptime(value.strip(), "%Y-%m-%d %H:%M:%S")
-            return True, dt.strftime("%Y:%m:%d %H:%M:%S")
-        except ValueError:
-            return False, None
+        pass
+    # Also accept EXIF format
+    try:
+        return True, datetime.strptime(text, "%Y:%m:%d %H:%M:%S")
+    except ValueError:
+        return False, None
 
 
 class MetadataDB:
@@ -196,7 +211,7 @@ class MetadataDB:
         latitude REAL,
         longitude REAL,
         keywords TEXT,
-        time_taken TEXT,
+        time_taken TIMESTAMP,
         label TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -226,15 +241,36 @@ class MetadataDB:
         return self._get_connection(create=True)
 
     def _check_migration(self, connection: sqlite3.Connection):
-        """Check if database needs migration from datetime_original to time_taken."""
+        """Check if database needs migration."""
         cursor = connection.execute("PRAGMA table_info(photo_metadata)")
-        columns = [row[1] for row in cursor.fetchall()]
+        columns = {row[1]: row[2] for row in cursor.fetchall()}
 
         if "datetime_original" in columns and "time_taken" not in columns:
             logger.info("Migrating database: datetime_original -> time_taken")
             connection.execute(
-                "ALTER TABLE photo_metadata RENAME COLUMN datetime_original TO time_taken"
+                "ALTER TABLE photo_metadata"
+                " RENAME COLUMN datetime_original TO time_taken"
             )
+            connection.commit()
+
+        # Migrate EXIF-format dates (YYYY:MM:DD) to ISO format (YYYY-MM-DD)
+        # This handles both old TEXT columns and newly declared TIMESTAMP columns
+        cursor = connection.execute(
+            "SELECT id, time_taken FROM photo_metadata "
+            "WHERE time_taken IS NOT NULL AND time_taken LIKE '____:__:__%'"
+        )
+        rows = cursor.fetchall()
+        if rows:
+            logger.info(f"Migrating {len(rows)} time_taken values to ISO format")
+            for row in rows:
+                old_val = row["time_taken"]
+                # Convert YYYY:MM:DD to YYYY-MM-DD in the date part
+                if len(old_val) >= 10 and old_val[4] == ":" and old_val[7] == ":":
+                    new_val = old_val[:10].replace(":", "-") + old_val[10:]
+                    connection.execute(
+                        "UPDATE photo_metadata SET time_taken = ? WHERE id = ?",
+                        (new_val, row["id"]),
+                    )
             connection.commit()
 
     def _get_connection(self, create: bool) -> sqlite3.Connection | None:
@@ -300,13 +336,26 @@ class MetadataDB:
         if row is None:
             return None
 
+        # Parse time_taken string to datetime object
+        time_taken_raw = row[DBFields.TIME_TAKEN]
+        if isinstance(time_taken_raw, str) and time_taken_raw:
+            try:
+                time_taken_val = datetime.strptime(time_taken_raw, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                # Fallback: try EXIF format for un-migrated data
+                time_taken_val = parse_exif_datetime(time_taken_raw)
+        elif isinstance(time_taken_raw, datetime):
+            time_taken_val = time_taken_raw
+        else:
+            time_taken_val = None
+
         return {
             DBFields.TITLE: row[DBFields.TITLE],
             DBFields.DESCRIPTION: row[DBFields.DESCRIPTION],
             DBFields.LATITUDE: row[DBFields.LATITUDE],
             DBFields.LONGITUDE: row[DBFields.LONGITUDE],
             DBFields.KEYWORDS: row[DBFields.KEYWORDS],
-            DBFields.TIME_TAKEN: row[DBFields.TIME_TAKEN],
+            DBFields.TIME_TAKEN: time_taken_val,
             DBFields.LABEL: row[DBFields.LABEL],
         }
 
@@ -322,6 +371,12 @@ class MetadataDB:
         conn = self._ensure_db()
         now = datetime.now().isoformat()
         file_name = os.path.basename(file_path)
+
+        # Convert datetime to ISO string for storage
+        time_taken = data.get(DBFields.TIME_TAKEN)
+        if isinstance(time_taken, datetime):
+            data = data.copy()
+            data[DBFields.TIME_TAKEN] = time_taken.strftime("%Y-%m-%d %H:%M:%S")
 
         # Check if entry exists
         cursor = conn.execute(

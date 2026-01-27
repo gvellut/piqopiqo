@@ -7,7 +7,7 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 
 from .config import Config
 from .db_fields import EXIF_TO_DB_MAPPING, GPS_REF_FIELDS, DBFields
-from .metadata_db import MetadataDBManager, parse_exif_gps
+from .metadata_db import MetadataDBManager, parse_exif_datetime, parse_exif_gps
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,10 @@ def extract_editable_metadata(exif_data: dict) -> dict:
         # Special handling for keywords (may be array)
         if db_field == DBFields.KEYWORDS and isinstance(value, list):
             value = ", ".join(str(k) for k in value)
+
+        # Parse EXIF datetime string to datetime object
+        if db_field == DBFields.TIME_TAKEN and isinstance(value, str):
+            value = parse_exif_datetime(value)
 
         result[db_field] = value
 

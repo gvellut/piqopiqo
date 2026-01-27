@@ -1,5 +1,6 @@
 """Editable metadata panel for photo metadata."""
 
+from datetime import datetime
 import logging
 
 from PySide6.QtCore import QRunnable, Qt, QThreadPool, Signal
@@ -365,11 +366,18 @@ class TimeEdit(QLineEdit):
         super().__init__(parent)
         self._original_value = ""
         self._is_valid = True
-        self.setPlaceholderText("YYYY:MM:DD HH:MM:SS")
+        self.setPlaceholderText("YYYY-MM-DD HH:MM:SS")
 
-    def set_value(self, value: str):
-        """Set the field value and store as original."""
-        self._original_value = value or ""
+    def set_value(self, value: datetime | str | None):
+        """Set the field value and store as original.
+
+        Accepts a datetime object (from DB) or string (for MULTIPLE_VALUES).
+        Displays as ISO format string for editing.
+        """
+        if isinstance(value, datetime):
+            self._original_value = value.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            self._original_value = value or ""
         self.setText(self._original_value)
         self._validate()
 
@@ -395,8 +403,8 @@ class TimeEdit(QLineEdit):
         else:
             self.setStyleSheet("border: 1px solid red;")
 
-    def get_value(self) -> str | None:
-        """Get the validated value."""
+    def get_value(self) -> datetime | None:
+        """Get the validated value as a datetime object."""
         valid, value = validate_datetime(self.text())
         return value if valid else None
 

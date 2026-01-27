@@ -155,14 +155,6 @@ class _LabelSaveWorker(QRunnable):
             logger.error(f"Failed to save label for {self.file_path}: {e}")
 
 
-def _format_time_taken(value: str) -> str:
-    """Convert EXIF date format (YYYY:MM:DD HH:MM:SS) to ISO (YYYY-MM-DD HH:MM:SS)."""
-    # Only replace colons in the date part (first 10 chars: YYYY:MM:DD)
-    if len(value) >= 10 and value[4] == ":" and value[7] == ":":
-        return value[:10].replace(":", "-") + value[10:]
-    return value
-
-
 def _get_label_color(label: str) -> str | None:
     """Get color hex for a label name from STATUS_LABELS."""
     for sl in Config.STATUS_LABELS:
@@ -281,8 +273,8 @@ class FullscreenOverlay(QWidget):
             else {}
         )
         time_taken = db_meta.get(DBFields.TIME_TAKEN)
-        if time_taken:
-            self.date_label.setText(_format_time_taken(str(time_taken)))
+        if isinstance(time_taken, datetime):
+            self.date_label.setText(time_taken.strftime("%Y-%m-%d %H:%M:%S"))
             self.date_label.setStyleSheet("color: white;")
         else:
             try:
@@ -846,10 +838,11 @@ class PhotoCell(QFrame):
 
             value = db_meta.get(field_name, "")
             if value:
-                display_value = str(value)
-                # Convert EXIF date format (YYYY:MM:DD) to ISO (YYYY-MM-DD)
-                if field_name == DBFields.TIME_TAKEN:
-                    display_value = _format_time_taken(display_value)
+                # Format datetime objects as ISO string
+                if field_name == DBFields.TIME_TAKEN and isinstance(value, datetime):
+                    display_value = value.strftime("%Y-%m-%d %H:%M:%S")
+                else:
+                    display_value = str(value)
                 field_rect = QRect(
                     text_rect.left(),
                     text_rect.top() + y_offset,
