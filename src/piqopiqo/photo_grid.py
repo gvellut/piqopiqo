@@ -28,6 +28,7 @@ from PySide6.QtGui import (
     QPen,
     QPixmap,
     QScreen,
+    QShortcut,
     QTransform,
 )
 from PySide6.QtWidgets import (
@@ -38,7 +39,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QScrollBar,
-    QShortcut,
     QSizePolicy,
     QSplitter,
     QVBoxLayout,

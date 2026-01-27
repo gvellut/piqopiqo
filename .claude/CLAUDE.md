@@ -4,6 +4,8 @@ Photo viewer / metadata viewer + editor built with Python 3 and PySide6 (Qt).
 
 ## Running the Application
 
+For testing that all the imports work and that the app initializes correctly. As well as testing that the changes are correct, using PyQtAuto.
+
 ```bash
 # Run with a folder path
 uv run piqopiqo /path/to/images
