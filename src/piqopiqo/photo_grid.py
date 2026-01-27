@@ -155,6 +155,14 @@ class _LabelSaveWorker(QRunnable):
             logger.error(f"Failed to save label for {self.file_path}: {e}")
 
 
+def _format_time_taken(value: str) -> str:
+    """Convert EXIF date format (YYYY:MM:DD HH:MM:SS) to ISO (YYYY-MM-DD HH:MM:SS)."""
+    # Only replace colons in the date part (first 10 chars: YYYY:MM:DD)
+    if len(value) >= 10 and value[4] == ":" and value[7] == ":":
+        return value[:10].replace(":", "-") + value[10:]
+    return value
+
+
 def _get_label_color(label: str) -> str | None:
     """Get color hex for a label name from STATUS_LABELS."""
     for sl in Config.STATUS_LABELS:
@@ -265,14 +273,28 @@ class FullscreenOverlay(QWidget):
         filename = os.path.basename(self.image_path)
         self.filename_label.setText(filename)
 
-        # Filesystem Date
-        try:
-            mtime = os.path.getmtime(self.image_path)
-            date_str = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
-            self.date_label.setText(date_str)
-        except OSError as e:
-            logger.error(f"Could not get modification date for {self.image_path}: {e}")
-            self.date_label.setText("Unknown Date")
+        # Date: prefer time_taken from metadata DB, fallback to filesystem date (in red)
+        global_index = self.visible_indices[self.current_visible_idx]
+        db_meta = (
+            self.all_items[global_index].db_metadata or {}
+            if 0 <= global_index < len(self.all_items)
+            else {}
+        )
+        time_taken = db_meta.get(DBFields.TIME_TAKEN)
+        if time_taken:
+            self.date_label.setText(_format_time_taken(str(time_taken)))
+            self.date_label.setStyleSheet("color: white;")
+        else:
+            try:
+                mtime = os.path.getmtime(self.image_path)
+                date_str = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+                self.date_label.setText(date_str)
+            except OSError as e:
+                logger.error(
+                    f"Could not get modification date for {self.image_path}: {e}"
+                )
+                self.date_label.setText("Unknown Date")
+            self.date_label.setStyleSheet("color: red;")
 
         # Label color swatch
         self._update_color_swatch()
@@ -824,6 +846,10 @@ class PhotoCell(QFrame):
 
             value = db_meta.get(field_name, "")
             if value:
+                display_value = str(value)
+                # Convert EXIF date format (YYYY:MM:DD) to ISO (YYYY-MM-DD)
+                if field_name == DBFields.TIME_TAKEN:
+                    display_value = _format_time_taken(display_value)
                 field_rect = QRect(
                     text_rect.left(),
                     text_rect.top() + y_offset,
@@ -831,7 +857,7 @@ class PhotoCell(QFrame):
                     line_height,
                 )
                 elided_value = font_metrics.elidedText(
-                    str(value), Qt.ElideRight, text_rect.width()
+                    display_value, Qt.ElideRight, text_rect.width()
                 )
                 painter.drawText(
                     field_rect, Qt.AlignTop | Qt.AlignHCenter, elided_value
