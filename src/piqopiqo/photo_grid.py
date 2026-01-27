@@ -212,10 +212,16 @@ class FullscreenOverlay(QWidget):
         self.info_panel.setFrameShadow(QFrame.Raised)
         self.info_panel.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-        # Layout for the panel
-        panel_layout = QHBoxLayout(self.info_panel)
+        # Vertical layout: color swatch, filename, date
+        panel_layout = QVBoxLayout(self.info_panel)
         panel_layout.setContentsMargins(10, 5, 10, 5)
-        panel_layout.setSpacing(10)
+        panel_layout.setSpacing(5)
+
+        # Color Swatch (always occupies space, transparent when no label)
+        self.color_swatch = QWidget(self)
+        self.color_swatch.setFixedSize(20, 20)
+        self.color_swatch.setStyleSheet("background-color: transparent;")
+        panel_layout.addWidget(self.color_swatch)
 
         # Filename Label
         self.filename_label = QLabel(self)
@@ -224,12 +230,6 @@ class FullscreenOverlay(QWidget):
         # Date Label
         self.date_label = QLabel(self)
         panel_layout.addWidget(self.date_label)
-
-        # Color Swatch
-        self.color_swatch = QWidget(self)
-        self.color_swatch.setFixedSize(20, 20)
-        self.color_swatch.setStyleSheet("background-color: red;")
-        panel_layout.addWidget(self.color_swatch)
 
         self.info_panel.setLayout(panel_layout)
 
@@ -297,7 +297,11 @@ class FullscreenOverlay(QWidget):
         self.info_panel.show()
 
     def _update_color_swatch(self):
-        """Update the color swatch based on the current image's label."""
+        """Update the color swatch based on the current image's label.
+
+        The swatch always occupies space (never hidden) to keep the panel
+        height stable. When no label is set, it becomes transparent.
+        """
         global_index = self.visible_indices[self.current_visible_idx]
         if 0 <= global_index < len(self.all_items):
             item = self.all_items[global_index]
@@ -307,19 +311,21 @@ class FullscreenOverlay(QWidget):
                 color = _get_label_color(label)
                 if color:
                     self.color_swatch.setStyleSheet(f"background-color: {color};")
-                    self.color_swatch.show()
                 else:
-                    self.color_swatch.hide()
+                    self.color_swatch.setStyleSheet("background-color: transparent;")
             else:
-                self.color_swatch.hide()
+                self.color_swatch.setStyleSheet("background-color: transparent;")
 
     def _position_info_panel(self):
-        """Positions the panel in the bottom-left corner."""
+        """Positions the panel on the left side, top or bottom per config."""
         if hasattr(self, "info_panel"):
-            margin = 10  # Margin from the window edges
-            self.info_panel.move(
-                margin, self.height() - self.info_panel.height() - margin
-            )
+            margin_edge = Config.INFO_PANEL_MARGIN_BOTTOM
+            margin_side = Config.INFO_PANEL_MARGIN_SIDE
+            if Config.INFO_PANEL_POSITION == "top":
+                y = margin_edge
+            else:
+                y = self.height() - self.info_panel.height() - margin_edge
+            self.info_panel.move(margin_side, y)
 
     def _load_current_image(self):
         """Load the image at the current index and reset zoom/pan state."""

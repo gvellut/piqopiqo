@@ -83,6 +83,9 @@ class Config:
     INFO_PANEL_BACKGROUND_COLOR = "black"
     INFO_PANEL_BACKGROUND_TRANSPARENCY = 80  # Percent
     INFO_PANEL_TEXT_COLOR = "white"
+    INFO_PANEL_MARGIN_BOTTOM = 10  # Space from bottom (or top) edge of screen
+    INFO_PANEL_MARGIN_SIDE = 10  # Space from left side of screen
+    INFO_PANEL_POSITION = "bottom"  # "top" or "bottom"
 
     # Selection Behavior
     ON_FULLSCREEN_EXIT = OnFullscreenExitMultipleSelected.KEEP_SELECTION
