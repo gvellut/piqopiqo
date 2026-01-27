@@ -2,10 +2,8 @@
 
 import logging
 
-from PySide6.QtCore import QRect, QRunnable, QSize, Qt, QThreadPool, Signal
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen
+from PySide6.QtCore import QRunnable, Qt, QThreadPool, Signal
 from PySide6.QtWidgets import (
-    QComboBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -14,9 +12,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
-    QStyle,
-    QStyledItemDelegate,
-    QStyleOptionViewItem,
     QVBoxLayout,
     QWidget,
 )
@@ -69,6 +64,12 @@ class TitleEdit(QLineEdit):
         self._original_value = value or ""
         self.setText(self._original_value)
 
+    def focusInEvent(self, event):
+        """Clear Multiple Values placeholder on focus."""
+        if self.text() == MULTIPLE_VALUES:
+            self.clear()
+        super().focusInEvent(event)
+
     def keyPressEvent(self, event):
         key = event.key()
         modifiers = event.modifiers()
@@ -90,8 +91,12 @@ class TitleEdit(QLineEdit):
         super().keyPressEvent(event)
 
     def focusOutEvent(self, event):
-        """Save on focus out if value changed."""
-        if self.text() != self._original_value:
+        """Save on focus out if value changed and not Multiple Values."""
+        text = self.text()
+        if text == MULTIPLE_VALUES:
+            super().focusOutEvent(event)
+            return
+        if text != self._original_value:
             self.edit_finished.emit()
         super().focusOutEvent(event)
 
@@ -118,6 +123,12 @@ class DescriptionEdit(QPlainTextEdit):
         self._original_value = value or ""
         self.setPlainText(self._original_value)
 
+    def focusInEvent(self, event):
+        """Clear Multiple Values placeholder on focus."""
+        if self.toPlainText() == MULTIPLE_VALUES:
+            self.clear()
+        super().focusInEvent(event)
+
     def keyPressEvent(self, event):
         key = event.key()
         modifiers = event.modifiers()
@@ -140,8 +151,11 @@ class DescriptionEdit(QPlainTextEdit):
         super().keyPressEvent(event)
 
     def focusOutEvent(self, event):
-        """Save on focus out if value changed."""
+        """Save on focus out if value changed and not Multiple Values."""
         text = self.toPlainText()
+        if text == MULTIPLE_VALUES:
+            super().focusOutEvent(event)
+            return
         if len(text) > Config.DESCRIPTION_MAX_LENGTH:
             text = text[: Config.DESCRIPTION_MAX_LENGTH]
             self.setPlainText(text)
@@ -171,9 +185,21 @@ class CoordinateEdit(QLineEdit):
         self.setText(self._original_value)
         self._validate()
 
+    def focusInEvent(self, event):
+        """Clear Multiple Values placeholder on focus."""
+        if self.text() == MULTIPLE_VALUES:
+            self.clear()
+            self._validate()
+        super().focusInEvent(event)
+
     def _validate(self):
         """Validate current value and update styling."""
         text = self.text()
+        if text == MULTIPLE_VALUES:
+            # Do not show red border for Multiple Values
+            self._is_valid = True
+            self.setStyleSheet("")
+            return
         if self._is_latitude:
             valid, _ = validate_latitude(text)
         else:
@@ -212,8 +238,12 @@ class CoordinateEdit(QLineEdit):
         self._validate()
 
     def focusOutEvent(self, event):
-        """Save on focus out if value changed and valid."""
-        if self._is_valid and self.text() != self._original_value:
+        """Save on focus out if value changed, valid, and not Multiple Values."""
+        text = self.text()
+        if text == MULTIPLE_VALUES:
+            super().focusOutEvent(event)
+            return
+        if self._is_valid and text != self._original_value:
             self.edit_finished.emit()
         super().focusOutEvent(event)
 
@@ -287,6 +317,12 @@ class KeywordsEdit(QPlainTextEdit):
         """Return the text content (compatibility with QLineEdit interface)."""
         return self.toPlainText()
 
+    def focusInEvent(self, event):
+        """Clear Multiple Values placeholder on focus."""
+        if self.toPlainText() == MULTIPLE_VALUES:
+            self.clear()
+        super().focusInEvent(event)
+
     def keyPressEvent(self, event):
         key = event.key()
 
@@ -309,8 +345,12 @@ class KeywordsEdit(QPlainTextEdit):
             self.insertPlainText(text)
 
     def focusOutEvent(self, event):
-        """Save on focus out if value changed."""
-        if self.toPlainText() != self._original_value:
+        """Save on focus out if value changed and not Multiple Values."""
+        text = self.toPlainText()
+        if text == MULTIPLE_VALUES:
+            super().focusOutEvent(event)
+            return
+        if text != self._original_value:
             self.edit_finished.emit()
         super().focusOutEvent(event)
 
@@ -333,9 +373,22 @@ class TimeEdit(QLineEdit):
         self.setText(self._original_value)
         self._validate()
 
+    def focusInEvent(self, event):
+        """Clear Multiple Values placeholder on focus."""
+        if self.text() == MULTIPLE_VALUES:
+            self.clear()
+            self._validate()
+        super().focusInEvent(event)
+
     def _validate(self):
         """Validate current value and update styling."""
-        valid, _ = validate_datetime(self.text())
+        text = self.text()
+        if text == MULTIPLE_VALUES:
+            # Do not show red border for Multiple Values
+            self._is_valid = True
+            self.setStyleSheet("")
+            return
+        valid, _ = validate_datetime(text)
         self._is_valid = valid
         if valid:
             self.setStyleSheet("")
@@ -365,113 +418,14 @@ class TimeEdit(QLineEdit):
         self._validate()
 
     def focusOutEvent(self, event):
-        """Save on focus out if value changed and valid."""
-        if self._is_valid and self.text() != self._original_value:
+        """Save on focus out if value changed, valid, and not Multiple Values."""
+        text = self.text()
+        if text == MULTIPLE_VALUES:
+            super().focusOutEvent(event)
+            return
+        if self._is_valid and text != self._original_value:
             self.edit_finished.emit()
         super().focusOutEvent(event)
-
-
-class ColorSwatchDelegate(QStyledItemDelegate):
-    """Delegate that draws a color swatch before item text."""
-
-    SWATCH_SIZE = 12
-    SWATCH_MARGIN = 4
-
-    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index):
-        # Get color from item data
-        color_hex = index.data(Qt.UserRole)
-
-        # Initialize style option
-        opt = QStyleOptionViewItem(option)
-        self.initStyleOption(opt, index)
-
-        # Draw background (selection highlight if selected)
-        if opt.state & QStyle.State_Selected:
-            painter.fillRect(opt.rect, opt.palette.highlight())
-        elif opt.state & QStyle.State_MouseOver:
-            painter.fillRect(opt.rect, opt.palette.midlight())
-
-        # Draw color swatch
-        swatch_rect = QRect(
-            opt.rect.left() + self.SWATCH_MARGIN,
-            opt.rect.center().y() - self.SWATCH_SIZE // 2,
-            self.SWATCH_SIZE,
-            self.SWATCH_SIZE,
-        )
-
-        swatch_color = QColor(color_hex) if color_hex else QColor("#808080")
-        painter.fillRect(swatch_rect, swatch_color)
-        painter.setPen(QPen(Qt.black, 1))
-        painter.drawRect(swatch_rect)
-
-        # Draw text (standard color, not the label color)
-        text_rect = opt.rect.adjusted(
-            self.SWATCH_MARGIN * 2 + self.SWATCH_SIZE, 0, 0, 0
-        )
-        text = index.data(Qt.DisplayRole)
-
-        if opt.state & QStyle.State_Selected:
-            painter.setPen(opt.palette.highlightedText().color())
-        else:
-            painter.setPen(opt.palette.text().color())
-
-        painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, text)
-
-    def sizeHint(self, option: QStyleOptionViewItem, index) -> QSize:
-        size = super().sizeHint(option, index)
-        size.setWidth(size.width() + self.SWATCH_SIZE + self.SWATCH_MARGIN * 2)
-        return size
-
-
-class StatusComboBox(QComboBox):
-    """Status label combobox with color swatches."""
-
-    value_changed = Signal(str)  # Emits the selected label or empty string
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._original_value = ""
-        self._populating = False
-
-        # Use custom delegate for swatch display
-        self.setItemDelegate(ColorSwatchDelegate(self))
-
-        # Populate from config
-        for label_name, color_hex in Config.STATUS_LABELS:
-            self.addItem(label_name)
-            idx = self.count() - 1
-            # Store color in UserRole (for delegate)
-            self.setItemData(idx, color_hex, Qt.UserRole)
-
-        self.currentIndexChanged.connect(self._on_index_changed)
-
-    def set_value(self, value: str):
-        """Set the field value."""
-        self._original_value = value or ""
-        self._populating = True
-
-        if not value:
-            self.setCurrentIndex(0)  # "No Label"
-        else:
-            idx = self.findText(value)
-            if idx >= 0:
-                self.setCurrentIndex(idx)
-            else:
-                self.setCurrentIndex(0)
-
-        self._populating = False
-
-    def _on_index_changed(self, index: int):
-        """Handle selection change."""
-        if self._populating:
-            return
-
-        label = self.currentText()
-        # "No Label" means clear the value
-        if label == "No Label":
-            self.value_changed.emit("")
-        else:
-            self.value_changed.emit(label)
 
 
 class EditPanel(QWidget):
@@ -508,7 +462,6 @@ class EditPanel(QWidget):
         header_layout.addStretch()
 
         self.refresh_btn = QPushButton()
-        self.refresh_btn.setIcon(QIcon.fromTheme("view-refresh"))
         self.refresh_btn.setToolTip("Refresh from EXIF")
         self.refresh_btn.setFixedSize(24, 24)
         self.refresh_btn.setEnabled(False)
@@ -603,15 +556,6 @@ class EditPanel(QWidget):
         )
         self.time_edit.edit_cancelled.connect(self._on_edit_cancelled)
         self.layout.addWidget(self.time_edit, row, 1)
-        row += 1
-
-        # Label (Status)
-        self.layout.addWidget(
-            QLabel(f"{FIELD_DISPLAY_LABELS[DBFields.LABEL]}:"), row, 0
-        )
-        self.status_combo = StatusComboBox()
-        self.status_combo.value_changed.connect(self._on_status_changed)
-        self.layout.addWidget(self.status_combo, row, 1)
 
         scroll_area.setWidget(container)
         main_layout.addWidget(scroll_area)
@@ -668,7 +612,6 @@ class EditPanel(QWidget):
         self._update_field(
             DBFields.TIME_TAKEN, field_values[DBFields.TIME_TAKEN], self.time_edit
         )
-        self._update_status_field(field_values[DBFields.LABEL])
 
     def _gather_field_values(self, items: list[ImageItem]) -> dict:
         """Gather field values from items, using DB only.
@@ -714,18 +657,11 @@ class EditPanel(QWidget):
             widget.set_value(None)
             widget.setText(MULTIPLE_VALUES)
             widget._original_value = MULTIPLE_VALUES
+            widget._validate()
         elif value == "" or value is None:
             widget.set_value(None)
         else:
             widget.set_value(float(value) if value else None)
-
-    def _update_status_field(self, value):
-        """Update the status combobox."""
-        if value == MULTIPLE_VALUES:
-            self.status_combo.set_value("")
-            # We can't easily show "Multiple Values" in a combobox
-        else:
-            self.status_combo.set_value(value if value else "")
 
     def _clear_fields(self):
         """Clear all fields."""
@@ -735,7 +671,6 @@ class EditPanel(QWidget):
         self.lon_edit.set_value(None)
         self.keywords_edit.set_value("")
         self.time_edit.set_value("")
-        self.status_combo.set_value("")
 
     def _on_field_saved(self, field_name: str):
         """Handle field save event."""
@@ -744,6 +679,10 @@ class EditPanel(QWidget):
 
         # Get the new value
         value = self._get_field_value(field_name)
+
+        # If the value is MULTIPLE_VALUES, do not save (no edit was performed)
+        if value == MULTIPLE_VALUES:
+            return
 
         # Save to all selected items
         for item in self._current_items:
@@ -766,9 +705,6 @@ class EditPanel(QWidget):
             return self.keywords_edit.text() or None
         elif field_name == DBFields.TIME_TAKEN:
             return self.time_edit.get_value()
-        elif field_name == DBFields.LABEL:
-            text = self.status_combo.currentText()
-            return text if text != "No Label" else None
         return None
 
     def _save_field_for_item(self, item: ImageItem, field_name: str, value):
@@ -792,16 +728,6 @@ class EditPanel(QWidget):
 
         # Update item's cached db_metadata
         item.db_metadata = data
-
-    def _on_status_changed(self, label: str):
-        """Handle status combobox change."""
-        if not self._current_items:
-            return
-
-        value = label if label else None
-
-        for item in self._current_items:
-            self._save_field_for_item(item, DBFields.LABEL, value)
 
     def _on_edit_cancelled(self):
         """Handle edit cancellation."""

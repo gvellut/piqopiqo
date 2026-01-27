@@ -41,7 +41,7 @@ src/piqopiqo/
 - **Grid view**: Thumbnails with configurable columns, lazy loading
 - **Fullscreen**: Full resolution with zoom/pan, keyboard navigation
 - **EXIF panel**: Read-only EXIF data display (uses pyexiftool)
-- **Edit panel**: Editable metadata (title, description, keywords, status label)
+- **Edit panel**: Editable metadata (title, description, keywords, coordinates, time taken)
 - **Thumbnail caching**: Multiprocessing pipeline, cached to disk
 - **Status labels**: Configurable colored labels for photo workflow
 
@@ -53,6 +53,15 @@ All settings in `config.py` can be overridden via environment variables with `PI
 - `PIQO_CACHE_BASE_DIR` - Thumbnail cache location
 - `PIQO_THUMB_MAX_DIM` - Max thumbnail dimension (default: 1024)
 - `PIQO_CLEAR_CACHE_ON_START` - Clear cache on startup (default: false)
+- `PIQO_INITIAL_RESOLUTION` - Initial window size as `WIDTHxHEIGHT` (e.g. `1280x800`). If not set, window opens maximized.
+
+## Keyboard Shortcuts
+
+Shortcuts are defined in `config.py` `Config.SHORTCUTS` dict (shortcut name => key combo string).
+
+- **Zoom (fullscreen only)**: `=` zoom in, `-` zoom out, `0` reset zoom
+- **Labels (grid + fullscreen)**: `1`-`9` set label by index, `` ` `` (backtick) clears label
+- Labels are defined in `Config.STATUS_LABELS` as `StatusLabel(name, color, index)`
 
 ## Dependencies
 

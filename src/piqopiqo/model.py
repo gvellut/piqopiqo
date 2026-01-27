@@ -1,7 +1,15 @@
 from enum import Enum
 
 import attr
+from attrs import define
 from PySide6.QtGui import QPixmap
+
+
+@define
+class StatusLabel:
+    name: str
+    color: str
+    index: int
 
 
 @attr.s(auto_attribs=True)

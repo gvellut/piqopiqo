@@ -13,11 +13,14 @@ import threading
 if sys.platform == "darwin":
     import AppKit
 
-from PySide6.QtCore import QPointF, QRect, Qt, Signal
+from functools import partial
+
+from PySide6.QtCore import QPointF, QRect, QRunnable, Qt, QThreadPool, Signal
 from PySide6.QtGui import (
     QAction,
     QColor,
     QKeyEvent,
+    QKeySequence,
     QMouseEvent,
     QPainter,
     QPaintEvent,
@@ -35,14 +38,15 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QScrollBar,
+    QShortcut,
     QSizePolicy,
     QSplitter,
     QVBoxLayout,
     QWidget,
 )
 
-from .config import Config
-from .db_fields import DBFields
+from .config import Config, Shortcut
+from .db_fields import EDITABLE_FIELDS, DBFields
 from .edit_panel import EditPanel
 from .exif_loader import ExifLoaderManager
 from .exif_man import ExifManager, ExifPanel
@@ -54,6 +58,109 @@ from .support import save_last_folder
 from .thumb_man import ThumbnailManager, scan_folder
 
 logger = logging.getLogger(__name__)
+
+# Map of modifier name => Qt modifier flag
+_MODIFIER_MAP = {
+    "ctrl": Qt.ControlModifier,
+    "alt": Qt.AltModifier,
+    "cmd": Qt.MetaModifier,
+    "meta": Qt.MetaModifier,
+    "shift": Qt.ShiftModifier,
+}
+
+# Map of special key name => Qt.Key
+_SPECIAL_KEY_MAP = {
+    "=": Qt.Key_Equal,
+    "-": Qt.Key_Minus,
+    "`": Qt.Key_QuoteLeft,
+    "0": Qt.Key_0,
+    "1": Qt.Key_1,
+    "2": Qt.Key_2,
+    "3": Qt.Key_3,
+    "4": Qt.Key_4,
+    "5": Qt.Key_5,
+    "6": Qt.Key_6,
+    "7": Qt.Key_7,
+    "8": Qt.Key_8,
+    "9": Qt.Key_9,
+}
+
+
+def parse_shortcut(shortcut_str: str) -> QKeySequence:
+    """Parse a shortcut string like 'ctrl+r', 'cmd+alt+t', '=' into a QKeySequence.
+
+    Supports modifiers: ctrl, alt, cmd/meta, shift.
+    Separator: +
+    The last token is the key.
+    """
+    parts = [p.strip().lower() for p in shortcut_str.split("+")]
+    qt_parts = []
+    for part in parts[:-1]:
+        # Map modifier names to Qt-understood strings
+        if part in ("cmd", "meta"):
+            qt_parts.append("Meta")
+        elif part == "ctrl":
+            qt_parts.append("Ctrl")
+        elif part == "alt":
+            qt_parts.append("Alt")
+        elif part == "shift":
+            qt_parts.append("Shift")
+
+    key_part = parts[-1]
+    qt_parts.append(key_part.upper() if len(key_part) > 1 else key_part)
+
+    return QKeySequence("+".join(qt_parts))
+
+
+def _match_shortcut(event: QKeyEvent, shortcut_str: str) -> bool:
+    """Check if a key event matches a shortcut string."""
+    parts = [p.strip().lower() for p in shortcut_str.split("+")]
+    key_str = parts[-1]
+    modifier_names = parts[:-1]
+
+    # Build expected modifiers
+    expected_mods = Qt.KeyboardModifier(0)
+    for mod_name in modifier_names:
+        if mod_name in _MODIFIER_MAP:
+            expected_mods |= _MODIFIER_MAP[mod_name]
+
+    # Get expected key
+    if key_str in _SPECIAL_KEY_MAP:
+        expected_key = _SPECIAL_KEY_MAP[key_str]
+    elif len(key_str) == 1:
+        expected_key = getattr(Qt, f"Key_{key_str.upper()}", None)
+        if expected_key is None:
+            return False
+    else:
+        expected_key = getattr(Qt, f"Key_{key_str.capitalize()}", None)
+        if expected_key is None:
+            return False
+
+    return event.key() == expected_key and event.modifiers() == expected_mods
+
+
+class _LabelSaveWorker(QRunnable):
+    """Background worker to save label metadata."""
+
+    def __init__(self, db, file_path: str, data: dict):
+        super().__init__()
+        self.db = db
+        self.file_path = file_path
+        self.data = data
+
+    def run(self):
+        try:
+            self.db.save_metadata(self.file_path, self.data)
+        except Exception as e:
+            logger.error(f"Failed to save label for {self.file_path}: {e}")
+
+
+def _get_label_color(label: str) -> str | None:
+    """Get color hex for a label name from STATUS_LABELS."""
+    for sl in Config.STATUS_LABELS:
+        if sl.name == label:
+            return sl.color
+    return None
 
 
 class FullscreenOverlay(QWidget):
@@ -167,10 +274,30 @@ class FullscreenOverlay(QWidget):
             logger.error(f"Could not get modification date for {self.image_path}: {e}")
             self.date_label.setText("Unknown Date")
 
+        # Label color swatch
+        self._update_color_swatch()
+
         # Reposition and show
         self.info_panel.adjustSize()
         self._position_info_panel()
         self.info_panel.show()
+
+    def _update_color_swatch(self):
+        """Update the color swatch based on the current image's label."""
+        global_index = self.visible_indices[self.current_visible_idx]
+        if 0 <= global_index < len(self.all_items):
+            item = self.all_items[global_index]
+            db_meta = item.db_metadata or {}
+            label = db_meta.get(DBFields.LABEL)
+            if label:
+                color = _get_label_color(label)
+                if color:
+                    self.color_swatch.setStyleSheet(f"background-color: {color};")
+                    self.color_swatch.show()
+                else:
+                    self.color_swatch.hide()
+            else:
+                self.color_swatch.hide()
 
     def _position_info_panel(self):
         """Positions the panel in the bottom-left corner."""
@@ -330,6 +457,27 @@ class FullscreenOverlay(QWidget):
         elif key in (Qt.Key_Up, Qt.Key_Down):
             # Ignore up/down keys in fullscreen
             pass
+        elif _match_shortcut(event, Config.SHORTCUTS.get(Shortcut.ZOOM_IN, "=")):
+            # Zoom in centered on screen center
+            center = QPointF(self.width() / 2.0, self.height() / 2.0)
+            scaled_pixmap = self._get_base_scaled_pixmap()
+            base_x = (self.rect().width() - scaled_pixmap.width()) / 2
+            base_y = (self.rect().height() - scaled_pixmap.height()) / 2
+            center_pos = center - QPointF(base_x, base_y)
+            self._zoom_in(center_pos)
+        elif _match_shortcut(event, Config.SHORTCUTS.get(Shortcut.ZOOM_OUT, "-")):
+            # Zoom out centered on screen center
+            center = QPointF(self.width() / 2.0, self.height() / 2.0)
+            scaled_pixmap = self._get_base_scaled_pixmap()
+            base_x = (self.rect().width() - scaled_pixmap.width()) / 2
+            base_y = (self.rect().height() - scaled_pixmap.height()) / 2
+            center_pos = center - QPointF(base_x, base_y)
+            self._zoom_out(center_pos)
+        elif _match_shortcut(event, Config.SHORTCUTS.get(Shortcut.ZOOM_RESET, "0")):
+            # Reset zoom
+            self._transform.reset()
+            self._zoom_level = 1.0
+            self.update()
         else:
             super().keyPressEvent(event)
 
@@ -696,10 +844,7 @@ class PhotoCell(QFrame):
 
     def _get_label_color(self, label: str) -> str | None:
         """Get color hex for a label name."""
-        for name, color in Config.STATUS_LABELS:
-            if name == label:
-                return color
-        return None
+        return _get_label_color(label)
 
 
 class PagedPhotoGrid(QWidget):
@@ -1035,7 +1180,6 @@ class MainWindow(QMainWindow):
     def __init__(self, images, source_folders, root_folder, etHelper):
         super().__init__()
         self.setWindowTitle(Config.APP_NAME)
-        self.showMaximized()
 
         self._fullscreen_overlay = None
         self.etHelper = etHelper
@@ -1138,6 +1282,76 @@ class MainWindow(QMainWindow):
 
         # Start background EXIF loading
         self._start_background_exif_loading()
+
+        # Set up keyboard shortcuts
+        self._label_save_pool = QThreadPool()
+        self._setup_shortcuts()
+
+    def _setup_shortcuts(self):
+        """Set up application-wide keyboard shortcuts from config."""
+        shortcuts = Config.SHORTCUTS
+
+        # Label shortcuts (1-9 and backtick) - application-wide
+        for i in range(1, 10):
+            shortcut_enum = Shortcut(f"label_{i}")
+            if shortcut_enum in shortcuts:
+                sc = QShortcut(
+                    parse_shortcut(shortcuts[shortcut_enum]),
+                    self,
+                )
+                sc.setContext(Qt.ApplicationShortcut)
+                # Find label with matching index
+                label_name = None
+                for sl in Config.STATUS_LABELS:
+                    if sl.index == i:
+                        label_name = sl.name
+                        break
+                sc.activated.connect(partial(self._apply_label, label_name))
+
+        # No-label shortcut (backtick)
+        if Shortcut.LABEL_NONE in shortcuts:
+            sc = QShortcut(
+                parse_shortcut(shortcuts[Shortcut.LABEL_NONE]),
+                self,
+            )
+            sc.setContext(Qt.ApplicationShortcut)
+            sc.activated.connect(partial(self._apply_label, None))
+
+    def _apply_label(self, label_name: str | None):
+        """Apply a label to all selected photos."""
+        selected_items = self._get_selected_items()
+        if not selected_items:
+            return
+
+        for item in selected_items:
+            # Ensure db_metadata exists
+            if item.db_metadata is None:
+                db = self.db_manager.get_db_for_image(item.path)
+                existing = db.get_metadata(item.path)
+                if existing:
+                    item.db_metadata = existing.copy()
+                else:
+                    item.db_metadata = {field: None for field in EDITABLE_FIELDS}
+
+            # Update label
+            item.db_metadata[DBFields.LABEL] = label_name
+
+            # Save to DB in background
+            db = self.db_manager.get_db_for_image(item.path)
+            worker = _LabelSaveWorker(db, item.path, item.db_metadata.copy())
+            self._label_save_pool.start(worker)
+
+            # Refresh grid cell immediately
+            self.grid.refresh_item(item._global_index)
+
+        # Update fullscreen overlay swatch if open
+        if self._fullscreen_overlay is not None:
+            self._fullscreen_overlay._update_color_swatch()
+            self._fullscreen_overlay.update()
+
+        # Update edit panel if visible
+        if self.edit_panel:
+            self.edit_panel.update_for_selection(selected_items)
 
     def _on_edit_finished(self):
         """Return focus to grid after editing."""

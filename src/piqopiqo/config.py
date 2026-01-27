@@ -1,9 +1,26 @@
+from enum import Enum
 import os
 
-from piqopiqo.model import OnFullscreenExitMultipleSelected
+from piqopiqo.model import OnFullscreenExitMultipleSelected, StatusLabel
 
 # Environment variable prefix for config overrides
 ENV_PREFIX = "PIQO_"
+
+
+class Shortcut(Enum):
+    ZOOM_IN = "zoom_in"
+    ZOOM_OUT = "zoom_out"
+    ZOOM_RESET = "zoom_reset"
+    LABEL_1 = "label_1"
+    LABEL_2 = "label_2"
+    LABEL_3 = "label_3"
+    LABEL_4 = "label_4"
+    LABEL_5 = "label_5"
+    LABEL_6 = "label_6"
+    LABEL_7 = "label_7"
+    LABEL_8 = "label_8"
+    LABEL_9 = "label_9"
+    LABEL_NONE = "label_none"
 
 
 class Config:
@@ -11,6 +28,10 @@ class Config:
     APP_NAME = "PiqoPiqo"
 
     CACHE_BASE_DIR = "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
+
+    # Initial window resolution (format: "WIDTHxHEIGHT", e.g. "1280x800")
+    # If None, the window opens maximized.
+    INITIAL_RESOLUTION = None
 
     # EXIF Panel
     EXIFTOOL_PATH = None
@@ -69,13 +90,12 @@ class Config:
     TITLE_MAX_LENGTH = 128
     DESCRIPTION_MAX_LENGTH = 128
 
-    # Status labels with colors (name, hex color)
+    # Status labels (name, hex color, index for shortcut key)
     STATUS_LABELS = [
-        ("No Label", "#808080"),  # TO REMOVE
-        ("Approved", "#FF0000"),
-        ("Rejected", "#FFFF00"),
-        ("Uploaded", "#00FF00"),
-        ("Verification", "#0000FF"),
+        StatusLabel("Approved", "#FF0000", 1),
+        StatusLabel("Rejected", "#FFFF00", 2),
+        StatusLabel("Uploaded", "#00FF00", 3),
+        StatusLabel("Verification", "#0000FF", 4),
     ]
 
     # Grid item metadata display
@@ -86,6 +106,24 @@ class Config:
 
     # Show label as colored swatch on top-right of grid item
     GRID_ITEM_SHOW_LABEL_SWATCH = True
+
+    # Keyboard shortcuts (key combinations, e.g. "ctrl+r", "cmd+alt+t", "=")
+    # Modifier keys: ctrl, alt, cmd/meta, shift. Separator: +
+    SHORTCUTS = {
+        Shortcut.ZOOM_IN: "=",
+        Shortcut.ZOOM_OUT: "-",
+        Shortcut.ZOOM_RESET: "0",
+        Shortcut.LABEL_1: "1",
+        Shortcut.LABEL_2: "2",
+        Shortcut.LABEL_3: "3",
+        Shortcut.LABEL_4: "4",
+        Shortcut.LABEL_5: "5",
+        Shortcut.LABEL_6: "6",
+        Shortcut.LABEL_7: "7",
+        Shortcut.LABEL_8: "8",
+        Shortcut.LABEL_9: "9",
+        Shortcut.LABEL_NONE: "`",
+    }
 
 
 def apply_env_overrides():
@@ -100,6 +138,7 @@ def apply_env_overrides():
     - bool: converts to boolean (accepts: true/false, yes/no, 1/0, case-insensitive)
     - str: used as-is
     - list: splits comma-separated values
+    - None: treated as string (for optional string fields)
     """
     for env_var, value in os.environ.items():
         if not env_var.startswith(ENV_PREFIX):
@@ -117,7 +156,10 @@ def apply_env_overrides():
 
         # Convert the environment variable value to the appropriate type
         try:
-            if isinstance(current_value, bool):
+            if current_value is None:
+                # None defaults are optional strings
+                converted_value = value
+            elif isinstance(current_value, bool):
                 # Handle boolean conversion
                 converted_value = value.lower() in ("true", "yes", "1")
             elif isinstance(current_value, int):

@@ -82,7 +82,19 @@ def cli(folder):
         executable=Config.EXIFTOOL_PATH, common_args=["-G"]
     ) as etHelper:
         window = MainWindow(images, source_folders, folder, etHelper)
-        window.show()
+        if Config.INITIAL_RESOLUTION:
+            try:
+                w, h = Config.INITIAL_RESOLUTION.split("x")
+                window.resize(int(w), int(h))
+                window.show()
+            except (ValueError, AttributeError):
+                logger.warning(
+                    f"Invalid INITIAL_RESOLUTION: {Config.INITIAL_RESOLUTION}, "
+                    "opening maximized"
+                )
+                window.showMaximized()
+        else:
+            window.showMaximized()
 
         # Make Ctrl-C in the launching terminal behave like a graceful quit.
         _sigint_kill_timer: threading.Timer | None = None
