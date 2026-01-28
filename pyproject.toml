@@ -11,6 +11,7 @@ dependencies = [
     "pillow>=12.0.0",
     "pyexiftool>=0.5.6",
     "pyobjc-framework-cocoa>=12.1",
+    "pyobjc-framework-quartz>=12.1",
     "pyside6>=6.10.1",
 ]
 
@@ -21,9 +22,7 @@ piqopiqo = "piqopiqo.__main__:cli"
 pyqtauto = { path = "/Users/guilhem/Documents/projects/github/pyqtauto" }
 
 [project.optional-dependencies]
-dev = [
-    "pyqtauto",
-]
+dev = ["pyqtauto"]
 
 [build-system]
 requires = ["uv_build>=0.9.11,<0.10.0"]

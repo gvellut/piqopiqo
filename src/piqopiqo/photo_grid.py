@@ -53,6 +53,7 @@ from .exif_man import ExifManager, ExifPanel
 from .filter_panel import FolderFilterPanel
 from .metadata_db import MetadataDBManager
 from .model import ImageItem, OnFullscreenExitMultipleSelected
+from .platform import PLATFORM, get_platform_true_resolution
 from .status_bar import ErrorListDialog, LoadingStatusBar
 from .support import save_last_folder
 from .thumb_man import ThumbnailManager, scan_folder
@@ -1649,16 +1650,6 @@ class MainWindow(QMainWindow):
             file_path = self.images_data[index].path
             self.thumb_manager.queue_image(file_path)
 
-    def _get_physical_resolution(self, screen: QScreen) -> tuple[int, int]:
-        """Calculates physical resolution based on logical size and pixel density."""
-        geometry = screen.geometry()
-        dpr = screen.devicePixelRatio()
-
-        phy_width = int(geometry.width() * dpr)
-        phy_height = int(geometry.height() * dpr)
-
-        return phy_width, phy_height
-
     def _handle_fullscreen_overlay(self, selected_indices: list):
         """Display the selected image in a fullscreen overlay."""
         if not selected_indices:
@@ -1680,12 +1671,17 @@ class MainWindow(QMainWindow):
         # Log resolution info
         log_geo = current_screen.geometry()
         dpr = current_screen.devicePixelRatio()
-        phy_w, phy_h = self._get_physical_resolution(current_screen)
+        buffer_w = int(log_geo.width() * dpr)
+        buffer_h = int(log_geo.height() * dpr)
 
-        logger.debug(f"Screen Detected: {current_screen.name()}")
-        logger.debug(f"Logical Size: {log_geo.width()} x {log_geo.height()}")
-        logger.debug(f"Device Pixel Ratio: {dpr}")
-        logger.debug(f"Physical Resolution: {phy_w} x {phy_h}")
+        print("--- Qt Info ---")
+        print(f"Screen Name:    {current_screen.name()}")
+        print(f"Logical Size:   {log_geo.width()} x {log_geo.height()}")
+        print(f"DPR:            {dpr}")
+        print(f"Render Buffer:  {buffer_w} x {buffer_h}")
+
+        phy_w, phy_h = get_platform_true_resolution(current_screen)
+        print(f"Physical resolution:  {phy_w} x {phy_h}")
 
         if len(selected_indices) > 1:
             visible_indices = selected_indices
