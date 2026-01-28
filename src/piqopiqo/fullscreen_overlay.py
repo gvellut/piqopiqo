@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import atexit
 from datetime import datetime
+from enum import Enum, auto
 import logging
 import sys
 
@@ -98,12 +99,40 @@ def _get_label_color(label: str) -> str | None:
     return None
 
 
-class ZoomDirection:
-    """Enum-like class for zoom direction tracking."""
+class ZoomState(Enum):
+    """Enum for discrete zoom states."""
 
-    NONE = "none"  # Initial state or reset
-    IN = "in"  # Zooming in
-    OUT = "out"  # Zooming out
+    BASE_VIEW = auto()  # Fit to screen (can be <100% for large, or 100% for small)
+    ZOOM_100 = auto()  # 1:1 pixel mapping (1 image pixel = 1 render buffer pixel)
+    ZOOM_200 = auto()  # 2x zoom (1 image pixel = 2 render buffer pixels)
+    ZOOM_400 = auto()  # 4x zoom (1 image pixel = 4 render buffer pixels)
+    ZOOM_800 = auto()  # 8x zoom (1 image pixel = 8 render buffer pixels)
+
+
+class ZoomDirection(Enum):
+    """Enum for zoom direction tracking."""
+
+    NONE = auto()  # Initial state or reset
+    IN = auto()  # Zooming in
+    OUT = auto()  # Zooming out
+
+
+# Zoom state progression for wheel/keyboard
+_ZOOM_STATE_ORDER = [
+    ZoomState.BASE_VIEW,
+    ZoomState.ZOOM_100,
+    ZoomState.ZOOM_200,
+    ZoomState.ZOOM_400,
+    ZoomState.ZOOM_800,
+]
+
+# Mapping from zoom state to display percentage
+_ZOOM_STATE_PERCENTAGES = {
+    ZoomState.ZOOM_100: 100,
+    ZoomState.ZOOM_200: 200,
+    ZoomState.ZOOM_400: 400,
+    ZoomState.ZOOM_800: 800,
+}
 
 
 class FullscreenOverlay(QWidget):
@@ -123,12 +152,17 @@ class FullscreenOverlay(QWidget):
         self._zoom_level = 1.0
         self._panning = False
         self._pan_start_pos = QPointF()
+        self._click_start_pos = QPointF()  # Track click position for click-to-zoom
+        self._did_pan = False  # Track if we panned during this click
 
         self._wheel_acc = 0
 
+        # Zoom state tracking
+        self._zoom_state = ZoomState.BASE_VIEW
+        self._zoom_direction = ZoomDirection.NONE
+        self._is_small_image = False  # True if base view is already at 100%
+
         # Zoom overlay state
-        self._is_base_view = True  # True when at base scale (fit to screen)
-        self._zoom_direction = ZoomDirection.NONE  # Track zoom direction
         self._overlay_timer = QTimer(self)
         self._overlay_timer.setSingleShot(True)
         self._overlay_timer.timeout.connect(self._hide_zoom_overlay)
@@ -181,45 +215,47 @@ class FullscreenOverlay(QWidget):
         self.zoom_overlay.hide()
 
     def _update_zoom_overlay(self):
-        """Update and position the zoom overlay based on current zoom level."""
-        # Calculate the zoom percentage relative to render buffer (1:1 pixel mapping)
-        # 100% means 1 image pixel = 1 render buffer pixel
-        # The base scale factor maps the image to fit the screen at zoom_level=1.0
-        # We need to account for DPR when calculating the actual zoom percentage
+        """Update and position the zoom overlay based on current zoom state."""
+        # Get the percentage from the zoom state
+        percentage = _ZOOM_STATE_PERCENTAGES.get(self._zoom_state)
+        if percentage is None:
+            return
 
-        base_scale = self._get_base_scale_factor()
-        # The actual scale in terms of render buffer pixels
-        # At zoom_level=1.0, base_scale tells us how much the image is scaled
-        # For 100%: image_pixel * base_scale * zoom_level * dpr = 1 render_buffer_pixel
-        # So 100% zoom = 1 / (base_scale * dpr) in terms of zoom_level
-        actual_zoom_pct = self._zoom_level * base_scale * self._device_pixel_ratio * 100
-
-        self.zoom_overlay.setText(f"{actual_zoom_pct:.0f}%")
+        self.zoom_overlay.setText(f"{percentage}%")
         self.zoom_overlay.adjustSize()
 
-        # Center the overlay on screen
+        # Position at top of screen with margin
         overlay_x = (self.width() - self.zoom_overlay.width()) // 2
-        overlay_y = (self.height() - self.zoom_overlay.height()) // 2
+        overlay_y = 40  # Top margin
         self.zoom_overlay.move(overlay_x, overlay_y)
 
     def _should_show_zoom_overlay(self) -> bool:
-        """Determine if the zoom overlay should be shown based on current state."""
-        # Don't show at base view (unless we just zoomed out to it)
-        if self._is_base_view:
-            # Only show if we're returning to base view by zooming out
+        """Determine if the zoom overlay should be shown based on current state.
+
+        Rules:
+        - Never show in base view (initial or zooming back to it) for large images
+        - For 100%: only show when zooming OUT (coming back from higher zoom)
+        - For small images at base view (which is 100%): show when going back from
+          further zoom
+        - Always show for 200%, 400%, 800%
+        """
+        if self._zoom_state == ZoomState.BASE_VIEW:
+            # For small images, base view IS 100%, so show when zooming out to it
+            if self._is_small_image and self._zoom_direction == ZoomDirection.OUT:
+                return True
+            # Never show overlay in base view for large images
+            return False
+
+        if self._zoom_state == ZoomState.ZOOM_100:
+            # Only show 100% when zooming out to it (not zooming in from base)
             return self._zoom_direction == ZoomDirection.OUT
 
-        # Calculate if we're at 100% (1:1 pixel mapping with render buffer)
-        base_scale = self._get_base_scale_factor()
-        actual_zoom_pct = self._zoom_level * base_scale * self._device_pixel_ratio * 100
-
-        # If at 100% zoom, only show if zooming out to it (not zooming in from base)
-        if abs(actual_zoom_pct - 100.0) < 0.5:  # Within 0.5% of 100%
-            # Don't show 100% when zooming in from base view
-            if self._zoom_direction == ZoomDirection.IN:
-                return False
-
-        return True
+        # Always show for 200%, 400%, 800%
+        return self._zoom_state in (
+            ZoomState.ZOOM_200,
+            ZoomState.ZOOM_400,
+            ZoomState.ZOOM_800,
+        )
 
     def _show_zoom_level(self):
         """Show the zoom overlay with auto-hide timer."""
@@ -363,9 +399,10 @@ class FullscreenOverlay(QWidget):
         self._zoom_level = 1.0
         self._panning = False
         self._pan_start_pos = QPointF()
+        self._did_pan = False
 
-        # Reset zoom overlay state - entering base view
-        self._is_base_view = True
+        # Reset zoom state - entering base view
+        self._zoom_state = ZoomState.BASE_VIEW
         self._zoom_direction = ZoomDirection.NONE
         self._hide_zoom_overlay()
 
@@ -378,6 +415,9 @@ class FullscreenOverlay(QWidget):
                 if self._pixmap.isNull():
                     logger.warning(f"Failed to load image: {self.image_path}")
                     self._pixmap = QPixmap()  # Fallback to empty pixmap
+                else:
+                    # Determine if this is a small image (base view is already 100%)
+                    self._update_small_image_flag()
                 self._update_info_panel()
                 self.update()
 
@@ -503,6 +543,73 @@ class FullscreenOverlay(QWidget):
         scale_h = target_rect.height() / pixmap_size.height()
         return min(scale_w, scale_h)
 
+    def _update_small_image_flag(self):
+        """Determine if the image is 'small' (base view is already at 100%).
+
+        A small image is one where the base scale factor (fit to screen) is 1.0,
+        meaning the image fits on screen without any scaling needed.
+        """
+        base_scale = self._get_base_scale_factor()
+        # Small image means base_scale is 1.0 (no downscaling needed)
+        self._is_small_image = base_scale >= 1.0
+
+    def _get_zoom_level_for_state(self, state: ZoomState) -> float:
+        """Calculate the zoom level for a given zoom state.
+
+        Returns the zoom_level value that achieves the desired pixel mapping.
+        """
+        if state == ZoomState.BASE_VIEW:
+            return 1.0
+
+        base_scale = self._get_base_scale_factor()
+        dpr = self._device_pixel_ratio
+
+        # For ZoomState.ZOOM_100: 1 image pixel = 1 render buffer pixel
+        # render_buffer_pixel = image_pixel * base_scale * zoom_level * dpr
+        # For 100%: 1 = 1 * base_scale * zoom_level * dpr
+        # zoom_level = 1 / (base_scale * dpr)
+
+        one_to_one_zoom = 1.0 / (base_scale * dpr)
+
+        if state == ZoomState.ZOOM_100:
+            return one_to_one_zoom
+        elif state == ZoomState.ZOOM_200:
+            return one_to_one_zoom * 2
+        elif state == ZoomState.ZOOM_400:
+            return one_to_one_zoom * 4
+        elif state == ZoomState.ZOOM_800:
+            return one_to_one_zoom * 8
+
+        return 1.0
+
+    def _get_next_zoom_state(self, direction: ZoomDirection) -> ZoomState | None:
+        """Get the next zoom state in the given direction.
+
+        For small images, BASE_VIEW is the same as ZOOM_100, so we skip ZOOM_100
+        when zooming in from base view.
+
+        Returns None if we can't zoom further in that direction.
+        """
+        current_idx = _ZOOM_STATE_ORDER.index(self._zoom_state)
+
+        if direction == ZoomDirection.IN:
+            # For small images at base view, skip ZOOM_100 (go directly to ZOOM_200)
+            if self._is_small_image and self._zoom_state == ZoomState.BASE_VIEW:
+                return ZoomState.ZOOM_200
+
+            if current_idx < len(_ZOOM_STATE_ORDER) - 1:
+                return _ZOOM_STATE_ORDER[current_idx + 1]
+
+        elif direction == ZoomDirection.OUT:
+            if current_idx > 0:
+                next_state = _ZOOM_STATE_ORDER[current_idx - 1]
+                # For small images, ZOOM_100 is the same as BASE_VIEW
+                if self._is_small_image and next_state == ZoomState.ZOOM_100:
+                    return ZoomState.BASE_VIEW
+                return next_state
+
+        return None
+
     def paintEvent(self, event: QPaintEvent):
         """Custom painting to handle aspect ratio, letterboxing, zoom, and pan.
 
@@ -578,13 +685,8 @@ class FullscreenOverlay(QWidget):
             center_pos = self._screen_to_image_coords(center)
             self._zoom_out(center_pos)
         elif _match_shortcut(event, Config.SHORTCUTS.get(Shortcut.ZOOM_RESET, "0")):
-            # Reset zoom
-            self._transform.reset()
-            self._zoom_level = 1.0
-            self._is_base_view = True
-            self._zoom_direction = ZoomDirection.NONE
-            self._hide_zoom_overlay()
-            self.update()
+            # Reset zoom to base view
+            self._zoom_to_base_view()
         else:
             super().keyPressEvent(event)
 
@@ -631,82 +733,59 @@ class FullscreenOverlay(QWidget):
 
             self._wheel_acc = 0
 
-    def _get_1_to_1_zoom_level(self) -> float:
-        """Calculate the zoom level for 1:1 pixel mapping with render buffer.
-
-        At this zoom level, 1 image pixel = 1 render buffer pixel.
-        Since render buffer = logical size * DPR, and we apply base_scale
-        at the painter level, the zoom level for 1:1 is:
-        1 / (base_scale * DPR)
-        """
-        base_scale = self._get_base_scale_factor()
-        return 1.0 / (base_scale * self._device_pixel_ratio)
-
-    def _zoom_in(self, center_pos: QPointF):
-        """Zoom in, centered on the given position (in image coordinates)."""
-        if self._zoom_level >= Config.ZOOM_MAX:
-            logger.debug("Already at max zoom level.")
-            return
-
-        # Mark that we're zooming in
-        self._zoom_direction = ZoomDirection.IN
-        self._is_base_view = False
-
-        # Calculate 1:1 zoom level for snapping
-        one_to_one_zoom = self._get_1_to_1_zoom_level()
-
-        factor = Config.ZOOM_FACTOR
-        next_zoom_level = self._zoom_level * factor
-
-        # Snap to 1:1 (100% in render buffer terms) when crossing that threshold
-        if self._zoom_level < one_to_one_zoom < next_zoom_level:
-            factor = one_to_one_zoom / self._zoom_level
-            self._zoom_level = one_to_one_zoom
-            logger.debug("Snapped to 1:1 pixel zoom (100% render buffer)")
-        else:
-            self._zoom_level = next_zoom_level
-
-        if self._zoom_level > Config.ZOOM_MAX:
-            self._zoom_level = Config.ZOOM_MAX
-
-        self._apply_zoom(factor, center_pos)
-        self._show_zoom_level()
-
-    def _zoom_out(self, center_pos: QPointF):
-        """Zoom out, centered on the given position (in image coordinates)."""
-        if self._zoom_level <= 1.0:
-            logger.debug("Already at base zoom level.")
-            return
-
-        # Mark that we're zooming out
+    def _zoom_to_base_view(self):
+        """Reset zoom to base view."""
+        self._transform.reset()
+        self._zoom_level = 1.0
+        self._zoom_state = ZoomState.BASE_VIEW
         self._zoom_direction = ZoomDirection.OUT
-
-        # Calculate 1:1 zoom level for snapping
-        one_to_one_zoom = self._get_1_to_1_zoom_level()
-
-        factor = 1.0 / Config.ZOOM_FACTOR
-        next_zoom_level = self._zoom_level * factor
-
-        # Snap to 1:1 (100% in render buffer terms) when crossing that threshold
-        if self._zoom_level > one_to_one_zoom > next_zoom_level:
-            factor = one_to_one_zoom / self._zoom_level
-            self._zoom_level = one_to_one_zoom
-            logger.debug("Snapped to 1:1 pixel zoom (100% render buffer)")
+        # Only show overlay for small images when returning to base
+        if self._is_small_image:
+            self._show_zoom_level()
         else:
-            self._zoom_level = next_zoom_level
+            self._hide_zoom_overlay()
+        self.update()
 
-        if self._zoom_level < 1.0:
-            self._zoom_level = 1.0
+    def _zoom_to_state(self, new_state: ZoomState, center_pos: QPointF):
+        """Zoom to a specific state, centered on the given position."""
+        old_zoom_level = self._zoom_level
+        new_zoom_level = self._get_zoom_level_for_state(new_state)
 
-        if self._zoom_level == 1.0:
+        self._zoom_state = new_state
+        self._zoom_level = new_zoom_level
+
+        if new_state == ZoomState.BASE_VIEW:
             self._transform.reset()
-            self._is_base_view = True
-            self._show_zoom_level()  # Show when returning to base by zooming out
+            self._show_zoom_level()
             self.update()
         else:
-            self._is_base_view = False
+            factor = new_zoom_level / old_zoom_level
             self._apply_zoom(factor, center_pos)
             self._show_zoom_level()
+
+    def _zoom_in(self, center_pos: QPointF):
+        """Zoom in to the next discrete zoom state."""
+        next_state = self._get_next_zoom_state(ZoomDirection.IN)
+        if next_state is None:
+            logger.debug("Already at max zoom state.")
+            return
+
+        self._zoom_direction = ZoomDirection.IN
+        self._zoom_to_state(next_state, center_pos)
+
+    def _zoom_out(self, center_pos: QPointF):
+        """Zoom out to the previous discrete zoom state."""
+        if self._zoom_state == ZoomState.BASE_VIEW:
+            logger.debug("Already at base view.")
+            return
+
+        next_state = self._get_next_zoom_state(ZoomDirection.OUT)
+        if next_state is None:
+            logger.debug("Already at base view.")
+            return
+
+        self._zoom_direction = ZoomDirection.OUT
+        self._zoom_to_state(next_state, center_pos)
 
     def _apply_zoom(self, factor: float, center_pos: QPointF):
         """Apply zoom transformation centered on the given image position."""
@@ -720,11 +799,16 @@ class FullscreenOverlay(QWidget):
         self.update()
 
     def mousePressEvent(self, event: QMouseEvent):
-        """Handle mouse press events to initiate panning."""
-        if event.button() == Qt.LeftButton and self._zoom_level > 1.0:
-            self._panning = True
-            self._pan_start_pos = event.position()
-            self.setCursor(Qt.ClosedHandCursor)
+        """Handle mouse press to initiate panning or prepare for click-to-zoom."""
+        if event.button() == Qt.LeftButton:
+            self._click_start_pos = event.position()
+            self._did_pan = False
+
+            # Only enable panning if zoomed in
+            if self._zoom_level > 1.0:
+                self._panning = True
+                self._pan_start_pos = event.position()
+                self.setCursor(Qt.ClosedHandCursor)
 
     def mouseMoveEvent(self, event: QMouseEvent):
         """Handle mouse move events to perform panning."""
@@ -733,6 +817,11 @@ class FullscreenOverlay(QWidget):
 
         delta = event.position() - self._pan_start_pos
         self._pan_start_pos = event.position()
+
+        # Track if we've moved significantly (to distinguish pan from click)
+        total_delta = event.position() - self._click_start_pos
+        if abs(total_delta.x()) > 5 or abs(total_delta.y()) > 5:
+            self._did_pan = True
 
         # Get base scale to convert delta to image coordinates
         base_scale = self._get_base_scale_factor()
@@ -832,8 +921,39 @@ class FullscreenOverlay(QWidget):
         self.update()
 
     def mouseReleaseEvent(self, event: QMouseEvent):
-        """Handle mouse release events to stop panning."""
-        if event.button() == Qt.LeftButton and self._panning:
+        """Handle mouse release events to stop panning or perform click-to-zoom."""
+        if event.button() == Qt.LeftButton:
+            was_panning = self._panning
             self._panning = False
             self.setCursor(Qt.ArrowCursor)
-            self._clamp_pan()
+
+            if was_panning:
+                self._clamp_pan()
+
+            # Handle click-to-zoom if we didn't pan
+            if not self._did_pan:
+                self._handle_click_zoom(event.position())
+
+    def _handle_click_zoom(self, screen_pos: QPointF):
+        """Handle click-to-zoom interaction.
+
+        Click behavior:
+        - In base view (large image): click zooms to 100%
+        - At 100% or beyond: click returns to base view
+        - Small image at base view (100%): click does nothing
+        - Small image zoomed beyond base: click returns to base view (100%)
+        """
+        center_pos = self._screen_to_image_coords(screen_pos)
+
+        if self._zoom_state == ZoomState.BASE_VIEW:
+            if self._is_small_image:
+                # Small image at base view (already 100%): do nothing
+                return
+            else:
+                # Large image in base view: zoom to 100%
+                self._zoom_direction = ZoomDirection.IN
+                self._zoom_to_state(ZoomState.ZOOM_100, center_pos)
+        else:
+            # Zoomed in (100% or beyond): return to base view
+            self._zoom_direction = ZoomDirection.OUT
+            self._zoom_to_base_view()
