@@ -45,6 +45,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from . import platform
 from .config import Config, Shortcut
 from .db_fields import EDITABLE_FIELDS, DBFields
 from .edit_panel import EditPanel
@@ -53,7 +54,6 @@ from .exif_man import ExifManager, ExifPanel
 from .filter_panel import FolderFilterPanel
 from .metadata_db import MetadataDBManager
 from .model import ImageItem, OnFullscreenExitMultipleSelected
-from .platform import PLATFORM, get_platform_true_resolution
 from .status_bar import ErrorListDialog, LoadingStatusBar
 from .support import save_last_folder
 from .thumb_man import ThumbnailManager, scan_folder
@@ -443,6 +443,8 @@ class FullscreenOverlay(QWidget):
         if self._pixmap.isNull():
             return
 
+        # FIXME correct : the full image should be painted and that one scaled
+        # not the scaled one and transformed later
         # --- Base Image Positioning (Letterboxing) ---
         scaled_pixmap = self._get_base_scaled_pixmap()
 
@@ -1674,14 +1676,17 @@ class MainWindow(QMainWindow):
         buffer_w = int(log_geo.width() * dpr)
         buffer_h = int(log_geo.height() * dpr)
 
-        print("--- Qt Info ---")
-        print(f"Screen Name:    {current_screen.name()}")
-        print(f"Logical Size:   {log_geo.width()} x {log_geo.height()}")
-        print(f"DPR:            {dpr}")
-        print(f"Render Buffer:  {buffer_w} x {buffer_h}")
+        logger.info("--- Qt Info ---")
+        logger.info(f"Screen Name:    {current_screen.name()}")
+        logger.info(f"Logical Size:   {log_geo.width()} x {log_geo.height()}")
+        logger.info(f"DPR:            {dpr}")
+        logger.info(f"Render Buffer:  {buffer_w} x {buffer_h}")
 
-        phy_w, phy_h = get_platform_true_resolution(current_screen)
-        print(f"Physical resolution:  {phy_w} x {phy_h}")
+        # not actually useful : cannot be used by the macos rendering (without changing
+        # the display resolution and flickering => so forget about it)
+        # TODO remove
+        phy_w, phy_h = platform.get_platform_true_resolution(current_screen)
+        logger.info(f"Physical resolution:  {phy_w} x {phy_h}")
 
         if len(selected_indices) > 1:
             visible_indices = selected_indices
