@@ -77,7 +77,7 @@ class Config:
     ZOOM_WHEEL_SENSITIVITY = 1
     PAN_EMPTY_SPACE = 300
 
-    # Info Panel
+    # Info Panel in fullscreen overlay
     INFO_PANEL_BACKGROUND_COLOR = "black"
     INFO_PANEL_BACKGROUND_TRANSPARENCY = 80  # Percent
     INFO_PANEL_TEXT_COLOR = "white"
