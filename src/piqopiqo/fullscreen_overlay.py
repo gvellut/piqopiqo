@@ -33,62 +33,9 @@ from PySide6.QtWidgets import (
 
 from .config import Config, Shortcut
 from .db_fields import DBFields
+from .shortcuts import HardcodedShortcut, match_hardcoded, match_shortcut_enum
 
 logger = logging.getLogger(__name__)
-
-
-# Map of modifier name => Qt modifier flag
-_MODIFIER_MAP = {
-    "ctrl": Qt.ControlModifier,
-    "alt": Qt.AltModifier,
-    "cmd": Qt.MetaModifier,
-    "meta": Qt.MetaModifier,
-    "shift": Qt.ShiftModifier,
-}
-
-# Map of special key name => Qt.Key
-_SPECIAL_KEY_MAP = {
-    "=": Qt.Key_Equal,
-    "-": Qt.Key_Minus,
-    "`": Qt.Key_QuoteLeft,
-    "0": Qt.Key_0,
-    "1": Qt.Key_1,
-    "2": Qt.Key_2,
-    "3": Qt.Key_3,
-    "4": Qt.Key_4,
-    "5": Qt.Key_5,
-    "6": Qt.Key_6,
-    "7": Qt.Key_7,
-    "8": Qt.Key_8,
-    "9": Qt.Key_9,
-}
-
-
-def _match_shortcut(event: QKeyEvent, shortcut_str: str) -> bool:
-    """Check if a key event matches a shortcut string."""
-    parts = [p.strip().lower() for p in shortcut_str.split("+")]
-    key_str = parts[-1]
-    modifier_names = parts[:-1]
-
-    # Build expected modifiers
-    expected_mods = Qt.KeyboardModifier(0)
-    for mod_name in modifier_names:
-        if mod_name in _MODIFIER_MAP:
-            expected_mods |= _MODIFIER_MAP[mod_name]
-
-    # Get expected key
-    if key_str in _SPECIAL_KEY_MAP:
-        expected_key = _SPECIAL_KEY_MAP[key_str]
-    elif len(key_str) == 1:
-        expected_key = getattr(Qt, f"Key_{key_str.upper()}", None)
-        if expected_key is None:
-            return False
-    else:
-        expected_key = getattr(Qt, f"Key_{key_str.capitalize()}", None)
-        if expected_key is None:
-            return False
-
-    return event.key() == expected_key and event.modifiers() == expected_mods
 
 
 def _get_label_color(label: str) -> str | None:
@@ -154,6 +101,12 @@ class FullscreenOverlay(QWidget):
         self._pan_start_pos = QPointF()
         self._click_start_pos = QPointF()  # Track click position for click-to-zoom
         self._did_pan = False  # Track if we panned during this click
+
+        # Pan cursor delay timer - prevents cursor from changing to hand on brief clicks
+        self._pan_cursor_timer = QTimer(self)
+        self._pan_cursor_timer.setSingleShot(True)
+        self._pan_cursor_timer.timeout.connect(self._activate_pan_cursor)
+        self._pan_mode_active = False  # True once cursor changed to hand
 
         self._wheel_acc = 0
 
@@ -437,6 +390,118 @@ class FullscreenOverlay(QWidget):
             global_index = self.visible_indices[self.current_visible_idx]
             self.index_changed.emit(global_index)
 
+    def _navigate_to_preserve_zoom(self, new_visible_idx: int):
+        """Navigate to a new image while preserving zoom level and center position.
+
+        Keeps the same zoom factor and attempts to keep the image centered
+        at the same screen position.
+        """
+        total_visible = len(self.visible_indices)
+        if total_visible == 0:
+            return
+
+        new_visible_idx = (
+            new_visible_idx % total_visible + total_visible
+        ) % total_visible
+
+        if new_visible_idx != self.current_visible_idx:
+            # Save current zoom state
+            saved_zoom_level = self._zoom_level
+            saved_zoom_state = self._zoom_state
+            saved_zoom_direction = self._zoom_direction
+
+            # Get current center of view in normalized image coordinates (0-1)
+            old_center = self._get_view_center_normalized()
+
+            # Load new image (without resetting zoom state)
+            self.current_visible_idx = new_visible_idx
+            self._load_image_only()
+
+            # Restore zoom state
+            self._zoom_level = saved_zoom_level
+            self._zoom_state = saved_zoom_state
+            self._zoom_direction = saved_zoom_direction
+
+            # Recalculate transform to keep center at same position
+            self._apply_zoom_centered_normalized(old_center)
+
+            # Update small image flag for new image
+            self._update_small_image_flag()
+
+            # Emit signal
+            global_index = self.visible_indices[self.current_visible_idx]
+            self.index_changed.emit(global_index)
+
+    def _load_image_only(self):
+        """Load the image at current index WITHOUT resetting zoom/pan state."""
+        global_index = self.visible_indices[self.current_visible_idx]
+        if 0 <= global_index < len(self.all_items):
+            image_data = self.all_items[global_index]
+            self.image_path = image_data.path
+            if self.image_path:
+                self._pixmap = QPixmap(self.image_path)
+                if self._pixmap.isNull():
+                    logger.warning(f"Failed to load image: {self.image_path}")
+                    self._pixmap = QPixmap()
+                self._update_info_panel()
+                self.update()
+
+    def _get_view_center_normalized(self) -> QPointF:
+        """Get the current center of view in normalized image coordinates (0-1).
+
+        Returns the point on the image that is currently at the screen center,
+        normalized to 0-1 range relative to image dimensions.
+        """
+        if self._pixmap.isNull():
+            return QPointF(0.5, 0.5)
+
+        # Screen center
+        screen_center = QPointF(self.width() / 2.0, self.height() / 2.0)
+
+        # Convert screen center to image coordinates
+        image_coords = self._screen_to_image_coords(screen_center)
+
+        # Account for current transform (inverse to get original image coords)
+        inverted, ok = self._transform.inverted()
+        if ok:
+            image_coords = inverted.map(image_coords)
+
+        # Normalize to 0-1 range
+        norm_x = image_coords.x() / self._pixmap.width()
+        norm_y = image_coords.y() / self._pixmap.height()
+
+        # Clamp to valid range
+        norm_x = max(0.0, min(1.0, norm_x))
+        norm_y = max(0.0, min(1.0, norm_y))
+
+        return QPointF(norm_x, norm_y)
+
+    def _apply_zoom_centered_normalized(self, normalized_center: QPointF):
+        """Apply current zoom level centered on a normalized image position.
+
+        Args:
+            normalized_center: Position in 0-1 range relative to image dimensions
+        """
+        if self._pixmap.isNull():
+            return
+
+        # Convert normalized to actual image coordinates
+        img_x = normalized_center.x() * self._pixmap.width()
+        img_y = normalized_center.y() * self._pixmap.height()
+        center_pos = QPointF(img_x, img_y)
+
+        # Reset transform and apply zoom centered on this point
+        self._transform.reset()
+
+        if self._zoom_state != ZoomState.BASE_VIEW:
+            # Apply zoom centered on the position
+            self._transform.translate(center_pos.x(), center_pos.y())
+            self._transform.scale(self._zoom_level, self._zoom_level)
+            self._transform.translate(-center_pos.x(), -center_pos.y())
+
+        self._clamp_pan()
+        self.update()
+
     def show_on_screen(self, target_screen: QScreen):
         """Moves the overlay to the specific screen and shows it fullscreen."""
 
@@ -663,28 +728,31 @@ class FullscreenOverlay(QWidget):
 
     def keyPressEvent(self, event: QKeyEvent):
         """Handle keyboard events to dismiss the overlay and navigate images."""
-        key = event.key()
-
-        if key in (Qt.Key_Escape, Qt.Key_Space):
+        # Hardcoded shortcuts (non-configurable)
+        if match_hardcoded(event, HardcodedShortcut.ESCAPE):
             self.close()
-        elif key == Qt.Key_Left:
-            self._navigate_to(self.current_visible_idx - 1)
-        elif key == Qt.Key_Right:
-            self._navigate_to(self.current_visible_idx + 1)
-        elif key in (Qt.Key_Up, Qt.Key_Down):
-            # Ignore up/down keys in fullscreen
-            pass
-        elif _match_shortcut(event, Config.SHORTCUTS.get(Shortcut.ZOOM_IN, "=")):
+        elif match_hardcoded(event, HardcodedShortcut.SPACE):
+            self.close()
+        elif match_hardcoded(event, HardcodedShortcut.LEFT):
+            self._navigate_to_preserve_zoom(self.current_visible_idx - 1)
+        elif match_hardcoded(event, HardcodedShortcut.RIGHT):
+            self._navigate_to_preserve_zoom(self.current_visible_idx + 1)
+        elif match_hardcoded(event, HardcodedShortcut.UP):
+            pass  # Ignore up key in fullscreen
+        elif match_hardcoded(event, HardcodedShortcut.DOWN):
+            pass  # Ignore down key in fullscreen
+        # Configurable shortcuts
+        elif match_shortcut_enum(event, Shortcut.ZOOM_IN):
             # Zoom in centered on screen center
             center = QPointF(self.width() / 2.0, self.height() / 2.0)
             center_pos = self._screen_to_image_coords(center)
             self._zoom_in(center_pos)
-        elif _match_shortcut(event, Config.SHORTCUTS.get(Shortcut.ZOOM_OUT, "-")):
+        elif match_shortcut_enum(event, Shortcut.ZOOM_OUT):
             # Zoom out centered on screen center
             center = QPointF(self.width() / 2.0, self.height() / 2.0)
             center_pos = self._screen_to_image_coords(center)
             self._zoom_out(center_pos)
-        elif _match_shortcut(event, Config.SHORTCUTS.get(Shortcut.ZOOM_RESET, "0")):
+        elif match_shortcut_enum(event, Shortcut.ZOOM_RESET):
             # Reset zoom to base view
             self._zoom_to_base_view()
         else:
@@ -799,16 +867,37 @@ class FullscreenOverlay(QWidget):
         self.update()
 
     def mousePressEvent(self, event: QMouseEvent):
-        """Handle mouse press to initiate panning or prepare for click-to-zoom."""
+        """Handle mouse press to initiate panning or zoom in.
+
+        Behavior:
+        - If zoomed in: start panning, but delay cursor change to hand
+        - If at base view with large image: zoom in immediately on mouse down
+        """
         if event.button() == Qt.LeftButton:
             self._click_start_pos = event.position()
             self._did_pan = False
+            self._pan_mode_active = False
 
-            # Only enable panning if zoomed in
             if self._zoom_level > 1.0:
+                # Already zoomed in: enable panning with delayed cursor change
                 self._panning = True
                 self._pan_start_pos = event.position()
-                self.setCursor(Qt.ClosedHandCursor)
+                # Start timer for cursor change (don't change cursor immediately)
+                self._pan_cursor_timer.start(Config.PAN_CURSOR_DELAY_MS)
+            elif self._zoom_state == ZoomState.BASE_VIEW and not self._is_small_image:
+                # Base view with large image: zoom in immediately on mouse down
+                center_pos = self._screen_to_image_coords(event.position())
+                self._zoom_direction = ZoomDirection.IN
+                self._zoom_to_state(ZoomState.ZOOM_100, center_pos)
+                # Now enable panning since we're zoomed in
+                self._panning = True
+                self._pan_start_pos = event.position()
+
+    def _activate_pan_cursor(self):
+        """Called after delay to activate pan cursor."""
+        if self._panning:
+            self._pan_mode_active = True
+            self.setCursor(Qt.ClosedHandCursor)
 
     def mouseMoveEvent(self, event: QMouseEvent):
         """Handle mouse move events to perform panning."""
@@ -924,35 +1013,34 @@ class FullscreenOverlay(QWidget):
         """Handle mouse release events to stop panning or perform click-to-zoom."""
         if event.button() == Qt.LeftButton:
             was_panning = self._panning
+            was_pan_mode_active = self._pan_mode_active
+
             self._panning = False
+            self._pan_mode_active = False
+            self._pan_cursor_timer.stop()  # Cancel any pending timer
             self.setCursor(Qt.ArrowCursor)
 
             if was_panning:
                 self._clamp_pan()
 
-            # Handle click-to-zoom if we didn't pan
-            if not self._did_pan:
+            # Handle click-to-zoom only if:
+            # 1. We didn't actually pan (move > 5px)
+            # 2. Pan mode was NOT activated (cursor didn't become hand)
+            if not self._did_pan and not was_pan_mode_active:
                 self._handle_click_zoom(event.position())
 
     def _handle_click_zoom(self, screen_pos: QPointF):
-        """Handle click-to-zoom interaction.
+        """Handle click-to-zoom interaction (only zoom OUT).
 
-        Click behavior:
-        - In base view (large image): click zooms to 100%
+        Note: Zoom IN from base view now happens on mouse down in mousePressEvent.
+        This function only handles:
         - At 100% or beyond: click returns to base view
-        - Small image at base view (100%): click does nothing
-        - Small image zoomed beyond base: click returns to base view (100%)
+        - Small image at base view: click does nothing (already at 100%)
         """
-        center_pos = self._screen_to_image_coords(screen_pos)
-
         if self._zoom_state == ZoomState.BASE_VIEW:
-            if self._is_small_image:
-                # Small image at base view (already 100%): do nothing
-                return
-            else:
-                # Large image in base view: zoom to 100%
-                self._zoom_direction = ZoomDirection.IN
-                self._zoom_to_state(ZoomState.ZOOM_100, center_pos)
+            # At base view (including small images): do nothing
+            # Zoom IN for large images is handled in mousePressEvent
+            return
         else:
             # Zoomed in (100% or beyond): return to base view
             self._zoom_direction = ZoomDirection.OUT

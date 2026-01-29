@@ -10,7 +10,6 @@ from PySide6.QtCore import QRect, QRunnable, Qt, QThreadPool, Signal
 from PySide6.QtGui import (
     QAction,
     QColor,
-    QKeySequence,
     QMouseEvent,
     QPainter,
     QPaintEvent,
@@ -42,37 +41,12 @@ from .filter_panel import FolderFilterPanel
 from .fullscreen_overlay import FullscreenOverlay
 from .metadata_db import MetadataDBManager
 from .model import ImageItem, OnFullscreenExitMultipleSelected
+from .shortcuts import parse_shortcut
 from .status_bar import ErrorListDialog, LoadingStatusBar
 from .support import save_last_folder
 from .thumb_man import ThumbnailManager, scan_folder
 
 logger = logging.getLogger(__name__)
-
-
-def parse_shortcut(shortcut_str: str) -> QKeySequence:
-    """Parse a shortcut string like 'ctrl+r', 'cmd+alt+t', '=' into a QKeySequence.
-
-    Supports modifiers: ctrl, alt, cmd/meta, shift.
-    Separator: +
-    The last token is the key.
-    """
-    parts = [p.strip().lower() for p in shortcut_str.split("+")]
-    qt_parts = []
-    for part in parts[:-1]:
-        # Map modifier names to Qt-understood strings
-        if part in ("cmd", "meta"):
-            qt_parts.append("Meta")
-        elif part == "ctrl":
-            qt_parts.append("Ctrl")
-        elif part == "alt":
-            qt_parts.append("Alt")
-        elif part == "shift":
-            qt_parts.append("Shift")
-
-    key_part = parts[-1]
-    qt_parts.append(key_part.upper() if len(key_part) > 1 else key_part)
-
-    return QKeySequence("+".join(qt_parts))
 
 
 class _LabelSaveWorker(QRunnable):
