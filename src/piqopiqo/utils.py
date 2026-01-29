@@ -1,3 +1,4 @@
+from enum import StrEnum
 import logging
 import os
 import sys
@@ -30,3 +31,9 @@ def setup_logging(logger=None):
             stream=sys.stdout,
             datefmt=datefmt,
         )
+
+
+class UpperStrEnum(StrEnum):
+    @staticmethod
+    def _generate_next_value_(name, start, count, last_values):
+        return name

@@ -679,19 +679,25 @@ class MainWindow(QMainWindow):
 
         # Label shortcuts (1-9 and backtick) - application-wide
         for i in range(1, 10):
-            shortcut_enum = Shortcut(f"label_{i}")
+            shortcut_enum = Shortcut(f"LABEL_{i}")
             if shortcut_enum in shortcuts:
-                sc = QShortcut(
-                    parse_shortcut(shortcuts[shortcut_enum]),
-                    self,
-                )
-                sc.setContext(Qt.ApplicationShortcut)
                 # Find label with matching index
                 label_name = None
                 for sl in Config.STATUS_LABELS:
                     if sl.index == i:
                         label_name = sl.name
                         break
+
+                # do not set to no label if no shortcut defined
+                if label_name is None:
+                    continue
+
+                sc = QShortcut(
+                    parse_shortcut(shortcuts[shortcut_enum]),
+                    self,
+                )
+                sc.setContext(Qt.ApplicationShortcut)
+
                 sc.activated.connect(partial(self._apply_label, label_name))
 
         # No-label shortcut (backtick)

@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 
 from .config import Config, Shortcut
 from .db_fields import DBFields
-from .shortcuts import HardcodedShortcut, match_hardcoded, match_shortcut_enum
+from .shortcuts import match_shortcut_sequence, match_simple_shortcut
 
 logger = logging.getLogger(__name__)
 
@@ -728,31 +728,32 @@ class FullscreenOverlay(QWidget):
 
     def keyPressEvent(self, event: QKeyEvent):
         """Handle keyboard events to dismiss the overlay and navigate images."""
+
         # Hardcoded shortcuts (non-configurable)
-        if match_hardcoded(event, HardcodedShortcut.ESCAPE):
+        if match_simple_shortcut(event, Qt.Key_Escape) or match_simple_shortcut(
+            event, Qt.Key_Space
+        ):
             self.close()
-        elif match_hardcoded(event, HardcodedShortcut.SPACE):
-            self.close()
-        elif match_hardcoded(event, HardcodedShortcut.LEFT):
+        elif match_simple_shortcut(event, Qt.Key_Left):
             self._navigate_to_preserve_zoom(self.current_visible_idx - 1)
-        elif match_hardcoded(event, HardcodedShortcut.RIGHT):
+        elif match_simple_shortcut(event, Qt.Key_Right):
             self._navigate_to_preserve_zoom(self.current_visible_idx + 1)
-        elif match_hardcoded(event, HardcodedShortcut.UP):
+        elif match_simple_shortcut(event, Qt.Key_Up):
             pass  # Ignore up key in fullscreen
-        elif match_hardcoded(event, HardcodedShortcut.DOWN):
+        elif match_simple_shortcut(event, Qt.Key_Down):
             pass  # Ignore down key in fullscreen
         # Configurable shortcuts
-        elif match_shortcut_enum(event, Shortcut.ZOOM_IN):
+        elif match_shortcut_sequence(event, Config.SHORTCUTS.get(Shortcut.ZOOM_IN)):
             # Zoom in centered on screen center
             center = QPointF(self.width() / 2.0, self.height() / 2.0)
             center_pos = self._screen_to_image_coords(center)
             self._zoom_in(center_pos)
-        elif match_shortcut_enum(event, Shortcut.ZOOM_OUT):
+        elif match_shortcut_sequence(event, Config.SHORTCUTS.get(Shortcut.ZOOM_OUT)):
             # Zoom out centered on screen center
             center = QPointF(self.width() / 2.0, self.height() / 2.0)
             center_pos = self._screen_to_image_coords(center)
             self._zoom_out(center_pos)
-        elif match_shortcut_enum(event, Shortcut.ZOOM_RESET):
+        elif match_shortcut_sequence(event, Config.SHORTCUTS.get(Shortcut.ZOOM_RESET)):
             # Reset zoom to base view
             self._zoom_to_base_view()
         else:

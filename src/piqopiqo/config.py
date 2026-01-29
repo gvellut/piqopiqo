@@ -1,26 +1,27 @@
-from enum import Enum
+from enum import auto
 import os
 
-from piqopiqo.model import OnFullscreenExitMultipleSelected, StatusLabel
+from .model import OnFullscreenExitMultipleSelected, StatusLabel
+from .utils import UpperStrEnum
 
 # Environment variable prefix for config overrides
 ENV_PREFIX = "PIQO_"
 
 
-class Shortcut(Enum):
-    ZOOM_IN = "zoom_in"
-    ZOOM_OUT = "zoom_out"
-    ZOOM_RESET = "zoom_reset"
-    LABEL_1 = "label_1"
-    LABEL_2 = "label_2"
-    LABEL_3 = "label_3"
-    LABEL_4 = "label_4"
-    LABEL_5 = "label_5"
-    LABEL_6 = "label_6"
-    LABEL_7 = "label_7"
-    LABEL_8 = "label_8"
-    LABEL_9 = "label_9"
-    LABEL_NONE = "label_none"
+class Shortcut(UpperStrEnum):
+    ZOOM_IN = auto()
+    ZOOM_OUT = auto()
+    ZOOM_RESET = auto()
+    LABEL_1 = auto()
+    LABEL_2 = auto()
+    LABEL_3 = auto()
+    LABEL_4 = auto()
+    LABEL_5 = auto()
+    LABEL_6 = auto()
+    LABEL_7 = auto()
+    LABEL_8 = auto()
+    LABEL_9 = auto()
+    LABEL_NONE = auto()
 
 
 class Config:
