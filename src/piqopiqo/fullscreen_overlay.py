@@ -107,6 +107,7 @@ class FullscreenOverlay(QWidget):
         self._pan_cursor_timer.setSingleShot(True)
         self._pan_cursor_timer.timeout.connect(self._activate_pan_cursor)
         self._pan_mode_active = False  # True once cursor changed to hand
+        self._just_zoomed_in = False  # True when we zoomed in on mouse down
 
         self._wheel_acc = 0
 
@@ -871,13 +872,14 @@ class FullscreenOverlay(QWidget):
         """Handle mouse press to initiate panning or zoom in.
 
         Behavior:
-        - If zoomed in: start panning, but delay cursor change to hand
+        - If zoomed in: start panning, delay cursor change (zoom out on quick release)
         - If at base view with large image: zoom in immediately on mouse down
         """
         if event.button() == Qt.LeftButton:
             self._click_start_pos = event.position()
             self._did_pan = False
             self._pan_mode_active = False
+            self._just_zoomed_in = False
 
             if self._zoom_level > 1.0:
                 # Already zoomed in: enable panning with delayed cursor change
@@ -890,7 +892,9 @@ class FullscreenOverlay(QWidget):
                 center_pos = self._screen_to_image_coords(event.position())
                 self._zoom_direction = ZoomDirection.IN
                 self._zoom_to_state(ZoomState.ZOOM_100, center_pos)
-                # Now enable panning since we're zoomed in
+                # Mark that we just zoomed in (so release doesn't zoom back out)
+                self._just_zoomed_in = True
+                # Enable panning (cursor changes only on movement)
                 self._panning = True
                 self._pan_start_pos = event.position()
 
@@ -912,6 +916,10 @@ class FullscreenOverlay(QWidget):
         total_delta = event.position() - self._click_start_pos
         if abs(total_delta.x()) > 5 or abs(total_delta.y()) > 5:
             self._did_pan = True
+            # If we just zoomed in and now moved, activate pan mode + cursor
+            if self._just_zoomed_in and not self._pan_mode_active:
+                self._pan_mode_active = True
+                self.setCursor(Qt.ClosedHandCursor)
 
         # Get base scale to convert delta to image coordinates
         base_scale = self._get_base_scale_factor()
@@ -1015,19 +1023,22 @@ class FullscreenOverlay(QWidget):
         if event.button() == Qt.LeftButton:
             was_panning = self._panning
             was_pan_mode_active = self._pan_mode_active
+            just_zoomed_in = self._just_zoomed_in
 
             self._panning = False
             self._pan_mode_active = False
+            self._just_zoomed_in = False
             self._pan_cursor_timer.stop()  # Cancel any pending timer
             self.setCursor(Qt.ArrowCursor)
 
             if was_panning:
                 self._clamp_pan()
 
-            # Handle click-to-zoom only if:
+            # Handle click-to-zoom (zoom OUT) only if:
             # 1. We didn't actually pan (move > 5px)
             # 2. Pan mode was NOT activated (cursor didn't become hand)
-            if not self._did_pan and not was_pan_mode_active:
+            # 3. We didn't just zoom in on mouse down
+            if not self._did_pan and not was_pan_mode_active and not just_zoomed_in:
                 self._handle_click_zoom(event.position())
 
     def _handle_click_zoom(self, screen_pos: QPointF):

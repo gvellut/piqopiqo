@@ -77,7 +77,7 @@ class Config:
 
     ZOOM_WHEEL_SENSITIVITY = 1
     PAN_EMPTY_SPACE = 300
-    PAN_CURSOR_DELAY_MS = 150  # Delay before showing pan cursor on mouse press
+    PAN_CURSOR_DELAY_MS = 100  # Delay before showing pan cursor on mouse press
 
     # Info Panel in fullscreen overlay
     INFO_PANEL_BACKGROUND_COLOR = "black"
