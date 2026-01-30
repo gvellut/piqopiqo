@@ -122,6 +122,10 @@ class FullscreenOverlay(QWidget):
         self._overlay_timer.timeout.connect(self._hide_zoom_overlay)
         self._show_zoom_overlay = False
 
+        # Per-side allowed extra space (set when navigating with preserved zoom)
+        # This allows space > PAN_EMPTY_SPACE on sides where it was larger at load time
+        self._allowed_extra_space = {"left": 0, "right": 0, "top": 0, "bottom": 0}
+
         # Device pixel ratio for this screen (will be set in show_on_screen)
         self._device_pixel_ratio = 1.0
 
@@ -346,6 +350,28 @@ class FullscreenOverlay(QWidget):
                 y = self.height() - self.info_panel.height() - margin_edge
             self.info_panel.move(margin_side, y)
 
+    def _load_pixmap_at_current_index(self) -> bool:
+        """Load the pixmap for the current index.
+
+        Returns True if successfully loaded, False otherwise.
+        This is the common loading logic shared by _load_current_image and
+        _load_image_only.
+        """
+        global_index = self.visible_indices[self.current_visible_idx]
+        if 0 <= global_index < len(self.all_items):
+            image_data = self.all_items[global_index]
+            self.image_path = image_data.path
+            if self.image_path:
+                self._pixmap = QPixmap(self.image_path)
+                if self._pixmap.isNull():
+                    logger.warning(f"Failed to load image: {self.image_path}")
+                    self._pixmap = QPixmap()
+                    return False
+                self._update_small_image_flag()
+                self._update_info_panel()
+                return True
+        return False
+
     def _load_current_image(self):
         """Load the image at the current index and reset zoom/pan state."""
         # Reset transformation state
@@ -360,20 +386,11 @@ class FullscreenOverlay(QWidget):
         self._zoom_direction = ZoomDirection.NONE
         self._hide_zoom_overlay()
 
-        global_index = self.visible_indices[self.current_visible_idx]
-        if 0 <= global_index < len(self.all_items):
-            image_data = self.all_items[global_index]
-            self.image_path = image_data.path
-            if self.image_path:
-                self._pixmap = QPixmap(self.image_path)
-                if self._pixmap.isNull():
-                    logger.warning(f"Failed to load image: {self.image_path}")
-                    self._pixmap = QPixmap()  # Fallback to empty pixmap
-                else:
-                    # Determine if this is a small image (base view is already 100%)
-                    self._update_small_image_flag()
-                self._update_info_panel()
-                self.update()
+        # Reset allowed extra space (no extra allowance in base view)
+        self._reset_allowed_extra_space()
+
+        if self._load_pixmap_at_current_index():
+            self.update()
 
     def _navigate_to(self, new_visible_idx: int):
         """Navigate to a new image index within the visible set."""
@@ -397,6 +414,11 @@ class FullscreenOverlay(QWidget):
         Keeps the same zoom factor. The center of the image preserves its screen
         position - i.e., the center of the new image appears at the same screen
         coordinates as the center of the old image (can be negative if offscreen).
+
+        Special cases:
+        - If the new image would be completely offscreen, show it in base view
+        - Allowed extra space is set based on the initial position to prevent
+          clamping from shifting the image when navigating back and forth
         """
         total_visible = len(self.visible_indices)
         if total_visible == 0:
@@ -407,6 +429,10 @@ class FullscreenOverlay(QWidget):
         ) % total_visible
 
         if new_visible_idx != self.current_visible_idx:
+            # Before leaving, update allowed extra space based on current pan state
+            # If user panned and reduced space below PAN_EMPTY_SPACE, that's recorded
+            self._update_allowed_extra_space_after_pan()
+
             # Get where the old image's center is on screen (can be offscreen)
             old_image_center_screen = self._get_image_center_screen_coords()
 
@@ -424,11 +450,18 @@ class FullscreenOverlay(QWidget):
             self._zoom_state = saved_zoom_state
             self._zoom_direction = saved_zoom_direction
 
-            # Position new image center at the same screen position
-            self._position_image_center_at_screen(old_image_center_screen)
+            # Position new image center at the same screen position (without clamping)
+            self._position_image_center_at_screen_no_clamp(old_image_center_screen)
 
-            # Update small image flag for new image
-            self._update_small_image_flag()
+            # Check if the new image would be completely offscreen
+            if self._is_image_completely_offscreen():
+                # Fall back to base view
+                self._load_current_image()
+            else:
+                # Set allowed extra space based on the new position
+                self._set_allowed_extra_space_from_current()
+                # Now clamp with the new allowed space
+                self._clamp_pan()
 
             # Emit signal
             global_index = self.visible_indices[self.current_visible_idx]
@@ -438,17 +471,7 @@ class FullscreenOverlay(QWidget):
 
     def _load_image_only(self):
         """Load the image at current index WITHOUT resetting zoom/pan state."""
-        global_index = self.visible_indices[self.current_visible_idx]
-        if 0 <= global_index < len(self.all_items):
-            image_data = self.all_items[global_index]
-            self.image_path = image_data.path
-            if self.image_path:
-                self._pixmap = QPixmap(self.image_path)
-                if self._pixmap.isNull():
-                    logger.warning(f"Failed to load image: {self.image_path}")
-                    self._pixmap = QPixmap()
-                self._update_info_panel()
-                self.update()
+        self._load_pixmap_at_current_index()
 
     def _get_image_center_screen_coords(self) -> QPointF:
         """Get the screen coordinates where the image center is currently displayed.
@@ -536,6 +559,71 @@ class FullscreenOverlay(QWidget):
 
         self._clamp_pan()
         self.update()
+
+    def _position_image_center_at_screen_no_clamp(self, target_screen_pos: QPointF):
+        """Position the current image so its center is at the given screen position.
+
+        Same as _position_image_center_at_screen but does NOT clamp or update.
+        Used during navigation to allow setting allowed extra space first.
+
+        Args:
+            target_screen_pos: The screen position where the image center should appear
+        """
+        if self._pixmap.isNull():
+            return
+
+        new_img_center = QPointF(
+            self._pixmap.width() / 2.0, self._pixmap.height() / 2.0
+        )
+
+        # Get base parameters for new image
+        base_scale = self._get_base_scale_factor()
+        pixmap_size = self._pixmap.size()
+        scaled_width = pixmap_size.width() * base_scale
+        scaled_height = pixmap_size.height() * base_scale
+        target_rect = self.rect()
+        base_x = (target_rect.width() - scaled_width) / 2
+        base_y = (target_rect.height() - scaled_height) / 2
+
+        # Reset transform
+        self._transform.reset()
+
+        if self._zoom_state != ZoomState.BASE_VIEW:
+            # Apply zoom centered on image center
+            self._transform.translate(new_img_center.x(), new_img_center.y())
+            self._transform.scale(self._zoom_level, self._zoom_level)
+            self._transform.translate(-new_img_center.x(), -new_img_center.y())
+
+        # Calculate where image center currently appears on screen
+        current_screen_x = base_x + new_img_center.x() * base_scale
+        current_screen_y = base_y + new_img_center.y() * base_scale
+
+        # Calculate screen delta needed
+        dx_screen = target_screen_pos.x() - current_screen_x
+        dy_screen = target_screen_pos.y() - current_screen_y
+
+        # Apply translation in transformed space (post-zoom)
+        tx = dx_screen / base_scale
+        ty = dy_screen / base_scale
+
+        # Apply as post-multiplication (translation after zoom)
+        translate_transform = QTransform()
+        translate_transform.translate(tx, ty)
+        self._transform = self._transform * translate_transform
+
+    def _is_image_completely_offscreen(self) -> bool:
+        """Check if the image would be completely offscreen with current transform.
+
+        Returns True if no part of the image intersects the view rect.
+        """
+        if self._pixmap.isNull():
+            return True
+
+        view_rect = self.rect()
+        img_rect = self._get_image_rect_in_screen_coords()
+
+        # Check if there's any intersection
+        return not view_rect.intersects(img_rect)
 
     def show_on_screen(self, target_screen: QScreen):
         """Moves the overlay to the specific screen and shows it fullscreen."""
@@ -962,38 +1050,22 @@ class FullscreenOverlay(QWidget):
 
         # Clamp immediately to prevent going beyond boundaries during drag
         self._clamp_pan_smooth()
+
+        # Update allowed extra space - if user reduced space below PAN_EMPTY_SPACE,
+        # that side's extra allowance is reset
+        self._update_allowed_extra_space_after_pan()
+
         self.update()
 
-    def _get_effective_empty_space(self):
-        """Calculate the effective empty space around the image at current zoom
-        level."""
-        base_scale = self._get_base_scale_factor()
-        pixmap_size = self._pixmap.size()
-        view_rect = self.rect()
+    def _get_image_rect_in_screen_coords(self):
+        """Get the current image rectangle in screen coordinates.
 
-        scaled_width = pixmap_size.width() * base_scale
-        scaled_height = pixmap_size.height() * base_scale
+        Returns the bounding rectangle of the image after all transforms
+        (zoom, pan, base scale) have been applied.
+        """
+        if self._pixmap.isNull():
+            return self.rect()
 
-        # Configured empty space, scaled to the current view
-        if pixmap_size.width() > 0:
-            configured_empty_space = Config.PAN_EMPTY_SPACE * self._zoom_level
-        else:
-            configured_empty_space = 0
-
-        # Size of the initial black bars (scaled with zoom)
-        black_bar_x = max(0, (view_rect.width() - scaled_width) / 2) * self._zoom_level
-        black_bar_y = (
-            max(0, (view_rect.height() - scaled_height) / 2) * self._zoom_level
-        )
-
-        # The effective empty space is the larger of the two for each axis
-        effective_h_space = max(configured_empty_space, black_bar_x)
-        effective_v_space = max(configured_empty_space, black_bar_y)
-
-        return effective_h_space, effective_v_space
-
-    def _clamp_pan_smooth(self):
-        """Smoothly clamps panning during drag to prevent going beyond boundaries."""
         base_scale = self._get_base_scale_factor()
         pixmap_size = self._pixmap.size()
         view_rect = self.rect()
@@ -1004,37 +1076,105 @@ class FullscreenOverlay(QWidget):
         base_x = (view_rect.width() - scaled_width) / 2
         base_y = (view_rect.height() - scaled_height) / 2
 
-        # Get the transformed image rect in screen coordinates
-        # We need to map through: image coords -> transform -> scale -> translate
         img_rect = self._pixmap.rect()
-
-        # Apply zoom transform, then base scale, then base position
         transformed_rect = self._transform.mapRect(img_rect)
-        final_img_rect = transformed_rect.translated(
+        final_rect = transformed_rect.translated(
             transformed_rect.left() * (base_scale - 1) + base_x,
             transformed_rect.top() * (base_scale - 1) + base_y,
         )
-        final_img_rect.setWidth(transformed_rect.width() * base_scale)
-        final_img_rect.setHeight(transformed_rect.height() * base_scale)
+        final_rect.setWidth(transformed_rect.width() * base_scale)
+        final_rect.setHeight(transformed_rect.height() * base_scale)
 
-        effective_h_space, effective_v_space = self._get_effective_empty_space()
+        return final_rect
+
+    def _get_current_space_per_side(self) -> dict[str, float]:
+        """Calculate the current empty space on each side in screen coordinates.
+
+        Returns a dict with keys: left, right, top, bottom.
+        Positive values mean empty space, negative means image extends beyond screen.
+        """
+        view_rect = self.rect()
+        img_rect = self._get_image_rect_in_screen_coords()
+
+        return {
+            "left": img_rect.left(),
+            "right": view_rect.width() - img_rect.right(),
+            "top": img_rect.top(),
+            "bottom": view_rect.height() - img_rect.bottom(),
+        }
+
+    def _get_effective_empty_space_per_side(self) -> dict[str, float]:
+        """Get the effective allowed empty space for each side in screen coordinates.
+
+        Takes the maximum of PAN_EMPTY_SPACE and the per-side allowed extra space.
+        This allows larger space on sides where it was larger at image load time.
+        """
+        base = Config.PAN_EMPTY_SPACE
+        return {
+            "left": max(base, self._allowed_extra_space["left"]),
+            "right": max(base, self._allowed_extra_space["right"]),
+            "top": max(base, self._allowed_extra_space["top"]),
+            "bottom": max(base, self._allowed_extra_space["bottom"]),
+        }
+
+    def _reset_allowed_extra_space(self):
+        """Reset the per-side allowed extra space to zero."""
+        self._allowed_extra_space = {"left": 0, "right": 0, "top": 0, "bottom": 0}
+
+    def _set_allowed_extra_space_from_current(self):
+        """Set allowed extra space based on current image position.
+
+        For each side, if the current space exceeds PAN_EMPTY_SPACE,
+        that becomes the allowed space for that side.
+        """
+        current = self._get_current_space_per_side()
+        base = Config.PAN_EMPTY_SPACE
+        self._allowed_extra_space = {
+            side: max(0, space - base) if space > base else 0
+            for side, space in current.items()
+        }
+
+    def _update_allowed_extra_space_after_pan(self):
+        """Update allowed extra space after panning.
+
+        If panning has reduced the space on any side below PAN_EMPTY_SPACE,
+        that side's extra allowance is reset to 0.
+        """
+        current = self._get_current_space_per_side()
+        base = Config.PAN_EMPTY_SPACE
+        for side, space in current.items():
+            if space < base:
+                self._allowed_extra_space[side] = 0
+
+    def _clamp_pan_smooth(self):
+        """Smoothly clamps panning during drag to prevent going beyond boundaries."""
+        if self._pixmap.isNull():
+            return
+
+        base_scale = self._get_base_scale_factor()
+        view_rect = self.rect()
+        final_img_rect = self._get_image_rect_in_screen_coords()
+
+        # Get per-side effective empty space (in screen coordinates)
+        effective_space = self._get_effective_empty_space_per_side()
 
         # Calculate required corrections
         dx = 0
         if final_img_rect.width() < view_rect.width():
             dx = view_rect.center().x() - final_img_rect.center().x()
-        elif final_img_rect.left() > effective_h_space:
-            dx = effective_h_space - final_img_rect.left()
-        elif final_img_rect.right() < view_rect.width() - effective_h_space:
-            dx = view_rect.width() - effective_h_space - final_img_rect.right()
+        elif final_img_rect.left() > effective_space["left"]:
+            dx = effective_space["left"] - final_img_rect.left()
+        elif final_img_rect.right() < view_rect.width() - effective_space["right"]:
+            dx = view_rect.width() - effective_space["right"] - final_img_rect.right()
 
         dy = 0
         if final_img_rect.height() < view_rect.height():
             dy = view_rect.center().y() - final_img_rect.center().y()
-        elif final_img_rect.top() > effective_v_space:
-            dy = effective_v_space - final_img_rect.top()
-        elif final_img_rect.bottom() < view_rect.height() - effective_v_space:
-            dy = view_rect.height() - effective_v_space - final_img_rect.bottom()
+        elif final_img_rect.top() > effective_space["top"]:
+            dy = effective_space["top"] - final_img_rect.top()
+        elif final_img_rect.bottom() < view_rect.height() - effective_space["bottom"]:
+            bottom_limit = view_rect.height() - effective_space["bottom"]
+            dy = bottom_limit - final_img_rect.bottom()
 
         # Apply corrections (convert from screen coords to image coords)
         if dx or dy:
