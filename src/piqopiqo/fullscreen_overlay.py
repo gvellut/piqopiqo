@@ -843,11 +843,7 @@ class FullscreenOverlay(QWidget):
         self._zoom_level = 1.0
         self._zoom_state = ZoomState.BASE_VIEW
         self._zoom_direction = ZoomDirection.OUT
-        # Only show overlay for small images when returning to base
-        if self._is_small_image:
-            self._show_zoom_level()
-        else:
-            self._hide_zoom_overlay()
+        self._hide_zoom_overlay()
         self.update()
 
     def _zoom_to_state(self, new_state: ZoomState, center_pos: QPointF):
