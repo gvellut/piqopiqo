@@ -48,6 +48,23 @@ class TestCalculateEffectiveSpacePerSide:
         assert result["left"] == 400
         assert result["right"] == PAN_EMPTY_SPACE
         assert result["top"] == PAN_EMPTY_SPACE
+
+    def test_extra_less_than_base_still_adds(self):
+        """REGRESSION: Extra < base must still ADD to base, not use max().
+
+        This test catches the bug where code incorrectly used max(base, extra)
+        instead of base + extra. When extra=100 and base=300:
+        - WRONG: max(300, 100) = 300
+        - CORRECT: 300 + 100 = 400
+        """
+        # This is the exact scenario that triggered the bug
+        allowed_extra = {"left": 100, "right": 100, "top": 0, "bottom": 0}
+        result = calculate_effective_space_per_side(allowed_extra, PAN_EMPTY_SPACE)
+
+        # The key assertion: extra (100) is less than base (300),
+        # but result must be 400, NOT 300
+        assert result["left"] == 400, "Must be base + extra, not max(base, extra)"
+        assert result["right"] == 400, "Must be base + extra, not max(base, extra)"
         assert result["bottom"] == PAN_EMPTY_SPACE
 
 
@@ -356,3 +373,68 @@ class TestNavigationScenarios:
 
         # Small image just barely visible
         assert is_image_visible(-399, 1, 200, 500, view_width, view_height)
+
+    def test_clamping_does_not_shift_when_effective_space_set_correctly(self):
+        """REGRESSION: Verify clamping doesn't shift image when space is correct.
+
+        This is the core test for the bug where navigating large->small->large
+        would result in different positions. The fix requires:
+        1. Calculate current space after positioning
+        2. Set allowed_extra = current_space - base (for sides where > base)
+        3. Effective space = base + allowed_extra
+        4. Clamping should NOT shift when current_space == effective_space
+
+        If we incorrectly computed effective_space as max(base, extra) instead of
+        base + extra, the effective space would be too small and clamping would
+        incorrectly shift the image.
+        """
+        view_width = 1200
+
+        # Scenario: Small image positioned with 400px on left/right (> 300 base)
+        # Image rect: left=400, right=800 (width=400), centered at x=600
+        img_left, img_right = 400, 800
+
+        # Current space on each side
+        current_space = {
+            "left": img_left,  # 400
+            "right": view_width - img_right,  # 1200 - 800 = 400
+            "top": 250,
+            "bottom": 250,
+        }
+
+        # Step 1: Calculate allowed extra from current position
+        allowed_extra = calculate_allowed_extra_from_current(
+            current_space, PAN_EMPTY_SPACE
+        )
+        assert allowed_extra["left"] == 100  # 400 - 300
+        assert allowed_extra["right"] == 100  # 400 - 300
+
+        # Step 2: Calculate effective space (THIS IS WHERE THE BUG WAS)
+        effective_space = calculate_effective_space_per_side(
+            allowed_extra, PAN_EMPTY_SPACE
+        )
+
+        # CRITICAL: Effective space MUST equal current space for sides > base
+        # If this fails, clamping will incorrectly shift the image
+        assert effective_space["left"] == 400, (
+            "Effective must equal current (400), not base (300)"
+        )
+        assert effective_space["right"] == 400, (
+            "Effective must equal current (400), not base (300)"
+        )
+
+        # Step 3: Simulate clamping logic - should produce NO adjustment
+        # Clamping says: if img_left > effective_left, shift left
+        # Since img_left (400) == effective_left (400), no shift needed
+        dx = 0
+        if img_left > effective_space["left"]:
+            dx = effective_space["left"] - img_left
+
+        assert dx == 0, (
+            f"Clamping should not shift! dx={dx}, "
+            f"img_left={img_left}, effective={effective_space['left']}"
+        )
+
+        # With the bug (effective=300), this would have been:
+        # img_left (400) > effective (300) => dx = 300 - 400 = -100
+        # This would shift the image left by 100px, breaking center preservation!

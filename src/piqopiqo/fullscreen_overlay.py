@@ -1106,15 +1106,15 @@ class FullscreenOverlay(QWidget):
     def _get_effective_empty_space_per_side(self) -> dict[str, float]:
         """Get the effective allowed empty space for each side in screen coordinates.
 
-        Takes the maximum of PAN_EMPTY_SPACE and the per-side allowed extra space.
+        Returns base PAN_EMPTY_SPACE plus any extra allowance set at load time.
         This allows larger space on sides where it was larger at image load time.
         """
         base = Config.PAN_EMPTY_SPACE
         return {
-            "left": max(base, self._allowed_extra_space["left"]),
-            "right": max(base, self._allowed_extra_space["right"]),
-            "top": max(base, self._allowed_extra_space["top"]),
-            "bottom": max(base, self._allowed_extra_space["bottom"]),
+            "left": base + self._allowed_extra_space["left"],
+            "right": base + self._allowed_extra_space["right"],
+            "top": base + self._allowed_extra_space["top"],
+            "bottom": base + self._allowed_extra_space["bottom"],
         }
 
     def _reset_allowed_extra_space(self):
