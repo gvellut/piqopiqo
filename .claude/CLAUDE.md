@@ -96,11 +96,11 @@ uv sync
 # Install with dev dependencies (includes pyqtauto for testing)
 uv sync --all-extras
 
-# Run linting and formatting. Always use --fix
+# Run linting and formatting. Always use --fix.
 ruff check --fix
 ruff format
 ```
 
 ## Update of Claude.md
 
-After completing a feature, update this file CLAUDE.md if needed
+After completing a feature, update this file CLAUDE.md with the updated project structure. Also add considerations for reference for future work.
