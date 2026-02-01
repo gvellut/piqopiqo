@@ -160,7 +160,10 @@ class FullscreenOverlay(QWidget):
     def _show_zoom_level(self):
         """Show the zoom overlay with auto-hide timer."""
         if should_show_zoom_overlay(
-            self._zoom_state, self._zoom_direction, self._is_small_image
+            self._zoom_state,
+            self._zoom_direction,
+            self._get_base_scale_factor(),
+            self._device_pixel_ratio,
         ):
             self._update_zoom_overlay()
             self.zoom_overlay.show()
@@ -585,14 +588,18 @@ class FullscreenOverlay(QWidget):
         return min(scale_w, scale_h)
 
     def _update_small_image_flag(self):
-        """Determine if the image is 'small' (base view is already at 100%).
+        """Determine if the image is 'small' (BASE_VIEW >= ZOOM_100).
 
-        A small image is one where the base scale factor (fit to screen) is 1.0,
-        meaning the image fits on screen without any scaling needed.
+        An image is 'small' when ZOOM_100 (1:1 render buffer mapping) would be
+        the same size or smaller than BASE_VIEW. This happens when:
+        base_scale * dpr >= 1.0
+
+        For these images, we skip ZOOM_100 when zooming in since it would
+        shrink or maintain the same size.
         """
         base_scale = self._get_base_scale_factor()
-        # Small image means base_scale is 1.0 (no downscaling needed)
-        self._is_small_image = base_scale >= 1.0
+        # Small image means ZOOM_100 <= BASE_VIEW (would shrink or stay same)
+        self._is_small_image = base_scale * self._device_pixel_ratio >= 1.0
 
     def paintEvent(self, event: QPaintEvent):
         """Custom painting to handle aspect ratio, letterboxing, zoom, and pan.
@@ -743,7 +750,6 @@ class FullscreenOverlay(QWidget):
             new_state,
             self._get_base_scale_factor(),
             self._device_pixel_ratio,
-            self._is_small_image,
         )
 
         self._zoom_state = new_state
@@ -761,7 +767,10 @@ class FullscreenOverlay(QWidget):
     def _zoom_in(self, center_pos: QPointF):
         """Zoom in to the next discrete zoom state."""
         next_state = get_next_zoom_state(
-            self._zoom_state, ZoomDirection.IN, self._is_small_image
+            self._zoom_state,
+            ZoomDirection.IN,
+            self._get_base_scale_factor(),
+            self._device_pixel_ratio,
         )
         if next_state is None:
             logger.debug("Already at max zoom state.")
@@ -777,7 +786,10 @@ class FullscreenOverlay(QWidget):
             return
 
         next_state = get_next_zoom_state(
-            self._zoom_state, ZoomDirection.OUT, self._is_small_image
+            self._zoom_state,
+            ZoomDirection.OUT,
+            self._get_base_scale_factor(),
+            self._device_pixel_ratio,
         )
         if next_state is None:
             logger.debug("Already at base view.")
