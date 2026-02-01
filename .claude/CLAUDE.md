@@ -96,7 +96,7 @@ uv sync
 # Install with dev dependencies (includes pyqtauto for testing)
 uv sync --all-extras
 
-# Run linting and formatting
+# Run linting and formatting. Always use --fix
 ruff check --fix
 ruff format
 ```

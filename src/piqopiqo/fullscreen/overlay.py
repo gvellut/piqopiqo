@@ -36,14 +36,13 @@ from piqopiqo.config import Config, Shortcut
 from piqopiqo.db_fields import DBFields
 from piqopiqo.shortcuts import match_shortcut_sequence, match_simple_shortcut
 
+from .info_panel import ZoomOverlayController
 from .pan import calculate_allowed_extra_from_current
 from .zoom import (
-    ZOOM_STATE_PERCENTAGES,
     ZoomDirection,
     ZoomState,
     get_next_zoom_state,
     get_zoom_level_for_state,
-    should_show_zoom_overlay,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,12 +83,6 @@ class FullscreenOverlay(QWidget):
         self._zoom_direction = ZoomDirection.NONE
         self._is_small_image = False  # True if base view is already at 100%
 
-        # Zoom overlay state
-        self._overlay_timer = QTimer(self)
-        self._overlay_timer.setSingleShot(True)
-        self._overlay_timer.timeout.connect(self._hide_zoom_overlay)
-        self._show_zoom_overlay = False
-
         # Per-side allowed extra space (set when navigating with preserved zoom)
         # This allows space > PAN_EMPTY_SPACE on sides where it was larger at load time
         self._allowed_extra_space = {"left": 0, "right": 0, "top": 0, "bottom": 0}
@@ -102,6 +95,7 @@ class FullscreenOverlay(QWidget):
 
         self._setup_info_panel()
         self._setup_zoom_overlay()
+        self._setup_zoom_overlay_controller()
 
         # Load the initial image
         self._load_current_image()
@@ -143,39 +137,28 @@ class FullscreenOverlay(QWidget):
         )
         self.zoom_overlay.hide()
 
-    def _update_zoom_overlay(self):
-        """Update and position the zoom overlay based on current zoom state."""
-        # Get the percentage from the zoom state
-        percentage = ZOOM_STATE_PERCENTAGES.get(self._zoom_state)
-        if percentage is None:
-            return
+    def _setup_zoom_overlay_controller(self):
+        """Creates the zoom overlay controller that manages visibility."""
+        self._zoom_overlay_controller = ZoomOverlayController(
+            overlay_widget=self.zoom_overlay,
+            timer_ms=Config.INFO_PANEL_TIMER_MS,
+            get_base_scale=self._get_base_scale_factor,
+            get_device_pixel_ratio=lambda: self._device_pixel_ratio,
+            update_overlay_position=self._position_zoom_overlay,
+        )
 
-        self.zoom_overlay.setText(f"{percentage}%")
-        self.zoom_overlay.adjustSize()
-
-        # Position at top of screen with margin
+    def _position_zoom_overlay(self):
+        """Position the zoom overlay at top center of screen."""
         overlay_x = (self.width() - self.zoom_overlay.width()) // 2
         overlay_y = 40  # Top margin
         self.zoom_overlay.move(overlay_x, overlay_y)
 
-    def _show_zoom_level(self):
-        """Show the zoom overlay with auto-hide timer."""
-        if should_show_zoom_overlay(
+    def _notify_zoom_state_changed(self):
+        """Notify the zoom overlay controller of a state change."""
+        self._zoom_overlay_controller.on_zoom_state_changed(
             self._zoom_state,
             self._zoom_direction,
-            self._get_base_scale_factor(),
-            self._device_pixel_ratio,
-        ):
-            self._update_zoom_overlay()
-            self.zoom_overlay.show()
-            self._show_zoom_overlay = True
-            # Reset timer - hide after 1.5 seconds
-            self._overlay_timer.start(Config.INFO_PANEL_TIMER_MS)
-
-    def _hide_zoom_overlay(self):
-        """Hide the zoom overlay."""
-        self.zoom_overlay.hide()
-        self._show_zoom_overlay = False
+        )
 
     def _setup_info_panel(self):
         """Creates and configures the information panel."""
@@ -330,7 +313,7 @@ class FullscreenOverlay(QWidget):
         # Reset zoom state - entering base view
         self._zoom_state = ZoomState.BASE_VIEW
         self._zoom_direction = ZoomDirection.NONE
-        self._hide_zoom_overlay()
+        self._zoom_overlay_controller.hide()
 
         # Reset allowed extra space (no extra allowance in base view)
         self._reset_allowed_extra_space()
@@ -747,7 +730,7 @@ class FullscreenOverlay(QWidget):
         self._zoom_level = 1.0
         self._zoom_state = ZoomState.BASE_VIEW
         self._zoom_direction = ZoomDirection.OUT
-        self._hide_zoom_overlay()
+        self._notify_zoom_state_changed()
         self.update()
 
     def _zoom_to_state(self, new_state: ZoomState, center_pos: QPointF):
@@ -764,12 +747,12 @@ class FullscreenOverlay(QWidget):
 
         if new_state == ZoomState.BASE_VIEW:
             self._transform.reset()
-            self._show_zoom_level()
+            self._notify_zoom_state_changed()
             self.update()
         else:
             factor = new_zoom_level / old_zoom_level
             self._apply_zoom(factor, center_pos)
-            self._show_zoom_level()
+            self._notify_zoom_state_changed()
 
     def _zoom_in(self, center_pos: QPointF):
         """Zoom in to the next discrete zoom state."""
