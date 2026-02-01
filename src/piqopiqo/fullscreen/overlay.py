@@ -564,28 +564,35 @@ class FullscreenOverlay(QWidget):
     # -----------------------------------
 
     def _get_base_scale_factor(self) -> float:
-        """Calculate the base scale factor to fit image to screen.
+        """Calculate the base scale factor for BASE_VIEW.
 
-        Returns the scale factor that would be applied to fit the image
-        within the screen bounds (1.0 if image fits without scaling).
+        BASE_VIEW shows the image at 100% (1:1 render buffer mapping) or
+        scaled down to fit on screen, whichever is smaller. This ensures:
+        - Small images are shown at true 100% (not upscaled to fill logical pixels)
+        - Large images are scaled down to fit on screen
+
+        Returns:
+            The scale factor where 1/dpr = 100% (1:1 render buffer).
         """
         if self._pixmap.isNull():
-            return 1.0
+            return 1.0 / self._device_pixel_ratio
 
         target_rect = self.rect()
         pixmap_size = self._pixmap.size()
 
-        # If image fits on screen, no scaling needed
-        if (
-            pixmap_size.width() <= target_rect.width()
-            and pixmap_size.height() <= target_rect.height()
-        ):
-            return 1.0
+        # Scale for 100% = 1:1 render buffer mapping
+        # At this scale, 1 image pixel = 1 render buffer pixel
+        one_to_one_scale = 1.0 / self._device_pixel_ratio
 
-        # Calculate scale to fit
+        # Scale to fit on screen (in logical pixels)
         scale_w = target_rect.width() / pixmap_size.width()
         scale_h = target_rect.height() / pixmap_size.height()
-        return min(scale_w, scale_h)
+        fit_scale = min(scale_w, scale_h)
+
+        # BASE_VIEW is the smaller of: fit-to-screen OR 100%
+        # - Small images: limited by 100% (don't upscale beyond 1:1 render buffer)
+        # - Large images: limited by fit-to-screen
+        return min(fit_scale, one_to_one_scale)
 
     def _update_small_image_flag(self):
         """Determine if the image is 'small' (BASE_VIEW >= ZOOM_100).
