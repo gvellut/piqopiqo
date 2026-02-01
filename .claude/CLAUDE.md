@@ -23,19 +23,35 @@ PIQO_NUM_COLUMNS=10 uv run piqopiqo /path/to/images
 src/piqopiqo/
 ├── __main__.py      # Entry point, CLI with click, Qt app setup
 ├── config.py        # Configuration class with env var overrides (PIQO_ prefix)
-├── photo_grid.py    # MainWindow, grid view, fullscreen, selection handling
-├── edit_panel.py    # Editable metadata panel (title, description, keywords, label)
-├── filter_panel.py  # Filtering UI
+├── main_window.py   # Main application window
+├── shortcuts.py     # Keyboard shortcut matching utilities
+├── model.py         # Data models and enums
+├── db_fields.py     # Database field definitions
+├── metadata_db.py   # SQLite database for cached metadata
 ├── exif_loader.py   # EXIF metadata loading
 ├── exif_man.py      # EXIF management utilities
-├── metadata_db.py   # SQLite database for cached metadata
 ├── thumb_man.py     # Thumbnail generation and caching (multiprocessing)
-├── status_bar.py    # Status bar component
-├── model.py         # Data models and enums
-├── components.py    # Reusable UI components
 ├── support.py       # Support functions (cache dir, last folder persistence)
 ├── utils.py         # Logging setup and utilities
-└── db_fields.py     # Database field definitions
+├── components/      # Reusable UI components
+│   ├── ellided_label.py   # Truncated label with ellipsis
+│   ├── label_utils.py     # Status label color utilities
+│   └── save_workers.py    # Background metadata save workers
+├── fullscreen/      # Fullscreen image viewing
+│   ├── overlay.py   # Fullscreen overlay widget
+│   ├── pan.py       # Pan logic for zoomed images
+│   └── zoom.py      # Zoom state management
+├── grid/            # Photo grid display
+│   ├── photo_cell.py    # Single photo cell widget
+│   └── photo_grid.py    # Paged grid of photo thumbnails
+├── panels/          # Side panels
+│   ├── edit_panel.py    # Editable metadata panel
+│   ├── edit_widgets.py  # Field editor widgets
+│   ├── exif_panel.py    # Read-only EXIF display
+│   ├── filter_panel.py  # Filtering UI
+│   └── status_bar.py    # Status bar component
+└── platform/        # Platform-specific code
+    └── macos.py     # macOS-specific utilities
 ```
 
 ## Key Features
