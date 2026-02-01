@@ -162,7 +162,7 @@ class FullscreenOverlay(QWidget):
             self.zoom_overlay.show()
             self._show_zoom_overlay = True
             # Reset timer - hide after 1.5 seconds
-            self._overlay_timer.start(1500)
+            self._overlay_timer.start(Config.INFO_PANEL_TIMER_MS)
 
     def _hide_zoom_overlay(self):
         """Hide the zoom overlay."""
@@ -307,7 +307,6 @@ class FullscreenOverlay(QWidget):
                     logger.warning(f"Failed to load image: {self.image_path}")
                     self._pixmap = QPixmap()
                     return False
-                self._update_small_image_flag()
                 self._update_info_panel()
                 return True
         return False
@@ -331,22 +330,6 @@ class FullscreenOverlay(QWidget):
 
         if self._load_pixmap_at_current_index():
             self.update()
-
-    def _navigate_to(self, new_visible_idx: int):
-        """Navigate to a new image index within the visible set."""
-        total_visible = len(self.visible_indices)
-        if total_visible == 0:
-            return
-
-        new_visible_idx = (
-            new_visible_idx % total_visible + total_visible
-        ) % total_visible
-
-        if new_visible_idx != self.current_visible_idx:
-            self.current_visible_idx = new_visible_idx
-            self._load_current_image()
-            global_index = self.visible_indices[self.current_visible_idx]
-            self.index_changed.emit(global_index)
 
     def _navigate_to_preserve_zoom(self, new_visible_idx: int):
         """Navigate to a new image while preserving zoom level and center position.
@@ -438,63 +421,6 @@ class FullscreenOverlay(QWidget):
         screen_y = base_y + transformed_center.y() * base_scale
 
         return QPointF(screen_x, screen_y)
-
-    def _position_image_center_at_screen(self, target_screen_pos: QPointF):
-        """Position the current image so its center is at the given screen position.
-
-        Resets the transform and applies zoom centered on the image center,
-        then translates so the image center appears at target_screen_pos.
-
-        Args:
-            target_screen_pos: The screen position where the image center should appear
-        """
-        if self._pixmap.isNull():
-            return
-
-        new_img_center = QPointF(
-            self._pixmap.width() / 2.0, self._pixmap.height() / 2.0
-        )
-
-        # Get base parameters for new image
-        base_scale = self._get_base_scale_factor()
-        pixmap_size = self._pixmap.size()
-        scaled_width = pixmap_size.width() * base_scale
-        scaled_height = pixmap_size.height() * base_scale
-        target_rect = self.rect()
-        base_x = (target_rect.width() - scaled_width) / 2
-        base_y = (target_rect.height() - scaled_height) / 2
-
-        # Reset transform
-        self._transform.reset()
-
-        if self._zoom_state != ZoomState.BASE_VIEW:
-            # Apply zoom centered on image center
-            self._transform.translate(new_img_center.x(), new_img_center.y())
-            self._transform.scale(self._zoom_level, self._zoom_level)
-            self._transform.translate(-new_img_center.x(), -new_img_center.y())
-
-        # Calculate where image center currently appears on screen.
-        # After zoom centered on image center, it's still at (w/2, h/2) transformed
-        current_screen_x = base_x + new_img_center.x() * base_scale
-        current_screen_y = base_y + new_img_center.y() * base_scale
-
-        # Calculate screen delta needed
-        dx_screen = target_screen_pos.x() - current_screen_x
-        dy_screen = target_screen_pos.y() - current_screen_y
-
-        # Apply translation in transformed space (post-zoom)
-        # Screen delta = transform delta * base_scale
-        # So transform delta = screen delta / base_scale
-        tx = dx_screen / base_scale
-        ty = dy_screen / base_scale
-
-        # Apply as post-multiplication (translation after zoom)
-        translate_transform = QTransform()
-        translate_transform.translate(tx, ty)
-        self._transform = self._transform * translate_transform
-
-        self._clamp_pan()
-        self.update()
 
     def _position_image_center_at_screen_no_clamp(self, target_screen_pos: QPointF):
         """Position the current image so its center is at the given screen position.
@@ -673,6 +599,9 @@ class FullscreenOverlay(QWidget):
         - This ensures proper quality at all zoom levels
         """
         super().paintEvent(event)
+        # Update small image flag now that we have the correct widget size
+        # (during init, self.rect() returns 640x480 before fullscreen is applied)
+        self._update_small_image_flag()
         self._position_info_panel()
 
         painter = QPainter(self)
