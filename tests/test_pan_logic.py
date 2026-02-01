@@ -5,7 +5,7 @@ while preserving zoom and center position, particularly around edge cases
 with empty space calculations.
 """
 
-from piqopiqo.pan_logic import (
+from piqopiqo.fullscreen.pan import (
     calculate_allowed_extra_from_current,
     calculate_current_space,
     calculate_effective_space_per_side,

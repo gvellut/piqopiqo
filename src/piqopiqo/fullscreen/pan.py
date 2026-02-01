@@ -163,3 +163,55 @@ def calculate_current_space(
         "top": img_top,
         "bottom": view_height - img_bottom,
     }
+
+
+def calculate_clamp_correction(
+    img_rect_left: float,
+    img_rect_right: float,
+    img_rect_top: float,
+    img_rect_bottom: float,
+    img_rect_width: float,
+    img_rect_height: float,
+    view_width: float,
+    view_height: float,
+    effective_space: dict[str, float],
+) -> tuple[float, float]:
+    """Calculate the dx, dy correction needed to clamp pan within bounds.
+
+    Args:
+        img_rect_left: Left edge of image rect in screen coords
+        img_rect_right: Right edge of image rect in screen coords
+        img_rect_top: Top edge of image rect in screen coords
+        img_rect_bottom: Bottom edge of image rect in screen coords
+        img_rect_width: Width of image rect
+        img_rect_height: Height of image rect
+        view_width: Width of the view
+        view_height: Height of the view
+        effective_space: Per-side effective allowed empty space
+
+    Returns:
+        Tuple (dx, dy) correction to apply in screen coordinates
+    """
+    dx = 0.0
+    if img_rect_width < view_width:
+        # Center horizontally
+        center_x = view_width / 2
+        img_center_x = (img_rect_left + img_rect_right) / 2
+        dx = center_x - img_center_x
+    elif img_rect_left > effective_space["left"]:
+        dx = effective_space["left"] - img_rect_left
+    elif img_rect_right < view_width - effective_space["right"]:
+        dx = view_width - effective_space["right"] - img_rect_right
+
+    dy = 0.0
+    if img_rect_height < view_height:
+        # Center vertically
+        center_y = view_height / 2
+        img_center_y = (img_rect_top + img_rect_bottom) / 2
+        dy = center_y - img_center_y
+    elif img_rect_top > effective_space["top"]:
+        dy = effective_space["top"] - img_rect_top
+    elif img_rect_bottom < view_height - effective_space["bottom"]:
+        dy = view_height - effective_space["bottom"] - img_rect_bottom
+
+    return dx, dy
