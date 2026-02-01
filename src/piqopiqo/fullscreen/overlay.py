@@ -5,6 +5,7 @@ from __future__ import annotations
 import atexit
 from datetime import datetime
 import logging
+import os
 import sys
 
 if sys.platform == "darwin":
@@ -230,7 +231,6 @@ class FullscreenOverlay(QWidget):
 
     def _update_info_panel(self):
         """Updates the content of the info panel based on the current image."""
-        import os
 
         if not hasattr(self, "info_panel") or not self.image_path:
             return
@@ -869,6 +869,23 @@ class FullscreenOverlay(QWidget):
             if not self._did_pan and not was_pan_mode_active and not just_zoomed_in:
                 self._handle_click_zoom_out(event.position())
 
+    def _handle_click_zoom_out(self, screen_pos: QPointF):
+        """Handle click-to-zoom interaction (only zoom OUT).
+
+        Note: Zoom IN from base view now happens on mouse down in mousePressEvent.
+        This function only handles:
+        - At 100% or beyond: click returns to base view
+        - Small image at base view: click does nothing (already at 100%)
+        """
+        if self._zoom_state == ZoomState.BASE_VIEW:
+            # At base view (including small images): do nothing
+            # Zoom IN for large images is handled in mousePressEvent
+            return
+        else:
+            # Zoomed in (100% or beyond): return to base view
+            self._zoom_direction = ZoomDirection.OUT
+            self._zoom_to_base_view()
+
     def mouseMoveEvent(self, event: QMouseEvent):
         """Handle mouse move events to perform panning."""
         if not self._panning:
@@ -1038,20 +1055,3 @@ class FullscreenOverlay(QWidget):
         """Clamps the panning transformation to stay within the defined boundaries."""
         self._clamp_pan_smooth()
         self.update()
-
-    def _handle_click_zoom_out(self, screen_pos: QPointF):
-        """Handle click-to-zoom interaction (only zoom OUT).
-
-        Note: Zoom IN from base view now happens on mouse down in mousePressEvent.
-        This function only handles:
-        - At 100% or beyond: click returns to base view
-        - Small image at base view: click does nothing (already at 100%)
-        """
-        if self._zoom_state == ZoomState.BASE_VIEW:
-            # At base view (including small images): do nothing
-            # Zoom IN for large images is handled in mousePressEvent
-            return
-        else:
-            # Zoomed in (100% or beyond): return to base view
-            self._zoom_direction = ZoomDirection.OUT
-            self._zoom_to_base_view()
