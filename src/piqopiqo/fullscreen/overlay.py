@@ -369,10 +369,6 @@ class FullscreenOverlay(QWidget):
         ) % total_visible
 
         if new_visible_idx != self.current_visible_idx:
-            # Before leaving, update allowed extra space based on current pan state
-            # If user panned and reduced space below PAN_EMPTY_SPACE, that's recorded
-            self._update_allowed_extra_space_after_pan()
-
             # Get where the old image's center is on screen (can be offscreen)
             old_image_center_screen = self._get_image_center_screen_coords()
 
@@ -654,19 +650,6 @@ class FullscreenOverlay(QWidget):
             return 1.0
 
         # Calculate scale to fit
-        scale_w = target_rect.width() / pixmap_size.width()
-        scale_h = target_rect.height() / pixmap_size.height()
-        return min(scale_w, scale_h)
-
-    def _get_fit_scale_factor(self) -> float:
-        """Calculate the scale factor to fit image to screen (always returns
-        the fit scale, even if image is smaller than screen)."""
-        if self._pixmap.isNull():
-            return 1.0
-
-        target_rect = self.rect()
-        pixmap_size = self._pixmap.size()
-
         scale_w = target_rect.width() / pixmap_size.width()
         scale_h = target_rect.height() / pixmap_size.height()
         return min(scale_w, scale_h)

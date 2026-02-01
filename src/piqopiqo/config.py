@@ -28,7 +28,8 @@ class Config:
     # Application Settings
     APP_NAME = "PiqoPiqo"
 
-    CACHE_BASE_DIR = "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
+    # "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
+    CACHE_BASE_DIR = "/Volumes/CrucialX8/projects/piqopiqo/cache"
 
     # Initial window resolution (format: "WIDTHxHEIGHT", e.g. "1280x800")
     # If None, the window opens maximized.

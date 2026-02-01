@@ -520,11 +520,10 @@ class MainWindow(QMainWindow):
         buffer_w = int(log_geo.width() * dpr)
         buffer_h = int(log_geo.height() * dpr)
 
-        logger.info("--- Qt Info ---")
-        logger.info(f"Screen Name:    {current_screen.name()}")
-        logger.info(f"Logical Size:   {log_geo.width()} x {log_geo.height()}")
-        logger.info(f"DPR:            {dpr}")
-        logger.info(f"Render Buffer:  {buffer_w} x {buffer_h}")
+        logger.debug(f"Screen Name:    {current_screen.name()}")
+        logger.debug(f"Logical Size:   {log_geo.width()} x {log_geo.height()}")
+        logger.debug(f"DPR:            {dpr}")
+        logger.debug(f"Render Buffer:  {buffer_w} x {buffer_h}")
 
         # not actually useful : cannot be used by the macos rendering (without changing
         # the display resolution and flickering => so forget about it)
