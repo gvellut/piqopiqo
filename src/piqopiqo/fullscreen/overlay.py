@@ -605,44 +605,47 @@ class FullscreenOverlay(QWidget):
         self._position_info_panel()
 
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+        try:
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setRenderHint(QPainter.SmoothPixmapTransform)
 
-        # Fill background
-        painter.fillRect(self.rect(), self._background_color)
+            # Fill background
+            painter.fillRect(self.rect(), self._background_color)
 
-        if self._pixmap.isNull():
-            return
+            if self._pixmap.isNull():
+                return
 
-        # Calculate base scale to fit image to screen
-        base_scale = self._get_base_scale_factor()
-        pixmap_size = self._pixmap.size()
+            # Calculate base scale to fit image to screen
+            base_scale = self._get_base_scale_factor()
+            pixmap_size = self._pixmap.size()
 
-        # Calculate the dimensions of the scaled image
-        scaled_width = pixmap_size.width() * base_scale
-        scaled_height = pixmap_size.height() * base_scale
+            # Calculate the dimensions of the scaled image
+            scaled_width = pixmap_size.width() * base_scale
+            scaled_height = pixmap_size.height() * base_scale
 
-        # Calculate the centered position (letterboxing)
-        target_rect = self.rect()
-        base_x = (target_rect.width() - scaled_width) / 2
-        base_y = (target_rect.height() - scaled_height) / 2
+            # Calculate the centered position (letterboxing)
+            target_rect = self.rect()
+            base_x = (target_rect.width() - scaled_width) / 2
+            base_y = (target_rect.height() - scaled_height) / 2
 
-        # Apply transformations
-        painter.save()
+            # Apply transformations
+            painter.save()
 
-        # Move to the image origin
-        painter.translate(base_x, base_y)
+            # Move to the image origin
+            painter.translate(base_x, base_y)
 
-        # Apply base scaling to fit image to screen
-        painter.scale(base_scale, base_scale)
+            # Apply base scaling to fit image to screen
+            painter.scale(base_scale, base_scale)
 
-        # Apply the zoom/pan transform
-        painter.setTransform(self._transform, combine=True)
+            # Apply the zoom/pan transform
+            painter.setTransform(self._transform, combine=True)
 
-        # Draw the full resolution pixmap at origin
-        painter.drawPixmap(0, 0, self._pixmap)
+            # Draw the full resolution pixmap at origin
+            painter.drawPixmap(0, 0, self._pixmap)
 
-        painter.restore()
+            painter.restore()
+        finally:
+            painter.end()
 
     def keyPressEvent(self, event: QKeyEvent):
         """Handle keyboard events to dismiss the overlay and navigate images."""
