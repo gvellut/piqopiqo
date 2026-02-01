@@ -62,6 +62,7 @@ class FullscreenOverlay(QWidget):
         self._prev_presentation_opts = None
 
         self._transform = QTransform()
+        # base zoom is 1.0 by convention (even if image is bigger than screen)
         self._zoom_level = 1.0
         self._panning = False
         self._pan_start_pos = QPointF()
@@ -94,6 +95,9 @@ class FullscreenOverlay(QWidget):
 
         # Device pixel ratio for this screen (will be set in show_on_screen)
         self._device_pixel_ratio = 1.0
+
+        # TODO initialize small image here : pass size of screen to do it
+        # maintain the size outside ?
 
         self._setup_info_panel()
         self._setup_zoom_overlay()
@@ -736,7 +740,10 @@ class FullscreenOverlay(QWidget):
         """Zoom to a specific state, centered on the given position."""
         old_zoom_level = self._zoom_level
         new_zoom_level = get_zoom_level_for_state(
-            new_state, self._get_base_scale_factor(), self._device_pixel_ratio
+            new_state,
+            self._get_base_scale_factor(),
+            self._device_pixel_ratio,
+            self._is_small_image,
         )
 
         self._zoom_state = new_state
@@ -820,11 +827,28 @@ class FullscreenOverlay(QWidget):
                 self._panning = True
                 self._pan_start_pos = event.position()
 
-    def _activate_pan_cursor(self):
-        """Called after delay to activate pan cursor."""
-        if self._panning:
-            self._pan_mode_active = True
-            self.setCursor(Qt.ClosedHandCursor)
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        """Handle mouse release events to stop panning or perform click-to-zoom."""
+        if event.button() == Qt.LeftButton:
+            was_panning = self._panning
+            was_pan_mode_active = self._pan_mode_active
+            just_zoomed_in = self._just_zoomed_in
+
+            self._panning = False
+            self._pan_mode_active = False
+            self._just_zoomed_in = False
+            self._pan_cursor_timer.stop()  # Cancel any pending timer
+            self.setCursor(Qt.ArrowCursor)
+
+            if was_panning:
+                self._clamp_pan()
+
+            # Handle click-to-zoom (zoom OUT) only if:
+            # 1. We didn't actually pan (move > 5px)
+            # 2. Pan mode was NOT activated (cursor didn't become hand)
+            # 3. We didn't just zoom in on mouse down
+            if not self._did_pan and not was_pan_mode_active and not just_zoomed_in:
+                self._handle_click_zoom_out(event.position())
 
     def mouseMoveEvent(self, event: QMouseEvent):
         """Handle mouse move events to perform panning."""
@@ -860,6 +884,12 @@ class FullscreenOverlay(QWidget):
         self._update_allowed_extra_space_after_pan()
 
         self.update()
+
+    def _activate_pan_cursor(self):
+        """Called after delay to activate pan cursor."""
+        if self._panning:
+            self._pan_mode_active = True
+            self.setCursor(Qt.ClosedHandCursor)
 
     def _get_image_rect_in_screen_coords(self):
         """Get the current image rectangle in screen coordinates.
@@ -990,30 +1020,7 @@ class FullscreenOverlay(QWidget):
         self._clamp_pan_smooth()
         self.update()
 
-    def mouseReleaseEvent(self, event: QMouseEvent):
-        """Handle mouse release events to stop panning or perform click-to-zoom."""
-        if event.button() == Qt.LeftButton:
-            was_panning = self._panning
-            was_pan_mode_active = self._pan_mode_active
-            just_zoomed_in = self._just_zoomed_in
-
-            self._panning = False
-            self._pan_mode_active = False
-            self._just_zoomed_in = False
-            self._pan_cursor_timer.stop()  # Cancel any pending timer
-            self.setCursor(Qt.ArrowCursor)
-
-            if was_panning:
-                self._clamp_pan()
-
-            # Handle click-to-zoom (zoom OUT) only if:
-            # 1. We didn't actually pan (move > 5px)
-            # 2. Pan mode was NOT activated (cursor didn't become hand)
-            # 3. We didn't just zoom in on mouse down
-            if not self._did_pan and not was_pan_mode_active and not just_zoomed_in:
-                self._handle_click_zoom(event.position())
-
-    def _handle_click_zoom(self, screen_pos: QPointF):
+    def _handle_click_zoom_out(self, screen_pos: QPointF):
         """Handle click-to-zoom interaction (only zoom OUT).
 
         Note: Zoom IN from base view now happens on mouse down in mousePressEvent.

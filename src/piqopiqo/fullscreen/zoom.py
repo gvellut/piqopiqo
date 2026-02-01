@@ -45,6 +45,7 @@ def get_zoom_level_for_state(
     state: ZoomState,
     base_scale: float,
     device_pixel_ratio: float,
+    is_small_image: bool = False,
 ) -> float:
     """Calculate the zoom level for a given zoom state.
 
@@ -52,6 +53,7 @@ def get_zoom_level_for_state(
         state: The target zoom state
         base_scale: The scale factor to fit image to screen
         device_pixel_ratio: The screen's device pixel ratio
+        is_small_image: True if image fits on screen without scaling
 
     Returns:
         The zoom_level value that achieves the desired pixel mapping.
@@ -59,11 +61,17 @@ def get_zoom_level_for_state(
     if state == ZoomState.BASE_VIEW:
         return 1.0
 
-    # For ZoomState.ZOOM_100: 1 image pixel = 1 render buffer pixel
-    # render_buffer_pixel = image_pixel * base_scale * zoom_level * dpr
-    # For 100%: 1 = 1 * base_scale * zoom_level * dpr
-    # zoom_level = 1 / (base_scale * dpr)
-    one_to_one_zoom = 1.0 / (base_scale * device_pixel_ratio)
+    if is_small_image:
+        # For small images, BASE_VIEW is already 100% visual size.
+        # Zoom states are direct visual magnification multipliers.
+        one_to_one_zoom = 1.0
+    else:
+        # For large images, calculate based on render buffer pixel mapping.
+        # For ZoomState.ZOOM_100: 1 image pixel = 1 render buffer pixel
+        # render_buffer_pixel = image_pixel * base_scale * zoom_level * dpr
+        # For 100%: 1 = 1 * base_scale * zoom_level * dpr
+        # zoom_level = 1 / (base_scale * dpr)
+        one_to_one_zoom = 1.0 / (base_scale * device_pixel_ratio)
 
     if state == ZoomState.ZOOM_100:
         return one_to_one_zoom
