@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 
 from piqopiqo.components.label_utils import get_label_color
 from piqopiqo.config import Config, Shortcut
-from piqopiqo.db_fields import DBFields
+from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.shortcuts import match_shortcut_sequence, match_simple_shortcut
 
 from .info_panel import ZoomOverlayController

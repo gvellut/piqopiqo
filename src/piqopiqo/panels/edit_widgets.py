@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.config import Config
-from piqopiqo.metadata_db import (
+from piqopiqo.metadata.metadata_db import (
     validate_datetime,
     validate_latitude,
     validate_longitude,

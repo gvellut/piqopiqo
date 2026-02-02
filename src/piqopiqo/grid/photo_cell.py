@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QFrame, QSizePolicy
 
 from piqopiqo.components.label_utils import get_label_color
 from piqopiqo.config import Config
-from piqopiqo.db_fields import DBFields
+from piqopiqo.metadata.db_fields import DBFields
 
 
 class PhotoCell(QFrame):

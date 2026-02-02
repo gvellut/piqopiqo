@@ -14,9 +14,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from piqopiqo.components.save_workers import MetadataSaveWorker
-from piqopiqo.db_fields import EDITABLE_FIELDS, FIELD_DISPLAY_LABELS, DBFields
-from piqopiqo.metadata_db import MetadataDBManager
+from piqopiqo.metadata.db_fields import EDITABLE_FIELDS, FIELD_DISPLAY_LABELS, DBFields
+from piqopiqo.metadata.metadata_db import MetadataDBManager
+from piqopiqo.metadata.save_workers import MetadataSaveWorker
 from piqopiqo.model import ImageItem
 
 from .edit_widgets import (

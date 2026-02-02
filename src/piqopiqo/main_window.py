@@ -17,14 +17,14 @@ from PySide6.QtWidgets import (
 )
 
 from . import platform
-from .components.save_workers import MetadataSaveWorker
 from .config import Config, Shortcut
-from .db_fields import EDITABLE_FIELDS, DBFields
 from .exif_loader import ExifLoaderManager
 from .exif_man import ExifManager
 from .fullscreen import FullscreenOverlay
 from .grid import PhotoGrid
-from .metadata_db import MetadataDBManager
+from .metadata.db_fields import EDITABLE_FIELDS, DBFields
+from .metadata.metadata_db import MetadataDBManager
+from .metadata.save_workers import MetadataSaveWorker
 from .model import ImageItem, OnFullscreenExitMultipleSelected
 from .panels import (
     EditPanel,

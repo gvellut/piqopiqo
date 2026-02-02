@@ -8,8 +8,9 @@ import re
 import sqlite3
 import threading
 
+from piqopiqo.thumb_man import get_cache_dir_for_folder
+
 from .db_fields import DBFields
-from .thumb_man import get_cache_dir_for_folder
 
 logger = logging.getLogger(__name__)
 

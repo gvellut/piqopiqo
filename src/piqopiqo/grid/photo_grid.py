@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.config import Config
-from piqopiqo.db_fields import DBFields
+from piqopiqo.metadata.db_fields import DBFields
 
 from .photo_cell import PhotoCell
 
