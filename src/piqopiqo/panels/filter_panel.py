@@ -1,60 +1,37 @@
-"""Folder filter panel for filtering photos by source folder."""
-
 from __future__ import annotations
 
 import logging
 import os
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import (
-    QCheckBox,
-    QComboBox,
-    QHBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QCheckBox, QComboBox
+
+from .scollable_strip import ScrollableStrip
 
 logger = logging.getLogger(__name__)
 
 
-class FolderFilterPanel(QWidget):
-    """Panel for filtering photos by source folder."""
-
-    # Emits folder path to filter by, or None to show all
-    filter_changed = Signal(object)  # str | None
+class FilterPanel(ScrollableStrip):
+    filter_changed = Signal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._folders: list[str] = []
-        self._updating = False
-
         self._setup_ui()
 
     def _setup_ui(self):
-        """Create the panel UI."""
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(4, 2, 4, 2)
-        layout.setSpacing(4)
-
-        # Checkbox with label text
+        # 1. Add widgets using the superclass method
         self.filter_checkbox = QCheckBox("Folder:")
         self.filter_checkbox.setChecked(False)
         self.filter_checkbox.stateChanged.connect(self._on_checkbox_changed)
-        layout.addWidget(self.filter_checkbox)
+        self.add_widget(self.filter_checkbox)
 
-        # Combobox for folder selection
         self.folder_combo = QComboBox()
         self.folder_combo.setMinimumWidth(150)
-        self.folder_combo.currentIndexChanged.connect(self._on_combo_changed)
-        layout.addWidget(self.folder_combo)
+        self.add_widget(self.folder_combo)
 
-        # Stretch to push everything left
-        layout.addStretch()
-
-        # Keep height minimal
-        self.setMaximumHeight(28)
-
-        # Initially hidden
-        self.setVisible(False)
+        # 2. Add extra items to demonstrate scrolling
+        for i in range(10):
+            self.add_widget(QCheckBox(f"Tag {i}"))
 
     def set_folders(self, folders: list[str]):
         """Set the list of folders to filter by.

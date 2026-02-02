@@ -23,14 +23,14 @@ from .db_fields import EDITABLE_FIELDS, DBFields
 from .exif_loader import ExifLoaderManager
 from .exif_man import ExifManager
 from .fullscreen import FullscreenOverlay
-from .grid import PagedPhotoGrid
+from .grid import PhotoGrid
 from .metadata_db import MetadataDBManager
 from .model import ImageItem, OnFullscreenExitMultipleSelected
 from .panels import (
     EditPanel,
     ErrorListDialog,
     ExifPanel,
-    FolderFilterPanel,
+    FilterPanel,
     LoadingStatusBar,
 )
 from .shortcuts import parse_shortcut
@@ -65,15 +65,15 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(0)
 
         # Folder filter panel (at top)
-        self.filter_panel = FolderFilterPanel()
+        self.filter_panel = FilterPanel()
         self.filter_panel.filter_changed.connect(self._on_filter_changed)
-        main_layout.addWidget(self.filter_panel)
+        main_layout.addWidget(self.filter_panel, 0)
 
         # Main horizontal splitter: grid | right panel(s)
         main_splitter = QSplitter(Qt.Horizontal)
         main_layout.addWidget(main_splitter)
 
-        self.grid = PagedPhotoGrid()
+        self.grid = PhotoGrid()
         main_splitter.addWidget(self.grid)
 
         # Right side: vertical splitter with edit panel and EXIF panel

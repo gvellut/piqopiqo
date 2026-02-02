@@ -2,13 +2,13 @@
 
 from .edit_panel import EditPanel
 from .exif_panel import ExifPanel
-from .filter_panel import FolderFilterPanel
+from .filter_panel import FilterPanel
 from .status_bar import ErrorListDialog, LoadingStatusBar
 
 __all__ = [
     "EditPanel",
     "ErrorListDialog",
     "ExifPanel",
-    "FolderFilterPanel",
+    "FilterPanel",
     "LoadingStatusBar",
 ]

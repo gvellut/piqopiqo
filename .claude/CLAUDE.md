@@ -43,7 +43,7 @@ src/piqopiqo/
 │   └── zoom.py      # Zoom state management
 ├── grid/            # Photo grid display
 │   ├── photo_cell.py    # Single photo cell widget
-│   └── photo_grid.py    # Paged grid of photo thumbnails
+│   └── photo_grid.py    # grid of photo thumbnails
 ├── panels/          # Side panels
 │   ├── edit_panel.py    # Editable metadata panel
 │   ├── edit_widgets.py  # Field editor widgets

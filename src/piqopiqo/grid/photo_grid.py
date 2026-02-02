@@ -1,4 +1,4 @@
-"""Paged photo grid widget for displaying thumbnails."""
+"""Photo grid widget for displaying thumbnails."""
 
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ from .photo_cell import PhotoCell
 logger = logging.getLogger(__name__)
 
 
-class PagedPhotoGrid(QWidget):
-    """Widget displaying a paged grid of photo thumbnails."""
+class PhotoGrid(QWidget):
+    """Widget displaying a grid of photo thumbnails."""
 
     request_thumb = Signal(int)
     selection_changed = Signal(set)
