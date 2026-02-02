@@ -6,7 +6,7 @@ import os
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QCheckBox, QComboBox
 
-from .scollable_strip import ScrollableStrip
+from piqopiqo.components.scollable_strip import ScrollableStrip
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +29,9 @@ class FilterPanel(ScrollableStrip):
         self.folder_combo.setMinimumWidth(150)
         self.add_widget(self.folder_combo)
 
-        # 2. Add extra items to demonstrate scrolling
-        for i in range(10):
-            self.add_widget(QCheckBox(f"Tag {i}"))
+        # Add extra items to demonstrate scrolling
+        # for i in range(100):
+        #     self.add_widget(QCheckBox(f"Tag {i}"))
 
     def set_folders(self, folders: list[str]):
         """Set the list of folders to filter by.

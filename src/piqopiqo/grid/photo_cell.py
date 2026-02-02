@@ -15,8 +15,8 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QFrame, QSizePolicy
 
-from piqopiqo.components.label_utils import get_label_color
 from piqopiqo.config import Config
+from piqopiqo.label_utils import get_label_color
 from piqopiqo.metadata.db_fields import DBFields
 
 

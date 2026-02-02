@@ -31,8 +31,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from piqopiqo.components.label_utils import get_label_color
 from piqopiqo.config import Config, Shortcut
+from piqopiqo.label_utils import get_label_color
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.shortcuts import match_shortcut_sequence, match_simple_shortcut
 
