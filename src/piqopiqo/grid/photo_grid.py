@@ -6,7 +6,7 @@ import logging
 import math
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont, QFontMetrics
+from PySide6.QtGui import QCursor, QFont, QFontMetrics
 from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
@@ -28,6 +28,7 @@ class PhotoGrid(QWidget):
     request_thumb = Signal(int)
     selection_changed = Signal(set)
     request_fullscreen = Signal(list)
+    context_menu_requested = Signal(int, object)  # index, QPoint (global pos)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -92,6 +93,7 @@ class PhotoGrid(QWidget):
             for c in range(cols):
                 cell = PhotoCell(len(self.cells))
                 cell.clicked.connect(self.on_cell_clicked)
+                cell.right_clicked.connect(self._on_cell_right_clicked)
                 self.grid_layout.addWidget(cell, r, c)
                 self.cells.append(cell)
 
@@ -254,6 +256,31 @@ class PhotoGrid(QWidget):
         self.selection_changed.emit(selected_indices)
 
         self.on_scroll(self.scrollbar.value())
+
+    def _on_cell_right_clicked(self, global_index: int):
+        """Handle right-click on a cell.
+
+        Selection behavior:
+        - If clicked photo is not selected: deselect all, select only clicked
+        - If clicked photo is already selected: keep current selection
+        """
+        if global_index == -1 or global_index >= len(self.items_data):
+            return
+
+        # Selection behavior: if clicked photo is not selected, select only it
+        if not self.items_data[global_index].is_selected:
+            # Deselect all, select this one
+            for item in self.items_data:
+                item.is_selected = False
+            self.items_data[global_index].is_selected = True
+            self._last_selected_index = global_index
+
+            selected_indices = {global_index}
+            self.selection_changed.emit(selected_indices)
+            self.on_scroll(self.scrollbar.value())
+
+        # Emit context menu request with global cursor position
+        self.context_menu_requested.emit(global_index, QCursor.pos())
 
     def wheelEvent(self, event):
         if not self.scrollbar.isVisible():

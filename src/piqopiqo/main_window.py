@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from functools import partial
 import logging
+import os
+import shutil
 import threading
 
 from PySide6.QtCore import Qt, QThreadPool
-from PySide6.QtGui import QAction, QPixmap, QShortcut
+from PySide6.QtGui import QAction, QActionGroup, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QFileDialog,
     QMainWindow,
+    QMenu,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -33,6 +37,7 @@ from .panels import (
     FilterPanel,
     LoadingStatusBar,
 )
+from .photo_model import PhotoListModel, SortOrder
 from .shortcuts import parse_shortcut
 from .support import save_last_folder
 from .thumb_man import ThumbnailManager, scan_folder
@@ -133,18 +138,30 @@ class MainWindow(QMainWindow):
         self.grid.request_thumb.connect(self.request_thumb_handler)
         self.grid.request_fullscreen.connect(self._handle_fullscreen_overlay)
         self.grid.selection_changed.connect(self.on_selection_changed)
+        self.grid.context_menu_requested.connect(self._show_context_menu)
 
-        # Store all images (unfiltered)
-        self._all_images_data = [ImageItem(**data) for data in images]
-        self.images_data = self._all_images_data
+        # Create photo list model
+        self.photo_model = PhotoListModel(
+            self.thumb_manager,
+            self.exif_loader,
+            self.db_manager,
+            parent=self,
+        )
+        photos = [ImageItem(**data) for data in images]
+        self.photo_model.set_photos(photos, source_folders)
+
+        # Connect model signals
+        self.photo_model.photos_changed.connect(self._on_model_changed)
+        self.photo_model.photo_added.connect(self._on_photo_added)
+        self.photo_model.photo_removed.connect(self._on_photo_removed)
 
         # Set up filter panel with folders
         self.filter_panel.set_folders(source_folders)
 
-        self.grid.set_data(self.images_data)
+        self.grid.set_data(self.photo_model.photos)
 
         # Update status bar
-        self.status_bar.set_photo_count(len(self._all_images_data))
+        self.status_bar.set_photo_count(len(self.photo_model.all_photos))
 
         # Start background EXIF loading
         self._start_background_exif_loading()
@@ -152,6 +169,18 @@ class MainWindow(QMainWindow):
         # Set up keyboard shortcuts
         self._label_save_pool = QThreadPool()
         self._setup_shortcuts()
+
+    # --- Properties for backward compatibility ---
+
+    @property
+    def images_data(self) -> list[ImageItem]:
+        """Filtered photo list (from model)."""
+        return self.photo_model.photos
+
+    @property
+    def _all_images_data(self) -> list[ImageItem]:
+        """All photos (from model)."""
+        return self.photo_model.all_photos
 
     def _setup_shortcuts(self):
         """Set up application-wide keyboard shortcuts from config."""
@@ -236,8 +265,8 @@ class MainWindow(QMainWindow):
 
     def _start_background_exif_loading(self):
         """Queue all images for background EXIF loading."""
-        self.exif_loader.reset(target_total=len(self._all_images_data))
-        self.exif_loader.prime_from_db(self._all_images_data)
+        self.exif_loader.reset(target_total=len(self.photo_model.all_photos))
+        self.exif_loader.prime_from_db(self.photo_model.all_photos)
 
     def _on_thumb_progress(self, completed: int, total: int):
         """Handle thumbnail progress update."""
@@ -291,105 +320,12 @@ class MainWindow(QMainWindow):
         Args:
             criteria: Filter criteria to apply.
         """
-        self._current_filter = criteria
-        self._apply_filter()
-
-    def _apply_filter(self):
-        """Apply the current filter to the images."""
-        if self._current_filter is None:
-            # Show all images
-            self.images_data = self._all_images_data
-            self.status_bar.set_photo_count(len(self._all_images_data))
-        else:
-            # Apply all filters (AND logic between different filter types)
-            filtered = self._all_images_data
-
-            # 1. Folder filter
-            if self._current_filter.folder is not None:
-                filtered = [
-                    item
-                    for item in filtered
-                    if item.source_folder == self._current_filter.folder
-                ]
-
-            # 2. Label filter (OR logic within labels)
-            if self._current_filter.labels or self._current_filter.include_no_label:
-                filtered = [
-                    item
-                    for item in filtered
-                    if self._matches_label_filter(item, self._current_filter)
-                ]
-
-            # 3. Search filter (in keywords + title, case insensitive)
-            if self._current_filter.search_text:
-                search_lower = self._current_filter.search_text.lower()
-                filtered = [
-                    item
-                    for item in filtered
-                    if self._matches_search_filter(item, search_lower)
-                ]
-
-            self.images_data = filtered
-            self.status_bar.set_photo_count(
-                len(self._all_images_data), len(self.images_data)
-            )
-
-        self.grid.set_data(self.images_data)
+        self.photo_model.set_filter(criteria)
 
         # Clear panels since selection changed
         self.exif_panel.update_exif([])
         if self.edit_panel:
             self.edit_panel.update_for_selection([])
-
-    def _matches_label_filter(self, item: ImageItem, criteria: FilterCriteria) -> bool:
-        """Check if item matches the label filter criteria.
-
-        Args:
-            item: Image item to check.
-            criteria: Filter criteria with label settings.
-
-        Returns:
-            True if item matches (OR logic: any checked label or no-label).
-        """
-        # Get item's label from db_metadata
-        item_label = None
-        if item.db_metadata:
-            item_label = item.db_metadata.get("label")
-
-        # Check if "No Label" matches
-        if criteria.include_no_label and not item_label:
-            return True
-
-        # Check if any selected label matches
-        if item_label and item_label in criteria.labels:
-            return True
-
-        return False
-
-    def _matches_search_filter(self, item: ImageItem, search_lower: str) -> bool:
-        """Check if item matches the search filter.
-
-        Args:
-            item: Image item to check.
-            search_lower: Lowercase search text.
-
-        Returns:
-            True if search text found in title or keywords.
-        """
-        if not item.db_metadata:
-            return False
-
-        # Check title
-        title = item.db_metadata.get("title", "") or ""
-        if search_lower in title.lower():
-            return True
-
-        # Check keywords
-        keywords = item.db_metadata.get("keywords", "") or ""
-        if search_lower in keywords.lower():
-            return True
-
-        return False
 
     def _create_menu_bar(self):
         menubar = self.menuBar()
@@ -419,6 +355,44 @@ class MainWindow(QMainWindow):
         quit_action.setShortcut("Ctrl+Q")
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
+
+        # View menu
+        view_menu = menubar.addMenu("View")
+
+        # Sort submenu
+        sort_menu = view_menu.addMenu("Sort By")
+        sort_group = QActionGroup(self)
+        sort_group.setExclusive(True)
+
+        sort_time = QAction("Time Taken", self, checkable=True)
+        sort_time.triggered.connect(lambda: self._set_sort_order(SortOrder.TIME_TAKEN))
+        sort_group.addAction(sort_time)
+        sort_menu.addAction(sort_time)
+
+        sort_name = QAction("File Name", self, checkable=True, checked=True)
+        sort_name.triggered.connect(lambda: self._set_sort_order(SortOrder.FILE_NAME))
+        sort_group.addAction(sort_name)
+        sort_menu.addAction(sort_name)
+
+        sort_folder = QAction("File Name by Folder", self, checkable=True)
+        sort_folder.triggered.connect(
+            lambda: self._set_sort_order(SortOrder.FILE_NAME_BY_FOLDER)
+        )
+        sort_group.addAction(sort_folder)
+        sort_menu.addAction(sort_folder)
+
+        self._sort_actions = {
+            SortOrder.TIME_TAKEN: sort_time,
+            SortOrder.FILE_NAME: sort_name,
+            SortOrder.FILE_NAME_BY_FOLDER: sort_folder,
+        }
+
+        view_menu.addSeparator()
+
+        refresh_action = QAction("Refresh", self)
+        refresh_action.setShortcut("Ctrl+R")
+        refresh_action.triggered.connect(self._on_refresh_folder)
+        view_menu.addAction(refresh_action)
 
         help_menu = menubar.addMenu("Help")
         about_action = QAction(f"About {Config.APP_NAME}", self)
@@ -457,7 +431,6 @@ class MainWindow(QMainWindow):
         # Update state
         self.root_folder = folder
         self.source_folders = source_folders
-        self._current_filter = None
 
         # Close old database connections and create new manager
         self.db_manager.close_all()
@@ -472,17 +445,17 @@ class MainWindow(QMainWindow):
         for src_folder in source_folders:
             self.thumb_manager.register_folder(src_folder)
 
-        # Update images data
-        self._all_images_data = [ImageItem(**data) for data in images]
-        self.images_data = self._all_images_data
+        # Update photo model (replaces old _all_images_data and images_data)
+        photos = [ImageItem(**data) for data in images]
+        self.photo_model.set_photos(photos, source_folders)
 
         # Update filter panel
         self.filter_panel.set_folders(source_folders)
 
-        self.grid.set_data(self.images_data)
+        self.grid.set_data(self.photo_model.photos)
 
         # Update status bar
-        self.status_bar.set_photo_count(len(self._all_images_data))
+        self.status_bar.set_photo_count(len(self.photo_model.all_photos))
 
         # Start background EXIF loading
         self._start_background_exif_loading()
@@ -650,6 +623,149 @@ class MainWindow(QMainWindow):
             # In single-selection (all items visible) mode, update the selection
             self.grid.on_cell_clicked(new_index, False, False)
             self.grid._ensure_visible(new_index)
+
+    # --- Model signal handlers ---
+
+    def _on_model_changed(self):
+        """Handle model data change - refresh grid."""
+        self.grid.set_data(self.photo_model.photos)
+        total = len(self.photo_model.all_photos)
+        filtered = len(self.photo_model.photos)
+        if total == filtered:
+            self.status_bar.set_photo_count(total)
+        else:
+            self.status_bar.set_photo_count(total, filtered)
+
+    def _on_photo_added(self, file_path: str, index: int):
+        """Handle photo added to model."""
+        self.grid.set_data(self.photo_model.photos)
+        if index >= 0:
+            self.grid._ensure_visible(index)
+        self._update_status_bar_count()
+
+    def _on_photo_removed(self, file_path: str, former_index: int):
+        """Handle photo removed from model."""
+        # Determine new index to show
+        new_index = min(former_index, len(self.photo_model.photos) - 1)
+        self.grid.set_data(self.photo_model.photos)
+        if new_index >= 0:
+            self.photo_model.select_photo(new_index)
+            self.grid._ensure_visible(new_index)
+        self._update_status_bar_count()
+
+    def _update_status_bar_count(self):
+        """Update status bar photo count."""
+        total = len(self.photo_model.all_photos)
+        filtered = len(self.photo_model.photos)
+        if total == filtered:
+            self.status_bar.set_photo_count(total)
+        else:
+            self.status_bar.set_photo_count(total, filtered)
+
+    # --- Sort order ---
+
+    def _set_sort_order(self, order: SortOrder):
+        """Set the sort order via menu."""
+        self.photo_model.set_sort_order(order)
+
+    # --- Refresh folder ---
+
+    def _on_refresh_folder(self):
+        """Refresh the current folder from disk."""
+        if not self.root_folder:
+            return
+
+        added, removed = self.photo_model.refresh_from_disk(self.root_folder)
+        logger.info(f"Refresh: {len(added)} added, {len(removed)} removed")
+
+        # Update filter panel folders if changed
+        self.filter_panel.set_folders(self.photo_model.source_folders)
+
+    # --- Context menu ---
+
+    def _show_context_menu(self, global_index: int, pos):
+        """Show context menu for photo(s)."""
+        selected = self.photo_model.get_selected_photos()
+        if not selected:
+            return
+
+        menu = QMenu(self)
+
+        # Duplicate action
+        if len(selected) == 1:
+            duplicate_action = menu.addAction("Duplicate")
+        else:
+            duplicate_action = menu.addAction(f"Duplicate ({len(selected)} photos)")
+        duplicate_action.triggered.connect(lambda: self._duplicate_photos(selected))
+
+        menu.addSeparator()
+
+        # Move to Trash action
+        if len(selected) == 1:
+            trash_action = menu.addAction("Move to Trash")
+        else:
+            trash_action = menu.addAction(f"Move to Trash ({len(selected)} photos)")
+        trash_action.triggered.connect(lambda: self._move_to_trash(selected))
+
+        menu.exec(pos)
+
+    def _duplicate_photos(self, photos: list[ImageItem]):
+        """Duplicate selected photos."""
+        for photo in photos:
+            new_path = self._get_duplicate_path(photo.path)
+            try:
+                shutil.copy2(photo.path, new_path)
+
+                # Create ImageItem for new photo
+                new_item = ImageItem(
+                    path=new_path,
+                    name=os.path.basename(new_path),
+                    created=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    source_folder=photo.source_folder,
+                )
+
+                # Add to model (triggers thumbnail/EXIF loading)
+                self.photo_model.add_photo(new_item)
+                logger.info(f"Duplicated {photo.path} to {new_path}")
+
+            except OSError as e:
+                logger.error(f"Failed to duplicate {photo.path}: {e}")
+
+    def _get_duplicate_path(self, original_path: str) -> str:
+        """Generate a path for a duplicate file."""
+        directory = os.path.dirname(original_path)
+        name, ext = os.path.splitext(os.path.basename(original_path))
+
+        # Try " copy", then " copy2", " copy3", etc.
+        suffix = " copy"
+        counter = 1
+
+        while True:
+            if counter == 1:
+                new_name = f"{name}{suffix}{ext}"
+            else:
+                new_name = f"{name}{suffix}{counter}{ext}"
+
+            new_path = os.path.join(directory, new_name)
+            if not os.path.exists(new_path):
+                return new_path
+            counter += 1
+
+    def _move_to_trash(self, photos: list[ImageItem]):
+        """Move selected photos to trash."""
+        paths_to_remove = []
+
+        for photo in photos:
+            try:
+                platform.move_to_trash(photo.path)
+                paths_to_remove.append(photo.path)
+                logger.info(f"Moved to trash: {photo.path}")
+            except Exception as e:
+                logger.error(f"Failed to trash {photo.path}: {e}")
+
+        # Remove from model (handles cleanup)
+        for path in paths_to_remove:
+            self.photo_model.remove_photo(path)
 
     def closeEvent(self, event):
         # Stop background workers first to avoid noisy teardown.

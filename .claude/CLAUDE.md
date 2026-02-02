@@ -24,26 +24,28 @@ src/piqopiqo/
 ├── __main__.py      # Entry point, CLI with click, Qt app setup
 ├── config.py        # Configuration class with env var overrides (PIQO_ prefix)
 ├── main_window.py   # Main application window
+├── photo_model.py   # PhotoListModel: filtering, sorting, selection, add/remove photos
 ├── shortcuts.py     # Keyboard shortcut matching utilities
-├── model.py         # Data models and enums
-├── db_fields.py     # Database field definitions
-├── metadata_db.py   # SQLite database for cached metadata
-├── exif_loader.py   # EXIF metadata loading
-├── exif_man.py      # EXIF management utilities
+├── model.py         # Data models (ImageItem, FilterCriteria, StatusLabel)
+├── exif_loader.py   # EXIF metadata loading (background thread)
+├── exif_man.py      # EXIF management utilities (on-demand fetch)
 ├── thumb_man.py     # Thumbnail generation and caching (multiprocessing)
 ├── support.py       # Support functions (cache dir, last folder persistence)
 ├── utils.py         # Logging setup and utilities
+├── label_utils.py   # Status label color utilities
+├── metadata/        # Database layer
+│   ├── metadata_db.py   # SQLite database for cached metadata
+│   ├── db_fields.py     # Database field definitions and EXIF mappings
+│   └── save_workers.py  # Background worker to save metadata
 ├── components/      # Reusable UI components
-│   ├── ellided_label.py   # Truncated label with ellipsis
-│   ├── label_utils.py     # Status label color utilities
-│   └── save_workers.py    # Background metadata save workers
+│   └── ellided_label.py   # Truncated label with ellipsis
 ├── fullscreen/      # Fullscreen image viewing
 │   ├── overlay.py   # Fullscreen overlay widget
 │   ├── pan.py       # Pan logic for zoomed images
 │   └── zoom.py      # Zoom state management
 ├── grid/            # Photo grid display
-│   ├── photo_cell.py    # Single photo cell widget
-│   └── photo_grid.py    # grid of photo thumbnails
+│   ├── photo_cell.py    # Single photo cell widget (left/right click)
+│   └── photo_grid.py    # Grid of photo thumbnails with context menu
 ├── panels/          # Side panels
 │   ├── edit_panel.py    # Editable metadata panel
 │   ├── edit_widgets.py  # Field editor widgets
@@ -51,7 +53,7 @@ src/piqopiqo/
 │   ├── filter_panel.py  # Filtering UI
 │   └── status_bar.py    # Status bar component
 └── platform/        # Platform-specific code
-    └── macos.py     # macOS-specific utilities
+    └── macos.py     # macOS utilities (resolution, move_to_trash)
 ```
 
 ## Key Features
@@ -60,9 +62,24 @@ src/piqopiqo/
 - **Fullscreen**: Full resolution with zoom/pan, keyboard navigation
 - **EXIF panel**: Read-only EXIF data display (uses pyexiftool)
 - **Edit panel**: Editable metadata (title, description, keywords, coordinates, time taken)
-- **Filter panel**: Fields to use for filtering the iamges displayed on the photo grid
+- **Filter panel**: Fields to use for filtering the images displayed on the photo grid
 - **Thumbnail caching**: Multiprocessing pipeline, cached to disk
 - **Status labels**: Configurable colored labels for photo workflow
+- **Sorting**: View menu with sort by Time Taken, File Name, File Name by Folder
+- **Context menu**: Right-click on photos for Duplicate and Move to Trash actions
+- **Refresh**: Ctrl+R to rescan folder for external file changes
+
+## PhotoListModel Architecture
+
+The `photo_model.py` module contains `PhotoListModel`, a QObject that manages:
+- All photos (`all_photos`) and filtered/sorted view (`photos`)
+- Filtering via `set_filter(FilterCriteria)`
+- Sorting via `set_sort_order(SortOrder)` - TIME_TAKEN, FILE_NAME, FILE_NAME_BY_FOLDER
+- Selection management
+- Photo addition (queues thumbnail/EXIF loading, cleans up on removal)
+- Signals: `photos_changed`, `photo_added`, `photo_removed`, `selection_changed`
+
+MainWindow uses properties `images_data` and `_all_images_data` that delegate to the model for backward compatibility.
 
 ## Configuration
 
@@ -80,13 +97,24 @@ Shortcuts are defined in `config.py` `Config.SHORTCUTS` dict (shortcut name => k
 
 - **Zoom (fullscreen only)**: `=` zoom in, `-` zoom out, `0` reset zoom
 - **Labels (grid + fullscreen)**: `1`-`9` set label by index, `` ` `` (backtick) clears label
+- **Refresh**: `Ctrl+R` rescan folder for changes
 - Labels are defined in `Config.STATUS_LABELS` as `StatusLabel(name, color, index)`
+
+## Context Menu (Right-Click)
+
+Right-click on a photo in the grid to access:
+- **Duplicate**: Creates a copy with " copy" suffix (or " copy2", etc.)
+- **Move to Trash**: Moves file to macOS Trash
+
+Selection behavior:
+- Right-click on unselected photo: selects only that photo
+- Right-click on selected photo in multi-selection: keeps all selected, action applies to all
 
 ## Dependencies
 
 - `uv` for Python project management (deps in `pyproject.toml`)
 - `exiftool` must be installed on the system
-- Key packages: PySide6, pyexiftool, Pillow, click, attrs
+- Key packages: PySide6, pyexiftool, Pillow, click, attrs, send2trash
 
 ## Development
 

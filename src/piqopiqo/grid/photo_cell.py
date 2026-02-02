@@ -23,7 +23,8 @@ from piqopiqo.metadata.db_fields import DBFields
 class PhotoCell(QFrame):
     """Widget for displaying a single photo cell in the grid."""
 
-    clicked = Signal(int, bool, bool)
+    clicked = Signal(int, bool, bool)  # global_index, is_shift, is_ctrl
+    right_clicked = Signal(int)  # global_index
 
     def __init__(self, index_in_grid: int):
         super().__init__()
@@ -48,13 +49,16 @@ class PhotoCell(QFrame):
         self.update()
 
     def mousePressEvent(self, event: QMouseEvent):
-        if self.current_data and event.button() == Qt.LeftButton:
-            modifiers = event.modifiers()
-            self.clicked.emit(
-                self.current_data._global_index,
-                bool(modifiers & Qt.ShiftModifier),
-                bool(modifiers & Qt.ControlModifier),
-            )
+        if self.current_data:
+            if event.button() == Qt.LeftButton:
+                modifiers = event.modifiers()
+                self.clicked.emit(
+                    self.current_data._global_index,
+                    bool(modifiers & Qt.ShiftModifier),
+                    bool(modifiers & Qt.ControlModifier),
+                )
+            elif event.button() == Qt.RightButton:
+                self.right_clicked.emit(self.current_data._global_index)
         super().mousePressEvent(event)
 
     def paintEvent(self, event: QPaintEvent):
