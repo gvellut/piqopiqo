@@ -56,6 +56,15 @@ if __name__ == "__main__":
     main()
 ```
 
+#### Initialization options
+
+You can set these options to make it easier to test (smaller window, with a large enough photo cells) :
+
+- `PIQO_INITIAL_RESOLUTION`
+- `PIQO_NUM_COLUMNS`
+- also `PIQO_CACHE_BASE_DIR` to reset the metadata state
+
+
 ### 3. Write Automation Scripts
 
 Create a Python script to automate your application. It connects to the server running inside the application.

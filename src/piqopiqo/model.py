@@ -12,6 +12,20 @@ class StatusLabel:
     index: int
 
 
+@define
+class FilterCriteria:
+    """Filter criteria for the photo model.
+
+    All filters are combined with AND logic.
+    Label filters within labels set use OR logic.
+    """
+
+    folder: str | None = None  # None means all folders
+    labels: set[str] = attr.Factory(set)  # Label names to show (OR). Empty = no filter.
+    include_no_label: bool = False  # Whether to include photos with no label
+    search_text: str = ""  # Search in keywords + title (case insensitive)
+
+
 @attr.s(auto_attribs=True)
 class ImageItem:
     path: str

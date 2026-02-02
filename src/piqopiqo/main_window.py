@@ -25,7 +25,7 @@ from .grid import PhotoGrid
 from .metadata.db_fields import EDITABLE_FIELDS, DBFields
 from .metadata.metadata_db import MetadataDBManager
 from .metadata.save_workers import MetadataSaveWorker
-from .model import ImageItem, OnFullscreenExitMultipleSelected
+from .model import FilterCriteria, ImageItem, OnFullscreenExitMultipleSelected
 from .panels import (
     EditPanel,
     ErrorListDialog,
@@ -51,7 +51,7 @@ class MainWindow(QMainWindow):
         self.etHelper = etHelper
         self.root_folder = root_folder
         self.source_folders = source_folders
-        self._current_filter = None  # Current folder filter
+        self._current_filter: FilterCriteria | None = None  # Current filter criteria
 
         # Create metadata database manager
         self.db_manager = MetadataDBManager()
@@ -285,13 +285,13 @@ class MainWindow(QMainWindow):
         """Get list of currently selected items."""
         return [item for item in self.images_data if item.is_selected]
 
-    def _on_filter_changed(self, folder_path: str | None):
-        """Handle folder filter change.
+    def _on_filter_changed(self, criteria: FilterCriteria):
+        """Handle filter change.
 
         Args:
-            folder_path: Folder to filter by, or None to show all.
+            criteria: Filter criteria to apply.
         """
-        self._current_filter = folder_path
+        self._current_filter = criteria
         self._apply_filter()
 
     def _apply_filter(self):
@@ -301,12 +301,35 @@ class MainWindow(QMainWindow):
             self.images_data = self._all_images_data
             self.status_bar.set_photo_count(len(self._all_images_data))
         else:
-            # Filter by source folder
-            self.images_data = [
-                item
-                for item in self._all_images_data
-                if item.source_folder == self._current_filter
-            ]
+            # Apply all filters (AND logic between different filter types)
+            filtered = self._all_images_data
+
+            # 1. Folder filter
+            if self._current_filter.folder is not None:
+                filtered = [
+                    item
+                    for item in filtered
+                    if item.source_folder == self._current_filter.folder
+                ]
+
+            # 2. Label filter (OR logic within labels)
+            if self._current_filter.labels or self._current_filter.include_no_label:
+                filtered = [
+                    item
+                    for item in filtered
+                    if self._matches_label_filter(item, self._current_filter)
+                ]
+
+            # 3. Search filter (in keywords + title, case insensitive)
+            if self._current_filter.search_text:
+                search_lower = self._current_filter.search_text.lower()
+                filtered = [
+                    item
+                    for item in filtered
+                    if self._matches_search_filter(item, search_lower)
+                ]
+
+            self.images_data = filtered
             self.status_bar.set_photo_count(
                 len(self._all_images_data), len(self.images_data)
             )
@@ -317,6 +340,56 @@ class MainWindow(QMainWindow):
         self.exif_panel.update_exif([])
         if self.edit_panel:
             self.edit_panel.update_for_selection([])
+
+    def _matches_label_filter(self, item: ImageItem, criteria: FilterCriteria) -> bool:
+        """Check if item matches the label filter criteria.
+
+        Args:
+            item: Image item to check.
+            criteria: Filter criteria with label settings.
+
+        Returns:
+            True if item matches (OR logic: any checked label or no-label).
+        """
+        # Get item's label from db_metadata
+        item_label = None
+        if item.db_metadata:
+            item_label = item.db_metadata.get("label")
+
+        # Check if "No Label" matches
+        if criteria.include_no_label and not item_label:
+            return True
+
+        # Check if any selected label matches
+        if item_label and item_label in criteria.labels:
+            return True
+
+        return False
+
+    def _matches_search_filter(self, item: ImageItem, search_lower: str) -> bool:
+        """Check if item matches the search filter.
+
+        Args:
+            item: Image item to check.
+            search_lower: Lowercase search text.
+
+        Returns:
+            True if search text found in title or keywords.
+        """
+        if not item.db_metadata:
+            return False
+
+        # Check title
+        title = item.db_metadata.get("title", "") or ""
+        if search_lower in title.lower():
+            return True
+
+        # Check keywords
+        keywords = item.db_metadata.get("keywords", "") or ""
+        if search_lower in keywords.lower():
+            return True
+
+        return False
 
     def _create_menu_bar(self):
         menubar = self.menuBar()
