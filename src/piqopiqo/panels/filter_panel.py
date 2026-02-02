@@ -36,6 +36,48 @@ class ColorSwatch(QFrame):
         self.setStyleSheet(f"background-color: {color}; border: 1px solid #888;")
 
 
+class LabelCheckbox(QWidget):
+    """A checkbox with a color swatch and label text."""
+
+    stateChanged = Signal(int)
+
+    def __init__(self, label_name: str, color: str, parent=None):
+        super().__init__(parent)
+        self._label_name = label_name
+
+        obj_name = f"filter_label_{label_name.lower().replace(' ', '_')}"
+        self.setObjectName(f"{obj_name}_container")
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        self.checkbox = QCheckBox()
+        self.checkbox.setObjectName(obj_name)
+        self.checkbox.stateChanged.connect(self.stateChanged)
+        layout.addWidget(self.checkbox)
+
+        swatch = ColorSwatch(color)
+        layout.addWidget(swatch)
+
+        text_label = QLabel(label_name)
+        layout.addWidget(text_label)
+
+    @property
+    def label_name(self) -> str:
+        return self._label_name
+
+    def isChecked(self) -> bool:
+        return self.checkbox.isChecked()
+
+    def setChecked(self, checked: bool):
+        self.checkbox.setChecked(checked)
+
+    def setEnabled(self, enabled: bool):
+        super().setEnabled(enabled)
+        self.checkbox.setEnabled(enabled)
+
+
 class FilterPanel(ScrollableStrip):
     filter_changed = Signal(FilterCriteria)
 
@@ -43,7 +85,7 @@ class FilterPanel(ScrollableStrip):
         super().__init__(parent)
         self._folders: list[str] = []
         self._updating = False
-        self._label_checkboxes: dict[str, QCheckBox] = {}  # label_name -> checkbox
+        self._label_checkboxes: dict[str, LabelCheckbox] = {}  # label_name -> widget
         self._no_label_checkbox: QCheckBox | None = None
         self._setup_ui()
         # Start disabled until folders are set
@@ -86,10 +128,10 @@ class FilterPanel(ScrollableStrip):
 
         # Label checkboxes from config
         for status_label in Config.STATUS_LABELS:
-            label_widget = self._create_label_checkbox(
-                status_label.name, status_label.color
-            )
-            self.add_widget(label_widget)
+            label_checkbox = LabelCheckbox(status_label.name, status_label.color)
+            label_checkbox.stateChanged.connect(self._on_label_filter_changed)
+            self._label_checkboxes[status_label.name] = label_checkbox
+            self.add_widget(label_checkbox)
 
         # Add separator
         self._add_separator()
@@ -113,29 +155,6 @@ class FilterPanel(ScrollableStrip):
         separator.setFrameShape(QFrame.VLine)
         separator.setFrameShadow(QFrame.Sunken)
         self.add_widget(separator)
-
-    def _create_label_checkbox(self, label_name: str, color: str) -> QWidget:
-        """Create a widget with checkbox + color swatch + label text."""
-        container = QWidget()
-        obj_name = f"filter_label_{label_name.lower().replace(' ', '_')}"
-        container.setObjectName(f"{obj_name}_container")
-        layout = QHBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-
-        checkbox = QCheckBox()
-        checkbox.setObjectName(obj_name)
-        checkbox.stateChanged.connect(self._on_label_filter_changed)
-        self._label_checkboxes[label_name] = checkbox
-        layout.addWidget(checkbox)
-
-        swatch = ColorSwatch(color)
-        layout.addWidget(swatch)
-
-        text_label = QLabel(label_name)
-        layout.addWidget(text_label)
-
-        return container
 
     def _set_panel_enabled(self, enabled: bool):
         """Enable or disable all filter widgets."""
