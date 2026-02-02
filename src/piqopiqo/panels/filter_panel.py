@@ -3,15 +3,18 @@ from __future__ import annotations
 import logging
 import os
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QPushButton,
+    QSizePolicy,
+    QStyle,
     QWidget,
 )
 
@@ -33,6 +36,7 @@ class ColorSwatch(QFrame):
     def __init__(self, color: str, parent=None):
         super().__init__(parent)
         self.setFixedSize(16, 16)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.setStyleSheet(f"background-color: {color}; border: 1px solid #888;")
 
 
@@ -54,6 +58,15 @@ class LabelCheckbox(QWidget):
 
         self.checkbox = QCheckBox()
         self.checkbox.setObjectName(obj_name)
+
+        # On macOS, the checkbox indicator visual rect can be larger than reported,
+        # or strict sizing causes overlap. Add padding to the fixed size.
+        style = self.checkbox.style()
+        ind_w = style.pixelMetric(QStyle.PM_IndicatorWidth, None, self.checkbox)
+        ind_h = style.pixelMetric(QStyle.PM_IndicatorHeight, None, self.checkbox)
+        self.checkbox.setFixedSize(ind_w + 10, max(16, ind_h))
+        self.checkbox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
         self.checkbox.stateChanged.connect(self.stateChanged)
         layout.addWidget(self.checkbox)
 
@@ -61,7 +74,13 @@ class LabelCheckbox(QWidget):
         layout.addWidget(swatch)
 
         text_label = QLabel(label_name)
+        text_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         layout.addWidget(text_label)
+
+        # Ensure this composite widget always gets enough space for its children,
+        # so the internal spacing doesn't collapse when placed in tight containers.
+        layout.setSizeConstraint(QLayout.SetFixedSize)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
     @property
     def label_name(self) -> str:
