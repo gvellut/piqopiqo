@@ -3,18 +3,17 @@ from __future__ import annotations
 import logging
 import os
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QMargins, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
-    QLayout,
     QLineEdit,
     QPushButton,
-    QSizePolicy,
     QStyle,
+    QStyleOptionButton,
     QWidget,
 )
 
@@ -36,8 +35,31 @@ class ColorSwatch(QFrame):
     def __init__(self, color: str, parent=None):
         super().__init__(parent)
         self.setFixedSize(16, 16)
-        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.setStyleSheet(f"background-color: {color}; border: 1px solid #888;")
+
+
+class EmptyCheckBox(QCheckBox):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+    def sizeHint(self):
+        # 1. Initialize style options to get current state
+        opt = QStyleOptionButton()
+        self.initStyleOption(opt)
+
+        # 2. Ask the style for the rectangle of the checkbox indicator
+        # SE_CheckBoxIndicator gives the exact rect of the box itself
+        indicator_rect = self.style().subElementRect(
+            QStyle.SubElement.SE_CheckBoxIndicator, opt, self
+        )
+
+        # 3. Return that size (plus a tiny margin if safer, but usually exact is fine)
+        a = indicator_rect.size().grownBy(QMargins(0, 0, 6, 0))
+        return a
+
+    def hitButton(self, pos):
+        # Optional: Ensure clicks anywhere in this (small) widget register
+        return self.rect().contains(pos)
 
 
 class LabelCheckbox(QWidget):
@@ -56,17 +78,8 @@ class LabelCheckbox(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
-        self.checkbox = QCheckBox()
+        self.checkbox = EmptyCheckBox()
         self.checkbox.setObjectName(obj_name)
-
-        # On macOS, the checkbox indicator visual rect can be larger than reported,
-        # or strict sizing causes overlap. Add padding to the fixed size.
-        style = self.checkbox.style()
-        ind_w = style.pixelMetric(QStyle.PM_IndicatorWidth, None, self.checkbox)
-        ind_h = style.pixelMetric(QStyle.PM_IndicatorHeight, None, self.checkbox)
-        self.checkbox.setFixedSize(ind_w + 10, max(16, ind_h))
-        self.checkbox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-
         self.checkbox.stateChanged.connect(self.stateChanged)
         layout.addWidget(self.checkbox)
 
@@ -74,13 +87,7 @@ class LabelCheckbox(QWidget):
         layout.addWidget(swatch)
 
         text_label = QLabel(label_name)
-        text_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         layout.addWidget(text_label)
-
-        # Ensure this composite widget always gets enough space for its children,
-        # so the internal spacing doesn't collapse when placed in tight containers.
-        layout.setSizeConstraint(QLayout.SetFixedSize)
-        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
     @property
     def label_name(self) -> str:
