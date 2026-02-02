@@ -4,7 +4,7 @@ Photo viewer / metadata viewer + editor built with Python 3 and PySide6 (Qt).
 
 ## Running the Application
 
-For testing that all the imports work and that the app initializes correctly. As well as testing that the changes are correct, using PyQtAuto.
+For testing that all the imports work and that the app initializes correctly. As well as testing that the changes are correct, using PyQtAuto (PIQO_INITIAL_RESOLUTION and PIQO_NUM_COLUMNS for setting suitable values)
 
 ```bash
 # Run with a folder path
@@ -60,6 +60,7 @@ src/piqopiqo/
 - **Fullscreen**: Full resolution with zoom/pan, keyboard navigation
 - **EXIF panel**: Read-only EXIF data display (uses pyexiftool)
 - **Edit panel**: Editable metadata (title, description, keywords, coordinates, time taken)
+- **Filter panel**: Fields to use for filtering the iamges displayed on the photo grid
 - **Thumbnail caching**: Multiprocessing pipeline, cached to disk
 - **Status labels**: Configurable colored labels for photo workflow
 
