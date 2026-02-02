@@ -3,7 +3,7 @@ name: automate-pyside6-and-screenshots
 description: Use PyQtAuto to automate and test PySide6 applications. PyQtAuto works like Playwright for web browsers, but for Qt/PySide6 desktop applications. Screenshots can be grabbed to see what is going on.
 ---
 
-This document describes how to use PyQtAuto to automate and test PySide6 applications. PyQtAuto works like Playwright for web browsers, but for Qt/PySide6 desktop applications.
+This document describes how to use PyQtAuto to automate and test PySide6 applications. PyQtAuto works like Playwright for web browsers, but for Qt/PySide6 desktop applications. 
 
 ## Quick Start
 
@@ -14,15 +14,10 @@ Do this if not already setup.
 In your project's `pyproject.toml`, add pyqtauto as a local source dependency:
 
 ```toml
-[project]
-dependencies = [
-    "pyside6>=6.5.0",
-]
-
 [tool.uv.sources]
 pyqtauto = { path = "/Users/guilhem/Documents/projects/github/pyqtauto" }
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pyqtauto",
 ]
@@ -31,29 +26,12 @@ dev = [
 Then install the dev dependencies:
 
 ```bash
-uv sync --extra dev
+uv sync
 ```
 
 ### 2. Enable the Server in Your Application
 
 Add the server import with a try/except to make it optional (recommended for production code):
-
-```python
-# Optional import - pyqtauto may not be installed in production
-try:
-    from pyqtauto.server import start_server
-except ImportError:
-    start_server = None
-
-# Later, after QApplication is created:
-if start_server is not None:
-    server = start_server(force=True)
-    if server:
-        print(f"PyQtAuto server on port {server.port}")
-```
-
-
-Complete example:
 
 ```python
 import sys
@@ -80,7 +58,7 @@ if __name__ == "__main__":
 
 ### 3. Write Automation Scripts
 
-Create a Python script to automate your application:
+Create a Python script to automate your application. It connects to the server running inside the application.
 
 ```python
 from pyqtauto import PyQtAutoClient
