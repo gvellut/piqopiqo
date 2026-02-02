@@ -121,6 +121,7 @@ class FilterPanel(ScrollableStrip):
         # 1. Clear filter button
         self.clear_button = QPushButton("Clear filter")
         self.clear_button.setObjectName("filter_clear_button")
+        self.clear_button.setFixedWidth(80)
         self.clear_button.clicked.connect(self._on_clear_filter)
         self.add_widget(self.clear_button)
 
@@ -134,7 +135,8 @@ class FilterPanel(ScrollableStrip):
 
         self.folder_combo = QComboBox()
         self.folder_combo.setObjectName("filter_folder_combo")
-        self.folder_combo.setMinimumWidth(150)
+        self.folder_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.folder_combo.setMaximumWidth(300)
         self.folder_combo.currentIndexChanged.connect(self._on_folder_changed)
         self.add_widget(self.folder_combo)
 
@@ -170,10 +172,13 @@ class FilterPanel(ScrollableStrip):
         self.search_field = QLineEdit()
         self.search_field.setObjectName("filter_search_field")
         self.search_field.setPlaceholderText("Search ...")
-        self.search_field.setMinimumWidth(150)
+        self.search_field.setMaximumWidth(200)
         self.search_field.returnPressed.connect(self._on_search_changed)
         self.search_field.editingFinished.connect(self._on_search_changed)
         self.add_widget(self.search_field)
+
+        # Add stretch to keep all widgets left-aligned
+        self.add_stretch()
 
     def _add_separator(self):
         """Add a vertical separator line."""
