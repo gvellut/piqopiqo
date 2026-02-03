@@ -6,6 +6,7 @@ import threading
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 
 from .config import Config
+from .keyword_utils import format_keywords, parse_keywords
 from .metadata.db_fields import EXIF_TO_DB_MAPPING, GPS_REF_FIELDS, DBFields
 from .metadata.metadata_db import MetadataDBManager, parse_exif_datetime, parse_exif_gps
 
@@ -36,9 +37,15 @@ def extract_editable_metadata(exif_data: dict) -> dict:
             ref = exif_data.get(ref_field)
             value = parse_exif_gps(value, ref)
 
-        # Special handling for keywords (may be array)
-        if db_field == DBFields.KEYWORDS and isinstance(value, list):
-            value = ", ".join(str(k) for k in value)
+        # Special handling for keywords (may be array or string with quotes)
+        if db_field == DBFields.KEYWORDS:
+            if isinstance(value, list):
+                # Format list using proper quoting for commas
+                value = format_keywords([str(k) for k in value])
+            elif isinstance(value, str):
+                # Parse and re-format to normalize (handles quoted values)
+                keywords = parse_keywords(value)
+                value = format_keywords(keywords)
 
         # Parse EXIF datetime string to datetime object
         if db_field == DBFields.TIME_TAKEN and isinstance(value, str):

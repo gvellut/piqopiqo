@@ -4,6 +4,7 @@ import logging
 
 from PySide6.QtCore import Qt, QThreadPool, Signal
 from PySide6.QtWidgets import (
+    QDialog,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -14,6 +15,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.keyword_tree import KeywordTreeManager
+from piqopiqo.keyword_utils import format_keywords, parse_keywords
 from piqopiqo.metadata.db_fields import EDITABLE_FIELDS, FIELD_DISPLAY_LABELS, DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBManager
 from piqopiqo.metadata.save_workers import MetadataSaveWorker
@@ -44,6 +47,7 @@ class EditPanel(QWidget):
         self._is_multi_select = False
         self._has_missing_data = False
         self._db_writer_pool = QThreadPool()
+        self._keyword_tree_manager = KeywordTreeManager()
 
         self._setup_ui()
 
@@ -149,6 +153,13 @@ class EditPanel(QWidget):
         self.layout.addWidget(self.keywords_edit, row, 1)
         row += 1
 
+        # Keyword tree button
+        self.keyword_tree_btn = QPushButton("Open Keyword Tree")
+        self.keyword_tree_btn.setEnabled(False)
+        self.keyword_tree_btn.clicked.connect(self._on_open_keyword_tree)
+        self.layout.addWidget(self.keyword_tree_btn, row, 1)
+        row += 1
+
         # Time taken
         self.layout.addWidget(
             QLabel(f"{FIELD_DISPLAY_LABELS[DBFields.TIME_TAKEN]}:"), row, 0
@@ -180,7 +191,11 @@ class EditPanel(QWidget):
         if not items:
             self._clear_fields()
             self.refresh_btn.setEnabled(False)
+            self.keyword_tree_btn.setEnabled(False)
             return
+
+        # Enable keyword tree button when items are selected
+        self.keyword_tree_btn.setEnabled(True)
 
         # Check if any items have missing DB data
         self._has_missing_data = False
@@ -334,4 +349,49 @@ class EditPanel(QWidget):
 
     def _on_edit_cancelled(self):
         """Handle edit cancellation."""
+        self.edit_finished.emit()
+
+    def _on_open_keyword_tree(self):
+        """Open the keyword tree dialog."""
+        if not self._current_items:
+            return
+
+        from piqopiqo.panels.keyword_tree_dialog import KeywordTreeDialog
+
+        dialog = KeywordTreeDialog(
+            self._current_items,
+            self._keyword_tree_manager,
+            parent=self,
+        )
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            modifications = dialog.get_modifications()
+            if modifications:
+                self._apply_keyword_modifications(modifications)
+
+    def _apply_keyword_modifications(self, modifications: dict[str, bool]):
+        """Apply keyword modifications to all selected items.
+
+        Args:
+            modifications: Dict mapping keyword name to True (add) or False (remove).
+        """
+        for item in self._current_items:
+            # Get current keywords
+            current_kws: set[str] = set()
+            if item.db_metadata and item.db_metadata.get(DBFields.KEYWORDS):
+                current_kws = set(parse_keywords(item.db_metadata[DBFields.KEYWORDS]))
+
+            # Apply modifications
+            for keyword, is_add in modifications.items():
+                if is_add:
+                    current_kws.add(keyword)
+                else:
+                    current_kws.discard(keyword)
+
+            # Format and save
+            new_value = format_keywords(sorted(current_kws, key=str.lower))
+            self._save_field_for_item(item, DBFields.KEYWORDS, new_value or None)
+
+        # Update the keywords field display
+        self.update_for_selection(self._current_items)
         self.edit_finished.emit()

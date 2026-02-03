@@ -152,6 +152,10 @@ class Config:
     TITLE_MAX_LENGTH = 128
     DESCRIPTION_MAX_LENGTH = 128
 
+    # Keyword Tree
+    # If True, the keyword tree is not persisted (in-memory only for testing)
+    DETACHED_KEYWORD_TREE = False
+
     # Status labels (name, hex color, index for shortcut key)
     STATUS_LABELS = [
         StatusLabel("Approved", "#FF0000", 1),
