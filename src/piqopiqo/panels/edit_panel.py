@@ -232,7 +232,10 @@ class EditPanel(QWidget):
         )
 
     def _gather_field_values(self, items: list[ImageItem]) -> dict:
-        """Gather field values from items, using DB only.
+        """Gather field values from items, preferring cached db_metadata.
+
+        Uses item.db_metadata if available (most up-to-date after saves),
+        otherwise falls back to querying the database.
 
         Returns:
             Dictionary mapping field names to values or MULTIPLE_VALUES.
@@ -240,8 +243,12 @@ class EditPanel(QWidget):
         fields = {field: set() for field in EDITABLE_FIELDS}
 
         for item in items:
-            db = self.db_manager.get_db_for_image(item.path)
-            db_data = db.get_metadata(item.path)
+            # Prefer cached db_metadata (updated synchronously after saves)
+            db_data = item.db_metadata
+            if not db_data:
+                # Fall back to database query
+                db = self.db_manager.get_db_for_image(item.path)
+                db_data = db.get_metadata(item.path)
 
             if db_data:
                 for field in fields:
