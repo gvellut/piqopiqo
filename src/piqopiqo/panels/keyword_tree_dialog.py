@@ -268,14 +268,41 @@ class KeywordTreeDialog(QDialog):
             for kws in self._item_keywords.values():
                 kws.discard(keyword)
             self._modifications[keyword] = False  # Mark as removed
+            new_state = Qt.CheckState.Unchecked
         else:
             # Add to all items (both Checked and PartiallyChecked -> Checked)
             for kws in self._item_keywords.values():
                 kws.add(keyword)
             item.setCheckState(0, Qt.CheckState.Checked)
             self._modifications[keyword] = True  # Mark as added
+            new_state = Qt.CheckState.Checked
+
+        # Sync all other items with the same keyword name
+        self._sync_keyword_check_state(keyword, new_state, exclude_item=item)
 
         self.tree.blockSignals(False)
+
+    def _sync_keyword_check_state(
+        self,
+        keyword: str,
+        state: Qt.CheckState,
+        exclude_item: QTreeWidgetItem | None = None,
+    ):
+        """Sync the check state of all tree items with the given keyword name.
+
+        Args:
+            keyword: The keyword name to sync.
+            state: The new check state to apply.
+            exclude_item: Optional item to exclude from syncing (already updated).
+        """
+        iterator = QTreeWidgetItemIterator(self.tree)
+        while iterator.value():
+            tree_item = iterator.value()
+            if tree_item and tree_item is not exclude_item:
+                role = tree_item.data(0, ROLE_TYPE)
+                if role in ("KEYWORD", "ADDITIONAL") and tree_item.text(0) == keyword:
+                    tree_item.setCheckState(0, state)
+            iterator += 1
 
     def _show_context_menu(self, position):
         """Show context menu for tree items."""
