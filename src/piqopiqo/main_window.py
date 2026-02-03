@@ -12,6 +12,7 @@ import threading
 from PySide6.QtCore import Qt, QThreadPool
 from PySide6.QtGui import QAction, QActionGroup, QPixmap, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QMainWindow,
     QMenu,
@@ -256,8 +257,11 @@ class MainWindow(QMainWindow):
             self.edit_panel.update_for_selection(selected_items)
 
     def _on_edit_finished(self):
-        """Return focus to grid after editing."""
-        self.grid.setFocus()
+        """Return focus to grid after editing, unless still in edit panel."""
+        focus_widget = QApplication.focusWidget()
+        # Only return focus to grid if focus left the edit panel entirely
+        if focus_widget is None or not self.edit_panel.isAncestorOf(focus_widget):
+            self.grid.setFocus()
 
     def _on_refresh_requested(self, items: list[ImageItem]):
         """Handle refresh request from edit panel."""

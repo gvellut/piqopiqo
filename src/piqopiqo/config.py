@@ -93,16 +93,16 @@ class Config:
     EXIF_AUTO_FORMAT = True
 
     EXIF_FIELDS = [
-        ExifField("EXIF:ExposureTime", "Exposure Time"),
+        ExifField("EXIF:ExposureTime"),
         ExifField("EXIF:FNumber", "F-Number"),
-        ExifField("EXIF:ExposureProgram", "Exposure Program"),
-        ExifField("EXIF:ISO", "ISO"),
+        ExifField("EXIF:ExposureProgram"),
+        ExifField("EXIF:ISO"),
         ExifField("EXIF:DateTimeOriginal", "Date/Time Original"),
-        ExifField("EXIF:CreateDate", "Create Date"),
+        ExifField("EXIF:CreateDate"),
         ExifField("EXIF:ShutterSpeedValue", "Shutter Speed"),
         ExifField("EXIF:ApertureValue", "Aperture"),
-        ExifField("EXIF:FocalLength", "Focal Length"),
-        ExifField("EXIF:LensModel", "Lens Model"),
+        ExifField("EXIF:FocalLength"),
+        ExifField("EXIF:LensModel"),
         ExifField("File:FileName", "File Name"),
         ExifField("File:FileModifyDate", "File Modified"),
     ]
