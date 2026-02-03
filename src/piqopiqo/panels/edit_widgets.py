@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.config import Config
+from piqopiqo.keyword_utils import validate_keywords_balanced
 from piqopiqo.metadata.metadata_db import (
     validate_datetime,
     validate_latitude,
@@ -221,7 +222,10 @@ class CoordinateEdit(QLineEdit):
 
 
 class KeywordsEdit(QPlainTextEdit):
-    """Keywords editor (comma-separated) with word wrap and auto-height."""
+    """Keywords editor (comma-separated) with word wrap and auto-height.
+
+    Shows red border when quotes are unbalanced, but still allows saving.
+    """
 
     edit_finished = Signal()
     edit_cancelled = Signal()
@@ -229,12 +233,35 @@ class KeywordsEdit(QPlainTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._original_value = ""
+        self._is_valid = True
         self.setLineWrapMode(QPlainTextEdit.WidgetWidth)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        self.document().contentsChanged.connect(self._adjust_height)
+        self.document().contentsChanged.connect(self._on_contents_changed)
         self._adjust_height()
+
+    def _on_contents_changed(self):
+        """Handle text content changes."""
+        self._adjust_height()
+        self._validate()
+
+    def _validate(self):
+        """Validate current value and update styling.
+
+        Shows red border for unbalanced quotes, but still allows saving.
+        """
+        text = self.toPlainText()
+        if text == MULTIPLE_VALUES:
+            self._is_valid = True
+            self.setStyleSheet("")
+            return
+
+        self._is_valid = validate_keywords_balanced(text)
+        if self._is_valid:
+            self.setStyleSheet("")
+        else:
+            self.setStyleSheet("border: 1px solid red;")
 
     def _adjust_height(self):
         """Adjust height to fit content."""
@@ -284,6 +311,7 @@ class KeywordsEdit(QPlainTextEdit):
         self._original_value = value or ""
         self.setPlainText(self._original_value)
         self._adjust_height()
+        self._validate()
 
     def text(self) -> str:
         """Return the text content (compatibility with QLineEdit interface)."""
@@ -293,18 +321,21 @@ class KeywordsEdit(QPlainTextEdit):
         """Clear Multiple Values placeholder on focus."""
         if self.toPlainText() == MULTIPLE_VALUES:
             self.clear()
+            self._validate()
         super().focusInEvent(event)
 
     def keyPressEvent(self, event):
         key = event.key()
 
         if key == Qt.Key_Return or key == Qt.Key_Enter:
+            # Save even if validation fails (red border is just a warning)
             self.edit_finished.emit()
             return
 
         if key == Qt.Key_Escape:
             self.setPlainText(self._original_value)
             self._adjust_height()
+            self._validate()
             self.edit_cancelled.emit()
             return
 

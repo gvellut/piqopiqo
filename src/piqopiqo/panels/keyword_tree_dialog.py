@@ -96,6 +96,17 @@ class KeywordTreeDialog(QDialog):
         self.tree.itemChanged.connect(self._on_item_changed)
         layout.addWidget(self.tree)
 
+        # Expand all present button
+        expand_layout = QHBoxLayout()
+        self.expand_present_btn = QPushButton("Expand all present")
+        self.expand_present_btn.setToolTip(
+            "Expand tree to show all keywords that are present in selected images"
+        )
+        self.expand_present_btn.clicked.connect(self._on_expand_all_present)
+        expand_layout.addWidget(self.expand_present_btn)
+        expand_layout.addStretch()
+        layout.addLayout(expand_layout)
+
         # OK/Cancel buttons
         self.btn_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -132,6 +143,36 @@ class KeywordTreeDialog(QDialog):
         """Restore expanded state from tree manager."""
         if hasattr(self._tree_manager, "expanded_keywords"):
             self._restore_expanded_from_set(self._tree_manager.expanded_keywords)
+
+    def _on_expand_all_present(self):
+        """Expand tree to show all keywords that are present in selected images.
+
+        This expands parent items to reveal any keywords that are checked or
+        partially checked (present in all or some selected images).
+        Already expanded items remain expanded.
+        """
+        # Collect all items that have a present keyword (checked or partially checked)
+        items_to_reveal: list[QTreeWidgetItem] = []
+        iterator = QTreeWidgetItemIterator(self.tree)
+        while iterator.value():
+            item = iterator.value()
+            if item:
+                role = item.data(0, ROLE_TYPE)
+                if role in ("KEYWORD", "ADDITIONAL"):
+                    check_state = item.checkState(0)
+                    if check_state in (
+                        Qt.CheckState.Checked,
+                        Qt.CheckState.PartiallyChecked,
+                    ):
+                        items_to_reveal.append(item)
+            iterator += 1
+
+        # Expand all ancestors of items with present keywords
+        for item in items_to_reveal:
+            parent = item.parent()
+            while parent:
+                parent.setExpanded(True)
+                parent = parent.parent()
 
     def _populate_tree(self, preserve_state: bool = False):
         """Populate the tree from the keyword tree manager.
