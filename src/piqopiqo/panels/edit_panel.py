@@ -379,24 +379,31 @@ class EditPanel(QWidget):
     def _apply_keyword_modifications(self, modifications: dict[str, bool]):
         """Apply keyword modifications to all selected items.
 
+        Preserves original keyword order: removes deleted keywords from their
+        positions, adds new keywords at the end.
+
         Args:
             modifications: Dict mapping keyword name to True (add) or False (remove).
         """
         for item in self._current_items:
-            # Get current keywords
-            current_kws: set[str] = set()
+            # Get current keywords as ordered list
+            current_kws: list[str] = []
             if item.db_metadata and item.db_metadata.get(DBFields.KEYWORDS):
-                current_kws = set(parse_keywords(item.db_metadata[DBFields.KEYWORDS]))
+                current_kws = parse_keywords(item.db_metadata[DBFields.KEYWORDS])
 
-            # Apply modifications
+            # Apply removals (filter out removed keywords, preserving order)
+            result_kws = [
+                kw for kw in current_kws if modifications.get(kw) is not False
+            ]
+
+            # Apply additions (add new keywords at the end)
+            existing = set(result_kws)
             for keyword, is_add in modifications.items():
-                if is_add:
-                    current_kws.add(keyword)
-                else:
-                    current_kws.discard(keyword)
+                if is_add and keyword not in existing:
+                    result_kws.append(keyword)
 
             # Format and save
-            new_value = format_keywords(sorted(current_kws, key=str.lower))
+            new_value = format_keywords(result_kws)
             self._save_field_for_item(item, DBFields.KEYWORDS, new_value or None)
 
         # Update the keywords field display
