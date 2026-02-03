@@ -1,27 +1,10 @@
 from PySide6.QtGui import QScreen
 import Quartz
-from send2trash import send2trash
 
 PLATFORM = "darwin"
 
 
-def move_to_trash(file_path: str) -> bool:
-    """Move a file to the macOS Trash.
-
-    Args:
-        file_path: Path to the file to trash.
-
-    Returns:
-        True if successful.
-
-    Raises:
-        OSError: If the operation fails.
-    """
-    send2trash(file_path)
-    return True
-
-
-def get_platform_true_resolution(qt_screen: QScreen) -> tuple[int, int]:
+def get_screen_true_resolution(qt_screen: QScreen) -> tuple[int, int]:
     max_displays = 32
     (err, ids, _) = Quartz.CGGetActiveDisplayList(max_displays, None, None)
 

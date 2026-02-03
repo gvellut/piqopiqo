@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from send2trash import send2trash
 
 from . import platform
 from .config import Config, Shortcut
@@ -574,7 +575,7 @@ class MainWindow(QMainWindow):
         # not actually useful : cannot be used by the macos rendering (without changing
         # the display resolution and flickering => so forget about it)
         # TODO remove
-        phy_w, phy_h = platform.get_platform_true_resolution(current_screen)
+        phy_w, phy_h = platform.get_screen_true_resolution(current_screen)
         logger.info(f"Physical resolution:  {phy_w} x {phy_h}")
 
         if len(selected_indices) > 1:
@@ -757,7 +758,7 @@ class MainWindow(QMainWindow):
 
         for photo in photos:
             try:
-                platform.move_to_trash(photo.path)
+                send2trash(photo.path)
                 paths_to_remove.append(photo.path)
                 logger.info(f"Moved to trash: {photo.path}")
             except Exception as e:
