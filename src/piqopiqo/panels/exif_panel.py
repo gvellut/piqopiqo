@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.components.ellided_label import EllidedLabel
-from piqopiqo.config import Config
+from piqopiqo.config import Config, get_exif_display_label
 from piqopiqo.model import ImageItem
 
 logger = logging.getLogger(__name__)
@@ -52,10 +52,11 @@ class ExifPanel(QWidget):
         self.value_labels = []
 
         for i, field in enumerate(Config.EXIF_FIELDS):
-            field_label = EllidedLabel(field)
+            display_label = get_exif_display_label(field)
+            field_label = EllidedLabel(display_label)
             value_label = EllidedLabel("")
 
-            field_label.setToolTip(field)
+            field_label.setToolTip(field.key)
 
             self.layout.addWidget(field_label, i, 0)
             self.layout.addWidget(value_label, i, 1)
@@ -89,8 +90,8 @@ class ExifPanel(QWidget):
 
             values = set()
             for item in items:
-                if item.exif_data and field in item.exif_data:
-                    value = item.exif_data[field]
+                if item.exif_data and field.key in item.exif_data:
+                    value = item.exif_data[field.key]
                     if not isinstance(value, str):
                         # TODO see if some should not be converted
                         value = str(value)  # "<Unable to display>"

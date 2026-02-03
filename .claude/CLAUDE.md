@@ -26,7 +26,7 @@ src/piqopiqo/
 ├── main_window.py   # Main application window
 ├── photo_model.py   # PhotoListModel: filtering, sorting, selection, add/remove photos
 ├── shortcuts.py     # Keyboard shortcut matching utilities
-├── model.py         # Data models (ImageItem, FilterCriteria, StatusLabel)
+├── model.py         # Data models (ImageItem, FilterCriteria, StatusLabel, ExifField)
 ├── exif_loader.py   # EXIF metadata loading (background thread)
 ├── exif_man.py      # EXIF management utilities (on-demand fetch)
 ├── thumb_man.py     # Thumbnail generation and caching (multiprocessing)
@@ -90,6 +90,21 @@ All settings in `config.py` can be overridden via environment variables with `PI
 - `PIQO_THUMB_MAX_DIM` - Max thumbnail dimension (default: 1024)
 - `PIQO_CLEAR_CACHE_ON_START` - Clear cache on startup (default: false)
 - `PIQO_INITIAL_RESOLUTION` - Initial window size as `WIDTHxHEIGHT` (e.g. `1280x800`). If not set, window opens maximized.
+
+## EXIF Panel Configuration
+
+EXIF fields are defined in `Config.EXIF_FIELDS` as a list of `ExifField` objects:
+- `ExifField(key, label)` - key is the exiftool field (e.g., "EXIF:DateTimeOriginal"), label is optional display name
+- If `label` is None and `EXIF_AUTO_FORMAT` is True, the key is auto-formatted (e.g., "File:FileName" → "File Name")
+- `format_exif_key(key)` function handles the auto-formatting (removes prefix, adds spaces around capitals)
+
+## Edit Panel
+
+The edit panel supports editing metadata fields (title, description, keywords, coordinates, time taken).
+- **Auto-save on focus out**: When user leaves a field to focus elsewhere, changes are automatically saved to DB
+- **Enter/Tab**: Saves the field and moves focus
+- **Escape**: Reverts changes and cancels edit
+- Validation is applied for coordinates and datetime fields (red border on invalid input)
 
 ## Keyboard Shortcuts
 

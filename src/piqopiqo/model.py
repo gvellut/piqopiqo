@@ -13,6 +13,19 @@ class StatusLabel:
 
 
 @define
+class ExifField:
+    """EXIF field definition for display in the EXIF panel.
+
+    Attributes:
+        key: The exiftool key (e.g., "EXIF:DateTimeOriginal")
+        label: Optional display label. If None, uses auto-formatted key or raw key.
+    """
+
+    key: str
+    label: str | None = None
+
+
+@define
 class FilterCriteria:
     """Filter criteria for the photo model.
 
