@@ -14,10 +14,11 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
+    QTreeWidgetItemIterator,
     QVBoxLayout,
 )
 
-from piqopiqo.keyword_tree import KeywordNode, KeywordTreeManager
+from piqopiqo.keyword_tree import KeywordTreeManager
 from piqopiqo.keyword_utils import parse_keywords
 from piqopiqo.model import ImageItem
 
@@ -67,9 +68,13 @@ class KeywordTreeDialog(QDialog):
         # For inline editing of new keywords
         self._editing_item: QTreeWidgetItem | None = None
         self._editing_parent: QTreeWidgetItem | None = None
+        self._editing_finished: bool = False  # Flag to prevent double handling
 
         self._setup_ui()
         self._populate_tree()
+
+        # Restore expanded state from tree manager
+        self._restore_expanded_state()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -92,15 +97,55 @@ class KeywordTreeDialog(QDialog):
         layout.addWidget(self.tree)
 
         # OK/Cancel buttons
-        btn_box = QDialogButtonBox(
+        self.btn_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
-        btn_box.accepted.connect(self.accept)
-        btn_box.rejected.connect(self.reject)
-        layout.addWidget(btn_box)
+        self.btn_box.accepted.connect(self.accept)
+        self.btn_box.rejected.connect(self.reject)
+        layout.addWidget(self.btn_box)
 
-    def _populate_tree(self):
-        """Populate the tree from the keyword tree manager."""
+    def _get_expanded_keywords(self) -> set[str]:
+        """Get the set of expanded keyword names."""
+        expanded: set[str] = set()
+        iterator = QTreeWidgetItemIterator(self.tree)
+        while iterator.value():
+            item = iterator.value()
+            if item and item.isExpanded():
+                expanded.add(item.text(0))
+            iterator += 1
+        return expanded
+
+    def _restore_expanded_from_set(self, expanded: set[str]):
+        """Restore expanded state from a set of keyword names."""
+        iterator = QTreeWidgetItemIterator(self.tree)
+        while iterator.value():
+            item = iterator.value()
+            if item and item.text(0) in expanded:
+                item.setExpanded(True)
+            iterator += 1
+
+    def _save_expanded_state(self):
+        """Save expanded state to tree manager for persistence during session."""
+        self._tree_manager.expanded_keywords = self._get_expanded_keywords()
+
+    def _restore_expanded_state(self):
+        """Restore expanded state from tree manager."""
+        if hasattr(self._tree_manager, "expanded_keywords"):
+            self._restore_expanded_from_set(self._tree_manager.expanded_keywords)
+
+    def _populate_tree(self, preserve_state: bool = False):
+        """Populate the tree from the keyword tree manager.
+
+        Args:
+            preserve_state: If True, save and restore expanded state.
+        """
+        # Save expanded state if requested
+        expanded: set[str] = set()
+        scroll_value = 0
+        if preserve_state:
+            expanded = self._get_expanded_keywords()
+            scroll_value = self.tree.verticalScrollBar().value()
+
         self.tree.blockSignals(True)
         self.tree.clear()
 
@@ -135,7 +180,12 @@ class KeywordTreeDialog(QDialog):
         root_item.setExpanded(True)
         self.tree.blockSignals(False)
 
-    def _add_children(self, parent_item: QTreeWidgetItem, node: KeywordNode):
+        # Restore expanded state if requested
+        if preserve_state:
+            self._restore_expanded_from_set(expanded)
+            self.tree.verticalScrollBar().setValue(scroll_value)
+
+    def _add_children(self, parent_item: QTreeWidgetItem, node):
         """Recursively add children to a tree item."""
         for child in node.children:
             item = QTreeWidgetItem(parent_item, [child.name])
@@ -217,6 +267,7 @@ class KeywordTreeDialog(QDialog):
         """Add a new keyword as child of the selected item."""
         # Create a new item with an editable line edit
         self._editing_parent = parent_item
+        self._editing_finished = False
 
         # Expand parent so the new item is visible
         parent_item.setExpanded(True)
@@ -235,26 +286,38 @@ class KeywordTreeDialog(QDialog):
         # Create inline editor
         editor = QLineEdit()
         editor.setPlaceholderText("Enter keyword name...")
-        editor.returnPressed.connect(self._finish_add_keyword)
-        editor.editingFinished.connect(self._cancel_add_keyword)
 
-        # Install event filter to catch Escape
+        # Install event filter to catch Enter and Escape
         editor.installEventFilter(self)
 
         self.tree.setItemWidget(temp_item, 0, editor)
         editor.setFocus()
 
     def eventFilter(self, obj, event):
-        """Handle escape key in line editor."""
-        if isinstance(obj, QLineEdit):
+        """Handle key events in line editor."""
+        if isinstance(obj, QLineEdit) and self._editing_item:
             if event.type() == event.Type.KeyPress:
                 if event.key() == Qt.Key.Key_Escape:
                     self._cancel_add_keyword()
                     return True
+                elif event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                    self._finish_add_keyword()
+                    return True  # Consume the event to prevent dialog close
+            elif event.type() == event.Type.FocusOut:
+                # Handle focus out - create keyword if text entered, cancel if empty
+                if not self._editing_finished:
+                    editor = obj
+                    if editor.text().strip():
+                        self._finish_add_keyword()
+                    else:
+                        self._cancel_add_keyword()
+                return False
         return super().eventFilter(obj, event)
 
     def _finish_add_keyword(self):
-        """Finish adding a keyword after Enter is pressed."""
+        """Finish adding a keyword after Enter is pressed or focus out with text."""
+        if self._editing_finished:
+            return
         if not self._editing_item or not self._editing_parent:
             return
 
@@ -271,6 +334,9 @@ class KeywordTreeDialog(QDialog):
             self._cancel_add_keyword()
             return
 
+        # Mark as finished to prevent double handling
+        self._editing_finished = True
+
         # Find the corresponding node in the tree manager
         role = self._editing_parent.data(0, ROLE_TYPE)
         if role == "ROOT":
@@ -279,7 +345,7 @@ class KeywordTreeDialog(QDialog):
             parent_name = self._editing_parent.text(0)
             parent_node = self._tree_manager.root.find_node(parent_name)
             if not parent_node:
-                self._cancel_add_keyword()
+                self._clear_editing_state()
                 return
 
         # Check if keyword already exists
@@ -290,7 +356,7 @@ class KeywordTreeDialog(QDialog):
                     "Duplicate Keyword",
                     f'Keyword "{keyword}" already exists under this parent.',
                 )
-                self._cancel_add_keyword()
+                self._clear_editing_state()
                 return
 
         # Add to tree manager
@@ -298,14 +364,22 @@ class KeywordTreeDialog(QDialog):
         self._tree_manager.save()
 
         # Clear editing state before repopulating
-        self._editing_item = None
-        self._editing_parent = None
+        self._clear_editing_state()
 
-        # Refresh the tree
-        self._populate_tree()
+        # Refresh the tree, preserving state
+        self._populate_tree(preserve_state=True)
 
         # Find and scroll to the new keyword
         self._scroll_to_keyword(keyword)
+
+    def _clear_editing_state(self):
+        """Clear the editing state variables."""
+        if self._editing_item and self._editing_parent:
+            idx = self._editing_parent.indexOfChild(self._editing_item)
+            if idx >= 0:
+                self._editing_parent.takeChild(idx)
+        self._editing_item = None
+        self._editing_parent = None
 
     def _scroll_to_keyword(self, keyword: str):
         """Find and scroll to a keyword in the tree."""
@@ -320,22 +394,29 @@ class KeywordTreeDialog(QDialog):
 
     def _cancel_add_keyword(self):
         """Cancel adding a keyword."""
-        if self._editing_item and self._editing_parent:
-            idx = self._editing_parent.indexOfChild(self._editing_item)
-            if idx >= 0:
-                self._editing_parent.takeChild(idx)
-        self._editing_item = None
-        self._editing_parent = None
+        if self._editing_finished:
+            return
+        self._editing_finished = True
+        self._clear_editing_state()
 
     def _delete_keyword(self, item: QTreeWidgetItem):
         """Delete a keyword from the tree."""
         keyword = item.text(0)
 
+        # Check if this keyword has children
+        has_children = item.childCount() > 0
+
+        # Build confirmation message
+        if has_children:
+            msg = f'Delete keyword "{keyword}" and all its children?'
+        else:
+            msg = f'Delete keyword "{keyword}"?'
+
         # Confirmation dialog
         reply = QMessageBox.question(
             self,
             "Delete Keyword",
-            f'Delete keyword "{keyword}" and all its children?',
+            msg,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -358,8 +439,8 @@ class KeywordTreeDialog(QDialog):
             parent_node.remove_child(keyword)
             self._tree_manager.save()
 
-        # Refresh the tree (deleted keyword will show in Additional if checked)
-        self._populate_tree()
+        # Refresh the tree, preserving expanded state and scroll position
+        self._populate_tree(preserve_state=True)
 
     def _on_import(self):
         """Handle import button click."""
@@ -380,8 +461,8 @@ class KeywordTreeDialog(QDialog):
             f"Imported {count} new keywords.",
         )
 
-        # Refresh the tree
-        self._populate_tree()
+        # Refresh the tree, preserving state
+        self._populate_tree(preserve_state=True)
 
     def get_modifications(self) -> dict[str, bool]:
         """Get the keyword modifications made during this session.
@@ -394,11 +475,16 @@ class KeywordTreeDialog(QDialog):
 
     def accept(self):
         """Apply modifications and close dialog."""
+        # Save expanded state for next opening
+        self._save_expanded_state()
+
         # Emit signal with modifications
         if self._modifications:
             self.keywords_changed.emit(self._modifications)
         super().accept()
 
-
-# Import at the end to avoid issues
-from PySide6.QtWidgets import QTreeWidgetItemIterator  # noqa: E402
+    def reject(self):
+        """Cancel dialog."""
+        # Save expanded state for next opening
+        self._save_expanded_state()
+        super().reject()

@@ -127,6 +127,8 @@ class KeywordTreeManager:
     def __init__(self):
         self._root: KeywordNode = KeywordNode(name="Keywords")
         self._loaded = False
+        # Track expanded state between dialog openings (not persisted to JSON)
+        self.expanded_keywords: set[str] = {"Keywords"}
 
     @property
     def root(self) -> KeywordNode:
