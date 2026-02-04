@@ -71,147 +71,151 @@ class PhotoCell(QFrame):
             return
 
         painter = QPainter(self)
-        rect = self.rect()
+        try:
+            rect = self.rect()
 
-        # Selection Highlight
-        if self.is_selected:
-            # Get default highlight color
-            highlight_color = (
-                self.palette().color(QPalette.Highlight)
-                if hasattr(self.palette(), "color")
-                else QColor("#0078d7")
-            )
-            painter.fillRect(rect, highlight_color)
+            # Selection Highlight
+            if self.is_selected:
+                # Get default highlight color
+                highlight_color = (
+                    self.palette().color(QPalette.Highlight)
+                    if hasattr(self.palette(), "color")
+                    else QColor("#0078d7")
+                )
+                painter.fillRect(rect, highlight_color)
 
-        if self.current_data is None:
-            return
+            if self.current_data is None:
+                return
 
-        # Unpack Data
-        name = self.current_data.name
-        state = self.current_data.state
-        pixmap = self.current_data.pixmap
-        db_meta = self.current_data.db_metadata or {}
+            # Unpack Data
+            name = self.current_data.name
+            state = self.current_data.state
+            pixmap = self.current_data.pixmap
+            db_meta = self.current_data.db_metadata or {}
 
-        # Unpack Layout Info (computed in parent resizeEvent)
-        pad = self.layout_info.get("pad", 5)
-        meta_h = self.layout_info.get("meta_h", 20)
+            # Unpack Layout Info (computed in parent resizeEvent)
+            pad = self.layout_info.get("pad", 5)
+            meta_h = self.layout_info.get("meta_h", 20)
 
-        # Image Rect
-        img_rect = rect.adjusted(pad, pad, -pad, -(pad + meta_h))
+            # Image Rect
+            img_rect = rect.adjusted(pad, pad, -pad, -(pad + meta_h))
 
-        if state == 0:
-            painter.fillRect(img_rect, QColor("black"))
-        else:
-            if pixmap:
-                # Apply orientation transform from DB metadata
-                orientation = db_meta.get(DBFields.ORIENTATION)
-                display_pixmap = apply_orientation_to_pixmap(pixmap, orientation)
+            if state == 0:
+                painter.fillRect(img_rect, QColor("black"))
+            else:
+                if pixmap:
+                    # Apply orientation transform from DB metadata
+                    orientation = db_meta.get(DBFields.ORIENTATION)
+                    display_pixmap = apply_orientation_to_pixmap(pixmap, orientation)
 
-                # Center pixmap
-                pixmap_rect = display_pixmap.rect()
-                pixmap_rect.moveCenter(img_rect.center())
-
-                # Scale to fit if too big
-                if (
-                    pixmap_rect.width() > img_rect.width()
-                    or pixmap_rect.height() > img_rect.height()
-                ):
-                    scaled = display_pixmap.scaled(
-                        img_rect.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
-                    )
-                    pixmap_rect = scaled.rect()
+                    # Center pixmap
+                    pixmap_rect = display_pixmap.rect()
                     pixmap_rect.moveCenter(img_rect.center())
-                    painter.drawPixmap(pixmap_rect, scaled)
-                else:
-                    painter.drawPixmap(pixmap_rect, display_pixmap)
 
-        # Draw label swatch (top-right corner of image area)
-        if Config.GRID_ITEM_SHOW_LABEL_SWATCH:
-            label = db_meta.get(DBFields.LABEL)
-            if label:
-                color = get_label_color(label)
-                if color:
-                    swatch_size = 16
-                    swatch_margin = 4
-                    swatch_rect = QRect(
-                        img_rect.right() - swatch_size - swatch_margin,
-                        img_rect.top() + swatch_margin,
-                        swatch_size,
-                        swatch_size,
+                    # Scale to fit if too big
+                    if (
+                        pixmap_rect.width() > img_rect.width()
+                        or pixmap_rect.height() > img_rect.height()
+                    ):
+                        scaled = display_pixmap.scaled(
+                            img_rect.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+                        )
+                        pixmap_rect = scaled.rect()
+                        pixmap_rect.moveCenter(img_rect.center())
+                        painter.drawPixmap(pixmap_rect, scaled)
+                    else:
+                        painter.drawPixmap(pixmap_rect, display_pixmap)
+
+            # Draw label swatch (top-right corner of image area)
+            if Config.GRID_ITEM_SHOW_LABEL_SWATCH:
+                label = db_meta.get(DBFields.LABEL)
+                if label:
+                    color = get_label_color(label)
+                    if color:
+                        swatch_size = 16
+                        swatch_margin = 4
+                        swatch_rect = QRect(
+                            img_rect.right() - swatch_size - swatch_margin,
+                            img_rect.top() + swatch_margin,
+                            swatch_size,
+                            swatch_size,
+                        )
+                        painter.fillRect(swatch_rect, QColor(color))
+                        painter.setPen(QPen(Qt.black, 1))
+                        painter.drawRect(swatch_rect)
+
+            # Text area
+            text_rect = QRect(
+                rect.left() + pad,
+                rect.bottom() - meta_h - pad,
+                rect.width() - (2 * pad),
+                meta_h,
+            )
+
+            # Keep the same font sizing as PhotoGrid._calculate_metadata_height.
+            painter.font().setPointSize(Config.FONT_SIZE)
+
+            painter.setPen(QPen(Qt.white))
+            font_metrics = painter.fontMetrics()
+            line_height = font_metrics.lineSpacing()
+
+            # Vertical padding inside the metadata area.
+            # The grid reserves a few extra pixels (see
+            # PhotoGrid._calculate_metadata_height) but we still need to actually
+            # use them when drawing.
+            expected_lines = 1 + sum(
+                1
+                for field_name in Config.GRID_ITEM_FIELDS
+                if field_name != DBFields.LABEL
+            )
+            reserved_text_h = expected_lines * line_height
+            extra_h = max(0, text_rect.height() - reserved_text_h)
+            top_pad = extra_h
+            text_top = text_rect.top() + top_pad
+
+            # Filename (first line)
+            elided_name = font_metrics.elidedText(
+                name, Qt.ElideRight, text_rect.width()
+            )
+            filename_rect = QRect(
+                text_rect.left(),
+                text_top,
+                text_rect.width(),
+                line_height,
+            )
+            painter.drawText(filename_rect, Qt.AlignTop | Qt.AlignHCenter, elided_name)
+
+            # DB fields (subsequent lines)
+            y_offset = line_height
+            for field_name in Config.GRID_ITEM_FIELDS:
+                if field_name == DBFields.LABEL:
+                    continue  # Label shown as swatch, not text
+
+                value = db_meta.get(field_name, "")
+                if value:
+                    # Format datetime objects as ISO string
+                    if field_name == DBFields.TIME_TAKEN and isinstance(
+                        value, datetime
+                    ):
+                        display_value = value.strftime("%Y-%m-%d %H:%M:%S")
+                    else:
+                        display_value = str(value)
+                    field_rect = QRect(
+                        text_rect.left(),
+                        text_top + y_offset,
+                        text_rect.width(),
+                        line_height,
                     )
-                    painter.fillRect(swatch_rect, QColor(color))
-                    painter.setPen(QPen(Qt.black, 1))
-                    painter.drawRect(swatch_rect)
+                    elided_value = font_metrics.elidedText(
+                        display_value, Qt.ElideRight, text_rect.width()
+                    )
+                    painter.drawText(
+                        field_rect, Qt.AlignTop | Qt.AlignHCenter, elided_value
+                    )
+                y_offset += line_height
 
-        # Text area
-        text_rect = QRect(
-            rect.left() + pad,
-            rect.bottom() - meta_h - pad,
-            rect.width() - (2 * pad),
-            meta_h,
-        )
-
-        # Keep the same font sizing as PhotoGrid._calculate_metadata_height.
-        original_font = painter.font()
-        meta_font = QFont(original_font)
-        meta_font.setPointSize(Config.FONT_SIZE)
-        painter.setFont(meta_font)
-
-        painter.setPen(QPen(Qt.white))
-        font_metrics = painter.fontMetrics()
-        line_height = font_metrics.lineSpacing()
-
-        # Vertical padding inside the metadata area.
-        # The grid reserves a few extra pixels (see
-        # PhotoGrid._calculate_metadata_height) but we still need to actually
-        # use them when drawing.
-        expected_lines = 1 + sum(
-            1 for field_name in Config.GRID_ITEM_FIELDS if field_name != DBFields.LABEL
-        )
-        reserved_text_h = expected_lines * line_height
-        extra_h = max(0, text_rect.height() - reserved_text_h)
-        top_pad = extra_h
-        text_top = text_rect.top() + top_pad
-
-        # Filename (first line)
-        elided_name = font_metrics.elidedText(name, Qt.ElideRight, text_rect.width())
-        filename_rect = QRect(
-            text_rect.left(),
-            text_top,
-            text_rect.width(),
-            line_height,
-        )
-        painter.drawText(filename_rect, Qt.AlignTop | Qt.AlignHCenter, elided_name)
-
-        # DB fields (subsequent lines)
-        y_offset = line_height
-        for field_name in Config.GRID_ITEM_FIELDS:
-            if field_name == DBFields.LABEL:
-                continue  # Label shown as swatch, not text
-
-            value = db_meta.get(field_name, "")
-            if value:
-                # Format datetime objects as ISO string
-                if field_name == DBFields.TIME_TAKEN and isinstance(value, datetime):
-                    display_value = value.strftime("%Y-%m-%d %H:%M:%S")
-                else:
-                    display_value = str(value)
-                field_rect = QRect(
-                    text_rect.left(),
-                    text_top + y_offset,
-                    text_rect.width(),
-                    line_height,
-                )
-                elided_value = font_metrics.elidedText(
-                    display_value, Qt.ElideRight, text_rect.width()
-                )
-                painter.drawText(
-                    field_rect, Qt.AlignTop | Qt.AlignHCenter, elided_value
-                )
-            y_offset += line_height
-
-        painter.setFont(original_font)
-
-        # Draw red border around item
-        painter.setPen(QPen(QColor("red"), 2))
-        painter.drawRect(rect.adjusted(1, 1, -1, -1))
+            # Draw red border around item
+            painter.setPen(QPen(QColor("red"), 2))
+            painter.drawRect(rect.adjusted(1, 1, -1, -1))
+        finally:
+            painter.end()

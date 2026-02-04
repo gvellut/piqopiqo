@@ -121,7 +121,7 @@ class Config:
     NUM_COLUMNS = 8
     PADDING = 10  # Pixels between cells/edges
     FONT_SIZE = 12  # Approx pixel height of text
-    GRID_ITEM_TEXT_FIELDS_TOP_PADDING = 8
+    GRID_ITEM_TEXT_FIELDS_TOP_PADDING = 10
 
     # Image Specs
     THUMB_MAX_DIM = 1024  # Max width/height for high-res cache
