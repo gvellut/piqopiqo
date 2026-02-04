@@ -71,6 +71,7 @@ class Shortcut(UpperStrEnum):
     LABEL_8 = auto()
     LABEL_9 = auto()
     LABEL_NONE = auto()
+    SELECT_ALL = auto()
 
 
 class Config:
@@ -189,6 +190,7 @@ class Config:
         Shortcut.LABEL_8: "8",
         Shortcut.LABEL_9: "9",
         Shortcut.LABEL_NONE: "`",
+        Shortcut.SELECT_ALL: "ctrl+a",
     }
 
 

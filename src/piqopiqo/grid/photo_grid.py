@@ -14,8 +14,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from piqopiqo.config import Config
+from piqopiqo.config import Config, Shortcut
 from piqopiqo.metadata.db_fields import DBFields
+from piqopiqo.shortcuts import match_shortcut_sequence
 
 from .photo_cell import PhotoCell
 
@@ -301,6 +302,12 @@ class PhotoGrid(QWidget):
             super().keyPressEvent(event)
             return
 
+        # Handle Select All shortcut
+        select_all_shortcut = Config.SHORTCUTS.get(Shortcut.SELECT_ALL)
+        if select_all_shortcut and match_shortcut_sequence(event, select_all_shortcut):
+            self._select_all()
+            return
+
         selected_indices = [
             i for i, item in enumerate(self.items_data) if item.is_selected
         ]
@@ -375,3 +382,18 @@ class PhotoGrid(QWidget):
             # Logic: New Top = Target Row - (Visible Rows - 1)
             new_top = target_row - self.n_rows + 1
             self.scrollbar.setValue(new_top)
+
+    def _select_all(self):
+        """Select all visible items (after filtering)."""
+        if not self.items_data:
+            return
+
+        for item in self.items_data:
+            item.is_selected = True
+
+        if self.items_data:
+            self._last_selected_index = len(self.items_data) - 1
+
+        selected_indices = set(range(len(self.items_data)))
+        self.selection_changed.emit(selected_indices)
+        self.on_scroll(self.scrollbar.value())
