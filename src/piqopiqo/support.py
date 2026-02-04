@@ -7,9 +7,9 @@ import os
 from pathlib import Path
 import sys
 
-logger = logging.getLogger(__name__)
+from .config import Config
 
-APP_NAME = "PiqoPiqo"
+logger = logging.getLogger(__name__)
 
 
 def get_support_dir() -> Path:
@@ -24,7 +24,7 @@ def get_support_dir() -> Path:
     if sys.platform == "darwin":
         # macOS
         base = Path.home() / "Library" / "Application Support"
-        support_dir = base / APP_NAME
+        support_dir = base / Config.APP_NAME
     elif sys.platform == "win32":
         # Windows
         appdata = os.environ.get("APPDATA")
@@ -32,7 +32,7 @@ def get_support_dir() -> Path:
             base = Path(appdata)
         else:
             base = Path.home() / "AppData" / "Roaming"
-        support_dir = base / APP_NAME
+        support_dir = base / Config.APP_NAME
     else:
         # Linux and others
         xdg_config = os.environ.get("XDG_CONFIG_HOME")
@@ -40,7 +40,7 @@ def get_support_dir() -> Path:
             base = Path(xdg_config)
         else:
             base = Path.home() / ".config"
-        support_dir = base / APP_NAME.lower()
+        support_dir = base / Config.APP_NAME.lower()
 
     # Create directory if it doesn't exist
     support_dir.mkdir(parents=True, exist_ok=True)

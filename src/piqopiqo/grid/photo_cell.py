@@ -7,7 +7,6 @@ from datetime import datetime
 from PySide6.QtCore import QRect, Qt, Signal
 from PySide6.QtGui import (
     QColor,
-    QFont,
     QMouseEvent,
     QPainter,
     QPaintEvent,

@@ -78,15 +78,21 @@ class Config:
     # Application Settings
     APP_NAME = "PiqoPiqo"
 
+    # FIXME Add verification for existence + dialog to set at startup
+    # FIXME mode : dyn (no saved settings => read from here) auto (no dialog)
+    # FIXME kw (for keywords saved) + state (for reading / persisting state)
     # "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
-    CACHE_BASE_DIR = "/Volumes/CrucialX8/projects/piqopiqo/cache"
+    # # "/Volumes/CrucialX8/projects/piqopiqo/cache"
+    CACHE_BASE_DIR = "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
 
     # Initial window resolution (format: "WIDTHxHEIGHT", e.g. "1280x800")
     # If None, the window opens maximized.
     INITIAL_RESOLUTION = None
 
-    # EXIF Panel
-    EXIFTOOL_PATH = None
+    # EXIF tool
+    # None for taken from PATH : with PyInstaller : not taken into account
+    # FIXME add verification + dialog to set at startup
+    EXIFTOOL_PATH = "/opt/homebrew/bin/exiftool"
 
     # Auto-format exiftool keys for display when no label is provided.
     # If True: "File:FileName" => "File Name"

@@ -9,18 +9,26 @@ import threading
 import click
 import exiftool
 from PySide6.QtCore import QTimer
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
-try:
-    from pyqtauto.server import start_server
-except ImportError:
-    start_server = None
+# try:
+#     from pyqtauto.server import start_server
+# except ImportError:
+start_server = None
 
 from .config import Config, apply_env_overrides
 from .main_window import MainWindow
 from .support import get_cache_base_dir, get_last_folder, save_last_folder
 from .thumb_man import scan_folder
 from .utils import setup_logging
+
+
+# Helper to find the icon whether running as script or frozen app
+def resource_path(relative_path):
+    if hasattr(sys, "_MEIPASS"):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
 
 
 @click.command()
@@ -75,6 +83,9 @@ def cli(folder):
 
     app.setApplicationName(Config.APP_NAME)
     app.setApplicationDisplayName(Config.APP_NAME)
+
+    icon_path = resource_path("app.icns")
+    app.setWindowIcon(QIcon(icon_path))
 
     # by default: the common args are -G -n => numeric values like shutter speed
     # are 0.0025 instead of 1/400
