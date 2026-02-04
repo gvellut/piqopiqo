@@ -14,9 +14,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from piqopiqo.config import Config, Shortcut
+from piqopiqo.config import Config
 from piqopiqo.metadata.db_fields import DBFields
-from piqopiqo.shortcuts import match_shortcut_sequence
 
 from .photo_cell import PhotoCell
 
@@ -67,12 +66,15 @@ class PhotoGrid(QWidget):
         self.cells: list[PhotoCell] = []
 
     def set_data(self, items):
-        # Inject index for click handling
+        # Inject index for click handling (preserve selection state)
         for i, item in enumerate(items):
             item._global_index = i
-            item.is_selected = False
         self.items_data = items
-        self._last_selected_index = -1
+
+        # Update last selected index based on current selection
+        selected = [i for i, item in enumerate(items) if item.is_selected]
+        self._last_selected_index = selected[-1] if selected else -1
+
         self._recalculate_scrollbar()
         self.on_scroll(0)
 
@@ -231,7 +233,13 @@ class PhotoGrid(QWidget):
                 cell.set_content(item, item.is_selected)
 
     def on_cell_clicked(self, global_index, is_shift, is_ctrl):
+        # Empty cell clicked - clear selection
         if global_index == -1:
+            for item in self.items_data:
+                item.is_selected = False
+            self._last_selected_index = -1
+            self.selection_changed.emit(set())
+            self.on_scroll(self.scrollbar.value())
             return
 
         if is_ctrl:
@@ -300,12 +308,6 @@ class PhotoGrid(QWidget):
 
         if total_items == 0:
             super().keyPressEvent(event)
-            return
-
-        # Handle Select All shortcut
-        select_all_shortcut = Config.SHORTCUTS.get(Shortcut.SELECT_ALL)
-        if select_all_shortcut and match_shortcut_sequence(event, select_all_shortcut):
-            self._select_all()
             return
 
         selected_indices = [
@@ -382,18 +384,3 @@ class PhotoGrid(QWidget):
             # Logic: New Top = Target Row - (Visible Rows - 1)
             new_top = target_row - self.n_rows + 1
             self.scrollbar.setValue(new_top)
-
-    def _select_all(self):
-        """Select all visible items (after filtering)."""
-        if not self.items_data:
-            return
-
-        for item in self.items_data:
-            item.is_selected = True
-
-        if self.items_data:
-            self._last_selected_index = len(self.items_data) - 1
-
-        selected_indices = set(range(len(self.items_data)))
-        self.selection_changed.emit(selected_indices)
-        self.on_scroll(self.scrollbar.value())

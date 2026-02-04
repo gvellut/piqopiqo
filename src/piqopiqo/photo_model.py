@@ -338,16 +338,22 @@ class PhotoListModel(QObject):
     # --- Internal ---
 
     def _apply_filter_and_sort(self):
-        """Apply current filter and sort to generate filtered view."""
-        # Clear selection state
-        for p in self._all_photos:
-            p.is_selected = False
+        """Apply current filter and sort to generate filtered view.
 
+        Selection is preserved for items that pass the filter.
+        Items that are filtered out have their selection cleared.
+        """
         # Filter
         if self._filter is None:
             filtered = list(self._all_photos)
         else:
-            filtered = [p for p in self._all_photos if self._passes_filter(p)]
+            filtered = []
+            for p in self._all_photos:
+                if self._passes_filter(p):
+                    filtered.append(p)
+                else:
+                    # Clear selection for items that are filtered out
+                    p.is_selected = False
 
         # Sort
         filtered.sort(key=self._get_sort_key)

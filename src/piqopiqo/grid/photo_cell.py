@@ -49,16 +49,19 @@ class PhotoCell(QFrame):
         self.update()
 
     def mousePressEvent(self, event: QMouseEvent):
-        if self.current_data:
-            if event.button() == Qt.LeftButton:
+        if event.button() == Qt.LeftButton:
+            if self.current_data:
                 modifiers = event.modifiers()
                 self.clicked.emit(
                     self.current_data._global_index,
                     bool(modifiers & Qt.ShiftModifier),
                     bool(modifiers & Qt.ControlModifier),
                 )
-            elif event.button() == Qt.RightButton:
-                self.right_clicked.emit(self.current_data._global_index)
+            else:
+                # Empty cell clicked - emit with -1 to signal clear selection
+                self.clicked.emit(-1, False, False)
+        elif event.button() == Qt.RightButton and self.current_data:
+            self.right_clicked.emit(self.current_data._global_index)
         super().mousePressEvent(event)
 
     def paintEvent(self, event: QPaintEvent):

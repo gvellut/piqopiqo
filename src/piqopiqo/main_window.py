@@ -220,6 +220,32 @@ class MainWindow(QMainWindow):
             sc.setContext(Qt.ApplicationShortcut)
             sc.activated.connect(partial(self._apply_label, None))
 
+        # Select All shortcut
+        if Shortcut.SELECT_ALL in shortcuts:
+            sc = QShortcut(
+                parse_shortcut(shortcuts[Shortcut.SELECT_ALL]),
+                self,
+            )
+            sc.setContext(Qt.ApplicationShortcut)
+            sc.activated.connect(self._select_all_photos)
+
+    def _select_all_photos(self):
+        """Select all visible photos (after filtering)."""
+        photos = self.photo_model.photos
+        if not photos:
+            return
+
+        for photo in photos:
+            photo.is_selected = True
+
+        # Update grid's last selected index
+        self.grid._last_selected_index = len(photos) - 1
+
+        # Emit selection changed and refresh grid
+        selected_indices = set(range(len(photos)))
+        self.grid.selection_changed.emit(selected_indices)
+        self.grid.on_scroll(self.grid.scrollbar.value())
+
     def _apply_label(self, label_name: str | None):
         """Apply a label to all selected photos."""
         selected_items = self._get_selected_items()
