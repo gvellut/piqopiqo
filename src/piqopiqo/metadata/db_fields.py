@@ -13,6 +13,7 @@ class DBFields:
     KEYWORDS = "keywords"
     TIME_TAKEN = "time_taken"
     LABEL = "label"
+    ORIENTATION = "orientation"
     CREATED_AT = "created_at"
     UPDATED_AT = "updated_at"
 
@@ -28,6 +29,7 @@ EXIF_TO_DB_MAPPING = {
     DBFields.KEYWORDS: ["MWG:Keywords"],  # MWG reads from IPTC/XMP
     DBFields.TIME_TAKEN: ["EXIF:DateTimeOriginal"],
     DBFields.LABEL: ["XMP:Label"],
+    DBFields.ORIENTATION: ["EXIF:Orientation"],
 }
 
 # Maps DB field -> EXIF tag(s) for writing
@@ -41,6 +43,7 @@ DB_TO_EXIF_WRITE_MAPPING = {
     DBFields.LONGITUDE: "EXIF:GPSLongitude",
     DBFields.TIME_TAKEN: "EXIF:DateTimeOriginal",
     DBFields.LABEL: "XMP:Label",
+    DBFields.ORIENTATION: "EXIF:Orientation",
 }
 
 # GPS reference fields (special handling for lat/lon conversion)

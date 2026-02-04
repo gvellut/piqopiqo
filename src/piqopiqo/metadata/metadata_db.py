@@ -214,6 +214,7 @@ class MetadataDB:
         keywords TEXT,
         time_taken TIMESTAMP,
         label TEXT,
+        orientation INTEGER,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     );
