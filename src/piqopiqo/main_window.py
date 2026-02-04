@@ -798,7 +798,7 @@ class MainWindow(QMainWindow):
         # the display resolution and flickering => so forget about it)
         # TODO remove
         phy_w, phy_h = platform.get_screen_true_resolution(current_screen)
-        logger.info(f"Physical resolution:  {phy_w} x {phy_h}")
+        logger.debug(f"Physical resolution:  {phy_w} x {phy_h}")
 
         if len(selected_indices) > 1:
             visible_indices = selected_indices

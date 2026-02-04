@@ -117,7 +117,7 @@ class PhotoGrid(QWidget):
             if field != DBFields.LABEL:  # Label is swatch, not text line
                 num_lines += 1
 
-        return num_lines * line_height + 4  # +4 for padding
+        return num_lines * line_height + Config.GRID_ITEM_TEXT_FIELDS_TOP_PADDING
 
     def resizeEvent(self, event):
         # Width available for the grid (Total width - Scrollbar width)

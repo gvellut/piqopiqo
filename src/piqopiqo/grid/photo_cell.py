@@ -7,6 +7,7 @@ from datetime import datetime
 from PySide6.QtCore import QRect, Qt, Signal
 from PySide6.QtGui import (
     QColor,
+    QFont,
     QMouseEvent,
     QPainter,
     QPaintEvent,
@@ -150,13 +151,37 @@ class PhotoCell(QFrame):
             meta_h,
         )
 
+        # Keep the same font sizing as PhotoGrid._calculate_metadata_height.
+        original_font = painter.font()
+        meta_font = QFont(original_font)
+        meta_font.setPointSize(Config.FONT_SIZE)
+        painter.setFont(meta_font)
+
         painter.setPen(QPen(Qt.white))
         font_metrics = painter.fontMetrics()
         line_height = font_metrics.lineSpacing()
 
+        # Vertical padding inside the metadata area.
+        # The grid reserves a few extra pixels (see
+        # PhotoGrid._calculate_metadata_height) but we still need to actually
+        # use them when drawing.
+        expected_lines = 1 + sum(
+            1 for field_name in Config.GRID_ITEM_FIELDS if field_name != DBFields.LABEL
+        )
+        reserved_text_h = expected_lines * line_height
+        extra_h = max(0, text_rect.height() - reserved_text_h)
+        top_pad = extra_h
+        text_top = text_rect.top() + top_pad
+
         # Filename (first line)
         elided_name = font_metrics.elidedText(name, Qt.ElideRight, text_rect.width())
-        painter.drawText(text_rect, Qt.AlignTop | Qt.AlignHCenter, elided_name)
+        filename_rect = QRect(
+            text_rect.left(),
+            text_top,
+            text_rect.width(),
+            line_height,
+        )
+        painter.drawText(filename_rect, Qt.AlignTop | Qt.AlignHCenter, elided_name)
 
         # DB fields (subsequent lines)
         y_offset = line_height
@@ -173,7 +198,7 @@ class PhotoCell(QFrame):
                     display_value = str(value)
                 field_rect = QRect(
                     text_rect.left(),
-                    text_rect.top() + y_offset,
+                    text_top + y_offset,
                     text_rect.width(),
                     line_height,
                 )
@@ -184,6 +209,8 @@ class PhotoCell(QFrame):
                     field_rect, Qt.AlignTop | Qt.AlignHCenter, elided_value
                 )
             y_offset += line_height
+
+        painter.setFont(original_font)
 
         # Draw red border around item
         painter.setPen(QPen(QColor("red"), 2))
