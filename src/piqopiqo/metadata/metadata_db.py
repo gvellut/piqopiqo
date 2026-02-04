@@ -255,6 +255,14 @@ class MetadataDB:
             )
             connection.commit()
 
+        # Add orientation column if it doesn't exist
+        if "orientation" not in columns:
+            logger.info("Migrating database: adding orientation column")
+            connection.execute(
+                "ALTER TABLE photo_metadata ADD COLUMN orientation INTEGER"
+            )
+            connection.commit()
+
         # Migrate EXIF-format dates (YYYY:MM:DD) to ISO format (YYYY-MM-DD)
         # This handles both old TEXT columns and newly declared TIMESTAMP columns
         cursor = connection.execute(
@@ -359,6 +367,7 @@ class MetadataDB:
             DBFields.KEYWORDS: row[DBFields.KEYWORDS],
             DBFields.TIME_TAKEN: time_taken_val,
             DBFields.LABEL: row[DBFields.LABEL],
+            DBFields.ORIENTATION: row[DBFields.ORIENTATION],
         }
 
     def save_metadata(self, file_path: str, data: dict) -> None:
@@ -398,6 +407,7 @@ class MetadataDB:
                     keywords = ?,
                     time_taken = ?,
                     label = ?,
+                    orientation = ?,
                     updated_at = ?
                 WHERE file_path = ?
                 """,
@@ -409,6 +419,7 @@ class MetadataDB:
                     data.get(DBFields.KEYWORDS),
                     data.get(DBFields.TIME_TAKEN),
                     data.get(DBFields.LABEL),
+                    data.get(DBFields.ORIENTATION),
                     now,
                     file_path,
                 ),
@@ -419,8 +430,8 @@ class MetadataDB:
                 """
                 INSERT INTO photo_metadata
                 (file_path, file_name, title, description, latitude, longitude,
-                 keywords, time_taken, label, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 keywords, time_taken, label, orientation, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     file_path,
@@ -432,6 +443,7 @@ class MetadataDB:
                     data.get(DBFields.KEYWORDS),
                     data.get(DBFields.TIME_TAKEN),
                     data.get(DBFields.LABEL),
+                    data.get(DBFields.ORIENTATION),
                     now,
                     now,
                 ),

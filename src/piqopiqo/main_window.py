@@ -38,6 +38,7 @@ from .model import (
     LabelUndoEntry,
     OnFullscreenExitMultipleSelected,
 )
+from .orientation import rotate_orientation_left, rotate_orientation_right
 from .panels import (
     EditPanel,
     ErrorListDialog,
@@ -320,6 +321,52 @@ class MainWindow(QMainWindow):
         if self.edit_panel:
             self.edit_panel.update_for_selection(selected_items)
 
+    def _on_rotate_left(self):
+        """Rotate selected photos 90° counter-clockwise."""
+        self._apply_rotation(rotate_orientation_left)
+
+    def _on_rotate_right(self):
+        """Rotate selected photos 90° clockwise."""
+        self._apply_rotation(rotate_orientation_right)
+
+    def _apply_rotation(self, rotate_func):
+        """Apply rotation to selected photos.
+
+        Args:
+            rotate_func: Function that takes current orientation and returns new.
+        """
+        selected_items = self._get_selected_items()
+        if not selected_items:
+            return
+
+        for item in selected_items:
+            # Ensure db_metadata exists
+            if item.db_metadata is None:
+                db = self.db_manager.get_db_for_image(item.path)
+                existing = db.get_metadata(item.path)
+                if existing:
+                    item.db_metadata = existing.copy()
+                else:
+                    item.db_metadata = {field: None for field in EDITABLE_FIELDS}
+
+            # Get current orientation and rotate
+            current_orientation = item.db_metadata.get(DBFields.ORIENTATION)
+            new_orientation = rotate_func(current_orientation)
+            item.db_metadata[DBFields.ORIENTATION] = new_orientation
+
+            # Save to DB in background
+            db = self.db_manager.get_db_for_image(item.path)
+            worker = MetadataSaveWorker(db, item.path, item.db_metadata.copy())
+            self._label_save_pool.start(worker)
+
+            # Refresh grid cell immediately
+            self.grid.refresh_item(item._global_index)
+
+        # If fullscreen is open and showing one of these photos, reload image
+        if self._fullscreen_overlay is not None:
+            self._fullscreen_overlay._load_pixmap_at_current_index()
+            self._fullscreen_overlay.update()
+
     def _on_undo_redo_label(self):
         """Handle undo/redo label action."""
         if self._label_undo_entry is None:
@@ -481,6 +528,19 @@ class MainWindow(QMainWindow):
         self._undo_label_action.setEnabled(False)
         self._undo_label_action.triggered.connect(self._on_undo_redo_label)
         edit_menu.addAction(self._undo_label_action)
+
+        # Image menu
+        image_menu = menubar.addMenu("Image")
+
+        rotate_left_action = QAction("Rotate Left", self)
+        rotate_left_action.setShortcut("Ctrl+[")
+        rotate_left_action.triggered.connect(self._on_rotate_left)
+        image_menu.addAction(rotate_left_action)
+
+        rotate_right_action = QAction("Rotate Right", self)
+        rotate_right_action.setShortcut("Ctrl+]")
+        rotate_right_action.triggered.connect(self._on_rotate_right)
+        image_menu.addAction(rotate_right_action)
 
         # View menu
         view_menu = menubar.addMenu("View")

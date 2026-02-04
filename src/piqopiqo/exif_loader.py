@@ -51,6 +51,16 @@ def extract_editable_metadata(exif_data: dict) -> dict:
         if db_field == DBFields.TIME_TAKEN and isinstance(value, str):
             value = parse_exif_datetime(value)
 
+        # Parse orientation as integer (1-8)
+        if db_field == DBFields.ORIENTATION and value is not None:
+            try:
+                value = int(value)
+                # Validate range (1-8 are valid EXIF orientation values)
+                if not (1 <= value <= 8):
+                    value = 1  # Default to normal orientation
+            except (ValueError, TypeError):
+                value = 1
+
         result[db_field] = value
 
     return result

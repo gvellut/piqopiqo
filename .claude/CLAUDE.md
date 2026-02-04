@@ -33,6 +33,7 @@ src/piqopiqo/
 ├── support.py       # Support functions (cache dir, last folder persistence)
 ├── utils.py         # Logging setup and utilities
 ├── label_utils.py   # Status label color utilities
+├── orientation.py   # EXIF orientation handling and rotation utilities
 ├── metadata/        # Database layer
 │   ├── metadata_db.py   # SQLite database for cached metadata
 │   ├── db_fields.py     # Database field definitions and EXIF mappings
@@ -69,6 +70,7 @@ src/piqopiqo/
 - **Sorting**: View menu with sort by Time Taken, File Name, File Name by Folder
 - **Context menu**: Right-click on photos for Duplicate and Move to Trash actions
 - **Refresh**: Ctrl+R to rescan folder for external file changes
+- **Image rotation**: Image menu with Rotate Left/Right (Ctrl+[/]) to rotate photos
 - **Save EXIF**: Tools menu to write DB metadata back to image files using exiftool
 
 ## PhotoListModel Architecture
@@ -114,6 +116,7 @@ Shortcuts are defined in `config.py` `Config.SHORTCUTS` dict (shortcut name => k
 
 - **Zoom (fullscreen only)**: `=` zoom in, `-` zoom out, `0` reset zoom
 - **Labels (grid + fullscreen)**: `1`-`9` set label by index, `` ` `` (backtick) clears label
+- **Rotation**: `Ctrl+[` rotate left, `Ctrl+]` rotate right
 - **Refresh**: `Ctrl+R` rescan folder for changes
 - Labels are defined in `Config.STATUS_LABELS` as `StatusLabel(name, color, index)`
 
@@ -140,10 +143,37 @@ Defined in `db_fields.py`:
 | LONGITUDE | EXIF:GPSLongitude | EXIF:GPSLongitude + GPSLongitudeRef |
 | TIME_TAKEN | EXIF:DateTimeOriginal | EXIF:DateTimeOriginal |
 | LABEL | XMP:Label | XMP:Label |
+| ORIENTATION | EXIF:Orientation | EXIF:Orientation |
 
 ### Version
 
 Package version is defined in `__init__.py` as `__version__ = "1"` and used in XMP metadata.
+
+## Image Rotation (Image Menu)
+
+The "Image" menu provides rotation controls for selected photos:
+- **Rotate Left** (`Ctrl+[`): Rotates 90° counter-clockwise
+- **Rotate Right** (`Ctrl+]`): Rotates 90° clockwise
+
+### How Rotation Works
+
+1. EXIF orientation is read from image files and stored in the DB on import
+2. Orientation is applied when displaying (grid thumbnails and fullscreen)
+3. Rotation modifies the orientation value in the DB (not the original file)
+4. "Save EXIF" writes the modified orientation back to image files
+
+### EXIF Orientation Values
+
+Orientation is stored as an integer (1-8) representing the transform needed:
+- 1 = Normal (no transform)
+- 3 = Rotate 180°
+- 6 = Rotate 90° CW
+- 8 = Rotate 270° CW (= 90° CCW)
+- Values 2, 4, 5, 7 include horizontal/vertical mirroring
+
+The `orientation.py` module provides utilities for:
+- Rotation mappings (`ROTATE_LEFT_MAP`, `ROTATE_RIGHT_MAP`)
+- Transform application (`apply_orientation_to_pixmap`, `get_orientation_transform`)
 
 ## Context Menu (Right-Click)
 

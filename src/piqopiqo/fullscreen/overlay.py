@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 from piqopiqo.config import Config, Shortcut
 from piqopiqo.label_utils import get_label_color
 from piqopiqo.metadata.db_fields import DBFields
+from piqopiqo.orientation import apply_orientation_to_pixmap
 from piqopiqo.shortcuts import match_shortcut_sequence, match_simple_shortcut
 
 from .info_panel import ZoomOverlayController
@@ -292,11 +293,17 @@ class FullscreenOverlay(QWidget):
             image_data = self.all_items[global_index]
             self.image_path = image_data.path
             if self.image_path:
-                self._pixmap = QPixmap(self.image_path)
-                if self._pixmap.isNull():
+                raw_pixmap = QPixmap(self.image_path)
+                if raw_pixmap.isNull():
                     logger.warning(f"Failed to load image: {self.image_path}")
                     self._pixmap = QPixmap()
                     return False
+
+                # Apply orientation from db_metadata
+                db_meta = image_data.db_metadata or {}
+                orientation = db_meta.get(DBFields.ORIENTATION)
+                self._pixmap = apply_orientation_to_pixmap(raw_pixmap, orientation)
+
                 self._update_info_panel()
                 return True
         return False
