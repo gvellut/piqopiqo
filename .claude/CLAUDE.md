@@ -28,7 +28,7 @@ src/piqopiqo/
 ├── shortcuts.py     # Keyboard shortcut matching utilities
 ├── model.py         # Data models (ImageItem, FilterCriteria, StatusLabel, ExifField)
 ├── exif_loader.py   # EXIF metadata loading (background thread)
-├── exif_man.py      # EXIF management utilities (on-demand fetch)
+├── exif_man.py      # EXIF I/O manager (on-demand fetch + write to files)
 ├── thumb_man.py     # Thumbnail generation and caching (multiprocessing)
 ├── support.py       # Support functions (cache dir, last folder persistence)
 ├── utils.py         # Logging setup and utilities
@@ -47,11 +47,12 @@ src/piqopiqo/
 │   ├── photo_cell.py    # Single photo cell widget (left/right click)
 │   └── photo_grid.py    # Grid of photo thumbnails with context menu
 ├── panels/          # Side panels
-│   ├── edit_panel.py    # Editable metadata panel
-│   ├── edit_widgets.py  # Field editor widgets
-│   ├── exif_panel.py    # Read-only EXIF display
-│   ├── filter_panel.py  # Filtering UI
-│   └── status_bar.py    # Status bar component
+│   ├── edit_panel.py      # Editable metadata panel
+│   ├── edit_widgets.py    # Field editor widgets
+│   ├── exif_panel.py      # Read-only EXIF display
+│   ├── filter_panel.py    # Filtering UI
+│   ├── save_exif_dialog.py # Dialog for saving metadata to EXIF
+│   └── status_bar.py      # Status bar component
 └── platform/        # Platform-specific code
     └── macos.py     # macOS utilities (resolution, move_to_trash)
 ```
@@ -68,6 +69,7 @@ src/piqopiqo/
 - **Sorting**: View menu with sort by Time Taken, File Name, File Name by Folder
 - **Context menu**: Right-click on photos for Duplicate and Move to Trash actions
 - **Refresh**: Ctrl+R to rescan folder for external file changes
+- **Save EXIF**: Tools menu to write DB metadata back to image files using exiftool
 
 ## PhotoListModel Architecture
 
@@ -114,6 +116,34 @@ Shortcuts are defined in `config.py` `Config.SHORTCUTS` dict (shortcut name => k
 - **Labels (grid + fullscreen)**: `1`-`9` set label by index, `` ` `` (backtick) clears label
 - **Refresh**: `Ctrl+R` rescan folder for changes
 - Labels are defined in `Config.STATUS_LABELS` as `StatusLabel(name, color, index)`
+
+## Save EXIF (Tools Menu)
+
+The "Tools > Save exif" action writes DB metadata back to image files using exiftool:
+- Operates on selected photos, or all filtered photos if none selected
+- Shows dialog with progress bar and error log
+- Uses MWG (Metadata Working Group) composite tags where available for cross-format compatibility
+- Adds XMP history (HistoryAction, HistoryWhen, HistorySoftwareAgent) and processing metadata (ProcessingSoftware, MetadataDate)
+
+### EXIF Field Mappings
+
+Defined in `db_fields.py`:
+- **EXIF_TO_DB_MAPPING**: Maps DB fields to EXIF tags for reading (uses MWG:Description, MWG:Keywords)
+- **DB_TO_EXIF_WRITE_MAPPING**: Maps DB fields to EXIF tags for writing
+
+| DB Field | Read From | Write To |
+|----------|-----------|----------|
+| TITLE | XMP:Title, IPTC:ObjectName | XMP:Title + IPTC:ObjectName |
+| DESCRIPTION | MWG:Description | MWG:Description |
+| KEYWORDS | MWG:Keywords | MWG:Keywords |
+| LATITUDE | EXIF:GPSLatitude | EXIF:GPSLatitude + GPSLatitudeRef |
+| LONGITUDE | EXIF:GPSLongitude | EXIF:GPSLongitude + GPSLongitudeRef |
+| TIME_TAKEN | EXIF:DateTimeOriginal | EXIF:DateTimeOriginal |
+| LABEL | XMP:Label | XMP:Label |
+
+### Version
+
+Package version is defined in `__init__.py` as `__version__ = "1"` and used in XMP metadata.
 
 ## Context Menu (Right-Click)
 

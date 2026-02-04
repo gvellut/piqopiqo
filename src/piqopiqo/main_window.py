@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt, QThreadPool
 from PySide6.QtGui import QAction, QActionGroup, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QFileDialog,
     QMainWindow,
     QMenu,
@@ -519,6 +520,13 @@ class MainWindow(QMainWindow):
         refresh_action.triggered.connect(self._on_refresh_folder)
         view_menu.addAction(refresh_action)
 
+        # Tools menu
+        tools_menu = menubar.addMenu("Tools")
+
+        save_exif_action = QAction("Save exif", self)
+        save_exif_action.triggered.connect(self._on_save_exif)
+        tools_menu.addAction(save_exif_action)
+
         help_menu = menubar.addMenu("Help")
         about_action = QAction(f"About {Config.APP_NAME}", self)
         about_action.setMenuRole(QAction.MenuRole.AboutRole)
@@ -608,6 +616,33 @@ class MainWindow(QMainWindow):
 
         # Refresh the grid to trigger thumbnail requests
         self.grid.on_scroll(self.grid.scrollbar.value())
+
+    def _on_save_exif(self):
+        """Save DB metadata to EXIF for selected or all filtered photos."""
+        from .panels.save_exif_dialog import SaveExifDialog
+
+        # Get items to process: selected if any, otherwise all filtered
+        selected = self.photo_model.get_selected_photos()
+        if selected:
+            items = selected
+        else:
+            items = list(self.images_data)
+
+        if not items:
+            return
+
+        dialog = SaveExifDialog(items, self.exif_manager, self)
+        result = dialog.exec()
+
+        if result == QDialog.DialogCode.Accepted:
+            # Reload EXIF for processed items to reflect any changes
+            processed_paths = set(dialog.get_processed_paths())
+            for item in self._all_images_data:
+                if item.path in processed_paths:
+                    # Clear cached EXIF data so it gets reloaded
+                    item.exif_data = None
+                    # Queue for EXIF panel reload if item is visible/selected
+                    self.exif_manager.fetch_exif(item.path)
 
     def on_thumb_ready(self, file_path, thumb_type, cache_path):
         # Update the data list directly

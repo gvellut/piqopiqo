@@ -18,18 +18,29 @@ class DBFields:
 
 
 # Maps DB field -> list of EXIF fields to try (in order of preference)
+# Uses MWG (Metadata Working Group) composite tags where available
+# See: https://exiftool.org/TagNames/MWG.html
 EXIF_TO_DB_MAPPING = {
-    DBFields.TITLE: ["XMP:Title", "IPTC:ObjectName"],
-    DBFields.DESCRIPTION: [
-        "XMP:Description",
-        "IPTC:Caption-Abstract",
-        "EXIF:UserComment",
-    ],
+    DBFields.TITLE: ["XMP:Title", "IPTC:ObjectName"],  # No MWG for title
+    DBFields.DESCRIPTION: ["MWG:Description"],  # MWG reads from EXIF/IPTC/XMP
     DBFields.LATITUDE: ["EXIF:GPSLatitude"],
     DBFields.LONGITUDE: ["EXIF:GPSLongitude"],
-    DBFields.KEYWORDS: ["IPTC:Keywords", "XMP:Subject"],
+    DBFields.KEYWORDS: ["MWG:Keywords"],  # MWG reads from IPTC/XMP
     DBFields.TIME_TAKEN: ["EXIF:DateTimeOriginal"],
     DBFields.LABEL: ["XMP:Label"],
+}
+
+# Maps DB field -> EXIF tag(s) for writing
+# Uses MWG composite tags where available to write to multiple locations
+# String value = single tag, list = write to multiple tags
+DB_TO_EXIF_WRITE_MAPPING = {
+    DBFields.TITLE: ["XMP:Title", "IPTC:ObjectName"],  # No MWG, write to both
+    DBFields.DESCRIPTION: "MWG:Description",  # MWG writes to EXIF/IPTC/XMP
+    DBFields.KEYWORDS: "MWG:Keywords",  # MWG writes to IPTC + XMP
+    DBFields.LATITUDE: "EXIF:GPSLatitude",
+    DBFields.LONGITUDE: "EXIF:GPSLongitude",
+    DBFields.TIME_TAKEN: "EXIF:DateTimeOriginal",
+    DBFields.LABEL: "XMP:Label",
 }
 
 # GPS reference fields (special handling for lat/lon conversion)
