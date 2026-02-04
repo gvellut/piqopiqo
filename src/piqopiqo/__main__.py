@@ -12,10 +12,10 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
-# try:
-#     from pyqtauto.server import start_server
-# except ImportError:
-start_server = None
+try:
+    from pyqtauto.server import start_server
+except ImportError:
+    start_server = None
 
 from .config import Config, apply_env_overrides
 from .main_window import MainWindow
