@@ -19,8 +19,12 @@ class DBFields:
 
 # Maps DB field -> list of EXIF fields to try (in order of preference)
 EXIF_TO_DB_MAPPING = {
-    DBFields.TITLE: ["XMP:Title", "EXIF:ImageDescription"],
-    DBFields.DESCRIPTION: ["XMP:Description", "EXIF:UserComment"],
+    DBFields.TITLE: ["XMP:Title", "IPTC:ObjectName"],
+    DBFields.DESCRIPTION: [
+        "XMP:Description",
+        "IPTC:Caption-Abstract",
+        "EXIF:UserComment",
+    ],
     DBFields.LATITUDE: ["EXIF:GPSLatitude"],
     DBFields.LONGITUDE: ["EXIF:GPSLongitude"],
     DBFields.KEYWORDS: ["IPTC:Keywords", "XMP:Subject"],

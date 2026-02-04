@@ -183,8 +183,6 @@ class MainWindow(QMainWindow):
         # Start as True so first edit creates a new undo entry
         self._selection_changed_since_edit: bool = True
 
-    # --- Properties for backward compatibility ---
-
     @property
     def images_data(self) -> list[ImageItem]:
         """Filtered photo list (from model)."""

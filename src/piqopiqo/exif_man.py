@@ -115,7 +115,3 @@ class ExifManager(QObject):
                 pass
             for proc in processes:
                 proc.join(1.0)
-
-
-# Backward compatibility: re-export ExifPanel from panels
-from .panels.exif_panel import ExifPanel  # noqa: E402, F401

@@ -64,6 +64,15 @@ You can set these options to make it easier to test (smaller window, with a larg
 - `PIQO_NUM_COLUMNS`
 - also `PIQO_CACHE_BASE_DIR` to reset the metadata state
 
+#### Relaunching the application
+
+You will need to relaunch the PiqoPiqo app to understand the initialization options: First kill all existing instances (or it will not relaunch).
+
+```
+pkill -9 -f "piqopiqo"
+```
+
+Then launch with suitable initialization options.
 
 ### 3. Write Automation Scripts
 
@@ -231,26 +240,6 @@ client.click("@name:submit_btn")
 |----------|---------|-------------|
 | `PYQTAUTO_PORT` | `9876` | Server port |
 
-## CLI Tool
-
-PyQtAuto also provides a command-line tool:
-
-```bash
-# Get widget tree
-pyqtauto tree
-
-# Click a button
-pyqtauto click "@name:submit_btn"
-
-# Type text
-pyqtauto type "@name:input" "Hello World"
-
-# Take screenshot
-pyqtauto screenshot output.png
-
-# Interactive shell
-pyqtauto shell
-```
 
 ## Best Practices for Testable Applications
 
