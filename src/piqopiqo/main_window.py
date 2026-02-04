@@ -477,7 +477,8 @@ class MainWindow(QMainWindow):
         edit_menu = menubar.addMenu("Edit")
 
         self._undo_label_action = QAction("Undo label", self)
-        self._undo_label_action.setShortcut("Ctrl+Z")
+        # no shortcut for Undo label
+        # self._undo_label_action.setShortcut("Ctrl+Z")
         self._undo_label_action.setEnabled(False)
         self._undo_label_action.triggered.connect(self._on_undo_redo_label)
         edit_menu.addAction(self._undo_label_action)
