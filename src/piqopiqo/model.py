@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from enum import Enum
 
 import attr
@@ -56,3 +58,18 @@ class ImageItem:
 class OnFullscreenExitMultipleSelected(Enum):
     KEEP_SELECTION = "keep_selection"
     SELECT_LAST_VIEWED = "select_last_viewed"
+
+
+@define
+class LabelUndoEntry:
+    """Stores the state for a single label undo/redo operation.
+
+    Attributes:
+        items: List of ImageItem references that were modified.
+        previous_labels: Dict mapping item path to label value before the edit.
+        new_labels: Dict mapping item path to label value after the edit.
+    """
+
+    items: list[ImageItem]
+    previous_labels: dict[str, str | None]
+    new_labels: dict[str, str | None]

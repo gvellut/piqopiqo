@@ -31,7 +31,12 @@ from .grid import PhotoGrid
 from .metadata.db_fields import EDITABLE_FIELDS, DBFields
 from .metadata.metadata_db import MetadataDBManager
 from .metadata.save_workers import MetadataSaveWorker
-from .model import FilterCriteria, ImageItem, OnFullscreenExitMultipleSelected
+from .model import (
+    FilterCriteria,
+    ImageItem,
+    LabelUndoEntry,
+    OnFullscreenExitMultipleSelected,
+)
 from .panels import (
     EditPanel,
     ErrorListDialog,
@@ -172,6 +177,12 @@ class MainWindow(QMainWindow):
         self._label_save_pool = QThreadPool()
         self._setup_shortcuts()
 
+        # Undo state for label changes
+        self._label_undo_entry: LabelUndoEntry | None = None
+        self._label_undo_is_redo: bool = False  # False = Undo mode, True = Redo mode
+        # Start as True so first edit creates a new undo entry
+        self._selection_changed_since_edit: bool = True
+
     # --- Properties for backward compatibility ---
 
     @property
@@ -252,6 +263,8 @@ class MainWindow(QMainWindow):
         if not selected_items:
             return
 
+        # Capture previous labels before making changes
+        previous_labels: dict[str, str | None] = {}
         for item in selected_items:
             # Ensure db_metadata exists
             if item.db_metadata is None:
@@ -262,6 +275,32 @@ class MainWindow(QMainWindow):
                 else:
                     item.db_metadata = {field: None for field in EDITABLE_FIELDS}
 
+            # Capture the current label before changing
+            previous_labels[item.path] = item.db_metadata.get(DBFields.LABEL)
+
+        # Create undo entry if selection changed since last edit
+        if self._selection_changed_since_edit:
+            # New undo session: create new entry with captured previous labels
+            self._label_undo_entry = LabelUndoEntry(
+                items=list(selected_items),
+                previous_labels=previous_labels,
+                new_labels={item.path: label_name for item in selected_items},
+            )
+            self._selection_changed_since_edit = False
+        else:
+            # Same selection: update the new_labels in existing entry
+            if self._label_undo_entry is not None:
+                self._label_undo_entry.new_labels = {
+                    item.path: label_name for item in selected_items
+                }
+
+        # Reset to undo mode and enable the menu action
+        self._label_undo_is_redo = False
+        self._undo_label_action.setText("Undo label")
+        self._undo_label_action.setEnabled(True)
+
+        # Apply the label changes
+        for item in selected_items:
             # Update label
             item.db_metadata[DBFields.LABEL] = label_name
 
@@ -280,6 +319,53 @@ class MainWindow(QMainWindow):
 
         # Update edit panel if visible
         if self.edit_panel:
+            self.edit_panel.update_for_selection(selected_items)
+
+    def _on_undo_redo_label(self):
+        """Handle undo/redo label action."""
+        if self._label_undo_entry is None:
+            return
+
+        entry = self._label_undo_entry
+
+        if self._label_undo_is_redo:
+            # Redo: apply the new labels
+            labels_to_apply = entry.new_labels
+            self._undo_label_action.setText("Undo label")
+            self._label_undo_is_redo = False
+        else:
+            # Undo: apply the previous labels
+            labels_to_apply = entry.previous_labels
+            self._undo_label_action.setText("Redo label")
+            self._label_undo_is_redo = True
+
+        # Apply the labels to the items
+        for item in entry.items:
+            if item.path in labels_to_apply:
+                label_value = labels_to_apply[item.path]
+
+                # Ensure db_metadata exists
+                if item.db_metadata is None:
+                    item.db_metadata = {field: None for field in EDITABLE_FIELDS}
+
+                item.db_metadata[DBFields.LABEL] = label_value
+
+                # Save to DB in background
+                db = self.db_manager.get_db_for_image(item.path)
+                worker = MetadataSaveWorker(db, item.path, item.db_metadata.copy())
+                self._label_save_pool.start(worker)
+
+                # Refresh grid cell immediately
+                self.grid.refresh_item(item._global_index)
+
+        # Update fullscreen overlay swatch if open
+        if self._fullscreen_overlay is not None:
+            self._fullscreen_overlay._update_color_swatch()
+            self._fullscreen_overlay.update()
+
+        # Update edit panel for current selection
+        selected_items = self._get_selected_items()
+        if self.edit_panel and selected_items:
             self.edit_panel.update_for_selection(selected_items)
 
     def _on_edit_finished(self):
@@ -386,6 +472,15 @@ class MainWindow(QMainWindow):
         quit_action.setShortcut("Ctrl+Q")
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
+
+        # Edit menu
+        edit_menu = menubar.addMenu("Edit")
+
+        self._undo_label_action = QAction("Undo label", self)
+        self._undo_label_action.setShortcut("Ctrl+Z")
+        self._undo_label_action.setEnabled(False)
+        self._undo_label_action.triggered.connect(self._on_undo_redo_label)
+        edit_menu.addAction(self._undo_label_action)
 
         # View menu
         view_menu = menubar.addMenu("View")
@@ -544,6 +639,9 @@ class MainWindow(QMainWindow):
                 break
 
     def on_selection_changed(self, selected_indices):
+        # Mark selection as changed for undo tracking
+        self._selection_changed_since_edit = True
+
         selected_items = [self.images_data[i] for i in selected_indices]
 
         # Load db_metadata for selected items if not already loaded
