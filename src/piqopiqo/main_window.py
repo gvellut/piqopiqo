@@ -7,7 +7,6 @@ from functools import partial
 import logging
 import os
 import shutil
-import sys
 import threading
 
 from PySide6.QtCore import Qt, QThreadPool
@@ -142,7 +141,7 @@ class MainWindow(QMainWindow):
         self.exif_loader.all_completed.connect(self._on_loading_complete)
 
         # EXIF manager for display panel (on-demand)
-        self.exif_manager = ExifManager(Config.EXIFTOOL_PATH, common_args=["-G"])
+        self.exif_manager = ExifManager(Config.EXIFTOOL_PATH)
         self.exif_manager.exif_ready.connect(self.on_exif_ready)
 
         self.grid.request_thumb.connect(self.request_thumb_handler)

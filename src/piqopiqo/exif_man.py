@@ -63,8 +63,10 @@ def exif_write_task(
         return (file_path, False, str(e))
 
 
-class ExifIOManager(QObject):
+class ExifManager(QObject):
     """Manager for reading and writing EXIF metadata in background processes.
+
+    Used for reading the EXIF for direct display in the EXIF panel
 
     For reading: use fetch_exif() which emits exif_ready signal.
     For writing: use write_exif() which emits write_progress/write_file_completed/
@@ -87,7 +89,8 @@ class ExifIOManager(QObject):
     ):
         super().__init__(parent)
         self.exiftool_path = exiftool_path
-        self.common_args = common_args or ["-G"]
+        # no -n (machine format) : displayed to the user
+        self.common_args = common_args or ["-G", "-use", "MWG"]
 
         # Read pool (always active)
         self.pool = multiprocessing.Pool(
@@ -257,7 +260,3 @@ class ExifIOManager(QObject):
                 pass
             for proc in processes:
                 proc.join(1.0)
-
-
-# Backward compatibility alias
-ExifManager = ExifIOManager

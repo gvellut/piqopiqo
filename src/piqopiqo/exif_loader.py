@@ -3,6 +3,7 @@
 import logging
 import threading
 
+from exiftool import ExifToolHelper
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 
 from .config import Config
@@ -80,7 +81,7 @@ class ExifLoaderWorker(QRunnable):
         self,
         file_path: str,
         source_folder: str,
-        etHelper,
+        etHelper: ExifToolHelper,
         db_manager: MetadataDBManager,
         exif_lock: threading.Lock | None = None,
     ):
@@ -95,11 +96,16 @@ class ExifLoaderWorker(QRunnable):
     def run(self):
         try:
             # Read EXIF data
+            # Use -n option : machine-readable
             if self.exif_lock is None:
-                exif_results = self.etHelper.get_metadata(self.file_path)
+                exif_results = self.etHelper.get_metadata(
+                    self.file_path, ["-G", "-n", "-use", "MWG"]
+                )
             else:
                 with self.exif_lock:
-                    exif_results = self.etHelper.get_metadata(self.file_path)
+                    exif_results = self.etHelper.get_metadata(
+                        self.file_path, ["-G", "-n", "-use", "MWG"]
+                    )
             if not exif_results:
                 self.signals.error.emit(self.file_path, "No EXIF data found")
                 return

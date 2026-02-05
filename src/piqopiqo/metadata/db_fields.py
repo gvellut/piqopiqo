@@ -23,10 +23,10 @@ class DBFields:
 # See: https://exiftool.org/TagNames/MWG.html
 EXIF_TO_DB_MAPPING = {
     DBFields.TITLE: ["XMP:Title", "IPTC:ObjectName"],  # No MWG for title
-    DBFields.DESCRIPTION: ["MWG:Description"],  # MWG reads from EXIF/IPTC/XMP
+    DBFields.DESCRIPTION: ["Composite:Description"],  # MWG reads from EXIF/IPTC/XMP
     DBFields.LATITUDE: ["EXIF:GPSLatitude"],
     DBFields.LONGITUDE: ["EXIF:GPSLongitude"],
-    DBFields.KEYWORDS: ["MWG:Keywords"],  # MWG reads from IPTC/XMP
+    DBFields.KEYWORDS: ["Composite:Keywords"],  # MWG reads from IPTC/XMP
     DBFields.TIME_TAKEN: ["EXIF:DateTimeOriginal"],
     DBFields.LABEL: ["XMP:Label"],
     DBFields.ORIENTATION: ["EXIF:Orientation"],

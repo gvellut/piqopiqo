@@ -100,18 +100,12 @@ class Config:
     EXIF_AUTO_FORMAT = True
 
     EXIF_FIELDS = [
-        ExifField("EXIF:ExposureTime"),
+        ExifField("EXIF:FocalLength"),
+        ExifField("EXIF:ExposureTime", "Shutter Speed"),
         ExifField("EXIF:FNumber", "F-Number"),
-        ExifField("EXIF:ExposureProgram"),
         ExifField("EXIF:ISO"),
         ExifField("EXIF:DateTimeOriginal", "Date/Time Original"),
-        ExifField("EXIF:CreateDate"),
-        ExifField("EXIF:ShutterSpeedValue", "Shutter Speed"),
-        ExifField("EXIF:ApertureValue", "Aperture"),
-        ExifField("EXIF:FocalLength"),
-        ExifField("EXIF:LensModel"),
         ExifField("File:FileName", "File Name"),
-        ExifField("File:FileModifyDate", "File Modified"),
     ]
     EXIF_PANEL_LAYOUT = (30, 70)
     EXIF_PANEL_ROW_SPACING = 5  # Fixed spacing between rows in pixels
