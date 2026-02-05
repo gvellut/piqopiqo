@@ -8,6 +8,7 @@ import threading
 
 import click
 import exiftool
+import Foundation
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
@@ -29,6 +30,21 @@ def resource_path(relative_path):
     if hasattr(sys, "_MEIPASS"):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
+
+
+def suppress_macos_menus():
+    if sys.platform == "darwin":
+        defaults = Foundation.NSUserDefaults.standardUserDefaults()
+        # Suppress Emoji & Symbols
+        defaults.setBool_forKey_(True, "NSDisabledCharacterPaletteMenuItem")
+        # Suppress Dictation
+        defaults.setBool_forKey_(True, "NSDisabledDictationMenuItem")
+        # Suppress "Enter Full Screen" from appearing in View menus app-wide
+        defaults.setBool_forKey_(False, "NSFullScreenMenuItemEverywhere")
+        # 3. Remove Autofill (macOS 14+)
+        defaults.setBool_forKey_(True, "NSDisabledAutofillMenuItem")
+        # 4. Remove Passwords (often linked to Autofill)
+        defaults.setBool_forKey_(True, "NSDisabledPasswordsMenuItem")
 
 
 @click.command()
@@ -71,6 +87,8 @@ def cli(folder):
         print(f"Found {len(images)} images in {len(source_folders)} folder(s).")
         # Save as last folder
         save_last_folder(folder)
+
+    suppress_macos_menus()
 
     # Launch GUI
     app = QApplication(sys.argv)

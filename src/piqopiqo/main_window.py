@@ -7,6 +7,7 @@ from functools import partial
 import logging
 import os
 import shutil
+import sys
 import threading
 
 from PySide6.QtCore import Qt, QThreadPool
@@ -533,12 +534,10 @@ class MainWindow(QMainWindow):
         image_menu = menubar.addMenu("Image")
 
         rotate_left_action = QAction("Rotate Left", self)
-        rotate_left_action.setShortcut("Ctrl+[")
         rotate_left_action.triggered.connect(self._on_rotate_left)
         image_menu.addAction(rotate_left_action)
 
         rotate_right_action = QAction("Rotate Right", self)
-        rotate_right_action.setShortcut("Ctrl+]")
         rotate_right_action.triggered.connect(self._on_rotate_right)
         image_menu.addAction(rotate_right_action)
 
@@ -576,7 +575,6 @@ class MainWindow(QMainWindow):
         view_menu.addSeparator()
 
         refresh_action = QAction("Refresh", self)
-        refresh_action.setShortcut("Ctrl+R")
         refresh_action.triggered.connect(self._on_refresh_folder)
         view_menu.addAction(refresh_action)
 
