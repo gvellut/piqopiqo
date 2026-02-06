@@ -483,6 +483,16 @@ class MetadataDB:
         conn.execute("DELETE FROM photo_metadata WHERE file_path = ?", (file_path,))
         conn.commit()
 
+    def delete_all_metadata(self) -> None:
+        """Delete all metadata entries from the database."""
+        conn = self._get_readonly_connection()
+        if conn is None:
+            return
+
+        conn.execute("DELETE FROM photo_metadata")
+        conn.commit()
+        logger.info(f"Deleted all metadata for folder: {self.folder_path}")
+
     def close(self) -> None:
         """Close the database connection."""
         with self._connections_lock:
@@ -523,6 +533,11 @@ class MetadataDBManager:
         """
         folder_path = os.path.dirname(file_path)
         return self.get_db_for_folder(folder_path)
+
+    def delete_all_metadata(self) -> None:
+        """Delete all metadata from all registered databases."""
+        for db in self._databases.values():
+            db.delete_all_metadata()
 
     def close_all(self) -> None:
         """Close all database connections."""

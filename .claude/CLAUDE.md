@@ -30,6 +30,7 @@ src/piqopiqo/
 ├── exif_loader.py   # EXIF metadata loading (background thread)
 ├── exif_man.py      # EXIF I/O manager (on-demand fetch + write to files)
 ├── thumb_man.py     # Thumbnail generation and caching (multiprocessing)
+├── external_apps.py # External application integration (file manager, viewer, editor)
 ├── support.py       # Support functions (cache dir, last folder persistence)
 ├── utils.py         # Logging setup and utilities
 ├── label_utils.py   # Status label color utilities
@@ -68,10 +69,13 @@ src/piqopiqo/
 - **Thumbnail caching**: Multiprocessing pipeline, cached to disk
 - **Status labels**: Configurable colored labels for photo workflow
 - **Sorting**: View menu with sort by Time Taken, File Name, File Name by Folder
-- **Context menu**: Right-click on photos for Duplicate and Move to Trash actions
+- **Context menu**: Right-click on photos for Reveal in Finder, View/Edit in external app, Regenerate Thumbnail, Duplicate, Move to Trash
 - **Refresh**: Ctrl+R to rescan folder for external file changes
 - **Image rotation**: Image menu with Rotate Left/Right (Ctrl+[/]) to rotate photos
 - **Save EXIF**: Tools menu to write DB metadata back to image files using exiftool
+- **External apps**: Open photos in external viewer/editor (configurable via PIQO_EXTERNAL_VIEWER/EDITOR)
+- **Reveal in Finder**: Context menu to show selected files in the system file manager
+- **Clear All Data**: File menu action to wipe cached thumbnails + DB and reload from scratch
 
 ## PhotoListModel Architecture
 
@@ -87,13 +91,13 @@ MainWindow uses properties `images_data` and `_all_images_data` that delegate to
 
 ## Configuration
 
-All settings in `config.py` can be overridden via environment variables with `PIQO_` prefix:
+All settings in `config.py` can be overridden via environment variables with `PIQO_` prefix. Those useful for tesing as an agent are:
 
 - `PIQO_NUM_COLUMNS` - Grid columns (default: 8)
 - `PIQO_CACHE_BASE_DIR` - Thumbnail cache location
 - `PIQO_THUMB_MAX_DIM` - Max thumbnail dimension (default: 1024)
-- `PIQO_CLEAR_CACHE_ON_START` - Clear cache on startup (default: false)
 - `PIQO_INITIAL_RESOLUTION` - Initial window size as `WIDTHxHEIGHT` (e.g. `1280x800`). If not set, window opens maximized.
+
 
 ## EXIF Panel Configuration
 
@@ -109,16 +113,6 @@ The edit panel supports editing metadata fields (title, description, keywords, c
 - **Enter/Tab**: Saves the field and moves focus
 - **Escape**: Reverts changes and cancels edit
 - Validation is applied for coordinates and datetime fields (red border on invalid input)
-
-## Keyboard Shortcuts
-
-Shortcuts are defined in `config.py` `Config.SHORTCUTS` dict (shortcut name => key combo string).
-
-- **Zoom (fullscreen only)**: `=` zoom in, `-` zoom out, `0` reset zoom
-- **Labels (grid + fullscreen)**: `1`-`9` set label by index, `` ` `` (backtick) clears label
-- **Rotation**: `Ctrl+[` rotate left, `Ctrl+]` rotate right
-- **Refresh**: `Ctrl+R` rescan folder for changes
-- Labels are defined in `Config.STATUS_LABELS` as `StatusLabel(name, color, index)`
 
 ## Save EXIF (Tools Menu)
 
@@ -178,18 +172,16 @@ The `orientation.py` module provides utilities for:
 ## Context Menu (Right-Click)
 
 Right-click on a photo in the grid to access:
+- **Reveal in Finder**: Opens system file manager with files selected (uses `show-in-file-manager` package). Handles multiple files across multiple folders.
+- **View in {App}**: Opens selected photos in external viewer (only shown if `EXTERNAL_VIEWER` is configured)
+- **Edit in {App}**: Duplicates selected photos first, then opens duplicates in external editor (only shown if `EXTERNAL_EDITOR` is configured)
+- **Regenerate Thumbnail(s)**: Clears cached thumbnails for selected photos and re-queues generation
 - **Duplicate**: Creates a copy with " copy" suffix (or " copy2", etc.)
 - **Move to Trash**: Moves file to macOS Trash
 
 Selection behavior:
 - Right-click on unselected photo: selects only that photo
 - Right-click on selected photo in multi-selection: keeps all selected, action applies to all
-
-## Dependencies
-
-- `uv` for Python project management (deps in `pyproject.toml`)
-- `exiftool` must be installed on the system
-- Key packages: PySide6, pyexiftool, Pillow, click, attrs, send2trash
 
 ## Development
 
@@ -204,6 +196,10 @@ uv sync --all-extras
 ruff check --fix
 ruff format
 ```
+
+### System dependencies
+
+- `exiftool` must be installed on the system
 
 ## Update of Claude.md
 

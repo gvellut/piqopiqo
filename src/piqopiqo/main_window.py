@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QMainWindow,
     QMenu,
+    QMessageBox,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -501,10 +502,9 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
-        regenerate_action = QAction("Regenerate Thumbnails", self)
-        regenerate_action.setShortcut("Ctrl+Shift+R")
-        regenerate_action.triggered.connect(self.on_regenerate_thumbnails)
-        file_menu.addAction(regenerate_action)
+        clear_data_action = QAction("Clear All Data", self)
+        clear_data_action.triggered.connect(self._on_clear_all_data)
+        file_menu.addAction(clear_data_action)
 
         file_menu.addSeparator()
 
@@ -576,6 +576,13 @@ class MainWindow(QMainWindow):
         refresh_action = QAction("Refresh", self)
         refresh_action.triggered.connect(self._on_refresh_folder)
         view_menu.addAction(refresh_action)
+
+        view_menu.addSeparator()
+
+        regenerate_action = QAction("Regenerate Thumbnails", self)
+        regenerate_action.setShortcut("Ctrl+Shift+R")
+        regenerate_action.triggered.connect(self.on_regenerate_thumbnails)
+        view_menu.addAction(regenerate_action)
 
         # Tools menu
         tools_menu = menubar.addMenu("Tools")
@@ -905,11 +912,48 @@ class MainWindow(QMainWindow):
 
     def _show_context_menu(self, global_index: int, pos):
         """Show context menu for photo(s)."""
+        from .external_apps import open_in_external_app, reveal_in_file_manager
+
         selected = self.photo_model.get_selected_photos()
         if not selected:
             return
 
         menu = QMenu(self)
+
+        # Reveal in Finder
+        reveal_action = menu.addAction("Reveal in Finder")
+        reveal_action.triggered.connect(lambda: reveal_in_file_manager(selected))
+
+        # View in Application (only if configured)
+        if Config.EXTERNAL_VIEWER:
+            view_app_action = menu.addAction(f"View in {Config.EXTERNAL_VIEWER}")
+            view_app_action.triggered.connect(
+                lambda: open_in_external_app(
+                    Config.EXTERNAL_VIEWER, [p.path for p in selected]
+                )
+            )
+
+        # Edit in Application (only if configured)
+        if Config.EXTERNAL_EDITOR:
+            edit_app_action = menu.addAction(f"Edit in {Config.EXTERNAL_EDITOR}")
+            edit_app_action.triggered.connect(
+                lambda: self._edit_in_external_app(selected)
+            )
+
+        menu.addSeparator()
+
+        # Regenerate Thumbnail action
+        if len(selected) == 1:
+            regen_action = menu.addAction("Regenerate Thumbnail")
+        else:
+            regen_action = menu.addAction(
+                f"Regenerate Thumbnails ({len(selected)} photos)"
+            )
+        regen_action.triggered.connect(
+            lambda: self._regenerate_selected_thumbnails(selected)
+        )
+
+        menu.addSeparator()
 
         # Duplicate action
         if len(selected) == 1:
@@ -986,6 +1030,72 @@ class MainWindow(QMainWindow):
         # Remove from model (handles cleanup)
         for path in paths_to_remove:
             self.photo_model.remove_photo(path)
+
+    def _regenerate_selected_thumbnails(self, photos: list[ImageItem]):
+        """Regenerate thumbnails for selected photos."""
+        for photo in photos:
+            photo.state = 0
+            photo.pixmap = None
+            self.thumb_manager.clear_and_requeue_image(photo.path)
+
+        # Refresh the grid to show placeholders until new thumbs arrive
+        self.grid.on_scroll(self.grid.scrollbar.value())
+
+    def _edit_in_external_app(self, photos: list[ImageItem]):
+        """Duplicate selected photos and open duplicates in external editor."""
+        from .external_apps import open_in_external_app
+
+        duplicated_paths = []
+        for photo in photos:
+            new_path = self._get_duplicate_path(photo.path)
+            try:
+                shutil.copy2(photo.path, new_path)
+                new_item = ImageItem(
+                    path=new_path,
+                    name=os.path.basename(new_path),
+                    created=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    source_folder=photo.source_folder,
+                )
+                self.photo_model.add_photo(new_item)
+                duplicated_paths.append(new_path)
+                logger.info(f"Duplicated {photo.path} to {new_path} for editing")
+            except OSError as e:
+                logger.error(f"Failed to duplicate {photo.path}: {e}")
+
+        if duplicated_paths:
+            open_in_external_app(Config.EXTERNAL_EDITOR, duplicated_paths)
+
+    def _on_clear_all_data(self):
+        """Clear all cached data (thumbnails + DB) and reload the folder."""
+        if not self.root_folder:
+            return
+
+        reply = QMessageBox.warning(
+            self,
+            "Clear All Data",
+            "This will delete all cached thumbnails and metadata databases, "
+            "then reload the current folder from scratch.\n\n"
+            "This cannot be undone. Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        logger.info("Clearing all data and reloading folder")
+
+        # Delete all metadata from registered databases
+        self.db_manager.delete_all_metadata()
+
+        # Close all DB connections (files will be recreated on reload)
+        self.db_manager.close_all()
+
+        # Clear all thumbnail caches
+        self.thumb_manager.clear_all_registered_caches()
+
+        # Reload the folder from scratch
+        self._load_folder(self.root_folder)
 
     def closeEvent(self, event):
         # Stop background workers first to avoid noisy teardown.

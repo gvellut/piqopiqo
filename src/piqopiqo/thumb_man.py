@@ -296,6 +296,24 @@ class ThumbnailManager(QObject):
         if thumb_type:
             self.thumb_ready.emit(file_path, thumb_type, cache_path)
 
+    def clear_and_requeue_image(self, file_path: str):
+        """Clear cached thumbnails for a single image and re-queue generation."""
+        thumb_dir = self.get_thumb_dir_for_image(file_path)
+        basename = os.path.splitext(os.path.basename(file_path))[0]
+
+        for suffix in ["_embedded.jpg", "_hq.jpg"]:
+            cache_file = thumb_dir / f"{basename}{suffix}"
+            if cache_file.exists():
+                try:
+                    cache_file.unlink()
+                    logger.debug(f"Deleted cache file: {cache_file}")
+                except OSError as e:
+                    logger.warning(f"Failed to delete cache file {cache_file}: {e}")
+
+        # Allow re-queuing by removing from pending set
+        self.pending.discard(file_path)
+        self.queue_image(file_path)
+
     def get_registered_folders(self) -> list[str]:
         """Get list of all registered source folders.
 

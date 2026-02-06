@@ -173,6 +173,14 @@ class Config:
     # Show label as colored swatch on top-right of grid item
     GRID_ITEM_SHOW_LABEL_SWATCH = True
 
+    # External applications
+    # Application name for viewing photos (e.g. "Preview", "Adobe Lightroom")
+    # Empty string = disabled (menu item hidden)
+    EXTERNAL_VIEWER = ""
+    # Application name for editing photos (e.g. "Photoshop", "Affinity Photo")
+    # Empty string = disabled (menu item hidden)
+    EXTERNAL_EDITOR = ""
+
     # Keyboard shortcuts (key combinations, e.g. "ctrl+r", "cmd+alt+t", "=")
     # Modifier keys: ctrl, alt, cmd/meta, shift. Separator: +
     SHORTCUTS = {
