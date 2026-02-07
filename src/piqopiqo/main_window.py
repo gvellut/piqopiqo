@@ -26,8 +26,8 @@ from send2trash import send2trash
 
 from . import platform
 from .config import Config, Shortcut
+from .exif import ExifManager
 from .exif_loader import ExifLoaderManager
-from .exif_man import ExifManager
 from .fullscreen import FullscreenOverlay
 from .grid import PhotoGrid
 from .metadata.db_fields import EDITABLE_FIELDS, DBFields
