@@ -211,6 +211,6 @@ ruff format
 
 - `exiftool` must be installed on the system
 
-## Update of Claude.md
+## Update of AGENTS.md
 
 After completing a feature, update this file AGENTS.md with the updated project structure. Also add considerations for reference for future work.

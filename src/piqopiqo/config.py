@@ -202,7 +202,7 @@ class Config:
     }
 
     BASE_EXTERNAL_FOLDER = "/Volumes/CrucialX8/photos"
-    SDCARD_NAMES = ["tz95", "rx100", "xs20"]
+    # SDCARD_NAMES = ["tz95", "rx100", "xs20"]
     COPY_SD_DEFAULT_NAME = "annecy"
     COPY_SD_DATE_SPEC = "since:last"
     ZOOM_DIR = "tz95"

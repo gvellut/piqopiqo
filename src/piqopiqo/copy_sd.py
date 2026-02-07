@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from enum import Enum, auto
 import logging
 import os
+import plistlib
 import re
 import shutil
 import subprocess
 import threading
+from typing import Any
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 from PySide6.QtWidgets import (
@@ -34,7 +37,6 @@ logger = logging.getLogger(__name__)
 DATE_FMT = "%Y%m%d"
 OUTPUT_DATE_FMT = DATE_FMT
 PREFIX_SINCE = "since:"
-UPLOADED_DIR = "____uploaded"
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,13 @@ class PhotoVolume:
 class DateRange:
     start: date | None
     end: date | None
+
+
+class MediaType(Enum):
+    INTERNAL = auto()
+    SD_CARD = auto()
+    EXTERNAL = auto()
+    UNKNOWN = auto()
 
 
 def date_to_str(d):
@@ -79,24 +88,20 @@ def dirname_with_date(parent_folder, name, f_date):
     return output_folder
 
 
-def dirs_with_date(folder, subfolder=None):
-    if not os.path.isdir(folder):
+def find_date_folders(folder, subfolder=None):
+    if not folder or not os.path.isdir(folder):
         return []
     date_pattern = re.compile(r"^\d{8}_")
-    items = os.listdir(folder)
-    date_folders = [
-        item
-        for item in items
-        if os.path.isdir(os.path.join(folder, item)) and date_pattern.match(item)
-    ]
+    date_folders: set[str] = set()
 
-    if subfolder:
-        # only keep the dates with a folder for the SD card inside
-        date_folders = [
-            date_folder
-            for date_folder in date_folders
-            if os.path.isdir(os.path.join(folder, date_folder, subfolder))
-        ]
+    for root, dirnames, _ in os.walk(folder):
+        for dirname in dirnames:
+            if not date_pattern.match(dirname):
+                continue
+            full_path = os.path.join(root, dirname)
+            if subfolder and not os.path.isdir(os.path.join(full_path, subfolder)):
+                continue
+            date_folders.add(dirname)
 
     return sorted(date_folders, reverse=True)
 
@@ -136,14 +141,9 @@ def to_dates(date_s, volume: PhotoVolume):
         date_s = date_s[len(PREFIX_SINCE) :]
         if date_s == "last":
             folder_for_sd = volume.name
-            dirs_workspace = dirs_with_date(
+            dirs = find_date_folders(
                 Config.BASE_EXTERNAL_FOLDER, subfolder=folder_for_sd
             )
-            dirs_uploaded = dirs_with_date(
-                os.path.join(Config.BASE_EXTERNAL_FOLDER, UPLOADED_DIR),
-                subfolder=folder_for_sd,
-            )
-            dirs = sorted(dirs_workspace + dirs_uploaded, reverse=True)
             if dirs:
                 # replace with last folder in order
                 date_s = dirs[0]
@@ -208,7 +208,7 @@ def filter_after(dates, date_after):
     return [d for d in dates if d > date_after]
 
 
-def get_volume(media):
+def get_volume(media: list[str]):
     volumes_path = "/Volumes"
     try:
         volumes = os.listdir(volumes_path)
@@ -220,6 +220,71 @@ def get_volume(media):
             return PhotoVolume(volume, os.path.join(volumes_path, volume))
 
     return None
+
+
+def get_volume_info(volume_path: str) -> dict[str, Any] | None:
+    """Get metadata for a volume using diskutil."""
+    try:
+        result = subprocess.run(
+            ["diskutil", "info", "-plist", volume_path],
+            capture_output=True,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+    try:
+        return plistlib.loads(result.stdout)
+    except plistlib.InvalidFileException:
+        return None
+
+
+def get_media_type(volume_path: str) -> MediaType:
+    info = get_volume_info(volume_path)
+    if not info:
+        return MediaType.UNKNOWN
+
+    protocol = info.get("BusProtocol", "") or ""
+
+    if "SD" in protocol or "Secure Digital" in protocol:
+        return MediaType.SD_CARD
+
+    is_internal = info.get("Internal", False)
+    if is_internal:
+        return MediaType.INTERNAL
+
+    return MediaType.EXTERNAL
+
+
+def find_sd_card_volumes() -> list[PhotoVolume]:
+    volumes_path = "/Volumes"
+    try:
+        volumes = os.listdir(volumes_path)
+    except FileNotFoundError:
+        return []
+
+    sd_volumes: list[PhotoVolume] = []
+    for volume in volumes:
+        volume_path = os.path.join(volumes_path, volume)
+        if not os.path.isdir(volume_path):
+            continue
+        if get_media_type(volume_path) == MediaType.SD_CARD:
+            sd_volumes.append(PhotoVolume(volume, volume_path))
+
+    return sd_volumes
+
+
+def get_sd_volume() -> PhotoVolume | None:
+    sd_volumes = find_sd_card_volumes()
+    if not sd_volumes:
+        return None
+    if len(sd_volumes) > 1:
+        logger.warning(
+            "Multiple SD cards detected (%s). Using %s.",
+            ", ".join([v.name for v in sd_volumes]),
+            sd_volumes[0].name,
+        )
+    return sd_volumes[0]
 
 
 def eject_volume(volume_name):
@@ -567,7 +632,10 @@ def _confirm_copy(
 
 
 def launch_copy_sd(parent=None):
-    volume = get_volume(Config.SDCARD_NAMES)
+    if hasattr(Config, "SDCARD_NAMES"):
+        volume = get_volume(Config.SDCARD_NAMES)
+    else:
+        volume = get_sd_volume()
     if not volume:
         QMessageBox.warning(
             parent, "Copy from SD", "No relevant SD card. Volume not renamed?"

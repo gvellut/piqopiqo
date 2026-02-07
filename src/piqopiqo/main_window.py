@@ -506,10 +506,6 @@ class MainWindow(QMainWindow):
         refresh_action.triggered.connect(self._on_refresh_folder)
         file_menu.addAction(refresh_action)
 
-        copy_sd_action = QAction("Copy from SD...", self)
-        copy_sd_action.triggered.connect(self._on_copy_from_sd)
-        file_menu.addAction(copy_sd_action)
-
         file_menu.addSeparator()
 
         clear_data_action = QAction("Clear All Data", self)
@@ -591,6 +587,12 @@ class MainWindow(QMainWindow):
 
         # Tools menu
         tools_menu = menubar.addMenu("Tools")
+
+        copy_sd_action = QAction("Copy from SD...", self)
+        copy_sd_action.triggered.connect(self._on_copy_from_sd)
+        tools_menu.addAction(copy_sd_action)
+
+        tools_menu.addSeparator()
 
         save_exif_action = QAction("Save exif", self)
         save_exif_action.triggered.connect(self._on_save_exif)
