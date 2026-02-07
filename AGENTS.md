@@ -25,12 +25,12 @@ src/piqopiqo/
 ├── cache_paths.py   # Cache path helpers (thumb/db dirs) - no Qt imports
 ├── config.py        # Configuration class with env var overrides (PIQO_ prefix)
 ├── copy_sd.py       # Copy-from-SD workflow (dialogs, scanning, copy worker)
+├── folder_scan.py   # Folder scan (initial image list)
 ├── folder_watcher.py # watchfiles-based folder watcher (auto add/remove/modify)
 ├── main_window.py   # Main application window
 ├── photo_model.py   # PhotoListModel: filtering, sorting, selection, add/remove photos
 ├── shortcuts.py     # Keyboard shortcut matching utilities
 ├── model.py         # Data models (ImageItem, FilterCriteria, StatusLabel, ExifField)
-├── exif.py          # Deprecated (replaced by MediaManager)
 ├── external_apps.py # External application integration (file manager, viewer, editor)
 ├── support.py       # Support functions (cache dir, last folder persistence)
 ├── utils.py         # Logging setup and utilities
@@ -39,8 +39,6 @@ src/piqopiqo/
 ├── background/        # Background data loaded
 │   ├── media_man.py    # Unified multiprocessing manager (EXIF + thumbs + EXIF write)
 │   ├── media_worker.py # Worker entrypoints (no Qt imports)
-│   ├── thumb_man.py    # Deprecated (scan_folder() still used)
-│   ├── exif_man.py     # Deprecated (thread-based EXIF loader)
 ├── metadata/        # Metadata sqllite database layer
 │   ├── metadata_db.py   # SQLite database for cached metadata
 │   ├── db_fields.py     # Database field definitions and EXIF mappings

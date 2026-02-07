@@ -364,45 +364,6 @@ class PhotoListModel(QObject):
         for i in range(start_index, len(self._filtered_photos)):
             self._filtered_photos[i]._global_index = i
 
-    # --- Refresh ---
-
-    def refresh_from_disk(self, root_folder: str) -> tuple[list[str], list[str]]:
-        """Rescan folder and update model with changes.
-
-        Args:
-            root_folder: Root folder to scan.
-
-        Returns:
-            Tuple of (added_paths, removed_paths).
-        """
-        from .background.thumb_man import scan_folder
-
-        # Scan disk
-        new_images_data, new_folders = scan_folder(root_folder)
-
-        # Build sets for comparison
-        current_paths = {p.path for p in self._all_photos}
-        new_paths = {d["path"] for d in new_images_data}
-
-        # Find additions and removals
-        added_paths = new_paths - current_paths
-        removed_paths = current_paths - new_paths
-
-        # Remove deleted photos
-        for path in removed_paths:
-            self.remove_photo(path)
-
-        # Add new photos
-        for data in new_images_data:
-            if data["path"] in added_paths:
-                photo = ImageItem(**data)
-                self.add_photo(photo)
-
-        # Update source folders
-        self._source_folders = new_folders
-
-        return list(added_paths), list(removed_paths)
-
     # --- Metadata updates ---
 
     def refresh_after_metadata_update(self) -> None:

@@ -25,8 +25,8 @@ from send2trash import send2trash
 
 from . import platform
 from .background.media_man import MediaManager
-from .background.thumb_man import scan_folder
 from .config import Config, Shortcut
+from .folder_scan import scan_folder
 from .folder_watcher import FolderWatcher
 from .fullscreen import FullscreenOverlay
 from .grid import PhotoGrid

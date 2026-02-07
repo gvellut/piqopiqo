@@ -1,12 +1,7 @@
-"""Unified background manager for EXIF extraction and thumbnail generation.
+"""Unified background manager for EXIF extraction, EXIF writing and thumbnails.
 
-This replaces the previous split between:
-- background/exif_man.py (thread-based EXIF -> DB)
-- exif.py (on-demand EXIF + EXIF writing)
-- background/thumb_man.py (thumbnail generation)
-
-All background work runs in multiprocessing worker processes and results are
-applied on the Qt thread via signals.
+All background work runs in multiprocessing worker processes and results are applied
+on the Qt thread via signals.
 """
 
 from __future__ import annotations
