@@ -29,14 +29,16 @@ src/piqopiqo/
 ├── shortcuts.py     # Keyboard shortcut matching utilities
 ├── model.py         # Data models (ImageItem, FilterCriteria, StatusLabel, ExifField)
 ├── exif_loader.py   # EXIF metadata loading (background thread)
-├── exif_man.py      # EXIF I/O manager (on-demand fetch + write to files)
-├── thumb_man.py     # Thumbnail generation and caching (multiprocessing)
+├── exif.py          # EXIF I/O manager (on-demand fetch + write to files)
 ├── external_apps.py # External application integration (file manager, viewer, editor)
 ├── support.py       # Support functions (cache dir, last folder persistence)
 ├── utils.py         # Logging setup and utilities
 ├── label_utils.py   # Status label color utilities
 ├── orientation.py   # EXIF orientation handling and rotation utilities
-├── metadata/        # Database layer
+├── background/        # Background data loaded
+│   ├── thumb_man.py    # Thumbnail cache generation and caching (multiprocessing)
+│   ├── exif_man.py     # extractor from exif to metadata DB (background thread)
+├── metadata/        # Metadata sqllite database layer
 │   ├── metadata_db.py   # SQLite database for cached metadata
 │   ├── db_fields.py     # Database field definitions and EXIF mappings
 │   └── save_workers.py  # Background worker to save metadata

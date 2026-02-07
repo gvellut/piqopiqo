@@ -14,9 +14,9 @@ from .metadata.db_fields import DBFields
 from .model import FilterCriteria, ImageItem
 
 if TYPE_CHECKING:
-    from .exif_loader import ExifLoaderManager
+    from .background.exif_man import ExifLoaderManager
+    from .background.thumb_man import ThumbnailManager
     from .metadata.metadata_db import MetadataDBManager
-    from .thumb_man import ThumbnailManager
 
 logger = logging.getLogger(__name__)
 
@@ -183,7 +183,7 @@ class PhotoListModel(QObject):
         db.delete_metadata(file_path)
 
         # Delete thumbnail cache files
-        from .thumb_man import get_thumb_dir_for_folder
+        from .background.thumb_man import get_thumb_dir_for_folder
 
         thumb_dir = get_thumb_dir_for_folder(source_folder)
         basename = os.path.splitext(os.path.basename(file_path))[0]
@@ -380,7 +380,7 @@ class PhotoListModel(QObject):
         Returns:
             Tuple of (added_paths, removed_paths).
         """
-        from .thumb_man import scan_folder
+        from .background.thumb_man import scan_folder
 
         # Scan disk
         new_images_data, new_folders = scan_folder(root_folder)

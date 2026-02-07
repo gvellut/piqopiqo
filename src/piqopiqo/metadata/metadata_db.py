@@ -8,7 +8,7 @@ import re
 import sqlite3
 import threading
 
-from piqopiqo.thumb_man import get_cache_dir_for_folder
+from piqopiqo.background.thumb_man import get_cache_dir_for_folder
 
 from .db_fields import DBFields
 

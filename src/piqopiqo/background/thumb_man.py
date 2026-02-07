@@ -12,7 +12,7 @@ import time
 from PIL import Image
 from PySide6.QtCore import QObject, Signal
 
-from .config import Config
+from ..config import Config
 
 logger = logging.getLogger(__name__)
 

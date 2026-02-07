@@ -63,7 +63,7 @@ def exif_write_task(
         return (file_path, False, str(e))
 
 
-class ExifManager(QObject):
+class ExifHelper(QObject):
     """Manager for reading and writing EXIF metadata in background processes.
 
     Used for reading the EXIF for direct display in the EXIF panel

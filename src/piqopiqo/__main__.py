@@ -18,10 +18,10 @@ try:
 except ImportError:
     start_server = None
 
+from .background.thumb_man import scan_folder
 from .config import Config, apply_env_overrides
 from .main_window import MainWindow
 from .support import get_cache_base_dir, get_last_folder, save_last_folder
-from .thumb_man import scan_folder
 from .utils import setup_logging
 
 

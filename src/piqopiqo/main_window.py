@@ -25,9 +25,10 @@ from PySide6.QtWidgets import (
 from send2trash import send2trash
 
 from . import platform
+from .background.exif_man import ExifLoaderManager
+from .background.thumb_man import ThumbnailManager, scan_folder
 from .config import Config, Shortcut
-from .exif import ExifManager
-from .exif_loader import ExifLoaderManager
+from .exif import ExifHelper
 from .fullscreen import FullscreenOverlay
 from .grid import PhotoGrid
 from .metadata.db_fields import EDITABLE_FIELDS, DBFields
@@ -50,7 +51,6 @@ from .panels import (
 from .photo_model import PhotoListModel, SortOrder
 from .shortcuts import parse_shortcut
 from .support import save_last_folder
-from .thumb_man import ThumbnailManager, scan_folder
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +142,7 @@ class MainWindow(QMainWindow):
         self.exif_loader.all_completed.connect(self._on_loading_complete)
 
         # EXIF manager for display panel (on-demand)
-        self.exif_manager = ExifManager(Config.EXIFTOOL_PATH)
+        self.exif_manager = ExifHelper(Config.EXIFTOOL_PATH)
         self.exif_manager.exif_ready.connect(self.on_exif_ready)
 
         self.grid.request_thumb.connect(self.request_thumb_handler)
