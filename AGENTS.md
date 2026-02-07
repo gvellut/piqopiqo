@@ -23,6 +23,7 @@ PIQO_NUM_COLUMNS=10 uv run piqopiqo /path/to/images
 src/piqopiqo/
 ├── __main__.py      # Entry point, CLI with click, Qt app setup
 ├── config.py        # Configuration class with env var overrides (PIQO_ prefix)
+├── copy_sd.py       # Copy-from-SD workflow (dialogs, scanning, copy worker)
 ├── main_window.py   # Main application window
 ├── photo_model.py   # PhotoListModel: filtering, sorting, selection, add/remove photos
 ├── shortcuts.py     # Keyboard shortcut matching utilities
@@ -183,6 +184,15 @@ Selection behavior:
 - Right-click on unselected photo: selects only that photo
 - Right-click on selected photo in multi-selection: keeps all selected, action applies to all
 
+
+## Considerations
+- Copy-from-SD uses `Config.BASE_EXTERNAL_FOLDER` as the destination base; ensure the target volume is mounted.
+- Output folders are created as `YYYYMMDD_<name>/<VOLUME_NAME>` using the SD card volume name directly.
+- SD detection is based on `copy_sd.MEDIA` (volume names). Update this list for new cameras.
+- Date spec supports `TD`, `YD`, `YD2`, `YD3`, `YYYYMMDD`, `YYYYMMDD-YYYYMMDD`, `since:YYYYMMDD`, `since:last`, `L/L2/L3` and uses file modification time.
+- Copy runs in a background worker with progress and cancel; eject uses `diskutil` and is skipped on cancel.
+
+
 ## Development
 
 ```bash
@@ -203,4 +213,4 @@ ruff format
 
 ## Update of Claude.md
 
-After completing a feature, update this file CLAUDE.md with the updated project structure. Also add considerations for reference for future work.
+After completing a feature, update this file AGENTS.md with the updated project structure. Also add considerations for reference for future work.

@@ -506,6 +506,10 @@ class MainWindow(QMainWindow):
         refresh_action.triggered.connect(self._on_refresh_folder)
         file_menu.addAction(refresh_action)
 
+        copy_sd_action = QAction("Copy from SD...", self)
+        copy_sd_action.triggered.connect(self._on_copy_from_sd)
+        file_menu.addAction(copy_sd_action)
+
         file_menu.addSeparator()
 
         clear_data_action = QAction("Clear All Data", self)
@@ -603,6 +607,11 @@ class MainWindow(QMainWindow):
 
     def on_settings(self):
         pass
+
+    def _on_copy_from_sd(self):
+        from .copy_sd import launch_copy_sd
+
+        launch_copy_sd(self)
 
     def on_open(self):
         """Open a folder using a file dialog."""

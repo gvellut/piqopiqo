@@ -202,6 +202,9 @@ class Config:
     }
 
     BASE_EXTERNAL_FOLDER = "/Volumes/CrucialX8/photos"
+    SDCARD_NAMES = ["tz95", "rx100", "xs20"]
+    ZOOM_DIR = "tz95"
+    ZOOM_PREFIX = "P"
 
 
 def apply_env_overrides():
