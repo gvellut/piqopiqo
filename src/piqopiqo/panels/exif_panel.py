@@ -90,14 +90,18 @@ class ExifPanel(QWidget):
 
             values = set()
             for item in items:
-                if item.exif_data and field.key in item.exif_data:
-                    value = item.exif_data[field.key]
-                    if not isinstance(value, str):
-                        # TODO see if some should not be converted
-                        value = str(value)  # "<Unable to display>"
-                    values.add(value)
-                else:
+                if item.exif_data is None:
+                    values.add("Reading...")
+                    continue
+
+                value = item.exif_data.get(field.key)
+                if value is None:
                     values.add("<Not Present>")
+                    continue
+
+                if not isinstance(value, str):
+                    value = str(value)
+                values.add(value)
 
             value_str = values.pop() if len(values) == 1 else "<Multiple values>"
 

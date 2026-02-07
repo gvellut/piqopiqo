@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 import logging
 import os
+from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QDialog,
@@ -17,10 +18,12 @@ from PySide6.QtWidgets import (
 )
 
 from ..config import Config
-from ..exif_man import ExifIOManager
 from ..keyword_utils import parse_keywords
 from ..metadata.db_fields import DB_TO_EXIF_WRITE_MAPPING, DBFields
 from ..model import ImageItem
+
+if TYPE_CHECKING:
+    from ..background.media_man import MediaManager
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +117,7 @@ class SaveExifDialog(QDialog):
     def __init__(
         self,
         items: list[ImageItem],
-        exif_manager: ExifIOManager,
+        exif_manager: MediaManager,
         parent=None,
     ):
         super().__init__(parent)

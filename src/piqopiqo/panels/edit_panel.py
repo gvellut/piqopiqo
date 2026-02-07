@@ -38,7 +38,6 @@ class EditPanel(QWidget):
     """Panel for editing photo metadata."""
 
     edit_finished = Signal()  # Emitted when editing is complete (for focus return)
-    refresh_requested = Signal(list)  # Emitted when refresh button clicked
 
     def __init__(self, db_manager: MetadataDBManager, parent=None):
         super().__init__(parent)
@@ -57,7 +56,7 @@ class EditPanel(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Header with refresh button
+        # Header
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(10, 5, 10, 5)
@@ -67,13 +66,6 @@ class EditPanel(QWidget):
         header_layout.addWidget(header_label)
 
         header_layout.addStretch()
-
-        self.refresh_btn = QPushButton()
-        self.refresh_btn.setToolTip("Refresh from EXIF")
-        self.refresh_btn.setFixedSize(24, 24)
-        self.refresh_btn.setEnabled(False)
-        self.refresh_btn.clicked.connect(self._on_refresh_clicked)
-        header_layout.addWidget(self.refresh_btn)
 
         main_layout.addWidget(header_widget)
 
@@ -174,10 +166,24 @@ class EditPanel(QWidget):
         scroll_area.setWidget(container)
         main_layout.addWidget(scroll_area)
 
-    def _on_refresh_clicked(self):
-        """Request refresh of current items from EXIF."""
-        if self._current_items:
-            self.refresh_requested.emit(list(self._current_items))
+        # Status line (used when EXIF/DB data isn't ready yet)
+        self.reading_label = QLabel("")
+        self.reading_label.setContentsMargins(10, 5, 10, 5)
+        self.reading_label.setStyleSheet("color: gray;")
+        self.reading_label.hide()
+        main_layout.addWidget(self.reading_label)
+
+    def _set_editing_enabled(self, enabled: bool) -> None:
+        for widget in (
+            self.title_edit,
+            self.description_edit,
+            self.lat_edit,
+            self.lon_edit,
+            self.keywords_edit,
+            self.time_edit,
+            self.keyword_tree_btn,
+        ):
+            widget.setEnabled(enabled)
 
     def update_for_selection(self, items: list[ImageItem]):
         """Update the panel for a selection of items.
@@ -190,21 +196,25 @@ class EditPanel(QWidget):
 
         if not items:
             self._clear_fields()
-            self.refresh_btn.setEnabled(False)
-            self.keyword_tree_btn.setEnabled(False)
+            self._set_editing_enabled(False)
+            self.reading_label.hide()
             return
 
-        # Enable keyword tree button when items are selected
-        self.keyword_tree_btn.setEnabled(True)
+        # Check if any items are still missing DB data (EXIF not read yet)
+        self._has_missing_data = any(
+            not self.db_manager.get_db_for_image(item.path).has_metadata(item.path)
+            for item in items
+        )
 
-        # Check if any items have missing DB data
-        self._has_missing_data = False
-        for item in items:
-            db = self.db_manager.get_db_for_image(item.path)
-            if not db.has_metadata(item.path):
-                self._has_missing_data = True
-                break
-        self.refresh_btn.setEnabled(self._has_missing_data)
+        if self._has_missing_data:
+            self._clear_fields()
+            self._set_editing_enabled(False)
+            self.reading_label.setText("Reading...")
+            self.reading_label.show()
+            return
+
+        self.reading_label.hide()
+        self._set_editing_enabled(True)
 
         # Gather values for each field
         field_values = self._gather_field_values(items)

@@ -14,8 +14,6 @@ from .metadata.db_fields import DBFields
 from .model import FilterCriteria, ImageItem
 
 if TYPE_CHECKING:
-    from .background.exif_man import ExifLoaderManager
-    from .background.thumb_man import ThumbnailManager
     from .metadata.metadata_db import MetadataDBManager
 
 logger = logging.getLogger(__name__)
@@ -49,14 +47,10 @@ class PhotoListModel(QObject):
 
     def __init__(
         self,
-        thumb_manager: ThumbnailManager,
-        exif_loader: ExifLoaderManager,
         db_manager: MetadataDBManager,
         parent=None,
     ):
         super().__init__(parent)
-        self._thumb_manager = thumb_manager
-        self._exif_loader = exif_loader
         self._db_manager = db_manager
 
         # All photos (unfiltered, unsorted source)
@@ -124,11 +118,6 @@ class PhotoListModel(QObject):
             self._source_folders.append(photo.source_folder)
             self._source_folders.sort()
 
-        # Queue thumbnail and EXIF loading
-        self._thumb_manager.register_folder(photo.source_folder)
-        self._thumb_manager.queue_image(photo.path)
-        self._exif_loader.queue_image(photo.path, photo.source_folder)
-
         # Check if it passes filter
         if self._passes_filter(photo):
             # Find insertion point to maintain sort order
@@ -138,6 +127,7 @@ class PhotoListModel(QObject):
             self.photo_added.emit(photo.path, index)
             return index
 
+        self.photo_added.emit(photo.path, -1)
         return -1
 
     def remove_photo(self, file_path: str) -> int:
@@ -170,6 +160,8 @@ class PhotoListModel(QObject):
         if former_index >= 0:
             self._reindex_from(former_index)
             self.photo_removed.emit(file_path, former_index)
+        else:
+            self.photo_removed.emit(file_path, -1)
 
         # Cleanup: delete metadata DB entry and thumbnail cache
         self._cleanup_photo_data(file_path, photo.source_folder)
@@ -183,7 +175,7 @@ class PhotoListModel(QObject):
         db.delete_metadata(file_path)
 
         # Delete thumbnail cache files
-        from .background.thumb_man import get_thumb_dir_for_folder
+        from .cache_paths import get_thumb_dir_for_folder
 
         thumb_dir = get_thumb_dir_for_folder(source_folder)
         basename = os.path.splitext(os.path.basename(file_path))[0]
@@ -313,9 +305,12 @@ class PhotoListModel(QObject):
             time_taken = None
             if photo.db_metadata:
                 time_taken = photo.db_metadata.get(DBFields.TIME_TAKEN)
-            # Use epoch 0 if no time, so they sort to beginning
             if time_taken is None:
-                time_taken = datetime.min
+                # Fallback to FS created time (stored in ImageItem.created)
+                try:
+                    time_taken = datetime.strptime(photo.created, "%Y-%m-%d %H:%M:%S")
+                except (ValueError, TypeError):
+                    time_taken = datetime.min
             return (time_taken, photo.name.lower())
 
         elif self._sort_order == SortOrder.FILE_NAME:
@@ -407,3 +402,10 @@ class PhotoListModel(QObject):
         self._source_folders = new_folders
 
         return list(added_paths), list(removed_paths)
+
+    # --- Metadata updates ---
+
+    def refresh_after_metadata_update(self) -> None:
+        """Re-apply filter/sort after DB metadata changes."""
+        self._apply_filter_and_sort()
+        self.photos_changed.emit()

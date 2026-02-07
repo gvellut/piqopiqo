@@ -22,22 +22,25 @@ PIQO_NUM_COLUMNS=10 uv run piqopiqo /path/to/images
 ```
 src/piqopiqo/
 ├── __main__.py      # Entry point, CLI with click, Qt app setup
+├── cache_paths.py   # Cache path helpers (thumb/db dirs) - no Qt imports
 ├── config.py        # Configuration class with env var overrides (PIQO_ prefix)
 ├── copy_sd.py       # Copy-from-SD workflow (dialogs, scanning, copy worker)
+├── folder_watcher.py # watchfiles-based folder watcher (auto add/remove/modify)
 ├── main_window.py   # Main application window
 ├── photo_model.py   # PhotoListModel: filtering, sorting, selection, add/remove photos
 ├── shortcuts.py     # Keyboard shortcut matching utilities
 ├── model.py         # Data models (ImageItem, FilterCriteria, StatusLabel, ExifField)
-├── exif_loader.py   # EXIF metadata loading (background thread)
-├── exif.py          # EXIF I/O manager (on-demand fetch + write to files)
+├── exif.py          # Deprecated (replaced by MediaManager)
 ├── external_apps.py # External application integration (file manager, viewer, editor)
 ├── support.py       # Support functions (cache dir, last folder persistence)
 ├── utils.py         # Logging setup and utilities
 ├── label_utils.py   # Status label color utilities
 ├── orientation.py   # EXIF orientation handling and rotation utilities
 ├── background/        # Background data loaded
-│   ├── thumb_man.py    # Thumbnail cache generation and caching (multiprocessing)
-│   ├── exif_man.py     # extractor from exif to metadata DB (background thread)
+│   ├── media_man.py    # Unified multiprocessing manager (EXIF + thumbs + EXIF write)
+│   ├── media_worker.py # Worker entrypoints (no Qt imports)
+│   ├── thumb_man.py    # Deprecated (scan_folder() still used)
+│   ├── exif_man.py     # Deprecated (thread-based EXIF loader)
 ├── metadata/        # Metadata sqllite database layer
 │   ├── metadata_db.py   # SQLite database for cached metadata
 │   ├── db_fields.py     # Database field definitions and EXIF mappings
@@ -73,9 +76,10 @@ src/piqopiqo/
 - **Status labels**: Configurable colored labels for photo workflow
 - **Sorting**: View menu with sort by Time Taken, File Name, File Name by Folder
 - **Context menu**: Right-click on photos for Reveal in Finder, View/Edit in external app, Regenerate Thumbnail, Duplicate, Move to Trash
-- **Refresh**: Ctrl+R to rescan folder for external file changes
+- **Auto-refresh**: Folder changes (add/remove/modify) handled automatically via watchfiles
 - **Image rotation**: Image menu with Rotate Left/Right (Ctrl+[/]) to rotate photos
 - **Save EXIF**: Tools menu to write DB metadata back to image files using exiftool
+- **Regenerate EXIF**: Tools/context menu to re-read EXIF into the Metadata DB
 - **External apps**: Open photos in external viewer/editor (configurable via PIQO_EXTERNAL_VIEWER/EDITOR)
 - **Reveal in Finder**: Context menu to show selected files in the system file manager
 - **Clear All Data**: File menu action to wipe cached thumbnails + DB and reload from scratch
@@ -87,7 +91,7 @@ The `photo_model.py` module contains `PhotoListModel`, a QObject that manages:
 - Filtering via `set_filter(FilterCriteria)`
 - Sorting via `set_sort_order(SortOrder)` - TIME_TAKEN, FILE_NAME, FILE_NAME_BY_FOLDER
 - Selection management
-- Photo addition (queues thumbnail/EXIF loading, cleans up on removal)
+- Photo addition/removal (list updates + cleanup on removal)
 - Signals: `photos_changed`, `photo_added`, `photo_removed`, `selection_changed`
 
 MainWindow uses properties `images_data` and `_all_images_data` that delegate to the model for backward compatibility.
@@ -99,6 +103,9 @@ All settings in `config.py` can be overridden via environment variables with `PI
 - `PIQO_NUM_COLUMNS` - Grid columns (default: 8)
 - `PIQO_CACHE_BASE_DIR` - Thumbnail cache location
 - `PIQO_THUMB_MAX_DIM` - Max thumbnail dimension (default: 1024)
+- `PIQO_MAX_WORKERS` - Max worker processes (default: 4)
+- `PIQO_MIN_IDLE_WORKERS` - Idle worker processes to keep (default: 1)
+- `PIQO_MAX_EXIFTOOLS_IMAGE_BATCH` - Max images per EXIF batch (default: 8)
 - `PIQO_INITIAL_RESOLUTION` - Initial window size as `WIDTHxHEIGHT` (e.g. `1280x800`). If not set, window opens maximized.
 
 
@@ -193,6 +200,9 @@ Selection behavior:
 - SD detection is based on `copy_sd.MEDIA` (volume names). Update this list for new cameras.
 - Date spec supports `TD`, `YD`, `YD2`, `YD3`, `YYYYMMDD`, `YYYYMMDD-YYYYMMDD`, `since:YYYYMMDD`, `since:last`, `L/L2/L3` and uses file modification time.
 - Copy runs in a background worker with progress and cancel; eject uses `diskutil` and is skipped on cancel.
+- `MediaManager` handles EXIF + thumbnails via multiprocessing; DB writes happen in the main process (SQLite single-writer).
+- EXIF panel fields are cached in the per-folder DB (`photo_exif_fields` key/value table).
+- Folder watching uses `watchfiles`; internal create/delete actions suppress watcher events briefly to avoid double-processing.
 
 
 ## Development

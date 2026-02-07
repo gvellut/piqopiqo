@@ -1,4 +1,7 @@
-"""Background EXIF loader for editable metadata fields."""
+"""Deprecated thread-based EXIF loader.
+
+Replaced by `piqopiqo.background.media_man.MediaManager` (multiprocessing).
+"""
 
 import logging
 import threading

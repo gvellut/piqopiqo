@@ -7,7 +7,6 @@ import sys
 import threading
 
 import click
-import exiftool
 import Foundation
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
@@ -105,66 +104,61 @@ def cli(folder):
     icon_path = resource_path("app.icns")
     app.setWindowIcon(QIcon(icon_path))
 
-    # by default: the common args are -G -n => numeric values like shutter speed
-    # are 0.0025 instead of 1/400
-    with exiftool.ExifToolHelper(
-        executable=Config.EXIFTOOL_PATH, common_args=["-G"]
-    ) as etHelper:
-        window = MainWindow(images, source_folders, folder, etHelper)
-        if Config.INITIAL_RESOLUTION:
-            try:
-                w, h = Config.INITIAL_RESOLUTION.split("x")
-                window.resize(int(w), int(h))
-                window.show()
-            except (ValueError, AttributeError):
-                logger.warning(
-                    f"Invalid INITIAL_RESOLUTION: {Config.INITIAL_RESOLUTION}, "
-                    "opening maximized"
-                )
-                window.showMaximized()
-        else:
+    window = MainWindow(images, source_folders, folder)
+    if Config.INITIAL_RESOLUTION:
+        try:
+            w, h = Config.INITIAL_RESOLUTION.split("x")
+            window.resize(int(w), int(h))
+            window.show()
+        except (ValueError, AttributeError):
+            logger.warning(
+                f"Invalid INITIAL_RESOLUTION: {Config.INITIAL_RESOLUTION}, "
+                "opening maximized"
+            )
             window.showMaximized()
+    else:
+        window.showMaximized()
 
-        # Make Ctrl-C in the launching terminal behave like a graceful quit.
-        _sigint_kill_timer: threading.Timer | None = None
-        _sigint_requested = False
+    # Make Ctrl-C in the launching terminal behave like a graceful quit.
+    _sigint_kill_timer: threading.Timer | None = None
+    _sigint_requested = False
 
-        def _handle_sigint(_signum, _frame):
-            nonlocal _sigint_kill_timer, _sigint_requested
+    def _handle_sigint(_signum, _frame):
+        nonlocal _sigint_kill_timer, _sigint_requested
 
-            if _sigint_requested:
-                return
-            _sigint_requested = True
+        if _sigint_requested:
+            return
+        _sigint_requested = True
 
-            if _sigint_kill_timer is None:
-                _sigint_kill_timer = threading.Timer(
-                    float(Config.SHUTDOWN_TIMEOUT_S),
-                    lambda: os.kill(os.getpid(), signal.SIGKILL),
-                )
-                _sigint_kill_timer.daemon = True
-                _sigint_kill_timer.start()
+        if _sigint_kill_timer is None:
+            _sigint_kill_timer = threading.Timer(
+                float(Config.SHUTDOWN_TIMEOUT_S),
+                lambda: os.kill(os.getpid(), signal.SIGKILL),
+            )
+            _sigint_kill_timer.daemon = True
+            _sigint_kill_timer.start()
 
-            # Schedule Qt-side shutdown on the event loop (safer than calling
-            # QWidget/QApplication methods directly from a signal handler).
-            def _request_quit():
-                try:
-                    window.close()
-                finally:
-                    inst = QApplication.instance()
-                    if inst is not None:
-                        inst.quit()
+        # Schedule Qt-side shutdown on the event loop (safer than calling
+        # QWidget/QApplication methods directly from a signal handler).
+        def _request_quit():
+            try:
+                window.close()
+            finally:
+                inst = QApplication.instance()
+                if inst is not None:
+                    inst.quit()
 
-            QTimer.singleShot(0, _request_quit)
+        QTimer.singleShot(0, _request_quit)
 
-        signal.signal(signal.SIGINT, _handle_sigint)
+    signal.signal(signal.SIGINT, _handle_sigint)
 
-        # Keep the Python interpreter cycling so SIGINT is handled promptly
-        # while the Qt event loop is running.
-        _sigint_timer = QTimer()
-        _sigint_timer.start(250)
-        _sigint_timer.timeout.connect(lambda: None)
+    # Keep the Python interpreter cycling so SIGINT is handled promptly
+    # while the Qt event loop is running.
+    _sigint_timer = QTimer()
+    _sigint_timer.start(250)
+    _sigint_timer.timeout.connect(lambda: None)
 
-        exit_code = app.exec()
+    exit_code = app.exec()
     sys.exit(exit_code)
 
 

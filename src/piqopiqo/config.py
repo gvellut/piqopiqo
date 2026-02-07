@@ -112,6 +112,10 @@ class Config:
 
     # Concurrency
     MAX_WORKERS = 4
+    # Keep at least this many idle worker processes around
+    MIN_IDLE_WORKERS = 1
+    # Max number of images to process per exiftool batch call
+    MAX_EXIFTOOLS_IMAGE_BATCH = 8
 
     # Shutdown
     # Maximum time (seconds) allowed for a graceful shutdown before forcing exit.

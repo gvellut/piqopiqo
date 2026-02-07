@@ -1,3 +1,11 @@
+"""Thumbnail utilities.
+
+`ThumbnailManager` is deprecated and superseded by
+`piqopiqo.background.media_man.MediaManager`.
+
+The `scan_folder()` helper is still used to build the initial photo list.
+"""
+
 from datetime import datetime
 import hashlib
 import logging

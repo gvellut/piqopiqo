@@ -1,4 +1,8 @@
-"""EXIF management utilities for reading and writing EXIF data in background."""
+"""Deprecated EXIF helpers.
+
+This module is kept for reference, but the application now uses
+`piqopiqo.background.media_man.MediaManager` for all EXIF and thumbnail work.
+"""
 
 from __future__ import annotations
 

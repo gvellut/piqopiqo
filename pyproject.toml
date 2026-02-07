@@ -16,6 +16,7 @@ dependencies = [
     "pyside6>=6.10.1",
     "send2trash>=1.8.0",
     "show-in-file-manager>=1.1.2",
+    "watchfiles>=0.21.0",
 ]
 
 [project.scripts]

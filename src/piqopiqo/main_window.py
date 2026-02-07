@@ -7,13 +7,12 @@ from functools import partial
 import logging
 import os
 import shutil
-import threading
+import time
 
-from PySide6.QtCore import Qt, QThreadPool
-from PySide6.QtGui import QAction, QActionGroup, QPixmap, QShortcut
+from PySide6.QtCore import Qt, QThreadPool, QTimer
+from PySide6.QtGui import QAction, QActionGroup, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
-    QDialog,
     QFileDialog,
     QMainWindow,
     QMenu,
@@ -25,13 +24,13 @@ from PySide6.QtWidgets import (
 from send2trash import send2trash
 
 from . import platform
-from .background.exif_man import ExifLoaderManager
-from .background.thumb_man import ThumbnailManager, scan_folder
+from .background.media_man import MediaManager
+from .background.thumb_man import scan_folder
 from .config import Config, Shortcut
-from .exif import ExifHelper
+from .folder_watcher import FolderWatcher
 from .fullscreen import FullscreenOverlay
 from .grid import PhotoGrid
-from .metadata.db_fields import EDITABLE_FIELDS, DBFields
+from .metadata.db_fields import DBFields
 from .metadata.metadata_db import MetadataDBManager
 from .metadata.save_workers import MetadataSaveWorker
 from .model import (
@@ -58,15 +57,20 @@ logger = logging.getLogger(__name__)
 class MainWindow(QMainWindow):
     """Main application window."""
 
-    def __init__(self, images, source_folders, root_folder, etHelper):
+    def __init__(self, images, source_folders, root_folder):
         super().__init__()
         self.setWindowTitle(Config.APP_NAME)
 
         self._fullscreen_overlay = None
-        self.etHelper = etHelper
         self.root_folder = root_folder
         self.source_folders = source_folders
         self._current_filter: FilterCriteria | None = None  # Current filter criteria
+
+        self._items_by_path: dict[str, ImageItem] = {}
+        self._last_visible_paths: list[str] = []
+        self._model_refresh_scheduled = False
+        self._folder_watcher: FolderWatcher | None = None
+        self._watcher_suppressed: dict[str, float] = {}
 
         # Create metadata database manager
         self.db_manager = MetadataDBManager()
@@ -97,7 +101,6 @@ class MainWindow(QMainWindow):
 
             self.edit_panel = EditPanel(self.db_manager)
             self.edit_panel.edit_finished.connect(self._on_edit_finished)
-            self.edit_panel.refresh_requested.connect(self._on_refresh_requested)
             right_splitter.addWidget(self.edit_panel)
 
             self.exif_panel = ExifPanel()
@@ -119,46 +122,29 @@ class MainWindow(QMainWindow):
         self.status_bar.show_errors_requested.connect(self._show_error_dialog)
         self.setStatusBar(self.status_bar)
 
-        # Thumbnail manager
-        self.thumb_manager = ThumbnailManager()
-        self.thumb_manager.thumb_ready.connect(self.on_thumb_ready)
-        self.thumb_manager.progress_updated.connect(self._on_thumb_progress)
-        self.thumb_manager.all_completed.connect(self._on_loading_complete)
-
-        # Register all source folders with the thumbnail manager
-        for folder in source_folders:
-            self.thumb_manager.register_folder(folder)
-
-        # Shared lock for ExifToolHelper (not thread-safe)
-        self._exif_lock = threading.Lock()
-
-        # EXIF loader for editable fields (background)
-        self.exif_loader = ExifLoaderManager(
-            etHelper, self.db_manager, exif_lock=self._exif_lock
-        )
-        self.exif_loader.exif_loaded.connect(self._on_exif_loaded)
-        self.exif_loader.exif_error.connect(self._on_exif_error)
-        self.exif_loader.progress_updated.connect(self._on_exif_progress)
-        self.exif_loader.all_completed.connect(self._on_loading_complete)
-
-        # EXIF manager for display panel (on-demand)
-        self.exif_manager = ExifHelper(Config.EXIFTOOL_PATH)
-        self.exif_manager.exif_ready.connect(self.on_exif_ready)
+        # Unified background manager (multiprocessing)
+        self.media_manager = MediaManager(self.db_manager, parent=self)
+        self.media_manager.thumb_ready.connect(self.on_thumb_ready)
+        self.media_manager.thumb_progress_updated.connect(self._on_thumb_progress)
+        self.media_manager.editable_ready.connect(self._on_editable_ready)
+        self.media_manager.exif_progress_updated.connect(self._on_exif_progress)
+        self.media_manager.panel_fields_ready.connect(self._on_panel_fields_ready)
+        self.media_manager.all_completed.connect(self._on_loading_complete)
 
         self.grid.request_thumb.connect(self.request_thumb_handler)
+        self.grid.visible_paths_changed.connect(self._on_visible_paths_changed)
         self.grid.request_fullscreen.connect(self._handle_fullscreen_overlay)
         self.grid.selection_changed.connect(self.on_selection_changed)
         self.grid.context_menu_requested.connect(self._show_context_menu)
 
         # Create photo list model
         self.photo_model = PhotoListModel(
-            self.thumb_manager,
-            self.exif_loader,
             self.db_manager,
             parent=self,
         )
         photos = [ImageItem(**data) for data in images]
         self.photo_model.set_photos(photos, source_folders)
+        self._items_by_path = {item.path: item for item in self.photo_model.all_photos}
 
         # Connect model signals
         self.photo_model.photos_changed.connect(self._on_model_changed)
@@ -173,8 +159,13 @@ class MainWindow(QMainWindow):
         # Update status bar
         self.status_bar.set_photo_count(len(self.photo_model.all_photos))
 
-        # Start background EXIF loading
-        self._start_background_exif_loading()
+        # Start background loading (EXIF + thumbs)
+        self.media_manager.reset_for_folder(
+            [p.path for p in self.photo_model.all_photos],
+            self.photo_model.source_folders,
+        )
+        if self._last_visible_paths:
+            self.media_manager.update_visible(self._last_visible_paths)
 
         # Set up keyboard shortcuts
         self._label_save_pool = QThreadPool()
@@ -185,6 +176,8 @@ class MainWindow(QMainWindow):
         self._label_undo_is_redo: bool = False  # False = Undo mode, True = Redo mode
         # Start as True so first edit creates a new undo entry
         self._selection_changed_since_edit: bool = True
+
+        self._start_folder_watcher()
 
     @property
     def images_data(self) -> list[ImageItem]:
@@ -264,18 +257,14 @@ class MainWindow(QMainWindow):
         if not selected_items:
             return
 
+        if not self._ensure_db_metadata_ready(selected_items):
+            QApplication.beep()
+            self.status_bar.showMessage("Reading...", 2000)
+            return
+
         # Capture previous labels before making changes
         previous_labels: dict[str, str | None] = {}
         for item in selected_items:
-            # Ensure db_metadata exists
-            if item.db_metadata is None:
-                db = self.db_manager.get_db_for_image(item.path)
-                existing = db.get_metadata(item.path)
-                if existing:
-                    item.db_metadata = existing.copy()
-                else:
-                    item.db_metadata = {field: None for field in EDITABLE_FIELDS}
-
             # Capture the current label before changing
             previous_labels[item.path] = item.db_metadata.get(DBFields.LABEL)
 
@@ -340,16 +329,12 @@ class MainWindow(QMainWindow):
         if not selected_items:
             return
 
-        for item in selected_items:
-            # Ensure db_metadata exists
-            if item.db_metadata is None:
-                db = self.db_manager.get_db_for_image(item.path)
-                existing = db.get_metadata(item.path)
-                if existing:
-                    item.db_metadata = existing.copy()
-                else:
-                    item.db_metadata = {field: None for field in EDITABLE_FIELDS}
+        if not self._ensure_db_metadata_ready(selected_items):
+            QApplication.beep()
+            self.status_bar.showMessage("Reading...", 2000)
+            return
 
+        for item in selected_items:
             # Get current orientation and rotate
             current_orientation = item.db_metadata.get(DBFields.ORIENTATION)
             new_orientation = rotate_func(current_orientation)
@@ -391,9 +376,12 @@ class MainWindow(QMainWindow):
             if item.path in labels_to_apply:
                 label_value = labels_to_apply[item.path]
 
-                # Ensure db_metadata exists
                 if item.db_metadata is None:
-                    item.db_metadata = {field: None for field in EDITABLE_FIELDS}
+                    db = self.db_manager.get_db_for_image(item.path)
+                    meta = db.get_metadata(item.path)
+                    if meta is None:
+                        continue
+                    item.db_metadata = meta.copy()
 
                 item.db_metadata[DBFields.LABEL] = label_value
 
@@ -422,16 +410,6 @@ class MainWindow(QMainWindow):
         if focus_widget is None or not self.edit_panel.isAncestorOf(focus_widget):
             self.grid.setFocus()
 
-    def _on_refresh_requested(self, items: list[ImageItem]):
-        """Handle refresh request from edit panel."""
-        for item in items:
-            self.exif_loader.queue_image(item.path, item.source_folder, force=True)
-
-    def _start_background_exif_loading(self):
-        """Queue all images for background EXIF loading."""
-        self.exif_loader.reset(target_total=len(self.photo_model.all_photos))
-        self.exif_loader.prime_from_db(self.photo_model.all_photos)
-
     def _on_thumb_progress(self, completed: int, total: int):
         """Handle thumbnail progress update."""
         self.status_bar.set_thumb_progress(completed, total)
@@ -442,34 +420,55 @@ class MainWindow(QMainWindow):
 
     def _on_loading_complete(self):
         """Handle completion of loading (thumbnails or EXIF)."""
-        has_errors = self.thumb_manager.has_errors() or self.exif_loader.has_errors()
-        self.status_bar.set_has_errors(has_errors)
+        self.status_bar.set_has_errors(self.media_manager.has_errors())
 
-    def _on_exif_loaded(self, file_path: str, metadata: dict):
-        """Handle EXIF data loaded in background."""
-        # Find the item and update its db_metadata
-        for item in self._all_images_data:
-            if item.path == file_path:
-                item.db_metadata = metadata
+    def _on_visible_paths_changed(self, visible_paths: list[str]):
+        self._last_visible_paths = list(visible_paths)
+        self.media_manager.update_visible(self._last_visible_paths)
 
-                # Refresh grid item if visible
-                self.grid.refresh_item(item._global_index)
+    def _on_editable_ready(self, file_path: str, metadata: dict):
+        item = self._items_by_path.get(file_path)
+        if item is None:
+            return
 
-                # If this item is selected, update edit panel
-                selected_items = self._get_selected_items()
-                if item in selected_items and self.edit_panel:
-                    self.edit_panel.update_for_selection(selected_items)
-                break
+        item.db_metadata = metadata
+        self.grid.refresh_item(item._global_index)
 
-    def _on_exif_error(self, file_path: str, error_message: str):
-        """Handle EXIF loading error."""
-        logger.error(f"EXIF loading error for {file_path}: {error_message}")
+        selected_items = self._get_selected_items()
+        if self.edit_panel and item in selected_items:
+            self.edit_panel.update_for_selection(selected_items)
+
+        needs_resort = self.photo_model.sort_order == SortOrder.TIME_TAKEN
+        if self._current_filter is not None:
+            needs_resort = needs_resort or bool(
+                self._current_filter.search_text
+                or self._current_filter.labels
+                or self._current_filter.include_no_label
+            )
+        if needs_resort and not self._model_refresh_scheduled:
+            self._model_refresh_scheduled = True
+            QTimer.singleShot(50, self._refresh_model_after_metadata)
+
+    def _refresh_model_after_metadata(self):
+        self._model_refresh_scheduled = False
+        self.photo_model.refresh_after_metadata_update()
+
+    def _on_panel_fields_ready(self, file_path: str, fields: dict):
+        item = self._items_by_path.get(file_path)
+        if item is None:
+            return
+
+        item.exif_data = fields
+
+        selected_items = self._get_selected_items()
+        if item in selected_items:
+            self.exif_panel.update_exif(selected_items)
 
     def _show_error_dialog(self):
         """Show dialog with loading errors."""
         dialog = ErrorListDialog(
-            self.thumb_manager.get_errors(),
-            self.exif_loader.get_errors(),
+            self.media_manager.get_thumb_errors(),
+            self.media_manager.get_exif_errors(),
             self,
         )
         dialog.exec()
@@ -478,12 +477,28 @@ class MainWindow(QMainWindow):
         """Get list of currently selected items."""
         return [item for item in self.images_data if item.is_selected]
 
+    def _ensure_db_metadata_ready(self, items: list[ImageItem]) -> bool:
+        """Ensure editable DB metadata exists for all items.
+
+        Returns False if any item is still missing metadata (EXIF not read yet).
+        """
+        for item in items:
+            if item.db_metadata is not None:
+                continue
+            db = self.db_manager.get_db_for_image(item.path)
+            meta = db.get_metadata(item.path)
+            if meta is None:
+                return False
+            item.db_metadata = meta.copy()
+        return True
+
     def _on_filter_changed(self, criteria: FilterCriteria):
         """Handle filter change.
 
         Args:
             criteria: Filter criteria to apply.
         """
+        self._current_filter = criteria
         self.photo_model.set_filter(criteria)
 
         # Clear panels since selection changed
@@ -499,12 +514,6 @@ class MainWindow(QMainWindow):
         open_action.setShortcut("Ctrl+O")
         open_action.triggered.connect(self.on_open)
         file_menu.addAction(open_action)
-
-        file_menu.addSeparator()
-
-        refresh_action = QAction("Refresh Folder", self)
-        refresh_action.triggered.connect(self._on_refresh_folder)
-        file_menu.addAction(refresh_action)
 
         file_menu.addSeparator()
 
@@ -598,6 +607,10 @@ class MainWindow(QMainWindow):
         save_exif_action.triggered.connect(self._on_save_exif)
         tools_menu.addAction(save_exif_action)
 
+        regenerate_exif_action = QAction("Regenerate EXIF", self)
+        regenerate_exif_action.triggered.connect(self.on_regenerate_exif)
+        tools_menu.addAction(regenerate_exif_action)
+
         help_menu = menubar.addMenu("Help")
         about_action = QAction(f"About {Config.APP_NAME}", self)
         about_action.setMenuRole(QAction.MenuRole.AboutRole)
@@ -629,6 +642,7 @@ class MainWindow(QMainWindow):
     def _load_folder(self, folder: str):
         """Load images from a folder and update the UI."""
         logger.info(f"Loading folder: {folder}")
+        self._stop_folder_watcher()
 
         # Scan the folder
         images, source_folders = scan_folder(folder)
@@ -645,18 +659,12 @@ class MainWindow(QMainWindow):
         self.db_manager.close_all()
 
         # Reset progress tracking
-        self.thumb_manager.reset_progress()
-        self.exif_loader.reset(target_total=0)
         self.status_bar.reset()
-
-        # Clear and re-register folders with thumbnail manager
-        self.thumb_manager._folder_thumb_dirs.clear()
-        for src_folder in source_folders:
-            self.thumb_manager.register_folder(src_folder)
 
         # Update photo model (replaces old _all_images_data and images_data)
         photos = [ImageItem(**data) for data in images]
         self.photo_model.set_photos(photos, source_folders)
+        self._items_by_path = {item.path: item for item in self.photo_model.all_photos}
 
         # Update filter panel
         self.filter_panel.set_folders(source_folders)
@@ -666,32 +674,142 @@ class MainWindow(QMainWindow):
         # Update status bar
         self.status_bar.set_photo_count(len(self.photo_model.all_photos))
 
-        # Start background EXIF loading
-        self._start_background_exif_loading()
+        # Start background loading (EXIF + thumbs)
+        self.media_manager.reset_for_folder(
+            [p.path for p in self.photo_model.all_photos],
+            self.photo_model.source_folders,
+        )
+        if self._last_visible_paths:
+            self.media_manager.update_visible(self._last_visible_paths)
 
         # Clear panels
         self.exif_panel.update_exif([])
         if self.edit_panel:
             self.edit_panel.update_for_selection([])
 
+        self._start_folder_watcher()
+
+    # --- Folder watching ---
+
+    def _start_folder_watcher(self) -> None:
+        if not self.root_folder:
+            return
+
+        self._stop_folder_watcher()
+
+        watcher = FolderWatcher(self.root_folder, parent=self)
+        watcher.changes_detected.connect(self._on_folder_changes)
+        watcher.start()
+        self._folder_watcher = watcher
+
+    def _stop_folder_watcher(self) -> None:
+        watcher = self._folder_watcher
+        self._folder_watcher = None
+        if watcher is None:
+            return
+
+        try:
+            watcher.changes_detected.disconnect(self._on_folder_changes)
+        except RuntimeError:
+            pass
+
+        watcher.stop(timeout_s=1.0)
+
+    def _suppress_watcher_paths(
+        self, paths: list[str], duration_s: float = 2.0
+    ) -> None:
+        expiry = time.monotonic() + max(0.0, float(duration_s))
+        for path in paths:
+            self._watcher_suppressed[path] = expiry
+
+    def _on_folder_changes(self, changes: list[tuple[str, str]]) -> None:
+        if not changes:
+            return
+
+        now = time.monotonic()
+        self._watcher_suppressed = {
+            path: until
+            for path, until in self._watcher_suppressed.items()
+            if until > now
+        }
+
+        added: set[str] = set()
+        deleted: set[str] = set()
+        modified: set[str] = set()
+
+        for kind, path in changes:
+            kind_lower = str(kind).lower()
+            if path in self._watcher_suppressed:
+                continue
+            if "added" in kind_lower:
+                added.add(path)
+            elif "deleted" in kind_lower or "removed" in kind_lower:
+                deleted.add(path)
+            elif "modified" in kind_lower:
+                modified.add(path)
+
+        # Deletions first to handle renames (delete+add)
+        for path in sorted(deleted):
+            self.photo_model.remove_photo(path)
+
+        for path in sorted(added):
+            if not os.path.isfile(path):
+                continue
+
+            source_folder = os.path.dirname(path)
+            try:
+                created = datetime.fromtimestamp(os.path.getctime(path)).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+            except OSError:
+                created = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            item = ImageItem(
+                path=path,
+                name=os.path.basename(path),
+                created=created,
+                source_folder=source_folder,
+                state=0,
+            )
+            self.photo_model.add_photo(item)
+
+        effective_modified = modified - added - deleted
+        for path in sorted(effective_modified):
+            item = self._items_by_path.get(path)
+            if item is None:
+                continue
+
+            item.state = 0
+            item.pixmap = None
+            self.media_manager.regenerate_thumbnails([path])
+            self.grid.refresh_item(item._global_index)
+
     def on_regenerate_thumbnails(self):
         """Regenerate all thumbnails for currently loaded folders."""
-        if not self.source_folders:
+        if not self.photo_model.all_photos:
             logger.warning("No folders loaded, nothing to regenerate")
             return
 
-        logger.info(f"Regenerating thumbnails for {len(self.source_folders)} folder(s)")
-
-        # Clear the thumbnail cache for all registered folders
-        self.thumb_manager.clear_all_registered_caches()
+        items = list(self.photo_model.all_photos)
+        logger.info(f"Regenerating thumbnails for {len(items)} photo(s)")
+        self.media_manager.regenerate_thumbnails([p.path for p in items])
 
         # Reset all image states to trigger re-generation
-        for item in self.images_data:
+        for item in items:
             item.state = 0
             item.pixmap = None
 
         # Refresh the grid to trigger thumbnail requests
         self.grid.on_scroll(self.grid.scrollbar.value())
+
+    def on_regenerate_exif(self):
+        """Regenerate EXIF (editable + panel fields) for selected or all filtered."""
+        selected = self.photo_model.get_selected_photos()
+        items = selected if selected else list(self.images_data)
+        if not items:
+            return
+
+        self.media_manager.regenerate_exif([p.path for p in items])
 
     def _on_save_exif(self):
         """Save DB metadata to EXIF for selected or all filtered photos."""
@@ -707,46 +825,19 @@ class MainWindow(QMainWindow):
         if not items:
             return
 
-        dialog = SaveExifDialog(items, self.exif_manager, self)
-        result = dialog.exec()
-
-        if result == QDialog.DialogCode.Accepted:
-            # Reload EXIF for processed items to reflect any changes
-            processed_paths = set(dialog.get_processed_paths())
-            for item in self._all_images_data:
-                if item.path in processed_paths:
-                    # Clear cached EXIF data so it gets reloaded
-                    item.exif_data = None
-                    # Queue for EXIF panel reload if item is visible/selected
-                    self.exif_manager.fetch_exif(item.path)
+        dialog = SaveExifDialog(items, self.media_manager, self)
+        dialog.exec()
 
     def on_thumb_ready(self, file_path, thumb_type, cache_path):
-        # Update the data list directly
-        for i, item in enumerate(self.images_data):
-            if item.path == file_path:
-                pixmap = QPixmap(cache_path)
-                state = 1 if thumb_type == "embedded" else 2
+        item = self._items_by_path.get(file_path)
+        if item is None:
+            return
 
-                # Update item
-                item.pixmap = pixmap
-                item.state = state
+        state = 1 if thumb_type == "embedded" else 2
 
-                # Refresh Grid View
-                self.grid.refresh_item(i)
-                break
-
-    def on_exif_ready(self, file_path, metadata):
-        # TODO index the images_data so do not loop through it
-        for item in self.images_data:
-            if item.path == file_path:
-                item.exif_data = metadata
-                # If this item is currently selected, refresh the panel
-                selected_indices = {
-                    i for i, item in enumerate(self.images_data) if item.is_selected
-                }
-                if item._global_index in selected_indices:
-                    self.on_selection_changed(selected_indices)
-                break
+        item.state = state
+        item.pixmap = None
+        self.grid.refresh_item(item._global_index)
 
     def on_selection_changed(self, selected_indices):
         # Mark selection as changed for undo tracking
@@ -760,26 +851,20 @@ class MainWindow(QMainWindow):
                 db = self.db_manager.get_db_for_image(item.path)
                 item.db_metadata = db.get_metadata(item.path)
 
-        # Check if all selected items have EXIF data (for display panel)
-        all_exif_loaded = all(item.exif_data is not None for item in selected_items)
-
-        # Fetch EXIF for display panel (non-editable fields)
-        for item in selected_items:
-            if item.exif_data is None:
-                self.exif_manager.fetch_exif(item.path)
-
         # Update edit panel immediately (uses DB data)
         if self.edit_panel:
             self.edit_panel.update_for_selection(selected_items)
 
-        # Update EXIF panel only if all EXIF data is loaded
-        if all_exif_loaded:
-            self.exif_panel.update_exif(selected_items)
+        # Load EXIF panel fields from DB or schedule extraction
+        self.media_manager.ensure_panel_fields_loaded_from_db(
+            [item.path for item in selected_items]
+        )
+        self.exif_panel.update_exif(selected_items)
 
     def request_thumb_handler(self, index):
         if 0 <= index < len(self.images_data):
             file_path = self.images_data[index].path
-            self.thumb_manager.queue_image(file_path)
+            self.media_manager.request_thumbnail(file_path)
 
     def _handle_fullscreen_overlay(self, selected_indices: list):
         """Display the selected image in a fullscreen overlay."""
@@ -877,6 +962,15 @@ class MainWindow(QMainWindow):
 
     def _on_photo_added(self, file_path: str, index: int):
         """Handle photo added to model."""
+        item = next(
+            (p for p in self.photo_model.all_photos if p.path == file_path),
+            None,
+        )
+        if item is not None:
+            self._items_by_path[file_path] = item
+            self.media_manager.add_files([file_path])
+
+        self.filter_panel.set_folders(self.photo_model.source_folders)
         self.grid.set_data(self.photo_model.photos)
         if index >= 0:
             self.grid._ensure_visible(index)
@@ -884,6 +978,10 @@ class MainWindow(QMainWindow):
 
     def _on_photo_removed(self, file_path: str, former_index: int):
         """Handle photo removed from model."""
+        self._items_by_path.pop(file_path, None)
+        self.media_manager.remove_files([file_path])
+        self.filter_panel.set_folders(self.photo_model.source_folders)
+
         # Determine new index to show
         new_index = min(former_index, len(self.photo_model.photos) - 1)
         self.grid.set_data(self.photo_model.photos)
@@ -906,19 +1004,6 @@ class MainWindow(QMainWindow):
     def _set_sort_order(self, order: SortOrder):
         """Set the sort order via menu."""
         self.photo_model.set_sort_order(order)
-
-    # --- Refresh folder ---
-
-    def _on_refresh_folder(self):
-        """Refresh the current folder from disk."""
-        if not self.root_folder:
-            return
-
-        added, removed = self.photo_model.refresh_from_disk(self.root_folder)
-        logger.info(f"Refresh: {len(added)} added, {len(removed)} removed")
-
-        # Update filter panel folders if changed
-        self.filter_panel.set_folders(self.photo_model.source_folders)
 
     # --- Context menu ---
 
@@ -965,6 +1050,17 @@ class MainWindow(QMainWindow):
             lambda: self._regenerate_selected_thumbnails(selected)
         )
 
+        # Regenerate EXIF action
+        if len(selected) == 1:
+            regen_exif_action = menu.addAction("Regenerate EXIF")
+        else:
+            regen_exif_action = menu.addAction(
+                f"Regenerate EXIF ({len(selected)} photos)"
+            )
+        regen_exif_action.triggered.connect(
+            lambda: self.media_manager.regenerate_exif([p.path for p in selected])
+        )
+
         menu.addSeparator()
 
         # Duplicate action
@@ -991,6 +1087,7 @@ class MainWindow(QMainWindow):
             new_path = self._get_duplicate_path(photo.path)
             try:
                 shutil.copy2(photo.path, new_path)
+                self._suppress_watcher_paths([new_path])
 
                 # Create ImageItem for new photo
                 new_item = ImageItem(
@@ -1033,6 +1130,7 @@ class MainWindow(QMainWindow):
 
         for photo in photos:
             try:
+                self._suppress_watcher_paths([photo.path])
                 send2trash(photo.path)
                 paths_to_remove.append(photo.path)
                 logger.info(f"Moved to trash: {photo.path}")
@@ -1045,10 +1143,11 @@ class MainWindow(QMainWindow):
 
     def _regenerate_selected_thumbnails(self, photos: list[ImageItem]):
         """Regenerate thumbnails for selected photos."""
+        paths = [p.path for p in photos]
         for photo in photos:
             photo.state = 0
             photo.pixmap = None
-            self.thumb_manager.clear_and_requeue_image(photo.path)
+        self.media_manager.regenerate_thumbnails(paths)
 
         # Refresh the grid to show placeholders until new thumbs arrive
         self.grid.on_scroll(self.grid.scrollbar.value())
@@ -1062,6 +1161,7 @@ class MainWindow(QMainWindow):
             new_path = self._get_duplicate_path(photo.path)
             try:
                 shutil.copy2(photo.path, new_path)
+                self._suppress_watcher_paths([new_path])
                 new_item = ImageItem(
                     path=new_path,
                     name=os.path.basename(new_path),
@@ -1104,19 +1204,18 @@ class MainWindow(QMainWindow):
         self.db_manager.close_all()
 
         # Clear all thumbnail caches
-        self.thumb_manager.clear_all_registered_caches()
+        from .cache_paths import clear_thumb_cache_for_folders
+
+        clear_thumb_cache_for_folders(self.photo_model.source_folders)
 
         # Reload the folder from scratch
         self._load_folder(self.root_folder)
 
     def closeEvent(self, event):
         # Stop background workers first to avoid noisy teardown.
-        if hasattr(self, "exif_loader"):
-            self.exif_loader.stop(wait_ms=int(Config.SHUTDOWN_TIMEOUT_S * 1000))
-        if hasattr(self, "exif_manager"):
-            self.exif_manager.stop(timeout_s=Config.SHUTDOWN_TIMEOUT_S)
-        if hasattr(self, "thumb_manager"):
-            self.thumb_manager.stop(timeout_s=Config.SHUTDOWN_TIMEOUT_S)
+        self._stop_folder_watcher()
+        if hasattr(self, "media_manager"):
+            self.media_manager.stop(timeout_s=Config.SHUTDOWN_TIMEOUT_S)
         if hasattr(self, "db_manager"):
             self.db_manager.close_all()
         super().closeEvent(event)

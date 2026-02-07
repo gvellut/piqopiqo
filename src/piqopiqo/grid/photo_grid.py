@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging
 import math
+import os
+from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QCursor, QFont, QFontMetrics
+from PySide6.QtGui import QCursor, QFont, QFontMetrics, QPixmap
 from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
@@ -14,6 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.cache_paths import get_thumb_dir_for_folder
 from piqopiqo.config import Config
 from piqopiqo.metadata.db_fields import DBFields
 
@@ -29,6 +32,7 @@ class PhotoGrid(QWidget):
     selection_changed = Signal(set)
     request_fullscreen = Signal(list)
     context_menu_requested = Signal(int, object)  # index, QPoint (global pos)
+    visible_paths_changed = Signal(list)  # list[str] in display order
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -64,6 +68,7 @@ class PhotoGrid(QWidget):
         self.main_layout.addWidget(self.scrollbar, stretch=0)
 
         self.cells: list[PhotoCell] = []
+        self._last_visible_paths: list[str] = []
 
     def set_data(self, items):
         # Inject index for click handling (preserve selection state)
@@ -201,23 +206,47 @@ class PhotoGrid(QWidget):
         start_row = value
         start_data_index = start_row * self.n_cols
 
+        visible_paths: list[str] = []
         for i, cell in enumerate(self.cells):
             data_index = start_data_index + i
+            previous_item = cell.current_data
 
             # Pass layout info just in case
             cell.set_layout_info(self.layout_info)
 
             if data_index < len(self.items_data):
                 item = self.items_data[data_index]
+                if previous_item is not None and previous_item is not item:
+                    previous_item.pixmap = None
+
+                self._ensure_pixmap_loaded(item)
                 cell.set_content(item, item.is_selected)
                 cell.show()
+                visible_paths.append(item.path)
 
                 if item.state == 0:
                     self.request_thumb.emit(data_index)
             else:
+                if previous_item is not None:
+                    previous_item.pixmap = None
                 cell.set_content(None, False)
                 # Ensure complete cells are displayed even if empty
                 cell.show()
+
+        if visible_paths != self._last_visible_paths:
+            self._last_visible_paths = visible_paths
+            self.visible_paths_changed.emit(visible_paths)
+
+    def _ensure_pixmap_loaded(self, item):
+        if item.state == 0 or item.pixmap is not None:
+            return
+
+        suffix = "_embedded.jpg" if item.state == 1 else "_hq.jpg"
+        base_name = os.path.splitext(os.path.basename(item.path))[0]
+        thumb_dir = get_thumb_dir_for_folder(item.source_folder)
+        cache_path = Path(thumb_dir) / f"{base_name}{suffix}"
+        if cache_path.exists():
+            item.pixmap = QPixmap(str(cache_path))
 
     def refresh_item(self, global_index):
         # Efficiently update only if visible
@@ -230,6 +259,7 @@ class PhotoGrid(QWidget):
             if 0 <= cell_pool_index < len(self.cells):
                 cell = self.cells[cell_pool_index]
                 item = self.items_data[global_index]
+                self._ensure_pixmap_loaded(item)
                 cell.set_content(item, item.is_selected)
 
     def on_cell_clicked(self, global_index, is_shift, is_ctrl):

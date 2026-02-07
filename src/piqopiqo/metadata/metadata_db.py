@@ -8,7 +8,7 @@ import re
 import sqlite3
 import threading
 
-from piqopiqo.background.thumb_man import get_cache_dir_for_folder
+from piqopiqo.cache_paths import get_cache_dir_for_folder
 
 from .db_fields import DBFields
 
@@ -219,6 +219,16 @@ class MetadataDB:
         updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_file_path ON photo_metadata(file_path);
+
+    CREATE TABLE IF NOT EXISTS photo_exif_fields (
+        file_path TEXT NOT NULL,
+        field_key TEXT NOT NULL,
+        field_value TEXT,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (file_path, field_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_exif_fields_file_path
+        ON photo_exif_fields(file_path);
     """
 
     def __init__(self, folder_path: str):
@@ -470,6 +480,101 @@ class MetadataDB:
         )
         return cursor.fetchone() is not None
 
+    def has_exif_fields(self, file_path: str, field_keys: list[str]) -> bool:
+        """Check if EXIF field records exist for a photo.
+
+        A photo is considered complete only if every requested key has a row in
+        photo_exif_fields (value may be NULL when not present in the file).
+        """
+        if not field_keys:
+            return True
+
+        conn = self._get_readonly_connection()
+        if conn is None:
+            return False
+
+        placeholders = ",".join("?" for _ in field_keys)
+        row = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM photo_exif_fields "
+            f"WHERE file_path = ? AND field_key IN ({placeholders})",
+            (file_path, *field_keys),
+        ).fetchone()
+        return row is not None and int(row["cnt"]) == len(field_keys)
+
+    def get_exif_fields(
+        self, file_path: str, field_keys: list[str]
+    ) -> dict[str, str | None] | None:
+        """Get stored EXIF fields for a photo.
+
+        Returns a mapping of field_key -> field_value (may be None).
+        """
+        conn = self._get_readonly_connection()
+        if conn is None:
+            return None
+
+        if not field_keys:
+            return {}
+
+        placeholders = ",".join("?" for _ in field_keys)
+        cursor = conn.execute(
+            "SELECT field_key, field_value FROM photo_exif_fields "
+            f"WHERE file_path = ? AND field_key IN ({placeholders})",
+            (file_path, *field_keys),
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            return None
+
+        return {row["field_key"]: row["field_value"] for row in rows}
+
+    def save_exif_fields(self, file_path: str, fields: dict[str, str | None]) -> None:
+        """Upsert EXIF fields for a photo."""
+        if not fields:
+            return
+
+        conn = self._ensure_db()
+        now = datetime.now().isoformat()
+
+        for key, value in fields.items():
+            conn.execute(
+                """
+                INSERT INTO photo_exif_fields (
+                    file_path, field_key, field_value, updated_at
+                )
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(file_path, field_key) DO UPDATE SET
+                    field_value = excluded.field_value,
+                    updated_at = excluded.updated_at
+                """,
+                (file_path, key, value, now),
+            )
+
+        conn.commit()
+
+    def delete_exif_fields(self, file_path: str, keys: list[str] | None = None) -> None:
+        """Delete stored EXIF fields for a photo.
+
+        If keys is None, deletes all stored keys for the file.
+        """
+        conn = self._get_readonly_connection()
+        if conn is None:
+            return
+
+        if not keys:
+            conn.execute(
+                "DELETE FROM photo_exif_fields WHERE file_path = ?", (file_path,)
+            )
+            conn.commit()
+            return
+
+        placeholders = ",".join("?" for _ in keys)
+        conn.execute(
+            "DELETE FROM photo_exif_fields WHERE file_path = ? "
+            f"AND field_key IN ({placeholders})",
+            (file_path, *keys),
+        )
+        conn.commit()
+
     def delete_metadata(self, file_path: str) -> None:
         """Delete metadata for a photo.
 
@@ -480,6 +585,7 @@ class MetadataDB:
         if conn is None:
             return
 
+        conn.execute("DELETE FROM photo_exif_fields WHERE file_path = ?", (file_path,))
         conn.execute("DELETE FROM photo_metadata WHERE file_path = ?", (file_path,))
         conn.commit()
 
@@ -489,6 +595,7 @@ class MetadataDB:
         if conn is None:
             return
 
+        conn.execute("DELETE FROM photo_exif_fields")
         conn.execute("DELETE FROM photo_metadata")
         conn.commit()
         logger.info(f"Deleted all metadata for folder: {self.folder_path}")
