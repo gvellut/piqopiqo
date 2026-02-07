@@ -176,13 +176,14 @@ class Config:
     # External applications
     # Application name for viewing photos (e.g. "Preview", "Adobe Lightroom")
     # Empty string = disabled (menu item hidden)
-    EXTERNAL_VIEWER = ""
+    EXTERNAL_VIEWER = "Gimp"
     # Application name for editing photos (e.g. "Photoshop", "Affinity Photo")
     # Empty string = disabled (menu item hidden)
-    EXTERNAL_EDITOR = ""
+    EXTERNAL_EDITOR = "Gimp"
 
     # Keyboard shortcuts (key combinations, e.g. "ctrl+r", "cmd+alt+t", "=")
     # Modifier keys: ctrl, alt, cmd/meta, shift. Separator: +
+    # Some work only in fullscreen (Zoom), the labels work in both, the select
     SHORTCUTS = {
         Shortcut.ZOOM_IN: "=",
         Shortcut.ZOOM_OUT: "-",
@@ -199,6 +200,8 @@ class Config:
         Shortcut.LABEL_NONE: "`",
         Shortcut.SELECT_ALL: "ctrl+a",
     }
+
+    BASE_EXTERNAL_FOLDER = "/Volumes/CrucialX8/photos"
 
 
 def apply_env_overrides():

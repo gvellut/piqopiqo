@@ -191,9 +191,11 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "pyinstaller" },
-    { name = "pyqtauto" },
     { name = "pytest" },
     { name = "taskipy" },
+]
+pyqt = [
+    { name = "pyqtauto" },
 ]
 
 [package.metadata]
@@ -213,10 +215,10 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "pyinstaller", specifier = ">=6.18.0" },
-    { name = "pyqtauto", directory = "../pyqtauto" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "taskipy", specifier = ">=1.14.1" },
 ]
+pyqt = [{ name = "pyqtauto", git = "https://github.com/gvellut/pyqtauto.git" }]
 
 [[package]]
 name = "pluggy"
@@ -347,16 +349,10 @@ wheels = [
 [[package]]
 name = "pyqtauto"
 version = "0.1.0"
-source = { directory = "../pyqtauto" }
+source = { git = "https://github.com/gvellut/pyqtauto.git#86046d13513a594e401f1a85beda2d3fd2f71205" }
 dependencies = [
     { name = "click" },
     { name = "pyside6" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "click", specifier = ">=8.1.0" },
-    { name = "pyside6", specifier = ">=6.5.0" },
 ]
 
 [[package]]

@@ -502,6 +502,12 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
+        refresh_action = QAction("Refresh Folder", self)
+        refresh_action.triggered.connect(self._on_refresh_folder)
+        file_menu.addAction(refresh_action)
+
+        file_menu.addSeparator()
+
         clear_data_action = QAction("Clear All Data", self)
         clear_data_action.triggered.connect(self._on_clear_all_data)
         file_menu.addAction(clear_data_action)
@@ -573,14 +579,9 @@ class MainWindow(QMainWindow):
 
         view_menu.addSeparator()
 
-        refresh_action = QAction("Refresh", self)
-        refresh_action.triggered.connect(self._on_refresh_folder)
-        view_menu.addAction(refresh_action)
-
         view_menu.addSeparator()
 
         regenerate_action = QAction("Regenerate Thumbnails", self)
-        regenerate_action.setShortcut("Ctrl+Shift+R")
         regenerate_action.triggered.connect(self.on_regenerate_thumbnails)
         view_menu.addAction(regenerate_action)
 
