@@ -236,13 +236,11 @@ class FullscreenOverlay(QWidget):
             self.date_label.setStyleSheet("color: white;")
         else:
             try:
-                mtime = os.path.getmtime(self.image_path)
-                date_str = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+                ctime = os.path.getctime(self.image_path)
+                date_str = datetime.fromtimestamp(ctime).strftime("%Y-%m-%d %H:%M:%S")
                 self.date_label.setText(date_str)
             except OSError as e:
-                logger.error(
-                    f"Could not get modification date for {self.image_path}: {e}"
-                )
+                logger.error(f"Could not get creation date for {self.image_path}: {e}")
                 self.date_label.setText("Unknown Date")
             self.date_label.setStyleSheet("color: red;")
 
