@@ -593,8 +593,9 @@ def launch_copy_sd(parent=None):
         )
         return
 
-    name = ""
-    date_spec = "TD"
+    # TODO save last value in state after the copy
+    name = Config.COPY_SD_DEFAULT_NAME
+    date_spec = Config.COPY_SD_DATE_SPEC
     should_eject = True
 
     while True:
