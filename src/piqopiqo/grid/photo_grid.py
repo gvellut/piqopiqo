@@ -6,8 +6,9 @@ import logging
 import math
 import os
 from pathlib import Path
+import time
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QCursor, QFont, QFontMetrics, QPixmap
 from PySide6.QtWidgets import (
     QGridLayout,
@@ -69,12 +70,25 @@ class PhotoGrid(QWidget):
 
         self.cells: list[PhotoCell] = []
         self._last_visible_paths: list[str] = []
+        self._loaded_hq_indices: set[int] = set()
+        self._hq_display_enabled = True
+
+        self._hq_idle_timer = QTimer(self)
+        self._hq_idle_timer.setSingleShot(True)
+        self._hq_idle_timer.timeout.connect(self._on_hq_idle_timeout)
+
+        self._wheel_last_ts: float | None = None
+        self._wheel_streak_dir = 0
+        self._wheel_streak_count = 0
 
     def set_data(self, items):
         # Inject index for click handling (preserve selection state)
         for i, item in enumerate(items):
             item._global_index = i
         self.items_data = items
+        self._loaded_hq_indices = {
+            i for i, item in enumerate(items) if getattr(item, "hq_pixmap", None)
+        }
 
         # Update last selected index based on current selection
         selected = [i for i, item in enumerate(items) if item.is_selected]
@@ -203,23 +217,36 @@ class PhotoGrid(QWidget):
             self.scrollbar.show()
 
     def on_scroll(self, value):
-        start_row = value
+        self._hq_display_enabled = False
+        self._restart_hq_idle_timer()
+        self._render(int(value), allow_hq=False)
+
+    def _restart_hq_idle_timer(self) -> None:
+        delay_ms = int(getattr(Config, "GRID_HQ_THUMB_LOAD_DELAY_MS", 200))
+        if delay_ms <= 0:
+            self._hq_display_enabled = True
+            return
+        self._hq_idle_timer.start(delay_ms)
+
+    def _on_hq_idle_timeout(self) -> None:
+        self._hq_display_enabled = True
+        self._render(int(self.scrollbar.value()), allow_hq=True)
+
+    def _render(self, start_row: int, *, allow_hq: bool) -> None:
         start_data_index = start_row * self.n_cols
+        buffer_start_idx, buffer_end_idx = self._buffer_index_range(start_row)
 
         visible_paths: list[str] = []
         for i, cell in enumerate(self.cells):
             data_index = start_data_index + i
-            previous_item = cell.current_data
 
             # Pass layout info just in case
             cell.set_layout_info(self.layout_info)
 
             if data_index < len(self.items_data):
                 item = self.items_data[data_index]
-                if previous_item is not None and previous_item is not item:
-                    previous_item.pixmap = None
-
-                self._ensure_pixmap_loaded(item)
+                self._sync_item_state_from_cache(item)
+                self._ensure_display_pixmap_loaded(item, allow_hq=allow_hq)
                 cell.set_content(item, item.is_selected)
                 cell.show()
                 visible_paths.append(item.path)
@@ -227,26 +254,131 @@ class PhotoGrid(QWidget):
                 if item.state == 0:
                     self.request_thumb.emit(data_index)
             else:
-                if previous_item is not None:
-                    previous_item.pixmap = None
                 cell.set_content(None, False)
                 # Ensure complete cells are displayed even if empty
                 cell.show()
+
+        self._evict_hq_pixmaps_outside(buffer_start_idx, buffer_end_idx)
 
         if visible_paths != self._last_visible_paths:
             self._last_visible_paths = visible_paths
             self.visible_paths_changed.emit(visible_paths)
 
-    def _ensure_pixmap_loaded(self, item):
-        if item.state == 0 or item.pixmap is not None:
-            return
+    def _buffer_index_range(self, start_row: int) -> tuple[int, int]:
+        """Return [start, end) data-index range to keep HQ pixmaps for."""
+        buffer_rows = int(getattr(Config, "GRID_THUMB_BUFFER_ROWS", 2))
+        if self.n_cols <= 0:
+            return (0, 0)
 
-        suffix = "_embedded.jpg" if item.state == 1 else "_hq.jpg"
+        total_items = len(self.items_data)
+        total_rows = math.ceil(total_items / self.n_cols) if total_items else 0
+        visible_start_row = max(0, int(start_row))
+        visible_end_row = min(total_rows, visible_start_row + self.n_rows)
+
+        keep_start_row = max(0, visible_start_row - buffer_rows)
+        keep_end_row = min(total_rows, visible_end_row + buffer_rows)
+
+        start_idx = keep_start_row * self.n_cols
+        end_idx = min(total_items, keep_end_row * self.n_cols)
+        return (start_idx, end_idx)
+
+    def _cache_paths_for_item(self, item) -> tuple[Path, Path]:
         base_name = os.path.splitext(os.path.basename(item.path))[0]
         thumb_dir = get_thumb_dir_for_folder(item.source_folder)
-        cache_path = Path(thumb_dir) / f"{base_name}{suffix}"
-        if cache_path.exists():
-            item.pixmap = QPixmap(str(cache_path))
+        embedded_path = Path(thumb_dir) / "embedded" / f"{base_name}.jpg"
+        hq_path = Path(thumb_dir) / "hq" / f"{base_name}.jpg"
+        return embedded_path, hq_path
+
+    def _sync_item_state_from_cache(self, item) -> None:
+        """Best-effort sync of item.state from disk caches (for restarts)."""
+        if item is None:
+            return
+
+        embedded_path, hq_path = self._cache_paths_for_item(item)
+        base_name = os.path.splitext(os.path.basename(item.path))[0]
+        thumb_dir = get_thumb_dir_for_folder(item.source_folder)
+        legacy_embedded = Path(thumb_dir) / f"{base_name}_embedded.jpg"
+        legacy_hq = Path(thumb_dir) / f"{base_name}_hq.jpg"
+
+        has_hq = hq_path.exists() or legacy_hq.exists()
+        has_embedded = embedded_path.exists() or legacy_embedded.exists()
+
+        if has_hq:
+            item.state = max(int(getattr(item, "state", 0)), 2)
+        elif has_embedded:
+            item.state = max(int(getattr(item, "state", 0)), 1)
+        else:
+            if int(getattr(item, "state", 0)) != 0:
+                item.state = 0
+            item.embedded_pixmap = None
+            item.hq_pixmap = None
+            item.pixmap = None
+
+    def _ensure_embedded_pixmap_loaded(self, item) -> None:
+        if item is None or getattr(item, "embedded_pixmap", None) is not None:
+            return
+        embedded_path, _ = self._cache_paths_for_item(item)
+        if embedded_path.exists():
+            item.embedded_pixmap = QPixmap(str(embedded_path))
+            return
+
+        base_name = os.path.splitext(os.path.basename(item.path))[0]
+        thumb_dir = get_thumb_dir_for_folder(item.source_folder)
+        legacy_path = Path(thumb_dir) / f"{base_name}_embedded.jpg"
+        if legacy_path.exists():
+            item.embedded_pixmap = QPixmap(str(legacy_path))
+
+    def _ensure_hq_pixmap_loaded(self, item) -> None:
+        if item is None or getattr(item, "hq_pixmap", None) is not None:
+            return
+        _, hq_path = self._cache_paths_for_item(item)
+        if hq_path.exists():
+            item.hq_pixmap = QPixmap(str(hq_path))
+        else:
+            base_name = os.path.splitext(os.path.basename(item.path))[0]
+            thumb_dir = get_thumb_dir_for_folder(item.source_folder)
+            legacy_path = Path(thumb_dir) / f"{base_name}_hq.jpg"
+            if legacy_path.exists():
+                item.hq_pixmap = QPixmap(str(legacy_path))
+
+        if (
+            getattr(item, "hq_pixmap", None) is not None
+            and getattr(item, "_global_index", -1) >= 0
+        ):
+            self._loaded_hq_indices.add(int(item._global_index))
+
+    def _ensure_display_pixmap_loaded(self, item, *, allow_hq: bool) -> None:
+        """Ensure the best available pixmap is loaded and set as item.pixmap."""
+        if item is None:
+            return
+
+        state = int(getattr(item, "state", 0))
+
+        if state >= 1:
+            self._ensure_embedded_pixmap_loaded(item)
+        if allow_hq and state >= 2:
+            self._ensure_hq_pixmap_loaded(item)
+
+        # Display embedded while scrolling; switch to HQ when idle if available.
+        if allow_hq and getattr(item, "hq_pixmap", None) is not None:
+            item.pixmap = item.hq_pixmap
+        else:
+            item.pixmap = item.embedded_pixmap or item.hq_pixmap
+
+    def _evict_hq_pixmaps_outside(self, start_idx: int, end_idx: int) -> None:
+        """Free HQ pixmaps outside [start_idx, end_idx) while keeping embedded."""
+        if not self._loaded_hq_indices:
+            return
+
+        to_drop = [i for i in self._loaded_hq_indices if not (start_idx <= i < end_idx)]
+        for idx in to_drop:
+            if 0 <= idx < len(self.items_data):
+                item = self.items_data[idx]
+                if getattr(item, "hq_pixmap", None) is not None:
+                    if getattr(item, "pixmap", None) is item.hq_pixmap:
+                        item.pixmap = item.embedded_pixmap
+                    item.hq_pixmap = None
+            self._loaded_hq_indices.discard(idx)
 
     def refresh_item(self, global_index):
         # Efficiently update only if visible
@@ -259,7 +391,10 @@ class PhotoGrid(QWidget):
             if 0 <= cell_pool_index < len(self.cells):
                 cell = self.cells[cell_pool_index]
                 item = self.items_data[global_index]
-                self._ensure_pixmap_loaded(item)
+                self._sync_item_state_from_cache(item)
+                self._ensure_display_pixmap_loaded(
+                    item, allow_hq=bool(self._hq_display_enabled)
+                )
                 cell.set_content(item, item.is_selected)
 
     def on_cell_clicked(self, global_index, is_shift, is_ctrl):
@@ -324,12 +459,40 @@ class PhotoGrid(QWidget):
     def wheelEvent(self, event):
         if not self.scrollbar.isVisible():
             return
-        delta = event.angleDelta().y()
+
+        pixel_delta = event.pixelDelta().y()
+        delta = pixel_delta if pixel_delta else event.angleDelta().y()
+        if delta == 0:
+            return
+
         current = self.scrollbar.value()
-        if delta > 0:
-            self.scrollbar.setValue(current - self.scrollbar.singleStep())
+        direction = -1 if delta > 0 else 1
+
+        # Base wheel "steps" from magnitude (keep >=1 for small deltas).
+        if pixel_delta:
+            base_steps = max(1, int(abs(pixel_delta) / 40))
         else:
-            self.scrollbar.setValue(current + self.scrollbar.singleStep())
+            base_steps = max(1, int(round(abs(delta) / 120)))
+
+        now = time.monotonic()
+        dt_ms = (
+            (now - self._wheel_last_ts) * 1000.0
+            if self._wheel_last_ts is not None
+            else None
+        )
+
+        if dt_ms is not None and dt_ms < 150 and direction == self._wheel_streak_dir:
+            self._wheel_streak_count += 1
+        else:
+            self._wheel_streak_dir = direction
+            self._wheel_streak_count = 1
+        self._wheel_last_ts = now
+
+        accel = 1 + (self._wheel_streak_count - 1) // 3
+        accel = min(accel, 8)
+
+        steps = base_steps * accel
+        self.scrollbar.setValue(current + (direction * steps))
         event.accept()
 
     def keyPressEvent(self, event):

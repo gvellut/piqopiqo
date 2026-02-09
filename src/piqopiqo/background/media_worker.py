@@ -129,8 +129,9 @@ def _extract_embedded_previews(
     if not file_paths:
         return {}
 
-    os.makedirs(thumb_dir, exist_ok=True)
-    pattern = str(Path(thumb_dir) / "%f_embedded.jpg")
+    embedded_dir = Path(thumb_dir) / "embedded"
+    embedded_dir.mkdir(parents=True, exist_ok=True)
+    pattern = str(embedded_dir / "%f.jpg")
 
     used_fallback = False
     try:
@@ -154,7 +155,7 @@ def _extract_embedded_previews(
     results: dict[str, str | None] = {}
     for file_path in file_paths:
         base_name = os.path.splitext(os.path.basename(file_path))[0]
-        cache_path = str(Path(thumb_dir) / f"{base_name}_embedded.jpg")
+        cache_path = str(embedded_dir / f"{base_name}.jpg")
         results[file_path] = cache_path if _is_nonempty_file(cache_path) else None
     return results
 
@@ -293,7 +294,7 @@ def run_hq_thumb_task(task: dict) -> dict:
     max_dim = int(task["max_dim"])
 
     base_name = os.path.splitext(os.path.basename(file_path))[0]
-    cache_path = str(Path(thumb_dir) / f"{base_name}_hq.jpg")
+    cache_path = str(Path(thumb_dir) / "hq" / f"{base_name}.jpg")
 
     ok = generate_hq_thumbnail(file_path, cache_path, max_dim)
     return {

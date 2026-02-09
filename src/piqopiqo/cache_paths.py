@@ -34,10 +34,23 @@ def get_thumb_dir_for_folder(folder_path: str) -> Path:
     return get_cache_dir_for_folder(folder_path) / "thumb"
 
 
+def get_thumb_embedded_dir_for_folder(folder_path: str) -> Path:
+    """Get the embedded-preview thumbnail cache directory for a folder."""
+    return get_thumb_dir_for_folder(folder_path) / "embedded"
+
+
+def get_thumb_hq_dir_for_folder(folder_path: str) -> Path:
+    """Get the HQ thumbnail cache directory for a folder."""
+    return get_thumb_dir_for_folder(folder_path) / "hq"
+
+
 def ensure_thumb_dir(folder_path: str) -> Path:
-    """Ensure the thumbnail directory exists for a folder."""
+    """Ensure the thumbnail directories exist for a folder."""
     thumb_dir = get_thumb_dir_for_folder(folder_path)
-    thumb_dir.mkdir(parents=True, exist_ok=True)
+    # Split caches by quality level to avoid filename suffixes and allow
+    # different retention policies in memory.
+    (thumb_dir / "embedded").mkdir(parents=True, exist_ok=True)
+    (thumb_dir / "hq").mkdir(parents=True, exist_ok=True)
     return thumb_dir
 
 

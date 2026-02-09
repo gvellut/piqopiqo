@@ -51,6 +51,14 @@ class ImageItem:
     created: str
     source_folder: str = ""
     is_selected: bool = False
+    # Embedded preview JPEG extracted from EXIF (low-res).
+    # Kept in memory once loaded.
+    embedded_pixmap: QPixmap | None = None
+    # HQ thumbnail generated from full image.
+    # Evicted outside the grid buffer to save memory.
+    hq_pixmap: QPixmap | None = None
+    # Pixmap currently used for display in the grid.
+    # Points to embedded_pixmap or hq_pixmap.
     pixmap: QPixmap | None = None
     state: int = 0
     _global_index: int = -1

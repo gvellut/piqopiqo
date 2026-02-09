@@ -199,8 +199,13 @@ Selection behavior:
 - Date spec supports `TD`, `YD`, `YD2`, `YD3`, `YYYYMMDD`, `YYYYMMDD-YYYYMMDD`, `since:YYYYMMDD`, `since:last`, `L/L2/L3` and uses file modification time.
 - Copy runs in a background worker with progress and cancel; eject uses `diskutil` and is skipped on cancel.
 - `MediaManager` handles EXIF + thumbnails via multiprocessing; DB writes happen in the main process (SQLite single-writer).
+- Thumbnail cache layout is split by quality under each folder cache:
+  - `thumb/embedded/<base>.jpg` (EXIF embedded preview)
+  - `thumb/hq/<base>.jpg` (HQ thumbnail from full image)
+  - Legacy `*_embedded.jpg` / `*_hq.jpg` are migrated best-effort.
 - EXIF panel fields are cached in the per-folder DB (`photo_exif_fields` key/value table).
 - Folder watching uses `watchfiles`; internal create/delete actions suppress watcher events briefly to avoid double-processing.
+- Grid memory policy: embedded previews are kept in memory once loaded; HQ thumbnails are only kept for the visible range plus `Config.GRID_THUMB_BUFFER_ROWS`, and HQ display is delayed by `Config.GRID_HQ_THUMB_LOAD_DELAY_MS` after scrolling stops.
 
 
 ## Development

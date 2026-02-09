@@ -175,19 +175,31 @@ class PhotoListModel(QObject):
         db.delete_metadata(file_path)
 
         # Delete thumbnail cache files
-        from .cache_paths import get_thumb_dir_for_folder
+        from .cache_paths import (
+            get_thumb_dir_for_folder,
+            get_thumb_embedded_dir_for_folder,
+            get_thumb_hq_dir_for_folder,
+        )
 
         thumb_dir = get_thumb_dir_for_folder(source_folder)
         basename = os.path.splitext(os.path.basename(file_path))[0]
 
-        for suffix in ["_embedded.jpg", "_hq.jpg"]:
-            cache_file = thumb_dir / f"{basename}{suffix}"
-            if cache_file.exists():
-                try:
-                    cache_file.unlink()
-                    logger.debug(f"Deleted cache file: {cache_file}")
-                except OSError as e:
-                    logger.warning(f"Failed to delete cache file {cache_file}: {e}")
+        cache_files = [
+            get_thumb_embedded_dir_for_folder(source_folder) / f"{basename}.jpg",
+            get_thumb_hq_dir_for_folder(source_folder) / f"{basename}.jpg",
+            # Legacy naming (pre split-folders)
+            thumb_dir / f"{basename}_embedded.jpg",
+            thumb_dir / f"{basename}_hq.jpg",
+        ]
+
+        for cache_file in cache_files:
+            if not cache_file.exists():
+                continue
+            try:
+                cache_file.unlink()
+                logger.debug(f"Deleted cache file: {cache_file}")
+            except OSError as e:
+                logger.warning(f"Failed to delete cache file {cache_file}: {e}")
 
     # --- Selection ---
 

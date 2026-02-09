@@ -780,6 +780,8 @@ class MainWindow(QMainWindow):
                 continue
 
             item.state = 0
+            item.embedded_pixmap = None
+            item.hq_pixmap = None
             item.pixmap = None
             self.media_manager.regenerate_thumbnails([path])
             self.grid.refresh_item(item._global_index)
@@ -797,6 +799,8 @@ class MainWindow(QMainWindow):
         # Reset all image states to trigger re-generation
         for item in items:
             item.state = 0
+            item.embedded_pixmap = None
+            item.hq_pixmap = None
             item.pixmap = None
 
         # Refresh the grid to trigger thumbnail requests
@@ -835,7 +839,11 @@ class MainWindow(QMainWindow):
 
         state = 1 if thumb_type == "embedded" else 2
 
-        item.state = state
+        item.state = max(int(getattr(item, "state", 0)), state)
+        if thumb_type == "embedded":
+            item.embedded_pixmap = None
+        else:
+            item.hq_pixmap = None
         item.pixmap = None
         self.grid.refresh_item(item._global_index)
 
@@ -1146,6 +1154,8 @@ class MainWindow(QMainWindow):
         paths = [p.path for p in photos]
         for photo in photos:
             photo.state = 0
+            photo.embedded_pixmap = None
+            photo.hq_pixmap = None
             photo.pixmap = None
         self.media_manager.regenerate_thumbnails(paths)
 

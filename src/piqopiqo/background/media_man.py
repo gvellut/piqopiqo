@@ -12,6 +12,7 @@ import multiprocessing
 import os
 from pathlib import Path
 import queue
+import shutil
 import time
 
 from PySide6.QtCore import QObject, QTimer, Signal
@@ -33,10 +34,18 @@ class _FileInfo:
 
     @property
     def embedded_cache_path(self) -> str:
-        return str(Path(self.thumb_dir) / f"{self.base_name}_embedded.jpg")
+        return str(Path(self.thumb_dir) / "embedded" / f"{self.base_name}.jpg")
 
     @property
     def hq_cache_path(self) -> str:
+        return str(Path(self.thumb_dir) / "hq" / f"{self.base_name}.jpg")
+
+    @property
+    def legacy_embedded_cache_path(self) -> str:
+        return str(Path(self.thumb_dir) / f"{self.base_name}_embedded.jpg")
+
+    @property
+    def legacy_hq_cache_path(self) -> str:
         return str(Path(self.thumb_dir) / f"{self.base_name}_hq.jpg")
 
 
@@ -318,6 +327,8 @@ class MediaManager(QObject):
         if info is None:
             return
 
+        self._migrate_legacy_thumbs(info)
+
         # Fast-path: cache exists.
         if os.path.exists(info.hq_cache_path):
             self.thumb_ready.emit(file_path, "hq", info.hq_cache_path)
@@ -345,6 +356,8 @@ class MediaManager(QObject):
             if info is None:
                 continue
 
+            self._migrate_legacy_thumbs(info)
+
             if file_path in self._thumb_done:
                 self._thumb_done.remove(file_path)
                 self._thumb_completed = max(0, self._thumb_completed - 1)
@@ -352,7 +365,12 @@ class MediaManager(QObject):
                     self._thumb_completed, self._thumb_total
                 )
 
-            for path in (info.embedded_cache_path, info.hq_cache_path):
+            for path in (
+                info.embedded_cache_path,
+                info.hq_cache_path,
+                info.legacy_embedded_cache_path,
+                info.legacy_hq_cache_path,
+            ):
                 try:
                     Path(path).unlink(missing_ok=True)
                 except OSError:
@@ -452,11 +470,32 @@ class MediaManager(QObject):
     # Internal: priming & queueing
     # -------------------------------------------------------------------------
 
+    def _migrate_legacy_thumbs(self, info: _FileInfo) -> None:
+        """Best-effort migration from legacy thumb naming to split folders."""
+        candidates = [
+            (info.legacy_embedded_cache_path, info.embedded_cache_path),
+            (info.legacy_hq_cache_path, info.hq_cache_path),
+        ]
+        for legacy_path, new_path in candidates:
+            try:
+                if os.path.exists(new_path) or not os.path.exists(legacy_path):
+                    continue
+
+                Path(new_path).parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    Path(legacy_path).rename(new_path)
+                except OSError:
+                    shutil.copy2(legacy_path, new_path)
+            except Exception:
+                continue
+
     def _prime_and_queue_initial(self, file_paths: list[str]) -> None:
         for file_path in file_paths:
             info = self._file_infos.get(file_path)
             if info is None:
                 continue
+
+            self._migrate_legacy_thumbs(info)
 
             # Editable metadata
             db = self._db_manager.get_db_for_folder(info.source_folder)
