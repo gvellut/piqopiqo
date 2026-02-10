@@ -128,8 +128,10 @@ class Config:
     GRID_ITEM_TEXT_FIELDS_TOP_PADDING = 10
     # Keep HQ thumbnails only for visible items plus a row buffer.
     GRID_THUMB_BUFFER_ROWS = 2
-    # Deprecated: kept for compatibility (HQ thumbnails now display immediately
-    # for visible + buffered items).
+    # If True, while navigating (scroll/row movement), show embedded previews and
+    # switch to HQ only after idle delay.
+    GRID_HQ_THUMB_DELAY_ENABLED = True
+    # Delay before switching from embedded to HQ after navigation stops (ms).
     GRID_HQ_THUMB_LOAD_DELAY_MS = 100
 
     # Image Specs

@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import time
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QCursor, QFont, QFontMetrics, QPixmap
 from PySide6.QtWidgets import (
     QGridLayout,
@@ -71,6 +71,11 @@ class PhotoGrid(QWidget):
         self.cells: list[PhotoCell] = []
         self._last_visible_paths: list[str] = []
         self._loaded_hq_indices: set[int] = set()
+        self._hq_display_enabled = True
+
+        self._hq_idle_timer = QTimer(self)
+        self._hq_idle_timer.setSingleShot(True)
+        self._hq_idle_timer.timeout.connect(self._on_hq_idle_timeout)
 
         self._wheel_last_ts: float | None = None
         self._wheel_streak_dir = 0
@@ -90,7 +95,7 @@ class PhotoGrid(QWidget):
         self._last_selected_index = selected[-1] if selected else -1
 
         self._recalculate_scrollbar()
-        self.on_scroll(0)
+        self._render_current_view()
 
     def _rebuild_grid(self, rows, cols):
         """Recreate the grid widgets only if dimensions changed."""
@@ -116,7 +121,7 @@ class PhotoGrid(QWidget):
 
         # Force data refresh
         self._recalculate_scrollbar()
-        self.on_scroll(self.scrollbar.value())
+        self._render_current_view()
 
     def _calculate_metadata_height(self) -> int:
         """Calculate the height needed for metadata display."""
@@ -190,7 +195,7 @@ class PhotoGrid(QWidget):
             self._recalculate_scrollbar()
             # Just refresh content in case data range changed due to scroll limit
             # changes
-            self.on_scroll(self.scrollbar.value())
+            self._render_current_view()
 
         super().resizeEvent(event)
 
@@ -212,9 +217,37 @@ class PhotoGrid(QWidget):
             self.scrollbar.show()
 
     def on_scroll(self, value):
-        self._render(int(value))
+        self._mark_navigation_activity()
+        self._render(int(value), allow_hq=self._allow_hq_now())
 
-    def _render(self, start_row: int) -> None:
+    def _is_hq_delay_enabled(self) -> bool:
+        return bool(getattr(Config, "GRID_HQ_THUMB_DELAY_ENABLED", False))
+
+    def _allow_hq_now(self) -> bool:
+        return (not self._is_hq_delay_enabled()) or self._hq_display_enabled
+
+    def _restart_hq_idle_timer(self) -> None:
+        delay_ms = int(getattr(Config, "GRID_HQ_THUMB_LOAD_DELAY_MS", 200))
+        if delay_ms <= 0:
+            self._hq_display_enabled = True
+            return
+        self._hq_idle_timer.start(delay_ms)
+
+    def _mark_navigation_activity(self) -> None:
+        if not self._is_hq_delay_enabled():
+            self._hq_display_enabled = True
+            return
+        self._hq_display_enabled = False
+        self._restart_hq_idle_timer()
+
+    def _on_hq_idle_timeout(self) -> None:
+        self._hq_display_enabled = True
+        self._render(int(self.scrollbar.value()), allow_hq=True)
+
+    def _render_current_view(self) -> None:
+        self._render(int(self.scrollbar.value()), allow_hq=self._allow_hq_now())
+
+    def _render(self, start_row: int, *, allow_hq: bool) -> None:
         start_data_index = start_row * self.n_cols
         buffer_start_idx, buffer_end_idx = self._buffer_index_range(start_row)
         visible_end_idx = min(
@@ -227,8 +260,9 @@ class PhotoGrid(QWidget):
             self._sync_item_state_from_cache(item)
             buffered_paths.append(item.path)
 
-        self._ensure_hq_pixmaps_loaded_in_range(buffer_start_idx, start_data_index)
-        self._ensure_hq_pixmaps_loaded_in_range(visible_end_idx, buffer_end_idx)
+        if allow_hq:
+            self._ensure_hq_pixmaps_loaded_in_range(buffer_start_idx, start_data_index)
+            self._ensure_hq_pixmaps_loaded_in_range(visible_end_idx, buffer_end_idx)
 
         for i, cell in enumerate(self.cells):
             data_index = start_data_index + i
@@ -238,7 +272,7 @@ class PhotoGrid(QWidget):
 
             if data_index < len(self.items_data):
                 item = self.items_data[data_index]
-                self._ensure_display_pixmap_loaded(item)
+                self._ensure_display_pixmap_loaded(item, allow_hq=allow_hq)
                 cell.set_content(item, item.is_selected)
                 cell.show()
 
@@ -350,7 +384,7 @@ class PhotoGrid(QWidget):
             if int(getattr(item, "state", 0)) >= 2:
                 self._ensure_hq_pixmap_loaded(item)
 
-    def _ensure_display_pixmap_loaded(self, item) -> None:
+    def _ensure_display_pixmap_loaded(self, item, *, allow_hq: bool) -> None:
         """Ensure the best available pixmap is loaded and set as item.pixmap."""
         if item is None:
             return
@@ -359,14 +393,14 @@ class PhotoGrid(QWidget):
 
         if state >= 1:
             self._ensure_embedded_pixmap_loaded(item)
-        if state >= 2:
+        if allow_hq and state >= 2:
             self._ensure_hq_pixmap_loaded(item)
 
-        # For visible cells we always prefer HQ when available.
-        if getattr(item, "hq_pixmap", None) is not None:
+        # Prefer HQ when enabled. In delay mode while navigating, keep embedded.
+        if allow_hq and getattr(item, "hq_pixmap", None) is not None:
             item.pixmap = item.hq_pixmap
         else:
-            item.pixmap = item.embedded_pixmap
+            item.pixmap = item.embedded_pixmap or item.hq_pixmap
 
     def _evict_hq_pixmaps_outside(self, start_idx: int, end_idx: int) -> None:
         """Free HQ pixmaps outside [start_idx, end_idx) while keeping embedded."""
@@ -395,7 +429,7 @@ class PhotoGrid(QWidget):
                 cell = self.cells[cell_pool_index]
                 item = self.items_data[global_index]
                 self._sync_item_state_from_cache(item)
-                self._ensure_display_pixmap_loaded(item)
+                self._ensure_display_pixmap_loaded(item, allow_hq=self._allow_hq_now())
                 cell.set_content(item, item.is_selected)
 
     def on_cell_clicked(self, global_index, is_shift, is_ctrl):
@@ -405,7 +439,7 @@ class PhotoGrid(QWidget):
                 item.is_selected = False
             self._last_selected_index = -1
             self.selection_changed.emit(set())
-            self.on_scroll(self.scrollbar.value())
+            self._render_current_view()
             return
 
         if is_ctrl:
@@ -430,7 +464,7 @@ class PhotoGrid(QWidget):
         }
         self.selection_changed.emit(selected_indices)
 
-        self.on_scroll(self.scrollbar.value())
+        self._render_current_view()
 
     def _on_cell_right_clicked(self, global_index: int):
         """Handle right-click on a cell.
@@ -452,7 +486,7 @@ class PhotoGrid(QWidget):
 
             selected_indices = {global_index}
             self.selection_changed.emit(selected_indices)
-            self.on_scroll(self.scrollbar.value())
+            self._render_current_view()
 
         # Emit context menu request with global cursor position
         self.context_menu_requested.emit(global_index, QCursor.pos())
@@ -533,6 +567,7 @@ class PhotoGrid(QWidget):
                 return
 
             new_index = max(0, min(new_index, len(self.items_data) - 1))
+            self._mark_navigation_activity()
             self.on_cell_clicked(new_index, False, False)
             self._ensure_visible(new_index)
             return
@@ -558,6 +593,7 @@ class PhotoGrid(QWidget):
             return
 
         if new_index != original_index:
+            self._mark_navigation_activity()
             self.on_cell_clicked(new_index, False, False)
             self._ensure_visible(new_index)
 
