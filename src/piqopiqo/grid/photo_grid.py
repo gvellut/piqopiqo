@@ -396,8 +396,9 @@ class PhotoGrid(QWidget):
         if allow_hq and state >= 2:
             self._ensure_hq_pixmap_loaded(item)
 
-        # Prefer HQ when enabled. In delay mode while navigating, keep embedded.
-        if allow_hq and getattr(item, "hq_pixmap", None) is not None:
+        # Delay mode only blocks new HQ loads. If HQ is already in memory, keep
+        # showing it until evicted outside the buffered range.
+        if getattr(item, "hq_pixmap", None) is not None:
             item.pixmap = item.hq_pixmap
         else:
             item.pixmap = item.embedded_pixmap or item.hq_pixmap
