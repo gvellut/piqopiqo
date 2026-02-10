@@ -122,13 +122,14 @@ class Config:
     SHUTDOWN_TIMEOUT_S = 5.0
 
     # Grid Layout Options
-    NUM_COLUMNS = 4
+    NUM_COLUMNS = 6
     PADDING = 10  # Pixels between cells/edges
     FONT_SIZE = 12  # Approx pixel height of text
     GRID_ITEM_TEXT_FIELDS_TOP_PADDING = 10
     # Keep HQ thumbnails only for visible items plus a row buffer.
     GRID_THUMB_BUFFER_ROWS = 2
-    # Delay before showing HQ thumbnails after scrolling stops (ms).
+    # Deprecated: kept for compatibility (HQ thumbnails now display immediately
+    # for visible + buffered items).
     GRID_HQ_THUMB_LOAD_DELAY_MS = 100
 
     # Image Specs
