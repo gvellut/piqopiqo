@@ -340,13 +340,11 @@ class CopySdWorker(QRunnable):
         volume: PhotoVolume,
         dates: list,
         output_folder_base: list[str],
-        should_eject: bool,
     ):
         super().__init__()
         self._volume = volume
         self._dates = dates
         self._output_folder_base = output_folder_base
-        self._should_eject = should_eject
         self._cancel_requested = threading.Event()
         self.signals = CopySdWorkerSignals()
 
@@ -410,17 +408,6 @@ class CopySdWorker(QRunnable):
                 self.signals.progress.emit(copied, total)
 
             cancelled = self._is_cancelled()
-            if not cancelled and self._should_eject:
-                self.signals.status.emit(f"Ejecting {self._volume.name} ...")
-                try:
-                    eject_volume(self._volume.name)
-                except Exception as exc:
-                    error_count += 1
-                    logger.exception("Error ejecting %s", self._volume.name)
-                    self.signals.error.emit(
-                        f"Error ejecting {self._volume.name}: {exc}"
-                    )
-
             self.signals.finished.emit(copied, total, cancelled, error_count)
         except Exception as exc:
             error_count += 1
@@ -436,7 +423,6 @@ class CopySdInputDialog(QDialog):
         parent=None,
         name="",
         date_spec="TD",
-        should_eject=True,
     ):
         super().__init__(parent)
         self.setWindowTitle("Copy from SD")
@@ -507,7 +493,9 @@ class CopySdProgressDialog(QDialog):
         self.setModal(True)
         self.setMinimumWidth(520)
 
-        self._worker = CopySdWorker(volume, dates, output_folder_base, should_eject)
+        self._volume = volume
+        self._should_eject = should_eject
+        self._worker = CopySdWorker(volume, dates, output_folder_base)
         self._finished = False
         self._error_count = 0
 
@@ -527,6 +515,11 @@ class CopySdProgressDialog(QDialog):
         self.error_label.hide()
         layout.addWidget(self.error_label)
 
+        self.eject_checkbox = QCheckBox("Eject SD card")
+        self.eject_checkbox.setChecked(should_eject)
+        self.eject_checkbox.hide()
+        layout.addWidget(self.eject_checkbox)
+
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
@@ -536,7 +529,7 @@ class CopySdProgressDialog(QDialog):
 
         self.ok_btn = QPushButton("OK")
         self.ok_btn.setEnabled(False)
-        self.ok_btn.clicked.connect(self.accept)
+        self.ok_btn.clicked.connect(self._on_ok)
         btn_layout.addWidget(self.ok_btn)
 
         layout.addLayout(btn_layout)
@@ -591,6 +584,21 @@ class CopySdProgressDialog(QDialog):
         self.progress_bar.setValue(min(copied, total) if total else 0)
         self.cancel_btn.setEnabled(False)
         self.ok_btn.setEnabled(True)
+        if not cancelled:
+            self.eject_checkbox.show()
+
+    def _on_ok(self):
+        if self.eject_checkbox.isChecked() and self.eject_checkbox.isVisible():
+            try:
+                eject_volume(self._volume.name)
+            except Exception as exc:
+                logger.exception("Error ejecting %s", self._volume.name)
+                QMessageBox.warning(
+                    self,
+                    "Eject failed",
+                    f"Could not eject {self._volume.name}:\n{exc}",
+                )
+        self.accept()
 
     def _on_cancel(self):
         if self._finished:
@@ -732,7 +740,6 @@ def launch_copy_sd(parent=None):
     # TODO save last value in state after the copy
     name = Config.COPY_SD_DEFAULT_NAME
     date_spec = Config.COPY_SD_DATE_SPEC
-    should_eject = True
 
     while True:
         dialog = CopySdInputDialog(
@@ -740,12 +747,11 @@ def launch_copy_sd(parent=None):
             parent=parent,
             name=name,
             date_spec=date_spec,
-            should_eject=should_eject,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
-        name, date_spec, should_eject = dialog.get_values()
+        name, date_spec = dialog.get_values()
 
         result = _resolve_dates_with_progress(parent, date_spec, volume)
         if result is None:
@@ -779,7 +785,7 @@ def launch_copy_sd(parent=None):
         return
 
     progress_dialog = CopySdProgressDialog(
-        volume, dates, output_folder_base, should_eject, parent=parent
+        volume, dates, output_folder_base, should_eject=True, parent=parent
     )
     progress_dialog.start()
     progress_dialog.exec()

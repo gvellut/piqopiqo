@@ -1,0 +1,1 @@
+When ejecting, it seems the GUI becomes unresponsive while the ejection happens. Is it possible to do the ejection in the background ?
