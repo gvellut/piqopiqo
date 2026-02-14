@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from piqopiqo.cache_paths import get_thumb_dir_for_folder
 from piqopiqo.config import Config
 from piqopiqo.metadata.db_fields import DBFields
+from piqopiqo.orientation import apply_orientation_to_pixmap
 
 from .photo_cell import PhotoCell
 
@@ -71,6 +72,7 @@ class PhotoGrid(QWidget):
         self.cells: list[PhotoCell] = []
         self._last_visible_paths: list[str] = []
         self._loaded_hq_indices: set[int] = set()
+        self._loaded_embedded_indices: set[int] = set()
         self._hq_display_enabled = True
 
         self._hq_idle_timer = QTimer(self)
@@ -88,6 +90,9 @@ class PhotoGrid(QWidget):
         self.items_data = items
         self._loaded_hq_indices = {
             i for i, item in enumerate(items) if getattr(item, "hq_pixmap", None)
+        }
+        self._loaded_embedded_indices = {
+            i for i, item in enumerate(items) if getattr(item, "embedded_pixmap", None)
         }
 
         # Update last selected index based on current selection
@@ -284,6 +289,8 @@ class PhotoGrid(QWidget):
                 cell.show()
 
         self._evict_hq_pixmaps_outside(buffer_start_idx, buffer_end_idx)
+        emb_start, emb_end = self._embedded_buffer_index_range(start_row)
+        self._evict_embedded_pixmaps_outside(emb_start, emb_end)
 
         if buffered_paths != self._last_visible_paths:
             self._last_visible_paths = buffered_paths
@@ -345,13 +352,18 @@ class PhotoGrid(QWidget):
         embedded_path, _ = self._cache_paths_for_item(item)
         if embedded_path.exists():
             item.embedded_pixmap = QPixmap(str(embedded_path))
-            return
+        else:
+            base_name = os.path.splitext(os.path.basename(item.path))[0]
+            thumb_dir = get_thumb_dir_for_folder(item.source_folder)
+            legacy_path = Path(thumb_dir) / f"{base_name}_embedded.jpg"
+            if legacy_path.exists():
+                item.embedded_pixmap = QPixmap(str(legacy_path))
 
-        base_name = os.path.splitext(os.path.basename(item.path))[0]
-        thumb_dir = get_thumb_dir_for_folder(item.source_folder)
-        legacy_path = Path(thumb_dir) / f"{base_name}_embedded.jpg"
-        if legacy_path.exists():
-            item.embedded_pixmap = QPixmap(str(legacy_path))
+        if (
+            getattr(item, "embedded_pixmap", None) is not None
+            and getattr(item, "_global_index", -1) >= 0
+        ):
+            self._loaded_embedded_indices.add(int(item._global_index))
 
     def _ensure_hq_pixmap_loaded(self, item) -> None:
         if item is None or getattr(item, "hq_pixmap", None) is not None:
@@ -385,7 +397,11 @@ class PhotoGrid(QWidget):
                 self._ensure_hq_pixmap_loaded(item)
 
     def _ensure_display_pixmap_loaded(self, item, *, allow_hq: bool) -> None:
-        """Ensure the best available pixmap is loaded and set as item.pixmap."""
+        """Ensure the best available pixmap is loaded and set as item.pixmap.
+
+        Applies EXIF orientation to the display pixmap so that paintEvent can
+        draw it directly without per-paint allocation.
+        """
         if item is None:
             return
 
@@ -399,12 +415,48 @@ class PhotoGrid(QWidget):
         # Delay mode only blocks new HQ loads. If HQ is already in memory, keep
         # showing it until evicted outside the buffered range.
         if getattr(item, "hq_pixmap", None) is not None:
-            item.pixmap = item.hq_pixmap
+            source = item.hq_pixmap
         else:
-            item.pixmap = item.embedded_pixmap or item.hq_pixmap
+            source = item.embedded_pixmap or item.hq_pixmap
+
+        # Only rebuild display pixmap if source or orientation changed.
+        db_meta = item.db_metadata or {}
+        orientation = db_meta.get(DBFields.ORIENTATION)
+        if (
+            source is not None
+            and getattr(item, "_pixmap_source", None) is source
+            and getattr(item, "_pixmap_orientation", None) == orientation
+            and item.pixmap is not None
+        ):
+            return
+
+        item._pixmap_source = source
+        item._pixmap_orientation = orientation
+        if source is not None:
+            item.pixmap = apply_orientation_to_pixmap(source, orientation)
+        else:
+            item.pixmap = None
+
+    def _embedded_buffer_index_range(self, start_row: int) -> tuple[int, int]:
+        """Return [start, end) data-index range to keep embedded pixmaps for."""
+        buffer_rows = int(getattr(Config, "GRID_EMBEDDED_BUFFER_ROWS", 20))
+        if self.n_cols <= 0:
+            return (0, 0)
+
+        total_items = len(self.items_data)
+        total_rows = math.ceil(total_items / self.n_cols) if total_items else 0
+        visible_start_row = max(0, int(start_row))
+        visible_end_row = min(total_rows, visible_start_row + self.n_rows)
+
+        keep_start_row = max(0, visible_start_row - buffer_rows)
+        keep_end_row = min(total_rows, visible_end_row + buffer_rows)
+
+        start_idx = keep_start_row * self.n_cols
+        end_idx = min(total_items, keep_end_row * self.n_cols)
+        return (start_idx, end_idx)
 
     def _evict_hq_pixmaps_outside(self, start_idx: int, end_idx: int) -> None:
-        """Free HQ pixmaps outside [start_idx, end_idx) while keeping embedded."""
+        """Free HQ pixmaps outside [start_idx, end_idx)."""
         if not self._loaded_hq_indices:
             return
 
@@ -413,10 +465,30 @@ class PhotoGrid(QWidget):
             if 0 <= idx < len(self.items_data):
                 item = self.items_data[idx]
                 if getattr(item, "hq_pixmap", None) is not None:
-                    if getattr(item, "pixmap", None) is item.hq_pixmap:
-                        item.pixmap = item.embedded_pixmap
+                    # Invalidate display pixmap so it gets rebuilt from embedded
+                    if getattr(item, "_pixmap_source", None) is item.hq_pixmap:
+                        item.pixmap = None
+                        item._pixmap_source = None
                     item.hq_pixmap = None
             self._loaded_hq_indices.discard(idx)
+
+    def _evict_embedded_pixmaps_outside(self, start_idx: int, end_idx: int) -> None:
+        """Free embedded pixmaps outside [start_idx, end_idx)."""
+        if not self._loaded_embedded_indices:
+            return
+
+        to_drop = [
+            i for i in self._loaded_embedded_indices if not (start_idx <= i < end_idx)
+        ]
+        for idx in to_drop:
+            if 0 <= idx < len(self.items_data):
+                item = self.items_data[idx]
+                if getattr(item, "embedded_pixmap", None) is not None:
+                    if getattr(item, "_pixmap_source", None) is item.embedded_pixmap:
+                        item.pixmap = None
+                        item._pixmap_source = None
+                    item.embedded_pixmap = None
+            self._loaded_embedded_indices.discard(idx)
 
     def refresh_item(self, global_index):
         # Efficiently update only if visible

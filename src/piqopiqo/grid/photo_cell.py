@@ -18,7 +18,6 @@ from PySide6.QtWidgets import QFrame, QSizePolicy
 from piqopiqo.config import Config
 from piqopiqo.label_utils import get_label_color
 from piqopiqo.metadata.db_fields import DBFields
-from piqopiqo.orientation import apply_orientation_to_pixmap
 
 
 class PhotoCell(QFrame):
@@ -103,12 +102,9 @@ class PhotoCell(QFrame):
                 painter.fillRect(img_rect, QColor("black"))
             else:
                 if pixmap:
-                    # Apply orientation transform from DB metadata
-                    orientation = db_meta.get(DBFields.ORIENTATION)
-                    display_pixmap = apply_orientation_to_pixmap(pixmap, orientation)
-
+                    # Orientation is already applied in item.pixmap by the grid.
                     # Center pixmap
-                    pixmap_rect = display_pixmap.rect()
+                    pixmap_rect = pixmap.rect()
                     pixmap_rect.moveCenter(img_rect.center())
 
                     # Scale to fit if too big
@@ -116,14 +112,14 @@ class PhotoCell(QFrame):
                         pixmap_rect.width() > img_rect.width()
                         or pixmap_rect.height() > img_rect.height()
                     ):
-                        scaled = display_pixmap.scaled(
+                        scaled = pixmap.scaled(
                             img_rect.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
                         )
                         pixmap_rect = scaled.rect()
                         pixmap_rect.moveCenter(img_rect.center())
                         painter.drawPixmap(pixmap_rect, scaled)
                     else:
-                        painter.drawPixmap(pixmap_rect, display_pixmap)
+                        painter.drawPixmap(pixmap_rect, pixmap)
 
             # Draw label swatch (top-right corner of image area)
             if Config.GRID_ITEM_SHOW_LABEL_SWATCH:

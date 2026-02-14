@@ -340,6 +340,10 @@ class MainWindow(QMainWindow):
             new_orientation = rotate_func(current_orientation)
             item.db_metadata[DBFields.ORIENTATION] = new_orientation
 
+            # Invalidate cached oriented display pixmap so it gets rebuilt
+            item.pixmap = None
+            item._pixmap_source = None
+
             # Save to DB in background
             db = self.db_manager.get_db_for_image(item.path)
             worker = MetadataSaveWorker(db, item.path, item.db_metadata.copy())

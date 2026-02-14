@@ -128,6 +128,9 @@ class Config:
     GRID_ITEM_TEXT_FIELDS_TOP_PADDING = 10
     # Keep HQ thumbnails only for visible items plus a row buffer.
     GRID_THUMB_BUFFER_ROWS = 2
+    # Keep embedded thumbnails for a wider buffer (reloading from disk is cheap
+    # but we don't need to keep all of them in memory).
+    GRID_EMBEDDED_BUFFER_ROWS = 20
     # If True, while navigating (scroll/row movement), show embedded previews and
     # switch to HQ only after idle delay.
     GRID_HQ_THUMB_DELAY_ENABLED = True
