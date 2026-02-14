@@ -1,0 +1,1 @@
+in CopySdProgressDialog : inside _on_finished. The OK button should be the active / focues one (ie Enter should make it run) : also should be blue in macos. It was like that before the addition of the eject checkbox on that dialog.

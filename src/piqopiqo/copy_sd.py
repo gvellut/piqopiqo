@@ -587,6 +587,8 @@ class CopySdProgressDialog(QDialog):
         self.progress_bar.setValue(min(copied, total) if total else 0)
         self.cancel_btn.setEnabled(False)
         self.ok_btn.setEnabled(True)
+        self.ok_btn.setDefault(True)
+        self.ok_btn.setFocus()
         if not cancelled:
             self.eject_checkbox.show()
 
