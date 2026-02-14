@@ -631,15 +631,88 @@ def _confirm_copy(
     return result == QMessageBox.StandardButton.Ok
 
 
+class _ResolveDatesSignals(QObject):
+    finished = Signal(object)  # dates result or None
+    error = Signal(str)
+
+
+class _ResolveDatesWorker(QRunnable):
+    def __init__(self, date_spec: str, volume: PhotoVolume):
+        super().__init__()
+        self._date_spec = date_spec
+        self._volume = volume
+        self.signals = _ResolveDatesSignals()
+
+    def run(self):
+        try:
+            dates = to_dates(self._date_spec, self._volume)
+            self.signals.finished.emit(dates)
+        except ValueError:
+            self.signals.error.emit("Invalid date spec. Please try again.")
+
+
+def _resolve_dates_with_progress(parent, date_spec: str, volume: PhotoVolume):
+    """Run to_dates in a background thread with a progress dialog.
+
+    Returns dates on success, an error string on ValueError, or None if cancelled.
+    """
+    # Fast path: specs that don't scan the filesystem
+    if date_spec in ("TD", "YD", "YD2", "YD3") or "-" in date_spec:
+        try:
+            return to_dates(date_spec, volume)
+        except ValueError:
+            return "Invalid date spec. Please try again."
+
+    result_holder: list[object] = []
+    error_holder: list[str] = []
+
+    worker = _ResolveDatesWorker(date_spec, volume)
+
+    def on_finished(dates):
+        result_holder.append(dates)
+        wait_dialog.accept()
+
+    def on_error(msg):
+        error_holder.append(msg)
+        wait_dialog.accept()
+
+    worker.signals.finished.connect(on_finished)
+    worker.signals.error.connect(on_error)
+
+    wait_dialog = QDialog(parent)
+    wait_dialog.setWindowTitle("Copy from SD")
+    wait_dialog.setModal(True)
+    layout = QVBoxLayout(wait_dialog)
+    layout.addWidget(QLabel(f"Scanning {volume.name} for dates..."))
+    progress = QProgressBar()
+    progress.setRange(0, 0)  # indeterminate
+    layout.addWidget(progress)
+    cancel_btn = QPushButton("Cancel")
+    cancel_btn.clicked.connect(wait_dialog.reject)
+    layout.addWidget(cancel_btn)
+
+    QThreadPool.globalInstance().start(worker)
+
+    if wait_dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+
+    if error_holder:
+        return error_holder[0]
+
+    return result_holder[0] if result_holder else None
+
+
 def launch_copy_sd(parent=None):
     if hasattr(Config, "SDCARD_NAMES"):
         volume = get_volume(Config.SDCARD_NAMES)
+        cards = ", ".join(Config.SDCARD_NAMES)
+        error_txt = f"No relevant SD card found: {cards}. Volume not renamed?"
     else:
         volume = get_sd_volume()
+        error_txt = "No SD card found."
+
     if not volume:
-        QMessageBox.warning(
-            parent, "Copy from SD", "No relevant SD card. Volume not renamed?"
-        )
+        QMessageBox.warning(parent, "Copy from SD", error_txt)
         return
 
     output_parent_folder = Config.BASE_EXTERNAL_FOLDER
@@ -679,14 +752,16 @@ def launch_copy_sd(parent=None):
 
         name, date_spec, should_eject = dialog.get_values()
 
-        try:
-            dates = to_dates(date_spec, volume)
-        except ValueError:
-            QMessageBox.warning(
-                parent, "Copy from SD", "Invalid date spec. Please try again."
-            )
+        result = _resolve_dates_with_progress(parent, date_spec, volume)
+        if result is None:
+            # dialog was cancelled
+            continue
+        if isinstance(result, str):
+            # error message
+            QMessageBox.warning(parent, "Copy from SD", result)
             continue
 
+        dates = result
         if not dates:
             QMessageBox.information(
                 parent,
