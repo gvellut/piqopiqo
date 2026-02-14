@@ -480,6 +480,8 @@ class CopySdInputDialog(QDialog):
 
 
 class CopySdProgressDialog(QDialog):
+    _eject_done = Signal(str)  # empty string on success, error message on failure
+
     def __init__(
         self,
         volume: PhotoVolume,
@@ -539,6 +541,7 @@ class CopySdProgressDialog(QDialog):
         self._worker.signals.progress.connect(self._on_progress)
         self._worker.signals.error.connect(self._on_error)
         self._worker.signals.finished.connect(self._on_finished)
+        self._eject_done.connect(self._on_eject_done)
 
     def start(self):
         QThreadPool.globalInstance().start(self._worker)
@@ -589,15 +592,31 @@ class CopySdProgressDialog(QDialog):
 
     def _on_ok(self):
         if self.eject_checkbox.isChecked() and self.eject_checkbox.isVisible():
-            try:
-                eject_volume(self._volume.name)
-            except Exception as exc:
-                logger.exception("Error ejecting %s", self._volume.name)
-                QMessageBox.warning(
-                    self,
-                    "Eject failed",
-                    f"Could not eject {self._volume.name}:\n{exc}",
-                )
+            self.ok_btn.setEnabled(False)
+            self.eject_checkbox.setEnabled(False)
+            self.status_label.setText(f"Ejecting {self._volume.name}...")
+            self._eject_thread = threading.Thread(
+                target=self._eject_in_background, daemon=True
+            )
+            self._eject_thread.start()
+            return
+        self.accept()
+
+    def _eject_in_background(self):
+        try:
+            eject_volume(self._volume.name)
+            self._eject_done.emit("")
+        except Exception as exc:
+            logger.exception("Error ejecting %s", self._volume.name)
+            self._eject_done.emit(str(exc))
+
+    def _on_eject_done(self, error: str):
+        if error:
+            QMessageBox.warning(
+                self,
+                "Eject failed",
+                f"Could not eject {self._volume.name}:\n{error}",
+            )
         self.accept()
 
     def _on_cancel(self):

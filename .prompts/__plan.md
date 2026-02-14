@@ -1,3 +1,4 @@
 * [Eject SD after user OK](B_Eject_SD_after_user_OK.md)
-    *? [GUI lag](B.A_GUI_lag.md)
+    !? [GUI lag](B.A_GUI_lag.md)
+    ? [Make OK button active](C_Make_OK_button_active.md)
 ! [Fix date read delay if since:last](A_Fix_date_read_delay.md)
