@@ -133,24 +133,16 @@ def _extract_embedded_previews(
     embedded_dir.mkdir(parents=True, exist_ok=True)
     pattern = str(embedded_dir / "%f.jpg")
 
-    used_fallback = False
     try:
-        helper.execute("-b", "-PreviewImage", "-w", pattern, *file_paths)
+        # Use ThumbnailImage instead of PreviewImage
+        # PreviewImage is fine on Fuji (640x480): but on Panasonic : 1440x1080
+        # it seems to create some stutter when displayed on the grid (~50 images)
+        # TODO check again if comes from that
+        # So use ThumbnailImage : 160x120 (used only as a placeholder while waiting
+        # for the HQ thumbnail to be shown so fine
+        helper.execute("-b", "-ThumbnailImage", "-w", pattern, *file_paths)
     except Exception:
-        used_fallback = True
-
-    if used_fallback:
-        exe = exiftool_path if exiftool_path else "exiftool"
-        cmd = [exe, "-b", "-PreviewImage", "-w", pattern, *file_paths]
-        try:
-            subprocess.run(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
-        except Exception:
-            pass
+        pass
 
     results: dict[str, str | None] = {}
     for file_path in file_paths:
