@@ -465,10 +465,6 @@ class CopySdInputDialog(QDialog):
 
         layout.addLayout(form_layout)
 
-        self.eject_checkbox = QCheckBox("Eject SD card after copy")
-        self.eject_checkbox.setChecked(should_eject)
-        layout.addWidget(self.eject_checkbox)
-
         help_label = QLabel(
             "Date spec examples: TD, YD, YYYYMMDD, YYYYMMDD-YYYYMMDD, "
             "since:YYYYMMDD, since:last, L/L2/L3."
@@ -494,7 +490,6 @@ class CopySdInputDialog(QDialog):
         return (
             self.name_edit.text().strip(),
             self.date_edit.text().strip(),
-            self.eject_checkbox.isChecked(),
         )
 
 

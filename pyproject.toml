@@ -23,7 +23,10 @@ dependencies = [
 piqopiqo = "piqopiqo.__main__:cli"
 
 [tool.uv.sources]
-pyqtauto = { git = "https://github.com/gvellut/pyqtauto.git" }
+pyqtauto = { path = "/Users/guilhem/Documents/projects/github/pyqtauto" }
+
+# [tool.uv.sources]
+# pyqtauto = { git = "https://github.com/gvellut/pyqtauto.git" }
 
 [build-system]
 requires = ["uv_build>=0.9.11,<0.10.0"]
@@ -31,7 +34,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = ["pytest>=9.0.2", "taskipy>=1.14.1", "pyinstaller>=6.18.0"]
-pyqt = ["pyqtauto"]
+pyqtauto = ["pyqtauto"]
 
 [tool.taskipy.tasks]
 build = "pyinstaller --name 'PiqoPiqo' --windowed --noconfirm --clean --icon='app.icns' --exclude-module=pyqtauto --paths='src' --add-data='app.icns:.' pyinstaller_main.py"
