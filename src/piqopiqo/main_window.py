@@ -649,7 +649,7 @@ class MainWindow(QMainWindow):
             self,
             "Open Folder",
             self.root_folder or "",
-            QFileDialog.Option.ShowDirsOnly,
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.ReadOnly,
         )
         if folder:
             self._load_folder(folder)
