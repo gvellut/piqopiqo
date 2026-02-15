@@ -17,10 +17,10 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..config import Config
 from ..keyword_utils import parse_keywords
 from ..metadata.db_fields import DB_TO_EXIF_WRITE_MAPPING, DBFields
 from ..model import ImageItem
+from ..state import APP_NAME
 
 if TYPE_CHECKING:
     from ..background.media_man import MediaManager
@@ -98,7 +98,7 @@ def build_exif_tags(db_metadata: dict) -> dict:
 
     # Add XMP history metadata
     now = datetime.now().strftime("%Y:%m:%d %H:%M:%S")
-    software_agent = f"{Config.APP_NAME} v{__version__}"
+    software_agent = f"{APP_NAME} v{__version__}"
 
     tags["XMP-xmpMM:HistoryAction"] = "saved"
     tags["XMP-xmpMM:HistoryWhen"] = now

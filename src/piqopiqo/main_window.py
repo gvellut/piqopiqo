@@ -49,7 +49,7 @@ from .panels import (
 )
 from .photo_model import PhotoListModel, SortOrder
 from .shortcuts import parse_shortcut
-from .support import save_last_folder
+from .state import APP_NAME, StateKey, get_state
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, images, source_folders, root_folder):
         super().__init__()
-        self.setWindowTitle(Config.APP_NAME)
+        self.setWindowTitle(APP_NAME)
 
         self._fullscreen_overlay = None
         self.root_folder = root_folder
@@ -89,33 +89,44 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.filter_panel, 0)
 
         # Main horizontal splitter: grid | right panel(s)
-        main_splitter = QSplitter(Qt.Horizontal)
-        main_layout.addWidget(main_splitter)
+        self._main_splitter = QSplitter(Qt.Horizontal)
+        main_layout.addWidget(self._main_splitter)
 
         self.grid = PhotoGrid()
-        main_splitter.addWidget(self.grid)
+        self._main_splitter.addWidget(self.grid)
 
         # Right side: vertical splitter with edit panel and EXIF panel
+        self._right_splitter = None
         if Config.SHOW_EDIT_PANEL:
-            right_splitter = QSplitter(Qt.Vertical)
+            self._right_splitter = QSplitter(Qt.Vertical)
 
             self.edit_panel = EditPanel(self.db_manager)
             self.edit_panel.edit_finished.connect(self._on_edit_finished)
-            right_splitter.addWidget(self.edit_panel)
+            self._right_splitter.addWidget(self.edit_panel)
 
             self.exif_panel = ExifPanel()
-            right_splitter.addWidget(self.exif_panel)
+            self._right_splitter.addWidget(self.exif_panel)
 
             # Split evenly between edit and exif panels
-            right_splitter.setSizes([200, 200])
+            self._right_splitter.setSizes([200, 200])
 
-            main_splitter.addWidget(right_splitter)
+            self._main_splitter.addWidget(self._right_splitter)
         else:
             self.edit_panel = None
             self.exif_panel = ExifPanel()
-            main_splitter.addWidget(self.exif_panel)
+            self._main_splitter.addWidget(self.exif_panel)
 
-        main_splitter.setSizes([int(self.width() * 0.8), int(self.width() * 0.2)])
+        self._main_splitter.setSizes([int(self.width() * 0.8), int(self.width() * 0.2)])
+
+        # Restore splitter state from saved settings
+        state = get_state()
+        splitter_state = state.get(StateKey.mainSplitter)
+        if splitter_state and not splitter_state.isEmpty():
+            self._main_splitter.restoreState(splitter_state)
+        if self._right_splitter:
+            right_state = state.get(StateKey.rightSplitter)
+            if right_state and not right_state.isEmpty():
+                self._right_splitter.restoreState(right_state)
 
         # Status bar (standard QMainWindow status bar)
         self.status_bar = LoadingStatusBar()
@@ -532,7 +543,7 @@ class MainWindow(QMainWindow):
         settings_action.triggered.connect(self.on_settings)
         file_menu.addAction(settings_action)
 
-        quit_action = QAction(f"Quit {Config.APP_NAME}", self)
+        quit_action = QAction(f"Quit {APP_NAME}", self)
         quit_action.setMenuRole(QAction.MenuRole.QuitRole)
         quit_action.setShortcut("Ctrl+Q")
         quit_action.triggered.connect(self.close)
@@ -616,7 +627,7 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(regenerate_exif_action)
 
         help_menu = menubar.addMenu("Help")
-        about_action = QAction(f"About {Config.APP_NAME}", self)
+        about_action = QAction(f"About {APP_NAME}", self)
         about_action.setMenuRole(QAction.MenuRole.AboutRole)
         about_action.triggered.connect(self.on_about)
         help_menu.addAction(about_action)
@@ -653,7 +664,7 @@ class MainWindow(QMainWindow):
         logger.info(f"Found {len(images)} images in {len(source_folders)} folder(s)")
 
         # Save as last folder
-        save_last_folder(folder)
+        get_state().set(StateKey.lastFolder, folder)
 
         # Update state
         self.root_folder = folder
@@ -1226,6 +1237,14 @@ class MainWindow(QMainWindow):
         self._load_folder(self.root_folder)
 
     def closeEvent(self, event):
+        # Save window and splitter state
+        state = get_state()
+        state.set(StateKey.windowGeometry, self.saveGeometry())
+        state.set(StateKey.windowState, self.saveState())
+        state.set(StateKey.mainSplitter, self._main_splitter.saveState())
+        if self._right_splitter:
+            state.set(StateKey.rightSplitter, self._right_splitter.saveState())
+
         # Stop background workers first to avoid noisy teardown.
         self._stop_folder_watcher()
         if hasattr(self, "media_manager"):

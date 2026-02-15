@@ -758,9 +758,11 @@ def launch_copy_sd(parent=None):
         )
         return
 
-    # TODO save last value in state after the copy
-    name = Config.COPY_SD_DEFAULT_NAME
-    date_spec = Config.COPY_SD_DATE_SPEC
+    from .state import StateKey, get_state
+
+    state = get_state()
+    name = state.get(StateKey.copySdNameSuffix)
+    date_spec = state.get(StateKey.copySdDateSpec)
 
     while True:
         dialog = CopySdInputDialog(
@@ -805,8 +807,14 @@ def launch_copy_sd(parent=None):
         logger.warning("Aborted by user")
         return
 
+    should_eject = state.get(StateKey.copySdEject)
     progress_dialog = CopySdProgressDialog(
-        volume, dates, output_folder_base, should_eject=True, parent=parent
+        volume, dates, output_folder_base, should_eject=should_eject, parent=parent
     )
     progress_dialog.start()
     progress_dialog.exec()
+
+    # Save user choices for next session
+    state.set(StateKey.copySdNameSuffix, name)
+    state.set(StateKey.copySdDateSpec, date_spec)
+    state.set(StateKey.copySdEject, progress_dialog.eject_checkbox.isChecked())

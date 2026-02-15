@@ -75,9 +75,6 @@ class Shortcut(UpperStrEnum):
 
 
 class Config:
-    # Application Settings
-    APP_NAME = "PiqoPiqo"
-
     # FIXME Add verification for existence + dialog to set at startup
     # FIXME mode : dyn (no saved settings => read from here) auto (no dialog)
     # FIXME kw (for keywords saved) + state (for reading / persisting state)

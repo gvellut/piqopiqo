@@ -238,3 +238,7 @@ Do not use async.
 ## Update of AGENTS.md
 
 After completing a feature, update this file AGENTS.md with the updated project structure. Also add considerations for reference for future work.
+
+## Do not read
+
+Do not read any file from the .prompts folder or .prompts_archive.

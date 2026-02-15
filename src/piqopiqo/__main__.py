@@ -20,7 +20,8 @@ except ImportError:
 from .config import Config, apply_env_overrides
 from .folder_scan import scan_folder
 from .main_window import MainWindow
-from .support import get_cache_base_dir, get_last_folder, save_last_folder
+from .state import APP_NAME, ORG_DOMAIN, ORG_NAME, StateKey, init_state
+from .support import get_cache_base_dir
 from .utils import setup_logging
 
 
@@ -48,7 +49,8 @@ def suppress_macos_menus():
 
 @click.command()
 @click.argument("folder", type=click.Path(exists=True), required=False)
-def cli(folder):
+@click.option("--dyn", is_flag=True, default=False, help="Ignore saved state")
+def cli(folder, dyn):
     logger = logging.getLogger(__package__)
     setup_logging(logger)
 
@@ -70,11 +72,31 @@ def cli(folder):
             shutil.rmtree(cache_dir)
             cache_dir.mkdir(parents=True, exist_ok=True)
 
+    suppress_macos_menus()
+
+    # Launch GUI
+    app = QApplication(sys.argv)
+
+    # Set application identity (must be before QSettings creation)
+    app.setOrganizationName(ORG_NAME)
+    app.setOrganizationDomain(ORG_DOMAIN)
+    app.setApplicationName(APP_NAME)
+    app.setApplicationDisplayName(APP_NAME)
+
+    # Initialize state store (uses QSettings with org/app set above)
+    state = init_state(dyn=dyn)
+
+    # Start pyqtauto server for automation testing
+    if start_server is not None:
+        server = start_server(force=True)
+        if server:
+            logger.info(f"PyQtAuto server on port {server.port}")
+
     # Determine which folder to open
     if folder is None:
-        # Try to load last opened folder
-        folder = get_last_folder()
-        if folder:
+        last = state.get(StateKey.lastFolder)
+        if last and os.path.isdir(last):
+            folder = last
             logger.info(f"Opening last folder: {folder}")
 
     # Scan folder if provided
@@ -85,27 +107,15 @@ def cli(folder):
         images, source_folders = scan_folder(folder)
         print(f"Found {len(images)} images in {len(source_folders)} folder(s).")
         # Save as last folder
-        save_last_folder(folder)
-
-    suppress_macos_menus()
-
-    # Launch GUI
-    app = QApplication(sys.argv)
-
-    # Start pyqtauto server for automation testing
-    if start_server is not None:
-        server = start_server(force=True)
-        if server:
-            logger.info(f"PyQtAuto server on port {server.port}")
-
-    app.setApplicationName(Config.APP_NAME)
-    app.setApplicationDisplayName(Config.APP_NAME)
+        state.set(StateKey.lastFolder, folder)
 
     icon_path = resource_path("app.icns")
     app.setWindowIcon(QIcon(icon_path))
 
     window = MainWindow(images, source_folders, folder)
+
     if Config.INITIAL_RESOLUTION:
+        # Testing override - ignore saved geometry
         try:
             w, h = Config.INITIAL_RESOLUTION.split("x")
             window.resize(int(w), int(h))
@@ -117,7 +127,15 @@ def cli(folder):
             )
             window.showMaximized()
     else:
-        window.showMaximized()
+        geo = state.get(StateKey.windowGeometry)
+        if geo and not geo.isEmpty():
+            window.restoreGeometry(geo)
+            win_st = state.get(StateKey.windowState)
+            if win_st and not win_st.isEmpty():
+                window.restoreState(win_st)
+            window.show()
+        else:
+            window.showMaximized()
 
     # Make Ctrl-C in the launching terminal behave like a graceful quit.
     _sigint_kill_timer: threading.Timer | None = None
