@@ -103,23 +103,17 @@ class PhotoCell(QFrame):
             else:
                 if pixmap:
                     # Orientation is already applied in item.pixmap by the grid.
-                    # Center pixmap
-                    pixmap_rect = pixmap.rect()
-                    pixmap_rect.moveCenter(img_rect.center())
-
-                    # Scale to fit if too big
-                    if (
-                        pixmap_rect.width() > img_rect.width()
-                        or pixmap_rect.height() > img_rect.height()
-                    ):
+                    # Always scale to fit the image area (up or down) while
+                    # preserving aspect ratio, then keep centered.
+                    if img_rect.width() > 0 and img_rect.height() > 0:
                         scaled = pixmap.scaled(
-                            img_rect.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+                            img_rect.size(),
+                            Qt.KeepAspectRatio,
+                            Qt.SmoothTransformation,
                         )
                         pixmap_rect = scaled.rect()
                         pixmap_rect.moveCenter(img_rect.center())
                         painter.drawPixmap(pixmap_rect, scaled)
-                    else:
-                        painter.drawPixmap(pixmap_rect, pixmap)
 
             # Draw label swatch (top-right corner of image area)
             if Config.GRID_ITEM_SHOW_LABEL_SWATCH:

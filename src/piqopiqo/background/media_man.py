@@ -321,6 +321,9 @@ class MediaManager(QObject):
             complete = {k: stored.get(k) for k in self._panel_field_keys}
             self.panel_fields_ready.emit(file_path, complete)
 
+    def _is_lowres_only_mode(self) -> bool:
+        return bool(getattr(Config, "GRID_LOWRES_ONLY", False))
+
     def request_thumbnail(self, file_path: str) -> None:
         """Ensure a thumbnail is available for a file, prioritizing if visible."""
         info = self._file_infos.get(file_path)
@@ -328,9 +331,10 @@ class MediaManager(QObject):
             return
 
         self._migrate_legacy_thumbs(info)
+        lowres_only = self._is_lowres_only_mode()
 
         # Fast-path: cache exists.
-        if os.path.exists(info.hq_cache_path):
+        if (not lowres_only) and os.path.exists(info.hq_cache_path):
             self.thumb_ready.emit(file_path, "hq", info.hq_cache_path)
             self._mark_thumb_done(file_path)
             return
@@ -339,7 +343,7 @@ class MediaManager(QObject):
             self.thumb_ready.emit(file_path, "embedded", info.embedded_cache_path)
             self._mark_thumb_done(file_path)
             # Still generate HQ later if missing.
-            if not os.path.exists(info.hq_cache_path):
+            if (not lowres_only) and (not os.path.exists(info.hq_cache_path)):
                 self._queue_hq(file_path, to_visible=file_path in self._visible_paths)
             return
 
@@ -512,19 +516,30 @@ class MediaManager(QObject):
                 self._queue_combined(file_path, want_panel=True)
 
             # Thumbnails
-            if os.path.exists(info.hq_cache_path):
-                self._thumb_done.add(file_path)
-                self._thumb_completed += 1
-            elif os.path.exists(info.embedded_cache_path):
-                self._thumb_done.add(file_path)
-                self._thumb_completed += 1
-                self._queue_hq(file_path)
-            else:
-                self._queue_combined(file_path, want_embedded=True)
+            lowres_only = self._is_lowres_only_mode()
+            has_embedded = os.path.exists(info.embedded_cache_path)
+            has_hq = os.path.exists(info.hq_cache_path)
 
-            # If we want HQ thumbnails for everything, queue missing HQ.
-            if not os.path.exists(info.hq_cache_path):
-                self._queue_hq(file_path)
+            if lowres_only:
+                if has_embedded:
+                    self._thumb_done.add(file_path)
+                    self._thumb_completed += 1
+                else:
+                    self._queue_combined(file_path, want_embedded=True)
+            else:
+                if has_hq:
+                    self._thumb_done.add(file_path)
+                    self._thumb_completed += 1
+                elif has_embedded:
+                    self._thumb_done.add(file_path)
+                    self._thumb_completed += 1
+                    self._queue_hq(file_path)
+                else:
+                    self._queue_combined(file_path, want_embedded=True)
+
+                # If we want HQ thumbnails for everything, queue missing HQ.
+                if not has_hq:
+                    self._queue_hq(file_path)
 
         self.thumb_progress_updated.emit(self._thumb_completed, self._thumb_total)
         self.exif_progress_updated.emit(self._exif_completed, self._exif_total)
@@ -572,6 +587,9 @@ class MediaManager(QObject):
         target[file_path] = need
 
     def _queue_hq(self, file_path: str, *, to_visible: bool = False) -> None:
+        if self._is_lowres_only_mode():
+            return
+
         if file_path not in self._file_infos:
             return
 
@@ -909,7 +927,9 @@ class MediaManager(QObject):
                 self._mark_thumb_done(file_path)
 
             # Queue HQ if missing
-            if not os.path.exists(info.hq_cache_path):
+            if (not self._is_lowres_only_mode()) and (
+                not os.path.exists(info.hq_cache_path)
+            ):
                 self._queue_hq(file_path, to_visible=file_path in self._visible_paths)
 
             deferred = self._deferred_combined.pop(file_path, None)

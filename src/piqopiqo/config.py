@@ -133,6 +133,9 @@ class Config:
     GRID_HQ_THUMB_DELAY_ENABLED = True
     # Delay before switching from embedded to HQ after navigation stops (ms).
     GRID_HQ_THUMB_LOAD_DELAY_MS = 100
+    # If True, disable HQ thumbnail loading/generation and only use embedded
+    # previews in the grid. Useful for visual debugging of low-res rendering.
+    GRID_LOWRES_ONLY = False
 
     # Image Specs
     THUMB_MAX_DIM = 1024  # Max width/height for high-res cache

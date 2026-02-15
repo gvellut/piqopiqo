@@ -225,10 +225,17 @@ class PhotoGrid(QWidget):
         self._mark_navigation_activity()
         self._render(int(value), allow_hq=self._allow_hq_now())
 
+    def _is_lowres_only_mode(self) -> bool:
+        return bool(getattr(Config, "GRID_LOWRES_ONLY", False))
+
     def _is_hq_delay_enabled(self) -> bool:
+        if self._is_lowres_only_mode():
+            return False
         return bool(getattr(Config, "GRID_HQ_THUMB_DELAY_ENABLED", False))
 
     def _allow_hq_now(self) -> bool:
+        if self._is_lowres_only_mode():
+            return False
         return (not self._is_hq_delay_enabled()) or self._hq_display_enabled
 
     def _restart_hq_idle_timer(self) -> None:
@@ -332,7 +339,9 @@ class PhotoGrid(QWidget):
         legacy_embedded = Path(thumb_dir) / f"{base_name}_embedded.jpg"
         legacy_hq = Path(thumb_dir) / f"{base_name}_hq.jpg"
 
-        has_hq = hq_path.exists() or legacy_hq.exists()
+        has_hq = (not self._is_lowres_only_mode()) and (
+            hq_path.exists() or legacy_hq.exists()
+        )
         has_embedded = embedded_path.exists() or legacy_embedded.exists()
 
         if has_hq:
@@ -414,10 +423,12 @@ class PhotoGrid(QWidget):
 
         # Delay mode only blocks new HQ loads. If HQ is already in memory, keep
         # showing it until evicted outside the buffered range.
-        if getattr(item, "hq_pixmap", None) is not None:
+        if (not self._is_lowres_only_mode()) and getattr(
+            item, "hq_pixmap", None
+        ) is not None:
             source = item.hq_pixmap
         else:
-            source = item.embedded_pixmap or item.hq_pixmap
+            source = item.embedded_pixmap
 
         # Only rebuild display pixmap if source or orientation changed.
         db_meta = item.db_metadata or {}

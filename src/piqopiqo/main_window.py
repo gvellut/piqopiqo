@@ -851,6 +851,8 @@ class MainWindow(QMainWindow):
         item = self._items_by_path.get(file_path)
         if item is None:
             return
+        if getattr(Config, "GRID_LOWRES_ONLY", False) and thumb_type != "embedded":
+            return
 
         state = 1 if thumb_type == "embedded" else 2
 
