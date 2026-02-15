@@ -128,10 +128,10 @@ def cli(folder, dyn):
             window.showMaximized()
     else:
         geo = state.get(StateKey.windowGeometry)
-        if geo and not geo.isEmpty():
+        if geo is not None:
             window.restoreGeometry(geo)
             win_st = state.get(StateKey.windowState)
-            if win_st and not win_st.isEmpty():
+            if win_st is not None:
                 window.restoreState(win_st)
             window.show()
         else:

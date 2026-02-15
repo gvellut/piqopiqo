@@ -4,6 +4,7 @@ from enum import StrEnum
 import json
 import logging
 
+from attrs import define
 from PySide6.QtCore import QByteArray, QSettings
 
 logger = logging.getLogger(__name__)
@@ -32,29 +33,25 @@ class StateKey(StrEnum):
     rightSplitter = "rightSplitter"
 
 
-# Default values for each state key.
-# The type is inferred from the default (None defaults are treated as str).
-STATE_DEFAULTS: dict[StateKey, object] = {
-    StateKey.lastFolder: None,
-    StateKey.copySdEject: True,
-    StateKey.copySdNameSuffix: "",
-    StateKey.copySdDateSpec: "since:last",
-    StateKey.windowGeometry: QByteArray(),
-    StateKey.windowState: QByteArray(),
-    StateKey.mainSplitter: QByteArray(),
-    StateKey.rightSplitter: QByteArray(),
-}
+@define
+class _StateDef:
+    """Definition of a single state entry: group, stored type, default."""
 
-# Which QSettings group each key belongs to.
-_KEY_GROUPS: dict[StateKey, StateGroup] = {
-    StateKey.lastFolder: StateGroup.AppState,
-    StateKey.copySdEject: StateGroup.AppState,
-    StateKey.copySdNameSuffix: StateGroup.AppState,
-    StateKey.copySdDateSpec: StateGroup.AppState,
-    StateKey.windowGeometry: StateGroup.Qt,
-    StateKey.windowState: StateGroup.Qt,
-    StateKey.mainSplitter: StateGroup.Qt,
-    StateKey.rightSplitter: StateGroup.Qt,
+    group: StateGroup
+    typ: type = str  # Python type used for QSettings read/write
+    default: object = None  # None means "no default, returns None when unset"
+
+
+# Single source of truth for every state key.
+_REGISTRY: dict[StateKey, _StateDef] = {
+    StateKey.lastFolder: _StateDef(StateGroup.AppState),
+    StateKey.copySdEject: _StateDef(StateGroup.AppState, bool, True),
+    StateKey.copySdNameSuffix: _StateDef(StateGroup.AppState, str, ""),
+    StateKey.copySdDateSpec: _StateDef(StateGroup.AppState, str, "since:last"),
+    StateKey.windowGeometry: _StateDef(StateGroup.Qt, QByteArray),
+    StateKey.windowState: _StateDef(StateGroup.Qt, QByteArray),
+    StateKey.mainSplitter: _StateDef(StateGroup.Qt, QByteArray),
+    StateKey.rightSplitter: _StateDef(StateGroup.Qt, QByteArray),
 }
 
 
@@ -75,11 +72,9 @@ class StateStore:
             self._settings = None
 
     def get(self, key: StateKey):
-        """Read a state value. Returns the typed value or the default."""
-        group = _KEY_GROUPS[key]
-        default = STATE_DEFAULTS[key]
-        typ = type(default) if default is not None else str
-        full_key = f"{group}/{key}"
+        """Read a state value. Returns the typed value, the default, or None."""
+        entry = _REGISTRY[key]
+        full_key = f"{entry.group}/{key}"
 
         # In-memory cache (values set this session)
         if full_key in self._memory:
@@ -87,38 +82,34 @@ class StateStore:
 
         # In dyn mode, return default directly
         if self._dyn:
-            return default
+            return entry.default
+
+        # Key not in QSettings at all -> return default (which may be None)
+        if not self._settings.contains(full_key):
+            return entry.default
 
         # Read from QSettings with explicit type
-        if default is None:
-            # None-default keys: stored as "" in QSettings, returned as None if empty
-            value = self._settings.value(full_key, defaultValue="", type=str)
-            return value if value != "" else None
-        elif typ is QByteArray:
-            return self._settings.value(full_key, defaultValue=default, type=QByteArray)
-        elif typ is bool:
-            return self._settings.value(full_key, defaultValue=default, type=bool)
-        elif typ is int:
-            return self._settings.value(full_key, defaultValue=default, type=int)
-        elif typ is float:
-            return self._settings.value(full_key, defaultValue=default, type=float)
-        elif typ in (dict, list, tuple):
-            raw = self._settings.value(full_key, defaultValue="", type=str)
-            if not raw:
-                return default
+        if entry.typ is QByteArray:
+            return self._settings.value(full_key, type=QByteArray)
+        elif entry.typ is bool:
+            return self._settings.value(full_key, type=bool)
+        elif entry.typ is int:
+            return self._settings.value(full_key, type=int)
+        elif entry.typ is float:
+            return self._settings.value(full_key, type=float)
+        elif entry.typ in (dict, list, tuple):
+            raw = self._settings.value(full_key, type=str)
             try:
                 return json.loads(raw)
             except (json.JSONDecodeError, TypeError):
-                return default
+                return entry.default
         else:
-            return self._settings.value(full_key, defaultValue=default, type=str)
+            return self._settings.value(full_key, type=str)
 
     def set(self, key: StateKey, value):
         """Write a state value. In dyn mode, only updates in-memory cache."""
-        group = _KEY_GROUPS[key]
-        default = STATE_DEFAULTS[key]
-        typ = type(default) if default is not None else str
-        full_key = f"{group}/{key}"
+        entry = _REGISTRY[key]
+        full_key = f"{entry.group}/{key}"
 
         self._memory[full_key] = value
 
@@ -128,7 +119,7 @@ class StateStore:
         # Serialize for QSettings
         if value is None:
             self._settings.setValue(full_key, "")
-        elif typ in (dict, list, tuple):
+        elif entry.typ in (dict, list, tuple):
             self._settings.setValue(full_key, json.dumps(value))
         else:
             self._settings.setValue(full_key, value)

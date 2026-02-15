@@ -121,11 +121,11 @@ class MainWindow(QMainWindow):
         # Restore splitter state from saved settings
         state = get_state()
         splitter_state = state.get(StateKey.mainSplitter)
-        if splitter_state and not splitter_state.isEmpty():
+        if splitter_state is not None:
             self._main_splitter.restoreState(splitter_state)
         if self._right_splitter:
             right_state = state.get(StateKey.rightSplitter)
-            if right_state and not right_state.isEmpty():
+            if right_state is not None:
                 self._right_splitter.restoreState(right_state)
 
         # Status bar (standard QMainWindow status bar)
