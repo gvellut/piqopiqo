@@ -70,12 +70,7 @@ class StateStore:
         self._memory: dict[str, object] = {}
 
         if not dyn:
-            self._settings = QSettings(
-                QSettings.Format.NativeFormat,
-                QSettings.Scope.UserScope,
-                ORG_NAME,
-                APP_NAME,
-            )
+            self._settings = QSettings()
         else:
             self._settings = None
 
