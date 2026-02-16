@@ -758,7 +758,7 @@ def launch_copy_sd(parent=None):
         )
         return
 
-    from .state import StateKey, get_state
+    from .settings_state import StateKey, get_state
 
     state = get_state()
     name = state.get(StateKey.copySdNameSuffix)

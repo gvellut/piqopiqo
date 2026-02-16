@@ -10,7 +10,7 @@ from pathlib import Path
 from attrs import define, field
 
 from .config import Config
-from .state import get_support_dir
+from .settings_state import get_support_dir
 
 logger = logging.getLogger(__name__)
 

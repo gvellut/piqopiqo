@@ -20,7 +20,7 @@ except ImportError:
 from .config import Config, apply_env_overrides
 from .folder_scan import scan_folder
 from .main_window import MainWindow
-from .state import (
+from .settings_state import (
     APP_NAME,
     ORG_DOMAIN,
     ORG_NAME,

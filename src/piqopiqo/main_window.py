@@ -49,7 +49,7 @@ from .panels import (
 )
 from .photo_model import PhotoListModel, SortOrder
 from .shortcuts import parse_shortcut
-from .state import APP_NAME, StateKey, get_state
+from .settings_state import APP_NAME, StateKey, get_state
 
 logger = logging.getLogger(__name__)
 

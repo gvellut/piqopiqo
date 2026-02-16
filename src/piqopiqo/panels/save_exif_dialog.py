@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 from piqopiqo.keyword_utils import parse_keywords
 from piqopiqo.metadata.db_fields import DB_TO_EXIF_WRITE_MAPPING, DBFields
 from piqopiqo.model import ImageItem
-from piqopiqo.state import APP_NAME
+from piqopiqo.settings_state import APP_NAME
 
 if TYPE_CHECKING:
     from ..background.media_man import MediaManager
