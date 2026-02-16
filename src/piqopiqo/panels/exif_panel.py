@@ -92,8 +92,8 @@ class ExifPanel(QWidget):
         self.layout = QGridLayout(container)
         self.layout.setContentsMargins(10, 10, 10, 10)
         self.layout.setSpacing(Config.EXIF_PANEL_ROW_SPACING)
-        self.layout.setColumnStretch(0, Config.EXIF_PANEL_LAYOUT[0])
-        self.layout.setColumnStretch(1, Config.EXIF_PANEL_LAYOUT[1])
+        self.layout.setColumnStretch(0, Config.EXIF_PANEL_COLUMN_STRETCH[0])
+        self.layout.setColumnStretch(1, Config.EXIF_PANEL_COLUMN_STRETCH[1])
 
         # Create labels once for all fields
         self.field_labels = []

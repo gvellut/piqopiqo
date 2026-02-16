@@ -7,38 +7,29 @@ from .shortcuts import Shortcut
 ENV_PREFIX = "PIQO_"
 
 
-class Config:
-    # FIXME Add verification for existence + dialog to set at startup
-    # FIXME mode : dyn (no saved settings => read from here) auto (no dialog)
-    # FIXME kw (for keywords saved) + state (for reading / persisting state)
-    # "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
-    # # "/Volumes/CrucialX8/projects/piqopiqo/cache"
-    CACHE_BASE_DIR = "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
+class ConfigNoUserSettings:
+    # options useful for testing (set with env var)
+
+    # Keyword Tree
+    # If True, the keyword tree is not persisted (in-memory only for testing)
+    DETACHED_KEYWORD_TREE = False
 
     # Initial window resolution (format: "WIDTHxHEIGHT", e.g. "1280x800")
     # If None, the window opens maximized.
     INITIAL_RESOLUTION = None
 
-    # EXIF tool
-    # None for taken from PATH : with PyInstaller : not taken into account
-    # FIXME add verification + dialog to set at startup
-    EXIFTOOL_PATH = "/opt/homebrew/bin/exiftool"
+    # internal options
+
+    EXIF_PANEL_COLUMN_STRETCH = (30, 70)
+    EXIF_PANEL_ROW_SPACING = 5  # Fixed spacing between rows in pixels
+
+    # Show label as colored swatch on top-right of grid item
+    GRID_ITEM_SHOW_LABEL_SWATCH = True
 
     # Auto-format exiftool keys for display when no label is provided.
     # If True: "File:FileName" => "File Name"
     # If False: uses the raw exiftool key as-is
     EXIF_AUTO_FORMAT = True
-
-    EXIF_FIELDS = [
-        ExifField("EXIF:FocalLength"),
-        ExifField("Composite:ShutterSpeed#", "Shutter Speed"),
-        ExifField("EXIF:FNumber", "F-Number"),
-        ExifField("EXIF:ISO"),
-        ExifField("EXIF:DateTimeOriginal", "Date/Time Original"),
-        ExifField("File:FileName", "File Name"),
-    ]
-    EXIF_PANEL_LAYOUT = (30, 70)
-    EXIF_PANEL_ROW_SPACING = 5  # Fixed spacing between rows in pixels
 
     # Concurrency
     MAX_WORKERS = 4
@@ -52,7 +43,6 @@ class Config:
     SHUTDOWN_TIMEOUT_S = 5.0
 
     # Grid Layout Options
-    NUM_COLUMNS = 6
     PADDING = 10  # Pixels between cells/edges
     FONT_SIZE = 12  # Approx pixel height of text
     GRID_ITEM_TEXT_FIELDS_TOP_PADDING = 10
@@ -70,14 +60,6 @@ class Config:
     # previews in the grid. Useful for visual debugging of low-res rendering.
     GRID_LOWRES_ONLY = False
 
-    # Image Specs
-    THUMB_MAX_DIM = 1024  # Max width/height for high-res cache
-
-    CLEAR_CACHE_ON_START = False
-
-    # Fullscreen overlay settings
-    FULLSCREEN_BACKGROUND_COLOR = "black"
-
     ZOOM_WHEEL_SENSITIVITY = 1
     PAN_EMPTY_SPACE = 300
     PAN_CURSOR_DELAY_MS = 100  # Delay before showing pan cursor on mouse press
@@ -89,19 +71,55 @@ class Config:
     INFO_PANEL_MARGIN_BOTTOM = 10  # Space from bottom (or top) edge of screen
     INFO_PANEL_MARGIN_SIDE = 10  # Space from left side of screen
     INFO_PANEL_POSITION = "bottom"  # "top" or "bottom"
-    INFO_PANEL_TIMER_MS = 1000
-
-    # Selection Behavior
-    ON_FULLSCREEN_EXIT = OnFullscreenExitMultipleSelected.KEEP_SELECTION
+    INFO_PANEL_ZOOM_PERCENT_OVERLAY_TIMER_MS = 1000
 
     # Editable Metadata Panel
     SHOW_EDIT_PANEL = True
     TITLE_MAX_LENGTH = 128
     DESCRIPTION_MAX_LENGTH = 128
 
-    # Keyword Tree
-    # If True, the keyword tree is not persisted (in-memory only for testing)
-    DETACHED_KEYWORD_TREE = False
+    # Grid item metadata display
+    # List of DB field names to show below filename in grid items
+    # TODO add setting : do not show title
+    # TODO add setting : if no time taken : show date created in FS or do it
+    # automatically
+    GRID_ITEM_FIELDS = ["title", "time_taken"]
+
+
+class Config(ConfigNoUserSettings):
+    # FIXME Add verification for existence + dialog to set at startup
+    # or set to computed ie in Library Application Support
+    # "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
+    # # "/Volumes/CrucialX8/projects/piqopiqo/cache"
+    CACHE_BASE_DIR = "/Volumes/CrucialX9Pro/projects/piqopiqo/cache"
+
+    # EXIF tool
+    # None for taken from PATH : with PyInstaller : not taken into account
+    # FIXME add verification + dialog to set at startup
+    EXIFTOOL_PATH = "/opt/homebrew/bin/exiftool"
+
+    EXIF_FIELDS = [
+        ExifField("EXIF:FocalLength"),
+        ExifField("Composite:ShutterSpeed", "Shutter Speed"),
+        ExifField("EXIF:FNumber", "F-Number"),
+        ExifField("EXIF:ISO"),
+        ExifField("EXIF:DateTimeOriginal", "Date/Time Original"),
+        ExifField("File:FileName", "File Name"),
+    ]
+
+    # Grid Layout Options
+    NUM_COLUMNS = 6
+
+    # Image Specs
+    THUMB_MAX_DIM = 1024  # Max width/height for high-res cache
+
+    CLEAR_CACHE_ON_START = False
+
+    # Fullscreen overlay settings
+    FULLSCREEN_BACKGROUND_COLOR = "black"
+
+    # Selection Behavior
+    ON_FULLSCREEN_EXIT = OnFullscreenExitMultipleSelected.KEEP_SELECTION
 
     # Status labels (name, hex color, index for shortcut key)
     STATUS_LABELS = [
@@ -110,15 +128,6 @@ class Config:
         StatusLabel("Uploaded", "#00FF00", 3),
         StatusLabel("Verification", "#0000FF", 4),
     ]
-
-    # Grid item metadata display
-    # List of DB field names to show below filename in grid items
-    # Available: "title", "time_taken", "keywords", "description"
-    # Note: "label" is handled separately (shown as swatch, not text)
-    GRID_ITEM_FIELDS = ["title", "time_taken"]
-
-    # Show label as colored swatch on top-right of grid item
-    GRID_ITEM_SHOW_LABEL_SWATCH = True
 
     # External applications
     # Application name for viewing photos (e.g. "Preview", "Adobe Lightroom")
@@ -148,12 +157,7 @@ class Config:
         Shortcut.SELECT_ALL: "ctrl+a",
     }
 
-    BASE_EXTERNAL_FOLDER = "/Volumes/CrucialX8/photos"
-    # SDCARD_NAMES = ["tz95", "rx100", "xs20"]
-    COPY_SD_DEFAULT_NAME = "annecy"
-    COPY_SD_DATE_SPEC = "since:last"
-    ZOOM_DIR = "tz95"
-    ZOOM_PREFIX = "P"
+    COPY_SD_BASE_EXTERNAL_FOLDER = "/Volumes/CrucialX8/photos"
 
 
 def apply_env_overrides():

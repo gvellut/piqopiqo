@@ -142,7 +142,7 @@ class FullscreenOverlay(QWidget):
         """Creates the zoom overlay controller that manages visibility."""
         self._zoom_overlay_controller = ZoomOverlayController(
             overlay_widget=self.zoom_overlay,
-            timer_ms=Config.INFO_PANEL_TIMER_MS,
+            timer_ms=Config.INFO_PANEL_ZOOM_PERCENT_OVERLAY_TIMER_MS,
             get_base_scale=self._get_base_scale_factor,
             get_device_pixel_ratio=lambda: self._device_pixel_ratio,
             update_overlay_position=self._position_zoom_overlay,

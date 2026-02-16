@@ -78,7 +78,7 @@ class ZoomOverlayController:
 
     This class manages:
     - When to show/hide the zoom overlay based on zoom state changes
-    - Auto-hide timer for the overlay
+    - Auto-hide timer for the zoom percent overlay
     - Immediate hiding when returning to base view (no lingering)
     """
 
@@ -94,7 +94,7 @@ class ZoomOverlayController:
 
         Args:
             overlay_widget: The QLabel widget displaying zoom percentage
-            timer_ms: Duration in ms before auto-hiding the overlay
+            timer_ms: Duration in ms before auto-hiding the zoom percent overlay
             get_base_scale: Callback to get current base scale factor
             get_device_pixel_ratio: Callback to get device pixel ratio
             update_overlay_position: Callback to update overlay position/text

@@ -142,7 +142,7 @@ def to_dates(date_s, volume: PhotoVolume):
         if date_s == "last":
             folder_for_sd = volume.name
             dirs = find_date_folders(
-                Config.BASE_EXTERNAL_FOLDER, subfolder=folder_for_sd
+                Config.COPY_SD_BASE_EXTERNAL_FOLDER, subfolder=folder_for_sd
             )
             if dirs:
                 # replace with last folder in order
@@ -433,7 +433,7 @@ class CopySdInputDialog(QDialog):
 
         info_label = QLabel(
             f"Detected volume: {volume.name} ({volume.path})\n"
-            f"Destination base: {Config.BASE_EXTERNAL_FOLDER}"
+            f"Destination base: {Config.COPY_SD_BASE_EXTERNAL_FOLDER}"
         )
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
@@ -739,7 +739,7 @@ def launch_copy_sd(parent=None):
         QMessageBox.warning(parent, "Copy from SD", error_txt)
         return
 
-    output_parent_folder = Config.BASE_EXTERNAL_FOLDER
+    output_parent_folder = Config.COPY_SD_BASE_EXTERNAL_FOLDER
     if not output_parent_folder:
         QMessageBox.critical(
             parent,
