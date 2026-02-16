@@ -38,7 +38,7 @@ class StateKey(StrEnum):
 
 
 @define
-class _StateDef:
+class StateDef:
     """Definition of a single state entry: group, stored type, default."""
 
     group: StateGroup
@@ -47,15 +47,15 @@ class _StateDef:
 
 
 # Single source of truth for every state key.
-_REGISTRY: dict[StateKey, _StateDef] = {
-    StateKey.LAST_FOLDER: _StateDef(StateGroup.APP_STATE),
-    StateKey.COPY_SD_EJECT: _StateDef(StateGroup.APP_STATE, bool, True),
-    StateKey.COPY_SD_NAME_SUFFIX: _StateDef(StateGroup.APP_STATE, str, ""),
-    StateKey.COPY_SD_DATE_SPEC: _StateDef(StateGroup.APP_STATE, str, "since:last"),
-    StateKey.WINDOW_GEOMETRY: _StateDef(StateGroup.QT, QByteArray),
-    StateKey.WINDOW_STATE: _StateDef(StateGroup.QT, QByteArray),
-    StateKey.MAIN_SPLITTER: _StateDef(StateGroup.QT, QByteArray),
-    StateKey.RIGHT_SPLITTER: _StateDef(StateGroup.QT, QByteArray),
+_REGISTRY: dict[StateKey, StateDef] = {
+    StateKey.LAST_FOLDER: StateDef(StateGroup.APP_STATE),
+    StateKey.COPY_SD_EJECT: StateDef(StateGroup.APP_STATE, bool, True),
+    StateKey.COPY_SD_NAME_SUFFIX: StateDef(StateGroup.APP_STATE, str, ""),
+    StateKey.COPY_SD_DATE_SPEC: StateDef(StateGroup.APP_STATE, str, "since:last"),
+    StateKey.WINDOW_GEOMETRY: StateDef(StateGroup.QT, QByteArray),
+    StateKey.WINDOW_STATE: StateDef(StateGroup.QT, QByteArray),
+    StateKey.MAIN_SPLITTER: StateDef(StateGroup.QT, QByteArray),
+    StateKey.RIGHT_SPLITTER: StateDef(StateGroup.QT, QByteArray),
 }
 
 
