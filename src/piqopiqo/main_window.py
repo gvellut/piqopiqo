@@ -48,8 +48,8 @@ from .panels import (
     LoadingStatusBar,
 )
 from .photo_model import PhotoListModel, SortOrder
-from .shortcuts import parse_shortcut
 from .settings_state import APP_NAME, StateKey, get_state
+from .shortcuts import parse_shortcut
 
 logger = logging.getLogger(__name__)
 
@@ -120,11 +120,11 @@ class MainWindow(QMainWindow):
 
         # Restore splitter state from saved settings
         state = get_state()
-        splitter_state = state.get(StateKey.mainSplitter)
+        splitter_state = state.get(StateKey.MAIN_SPLITTER)
         if splitter_state:
             self._main_splitter.restoreState(splitter_state)
         if self._right_splitter:
-            right_state = state.get(StateKey.rightSplitter)
+            right_state = state.get(StateKey.RIGHT_SPLITTER)
             if right_state:
                 self._right_splitter.restoreState(right_state)
 
@@ -664,7 +664,7 @@ class MainWindow(QMainWindow):
         logger.info(f"Found {len(images)} images in {len(source_folders)} folder(s)")
 
         # Save as last folder
-        get_state().set(StateKey.lastFolder, folder)
+        get_state().set(StateKey.LAST_FOLDER, folder)
 
         # Update state
         self.root_folder = folder
@@ -1241,11 +1241,11 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         # Save window and splitter state
         state = get_state()
-        state.set(StateKey.windowGeometry, self.saveGeometry())
-        state.set(StateKey.windowState, self.saveState())
-        state.set(StateKey.mainSplitter, self._main_splitter.saveState())
+        state.set(StateKey.WINDOW_GEOMETRY, self.saveGeometry())
+        state.set(StateKey.WINDOW_STATE, self.saveState())
+        state.set(StateKey.MAIN_SPLITTER, self._main_splitter.saveState())
         if self._right_splitter:
-            state.set(StateKey.rightSplitter, self._right_splitter.saveState())
+            state.set(StateKey.RIGHT_SPLITTER, self._right_splitter.saveState())
 
         # Stop background workers first to avoid noisy teardown.
         self._stop_folder_watcher()

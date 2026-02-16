@@ -761,8 +761,8 @@ def launch_copy_sd(parent=None):
     from .settings_state import StateKey, get_state
 
     state = get_state()
-    name = state.get(StateKey.copySdNameSuffix)
-    date_spec = state.get(StateKey.copySdDateSpec)
+    name = state.get(StateKey.COPY_SD_NAME_SUFFIX)
+    date_spec = state.get(StateKey.COPY_SD_DATE_SPEC)
 
     while True:
         dialog = CopySdInputDialog(
@@ -807,7 +807,7 @@ def launch_copy_sd(parent=None):
         logger.warning("Aborted by user")
         return
 
-    should_eject = state.get(StateKey.copySdEject)
+    should_eject = state.get(StateKey.COPY_SD_EJECT)
     progress_dialog = CopySdProgressDialog(
         volume, dates, output_folder_base, should_eject=should_eject, parent=parent
     )
@@ -815,6 +815,6 @@ def launch_copy_sd(parent=None):
     progress_dialog.exec()
 
     # Save user choices for next session
-    state.set(StateKey.copySdNameSuffix, name)
-    state.set(StateKey.copySdDateSpec, date_spec)
-    state.set(StateKey.copySdEject, progress_dialog.eject_checkbox.isChecked())
+    state.set(StateKey.COPY_SD_NAME_SUFFIX, name)
+    state.set(StateKey.COPY_SD_DATE_SPEC, date_spec)
+    state.set(StateKey.COPY_SD_EJECT, progress_dialog.eject_checkbox.isChecked())

@@ -100,7 +100,7 @@ def cli(folder, dyn):
 
     # Determine which folder to open
     if folder is None:
-        last = state.get(StateKey.lastFolder)
+        last = state.get(StateKey.LAST_FOLDER)
         if last and os.path.isdir(last):
             folder = last
             logger.info(f"Opening last folder: {folder}")
@@ -113,7 +113,7 @@ def cli(folder, dyn):
         images, source_folders = scan_folder(folder)
         print(f"Found {len(images)} images in {len(source_folders)} folder(s).")
         # Save as last folder
-        state.set(StateKey.lastFolder, folder)
+        state.set(StateKey.LAST_FOLDER, folder)
 
     icon_path = resource_path("app.icns")
     app.setWindowIcon(QIcon(icon_path))
@@ -133,10 +133,10 @@ def cli(folder, dyn):
             )
             window.showMaximized()
     else:
-        geo = state.get(StateKey.windowGeometry)
+        geo = state.get(StateKey.WINDOW_GEOMETRY)
         if geo is not None:
             window.restoreGeometry(geo)
-            win_st = state.get(StateKey.windowState)
+            win_st = state.get(StateKey.WINDOW_STATE)
             if win_st is not None:
                 window.restoreState(win_st)
             window.show()
