@@ -1,5 +1,8 @@
 - [Settings](D.A_Settings.md)
 - [Details](F_Details.md)
+- [Settings create](G_Settings_create.md)
+- [gpx2exif](H_gpx2exif.md)
+- [Flickr upload](I_Flickr_upload.md)
 ! [Fix date read delay if since:last](A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](B_Eject_SD_after_user_OK.md)
     !? [GUI lag](B.A_GUI_lag.md)

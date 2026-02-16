@@ -85,6 +85,23 @@ class ConfigNoUserSettings:
     # automatically
     GRID_ITEM_FIELDS = ["title", "time_taken"]
 
+    EXIF_FIELDS = [
+        ExifField("EXIF:FocalLength"),
+        ExifField("Composite:ShutterSpeed", "Shutter Speed"),
+        ExifField("EXIF:FNumber", "F-Number"),
+        ExifField("EXIF:ISO"),
+        ExifField("EXIF:DateTimeOriginal", "Date/Time Original"),
+        ExifField("File:FileName", "File Name"),
+    ]
+
+    # Image Specs
+    THUMB_MAX_DIM = 1024  # Max width/height for high-res cache
+
+    # Fullscreen overlay settings
+    FULLSCREEN_BACKGROUND_COLOR = "black"
+
+    CLEAR_CACHE_ON_START = False
+
 
 class Config(ConfigNoUserSettings):
     # FIXME Add verification for existence + dialog to set at startup
@@ -98,25 +115,11 @@ class Config(ConfigNoUserSettings):
     # FIXME add verification + dialog to set at startup
     EXIFTOOL_PATH = "/opt/homebrew/bin/exiftool"
 
-    EXIF_FIELDS = [
-        ExifField("EXIF:FocalLength"),
-        ExifField("Composite:ShutterSpeed", "Shutter Speed"),
-        ExifField("EXIF:FNumber", "F-Number"),
-        ExifField("EXIF:ISO"),
-        ExifField("EXIF:DateTimeOriginal", "Date/Time Original"),
-        ExifField("File:FileName", "File Name"),
-    ]
+    # TODO add to the exif fields at run time
+    CUSTOM_EXIF_FIELDS = []
 
     # Grid Layout Options
     NUM_COLUMNS = 6
-
-    # Image Specs
-    THUMB_MAX_DIM = 1024  # Max width/height for high-res cache
-
-    CLEAR_CACHE_ON_START = False
-
-    # Fullscreen overlay settings
-    FULLSCREEN_BACKGROUND_COLOR = "black"
 
     # Selection Behavior
     ON_FULLSCREEN_EXIT = OnFullscreenExitMultipleSelected.KEEP_SELECTION
