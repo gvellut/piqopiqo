@@ -3,14 +3,9 @@ settings :
 
 Like the state : stored in the QSettings
 
-see https://github.com/pythonguis/pyqtconfig
+The src/piqopiqo/config.py should be rolled into state.py with the name changed to settings_state.py
 
-separate db from the state DB (one for each so easy to clear by deelting)
-Stored in the support dir (get_support_dir) like the state DB.
-Same format : Use simple structure : Key TEXT , Value TEXT. If the value must be an array or some python structure : it must be serialized as string and parsed as JSON.
-
-
-NativeFormat
+The settings use the same QSettings backing file as the settings
 
 
 add --dyn (dynamic) option => to ignore saved settings + state + do not write : for dev or testing. All in memory.

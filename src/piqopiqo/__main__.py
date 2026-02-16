@@ -20,8 +20,14 @@ except ImportError:
 from .config import Config, apply_env_overrides
 from .folder_scan import scan_folder
 from .main_window import MainWindow
-from .state import APP_NAME, ORG_DOMAIN, ORG_NAME, StateKey, init_state
-from .support import get_cache_base_dir
+from .state import (
+    APP_NAME,
+    ORG_DOMAIN,
+    ORG_NAME,
+    StateKey,
+    get_cache_base_dir,
+    init_state,
+)
 from .utils import setup_logging
 
 
