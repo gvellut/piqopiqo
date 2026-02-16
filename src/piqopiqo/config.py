@@ -1,77 +1,10 @@
-from enum import auto
 import os
-import re
 
 from .model import ExifField, OnFullscreenExitMultipleSelected, StatusLabel
-from .utils import UpperStrEnum
-
-
-def format_exif_key(key: str) -> str:
-    """Auto-format an exiftool key for display.
-
-    Removes the prefix (before colon) and adds spaces around capital letters.
-    Examples:
-        "File:FileName" => "File Name"
-        "EXIF:DateTimeOriginal" => "Date Time Original"
-        "EXIF:FNumber" => "F Number"
-
-    Args:
-        key: The exiftool key (e.g., "EXIF:DateTimeOriginal")
-
-    Returns:
-        Formatted display string
-    """
-    # Remove prefix (e.g., "EXIF:", "File:")
-    if ":" in key:
-        key = key.split(":", 1)[1]
-
-    # Insert space before each capital letter that follows a lowercase letter
-    # or before a capital letter that is followed by a lowercase letter
-    formatted = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", key)
-    formatted = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", " ", formatted)
-
-    return formatted
-
-
-def get_exif_display_label(field: "ExifField") -> str:
-    """Get the display label for an ExifField.
-
-    If the field has an explicit label, use it.
-    If EXIF_AUTO_FORMAT is True and no label, auto-format the key.
-    Otherwise, return the raw key.
-
-    Args:
-        field: The ExifField instance
-
-    Returns:
-        The display label string
-    """
-    if field.label is not None:
-        return field.label
-    if Config.EXIF_AUTO_FORMAT:
-        return format_exif_key(field.key)
-    return field.key
-
+from .shortcuts import Shortcut
 
 # Environment variable prefix for config overrides
 ENV_PREFIX = "PIQO_"
-
-
-class Shortcut(UpperStrEnum):
-    ZOOM_IN = auto()
-    ZOOM_OUT = auto()
-    ZOOM_RESET = auto()
-    LABEL_1 = auto()
-    LABEL_2 = auto()
-    LABEL_3 = auto()
-    LABEL_4 = auto()
-    LABEL_5 = auto()
-    LABEL_6 = auto()
-    LABEL_7 = auto()
-    LABEL_8 = auto()
-    LABEL_9 = auto()
-    LABEL_NONE = auto()
-    SELECT_ALL = auto()
 
 
 class Config:
@@ -98,7 +31,7 @@ class Config:
 
     EXIF_FIELDS = [
         ExifField("EXIF:FocalLength"),
-        ExifField("EXIF:ExposureTime", "Shutter Speed"),
+        ExifField("Composite:ShutterSpeed#", "Shutter Speed"),
         ExifField("EXIF:FNumber", "F-Number"),
         ExifField("EXIF:ISO"),
         ExifField("EXIF:DateTimeOriginal", "Date/Time Original"),

@@ -244,4 +244,4 @@ After completing a feature, update this file AGENTS.md with the updated project 
 
 ## Do not read
 
-Do not read any file from the .prompts folder or .prompts_archive.
+Do not read any file from the .prompts folder or .prompts_archive except explicitly told so in the prompt.

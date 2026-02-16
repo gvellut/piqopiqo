@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -14,10 +15,57 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.components.ellided_label import EllidedLabel
-from piqopiqo.config import Config, get_exif_display_label
-from piqopiqo.model import ImageItem
+from piqopiqo.config import Config
+from piqopiqo.model import ExifField, ImageItem
 
 logger = logging.getLogger(__name__)
+
+
+def format_exif_key(key: str) -> str:
+    """Auto-format an exiftool key for display.
+
+    Removes the prefix (before colon) and adds spaces around capital letters.
+    Examples:
+        "File:FileName" => "File Name"
+        "EXIF:DateTimeOriginal" => "Date Time Original"
+        "EXIF:FNumber" => "F Number"
+
+    Args:
+        key: The exiftool key (e.g., "EXIF:DateTimeOriginal")
+
+    Returns:
+        Formatted display string
+    """
+    # Remove prefix (e.g., "EXIF:", "File:")
+    if ":" in key:
+        key = key.split(":", 1)[1]
+
+    # Insert space before each capital letter that follows a lowercase letter
+    # or before a capital letter that is followed by a lowercase letter
+    formatted = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", key)
+    formatted = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", " ", formatted)
+
+    return formatted
+
+
+def get_exif_display_label(field: ExifField) -> str:
+    """Get the display label for an ExifField.
+
+    If the field has an explicit label, use it.
+    If EXIF_AUTO_FORMAT is True and no label, auto-format the key.
+    Otherwise, return the raw key.
+
+    Args:
+        field: The ExifField instance
+
+    Returns:
+        The display label string
+    """
+    if field.label is not None:
+        return field.label
+    if Config.EXIF_AUTO_FORMAT:
+        return format_exif_key(field.key)
+    return field.key
 
 
 class ExifPanel(QWidget):

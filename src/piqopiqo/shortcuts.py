@@ -1,11 +1,31 @@
 from __future__ import annotations
 
+from enum import auto
 import logging
 
 from PySide6.QtCore import QKeyCombination, Qt
 from PySide6.QtGui import QKeyEvent, QKeySequence
 
+from .utils import UpperStrEnum
+
 logger = logging.getLogger(__name__)
+
+
+class Shortcut(UpperStrEnum):
+    ZOOM_IN = auto()
+    ZOOM_OUT = auto()
+    ZOOM_RESET = auto()
+    LABEL_1 = auto()
+    LABEL_2 = auto()
+    LABEL_3 = auto()
+    LABEL_4 = auto()
+    LABEL_5 = auto()
+    LABEL_6 = auto()
+    LABEL_7 = auto()
+    LABEL_8 = auto()
+    LABEL_9 = auto()
+    LABEL_NONE = auto()
+    SELECT_ALL = auto()
 
 
 def parse_shortcut(shortcut_str: str) -> QKeySequence:

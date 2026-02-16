@@ -1,6 +1,8 @@
 
 settings :
 
+Like the state : stored in the QSettings
+
 see https://github.com/pythonguis/pyqtconfig
 
 separate db from the state DB (one for each so easy to clear by deelting)
