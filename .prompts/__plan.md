@@ -1,6 +1,3 @@
-* [Settings](D.A_Settings.md)
-    !? [Arrange settings panel](D.A.A_Arrange_settings_panel.md)
-    !? [Arrange settings panel](D.A.B_Arrange_settings_panel.md)
 - [Details](F_Details.md)
 - [Settings create](G_Settings_create.md)
 - [gpx2exif](H_gpx2exif.md)
@@ -12,3 +9,6 @@
 ! [Memory grows + lag](C_Memory_grows_lag.md)
 ! [Settings & state](D_Settings_state.md)
 ! [Lores Thumbnails scale up](E_Lores_Thumbnails_scale_up.md)
+! [Settings](D.A_Settings.md)
+    !? [Arrange settings panel](D.A.A_Arrange_settings_panel.md)
+    !? [Arrange settings panel](D.A.B_Arrange_settings_panel.md)
