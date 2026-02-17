@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import auto
 from typing import TYPE_CHECKING
 
 import attr
 from attrs import define
+
+from .utils import UpperStrEnum
 
 if TYPE_CHECKING:
     from PySide6.QtGui import QPixmap
@@ -66,9 +68,9 @@ class ImageItem:
     db_metadata: dict | None = None  # Cached DB metadata for editable fields
 
 
-class OnFullscreenExitMultipleSelected(Enum):
-    KEEP_SELECTION = "keep_selection"
-    SELECT_LAST_VIEWED = "select_last_viewed"
+class OnFullscreenExitMultipleSelected(UpperStrEnum):
+    KEEP_SELECTION = auto()
+    SELECT_LAST_VIEWED = auto()
 
 
 @define

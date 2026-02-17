@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from copy import deepcopy
-from dataclasses import dataclass
 from enum import Enum, StrEnum, auto
 import json
 import logging
@@ -13,6 +12,7 @@ from pathlib import Path
 import sys
 from typing import Any
 
+from attrs import define
 from PySide6.QtCore import QByteArray, QSettings
 
 from .model import ExifField, OnFullscreenExitMultipleSelected, StatusLabel
@@ -67,6 +67,7 @@ class UserSettingKey(StrEnum):
     EXTERNAL_EDITOR = "externalEditor"
     SHORTCUTS = "shortcuts"
     COPY_SD_BASE_EXTERNAL_FOLDER = "copySdBaseExternalFolder"
+    SDCARD_NAMES = "sdcardNames"
 
 
 class RuntimeSettingKey(StrEnum):
@@ -106,11 +107,10 @@ class RuntimeSettingKey(StrEnum):
     THUMB_MAX_DIM = "thumbMaxDim"
     FULLSCREEN_BACKGROUND_COLOR = "fullscreenBackgroundColor"
     CLEAR_CACHE_ON_START = "clearCacheOnStart"
-    SDCARD_NAMES = "sdcardNames"
     SETTINGS_PANEL_SAVE_MODE = "settingsPanelSaveMode"
 
 
-@dataclass(frozen=True)
+@define(frozen=True)
 class StateDef:
     group: StateGroup
     read_type: type
@@ -118,7 +118,7 @@ class StateDef:
     json_storage: bool = False
 
 
-@dataclass(frozen=True)
+@define(frozen=True)
 class SettingDef:
     default: object
     read_type: type = str
@@ -148,6 +148,15 @@ def _parse_list_of_str(raw: str) -> list[str]:
     return [part.strip() for part in raw.split(",") if part.strip()]
 
 
+_list_of_strings_params = {
+    "read_type": str,
+    "json_storage": True,
+    "serializer": lambda x: [str(v) for v in x],
+    "deserializer": lambda x: [str(v) for v in x] if isinstance(x, list) else [],
+    "env_parser": _parse_list_of_str,
+}
+
+
 def _serialize_status_labels(value: list[StatusLabel]) -> list[dict[str, Any]]:
     return [
         {
@@ -174,16 +183,6 @@ def _deserialize_status_labels(data: Any) -> list[StatusLabel]:
             )
         )
     return out
-
-
-def _serialize_exif_fields(value: list[ExifField]) -> list[dict[str, Any]]:
-    return [
-        {
-            "key": item.key,
-            "label": item.label,
-        }
-        for item in value
-    ]
 
 
 def _deserialize_exif_fields(data: Any) -> list[ExifField]:
@@ -254,28 +253,6 @@ def _deserialize_on_fullscreen_exit(data: Any) -> OnFullscreenExitMultipleSelect
         return OnFullscreenExitMultipleSelected.KEEP_SELECTION
 
 
-def _serialize_save_mode(value: SettingsPanelSaveMode | str) -> str:
-    if isinstance(value, SettingsPanelSaveMode):
-        return value.value
-    return str(value)
-
-
-def _deserialize_save_mode(data: Any) -> SettingsPanelSaveMode:
-    raw = str(data)
-    try:
-        return SettingsPanelSaveMode(raw)
-    except ValueError:
-        return SettingsPanelSaveMode.SAVE_CANCEL
-
-
-def _serialize_column_stretch(value: tuple[int, int] | list[int]) -> list[int]:
-    if isinstance(value, tuple):
-        return [int(value[0]), int(value[1])]
-    if isinstance(value, list) and len(value) >= 2:
-        return [int(value[0]), int(value[1])]
-    raise ValueError("Invalid EXIF panel column stretch")
-
-
 def _deserialize_column_stretch(data: Any) -> tuple[int, int]:
     if isinstance(data, list) and len(data) >= 2:
         return (int(data[0]), int(data[1]))
@@ -309,32 +286,35 @@ _STATE_REGISTRY: dict[StateKey, StateDef] = {
 
 _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
     UserSettingKey.CACHE_BASE_DIR: SettingDef(
+        # FIXME set default to the support dir / cache
+        # (Library / Application Support / cache on macos)
+        # this is my default.
         default="/Volumes/CrucialX9Pro/projects/piqopiqo/cache",
         read_type=str,
     ),
+    # TODO default : depends on the platform. This is the default for macos
+    # + check at launch that it exists (thumbnails lowres + metadata depend on it)
     UserSettingKey.EXIFTOOL_PATH: SettingDef(
         default="/opt/homebrew/bin/exiftool",
         read_type=str,
     ),
+    # for now : just a list of exiffields : no fomatting or change of label beyond
+    # default transformation
     UserSettingKey.CUSTOM_EXIF_FIELDS: SettingDef(
         default=[],
-        read_type=str,
-        json_storage=True,
-        serializer=lambda x: [str(v) for v in x],
-        deserializer=lambda x: [str(v) for v in x] if isinstance(x, list) else [],
-        env_parser=_parse_list_of_str,
+        **_list_of_strings_params,
     ),
+    # FIXME put in State. Add a slider. Beware : due to constraints in the cells
+    # may not go to 1 or 2 depending on the screen size. So need to check the min num
+    # or relax the constraints. Also see if constraints are related to screen or window
+    # size
     UserSettingKey.NUM_COLUMNS: SettingDef(default=6, read_type=int),
     UserSettingKey.ON_FULLSCREEN_EXIT: SettingDef(
         default=OnFullscreenExitMultipleSelected.KEEP_SELECTION,
         read_type=str,
         serializer=_serialize_on_fullscreen_exit,
         deserializer=_deserialize_on_fullscreen_exit,
-        env_parser=lambda raw: _parse_enum(
-            raw,
-            OnFullscreenExitMultipleSelected,
-            OnFullscreenExitMultipleSelected.KEEP_SELECTION,
-        ),
+        env_parser=_deserialize_on_fullscreen_exit,
     ),
     UserSettingKey.STATUS_LABELS: SettingDef(
         default=[
@@ -378,9 +358,14 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         default="/Volumes/CrucialX8/photos",
         read_type=str,
     ),
+    UserSettingKey.SDCARD_NAMES: SettingDef(
+        default=[],
+        **_list_of_strings_params,
+    ),
 }
 
-
+# read_type is to deserialize from an env var
+# TODO restrict the env vars to some of the keys ?
 _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.DETACHED_KEYWORD_TREE: SettingDef(default=False, read_type=bool),
     RuntimeSettingKey.INITIAL_RESOLUTION: SettingDef(
@@ -391,8 +376,6 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.EXIF_PANEL_COLUMN_STRETCH: SettingDef(
         default=(30, 70),
         read_type=str,
-        serializer=_serialize_column_stretch,
-        deserializer=_deserialize_column_stretch,
         env_parser=lambda raw: _deserialize_column_stretch(_parse_json(raw)),
     ),
     RuntimeSettingKey.EXIF_PANEL_ROW_SPACING: SettingDef(default=5, read_type=int),
@@ -440,9 +423,6 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.GRID_ITEM_FIELDS: SettingDef(
         default=["title", "time_taken"],
         read_type=str,
-        json_storage=True,
-        serializer=lambda x: [str(v) for v in x],
-        deserializer=lambda x: [str(v) for v in x] if isinstance(x, list) else [],
         env_parser=_parse_list_of_str,
     ),
     RuntimeSettingKey.EXIF_FIELDS: SettingDef(
@@ -455,9 +435,6 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
             ExifField("File:FileName", "File Name"),
         ],
         read_type=str,
-        json_storage=True,
-        serializer=_serialize_exif_fields,
-        deserializer=_deserialize_exif_fields,
         env_parser=lambda raw: _deserialize_exif_fields(_parse_json(raw)),
     ),
     RuntimeSettingKey.THUMB_MAX_DIM: SettingDef(default=1024, read_type=int),
@@ -465,19 +442,9 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
         default="black", read_type=str
     ),
     RuntimeSettingKey.CLEAR_CACHE_ON_START: SettingDef(default=False, read_type=bool),
-    RuntimeSettingKey.SDCARD_NAMES: SettingDef(
-        default=[],
-        read_type=str,
-        json_storage=True,
-        serializer=lambda x: [str(v) for v in x],
-        deserializer=lambda x: [str(v) for v in x] if isinstance(x, list) else [],
-        env_parser=_parse_list_of_str,
-    ),
     RuntimeSettingKey.SETTINGS_PANEL_SAVE_MODE: SettingDef(
         default=SettingsPanelSaveMode.SAVE_CANCEL,
         read_type=str,
-        serializer=_serialize_save_mode,
-        deserializer=_deserialize_save_mode,
         env_parser=lambda raw: _parse_enum(
             raw,
             SettingsPanelSaveMode,

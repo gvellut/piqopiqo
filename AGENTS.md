@@ -252,6 +252,8 @@ ruff format
 
 Do not use async.
 
+Never use dataclasses. Use attrs and @define, including frozen=True if relevant.
+
 ## Update of AGENTS.md
 
 After completing a feature, update this file AGENTS.md with the updated project structure. Also add considerations for reference for future work.

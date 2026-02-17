@@ -6,7 +6,6 @@ on the Qt thread via signals.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import multiprocessing
 import os
@@ -15,6 +14,7 @@ import queue
 import shutil
 import time
 
+from attrs import define
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from ..cache_paths import ensure_thumb_dir
@@ -30,7 +30,7 @@ from . import media_worker
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@define
 class _FileInfo:
     file_path: str
     source_folder: str
@@ -54,7 +54,7 @@ class _FileInfo:
         return str(Path(self.thumb_dir) / f"{self.base_name}_hq.jpg")
 
 
-@dataclass
+@define
 class _CombinedNeed:
     want_embedded: bool = False
     want_editable: bool = False
@@ -62,7 +62,7 @@ class _CombinedNeed:
     force: bool = False
 
 
-@dataclass
+@define
 class _Worker:
     process: multiprocessing.Process
     task_queue: multiprocessing.Queue

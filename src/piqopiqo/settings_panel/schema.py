@@ -2,31 +2,32 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum, auto
+
+from attrs import define
 
 from ..model import OnFullscreenExitMultipleSelected
 from ..settings_state import UserSettingKey
 
 
-class EditorKind(StrEnum):
-    PATH_DIR = "pathDir"
-    PATH_FILE = "pathFile"
-    TEXT = "text"
-    NUMBER = "number"
-    CHOICE = "choice"
-    LIST_TEXT = "listText"
-    STATUS_LABELS = "statusLabels"
-    SHORTCUTS = "shortcuts"
+class EditorKind(Enum):
+    PATH_DIR = auto()
+    PATH_FILE = auto()
+    TEXT = auto()
+    NUMBER = auto()
+    CHOICE = auto()
+    LIST_TEXT = auto()
+    STATUS_LABELS = auto()
+    SHORTCUTS = auto()
 
 
-@dataclass(frozen=True)
+@define(frozen=True)
 class ChoiceOption:
     label: str
     value: object
 
 
-@dataclass(frozen=True)
+@define(frozen=True)
 class FieldSpec:
     key: UserSettingKey
     label: str
@@ -36,13 +37,13 @@ class FieldSpec:
     max_value: int | None = None
 
 
-@dataclass(frozen=True)
+@define(frozen=True)
 class GroupSpec:
     title: str
     fields: tuple[FieldSpec, ...]
 
 
-@dataclass(frozen=True)
+@define(frozen=True)
 class TabSpec:
     title: str
     groups: tuple[GroupSpec, ...]

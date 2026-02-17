@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from enum import Enum, auto
 import logging
@@ -14,6 +13,7 @@ import subprocess
 import threading
 from typing import Any
 
+from attrs import define
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -29,12 +29,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from .settings_state import (
-    RuntimeSettingKey,
-    UserSettingKey,
-    get_runtime_setting,
-    get_user_setting,
-)
+from .settings_state import UserSettingKey, get_user_setting
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +39,13 @@ OUTPUT_DATE_FMT = DATE_FMT
 PREFIX_SINCE = "since:"
 
 
-@dataclass(frozen=True)
+@define(frozen=True)
 class PhotoVolume:
     name: str
     path: str
 
 
-@dataclass(frozen=True)
+@define(frozen=True)
 class DateRange:
     start: date | None
     end: date | None
@@ -734,7 +729,7 @@ def _resolve_dates_with_progress(parent, date_spec: str, volume: PhotoVolume):
 
 
 def launch_copy_sd(parent=None):
-    sdcard_names = get_runtime_setting(RuntimeSettingKey.SDCARD_NAMES)
+    sdcard_names = get_user_setting(UserSettingKey.SDCARD_NAMES)
     if sdcard_names:
         volume = get_volume(sdcard_names)
         cards = ", ".join(sdcard_names)

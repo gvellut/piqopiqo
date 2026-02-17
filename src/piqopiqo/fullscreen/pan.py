@@ -7,10 +7,10 @@ to allow easy unit testing without requiring Qt widgets.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from attrs import define
 
 
-@dataclass
+@define
 class SideSpaces:
     """Empty space on each side of an image."""
 

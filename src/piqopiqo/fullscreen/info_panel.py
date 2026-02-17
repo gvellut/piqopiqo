@@ -9,9 +9,9 @@ This module handles:
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from attrs import define
 from PySide6.QtCore import QTimer
 
 from .zoom import ZOOM_STATE_PERCENTAGES, ZoomDirection, ZoomState
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from PySide6.QtWidgets import QLabel
 
 
-@dataclass
+@define
 class ZoomDisplayState:
     """Tracks the current state relevant for zoom overlay display decisions."""
 
