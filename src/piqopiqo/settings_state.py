@@ -73,6 +73,8 @@ class UserSettingKey(StrEnum):
     GPX_KML_FOLDER = "gpxKmlFolder"
     GCP_PROJECT = "gcpProject"
     GCP_SA_KEY_PATH = "gcpSaKeyPath"
+    FLICKR_API_KEY = "flickrApiKey"
+    FLICKR_API_SECRET = "flickrApiSecret"
 
 
 class RuntimeSettingKey(StrEnum):
@@ -83,6 +85,7 @@ class RuntimeSettingKey(StrEnum):
     GRID_ITEM_SHOW_LABEL_SWATCH = "gridItemShowLabelSwatch"
     EXIF_AUTO_FORMAT = "exifAutoFormat"
     MAX_WORKERS = "maxWorkers"
+    FLICKR_UPLOAD_MAX_WORKERS = "flickrUploadMaxWorkers"
     MIN_IDLE_WORKERS = "minIdleWorkers"
     MAX_EXIFTOOLS_IMAGE_BATCH = "maxExiftoolsImageBatch"
     SHUTDOWN_TIMEOUT_S = "shutdownTimeoutS"
@@ -372,6 +375,8 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
     UserSettingKey.GPX_KML_FOLDER: SettingDef(default="", read_type=str),
     UserSettingKey.GCP_PROJECT: SettingDef(default="", read_type=str),
     UserSettingKey.GCP_SA_KEY_PATH: SettingDef(default="", read_type=str),
+    UserSettingKey.FLICKR_API_KEY: SettingDef(default="", read_type=str),
+    UserSettingKey.FLICKR_API_SECRET: SettingDef(default="", read_type=str),
 }
 
 # read_type is to deserialize from an env var
@@ -394,6 +399,7 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     ),
     RuntimeSettingKey.EXIF_AUTO_FORMAT: SettingDef(default=True, read_type=bool),
     RuntimeSettingKey.MAX_WORKERS: SettingDef(default=4, read_type=int),
+    RuntimeSettingKey.FLICKR_UPLOAD_MAX_WORKERS: SettingDef(default=2, read_type=int),
     RuntimeSettingKey.MIN_IDLE_WORKERS: SettingDef(default=1, read_type=int),
     RuntimeSettingKey.MAX_EXIFTOOLS_IMAGE_BATCH: SettingDef(default=8, read_type=int),
     RuntimeSettingKey.SHUTDOWN_TIMEOUT_S: SettingDef(default=5.0, read_type=float),

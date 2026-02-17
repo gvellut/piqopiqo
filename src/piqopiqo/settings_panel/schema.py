@@ -204,6 +204,21 @@ SETTINGS_TABS: list[TabSpec] = [
                     ),
                 ],
             ),
+            GroupSpec(
+                title="Flickr",
+                fields=[
+                    FieldSpec(
+                        key=UserSettingKey.FLICKR_API_KEY,
+                        label="Flickr API key",
+                        editor=EditorKind.TEXT,
+                    ),
+                    FieldSpec(
+                        key=UserSettingKey.FLICKR_API_SECRET,
+                        label="Flickr API secret",
+                        editor=EditorKind.TEXT,
+                    ),
+                ],
+            ),
         ],
     ),
 ]

@@ -47,6 +47,7 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_FONT_SIZE",
         "PIQO_GPX_IGNORE_OFFSET",
         "PIQO_GPX_TIMEZONE",
+        "PIQO_FLICKR_UPLOAD_MAX_WORKERS",
     ):
         monkeypatch.delenv(env_name, raising=False)
 
@@ -108,6 +109,23 @@ def test_gpx_settings_defaults_and_env_override(isolated_settings, monkeypatch):
     monkeypatch.setenv("PIQO_GPX_TIMEZONE", "Europe/Paris")
     assert get_user_setting(UserSettingKey.GPX_IGNORE_OFFSET) is True
     assert get_user_setting(UserSettingKey.GPX_TIMEZONE) == "Europe/Paris"
+
+
+def test_flickr_settings_defaults_and_roundtrip(isolated_settings):
+    assert get_user_setting(UserSettingKey.FLICKR_API_KEY) == ""
+    assert get_user_setting(UserSettingKey.FLICKR_API_SECRET) == ""
+
+    set_user_setting(UserSettingKey.FLICKR_API_KEY, "key123")
+    set_user_setting(UserSettingKey.FLICKR_API_SECRET, "secret456")
+
+    assert get_user_setting(UserSettingKey.FLICKR_API_KEY) == "key123"
+    assert get_user_setting(UserSettingKey.FLICKR_API_SECRET) == "secret456"
+
+
+def test_flickr_runtime_workers_env_override(isolated_settings, monkeypatch):
+    monkeypatch.setenv("PIQO_FLICKR_UPLOAD_MAX_WORKERS", "7")
+    init_qsettings_store(dyn=False)
+    assert get_runtime_setting(RuntimeSettingKey.FLICKR_UPLOAD_MAX_WORKERS) == 7
 
 
 def test_runtime_settings_are_memory_only(isolated_settings, monkeypatch):

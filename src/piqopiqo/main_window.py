@@ -82,6 +82,7 @@ class MainWindow(QMainWindow):
         self._folder_watcher: FolderWatcher | None = None
         self._watcher_suppressed: dict[str, float] = {}
         self._active_apply_gpx_worker = None
+        self._active_flickr_upload_manager = None
 
         # Create metadata database manager
         self.db_manager = MetadataDBManager()
@@ -736,6 +737,12 @@ class MainWindow(QMainWindow):
 
         tools_menu.addSeparator()
 
+        upload_flickr_action = QAction("Upload to Flickr...", self)
+        upload_flickr_action.triggered.connect(self._on_upload_to_flickr)
+        tools_menu.addAction(upload_flickr_action)
+
+        tools_menu.addSeparator()
+
         save_exif_action = QAction("Save EXIF", self)
         save_exif_action.triggered.connect(self._on_save_exif)
         tools_menu.addAction(save_exif_action)
@@ -889,6 +896,20 @@ class MainWindow(QMainWindow):
 
         QThreadPool.globalInstance().start(worker)
         progress_dialog.exec()
+
+    def _on_upload_to_flickr(self):
+        manager = self._active_flickr_upload_manager
+        if manager is not None and manager.is_running():
+            QMessageBox.information(
+                self,
+                "Upload to Flickr",
+                "A Flickr upload operation is already running.",
+            )
+            return
+
+        from .flickr_upload import launch_flickr_upload
+
+        launch_flickr_upload(self)
 
     def on_open(self):
         """Open a folder using a file dialog."""
@@ -1527,6 +1548,13 @@ class MainWindow(QMainWindow):
 
         # Stop background workers first to avoid noisy teardown.
         self._stop_folder_watcher()
+        if self._active_flickr_upload_manager is not None:
+            self._active_flickr_upload_manager.stop(
+                timeout_s=float(
+                    get_runtime_setting(RuntimeSettingKey.SHUTDOWN_TIMEOUT_S)
+                )
+            )
+            self._active_flickr_upload_manager = None
         if hasattr(self, "media_manager"):
             self.media_manager.stop(
                 timeout_s=float(

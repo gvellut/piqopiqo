@@ -29,6 +29,14 @@ src/piqopiqo/
 ├── folder_watcher.py # watchfiles-based folder watcher (auto add/remove/modify)
 ├── main_window.py   # Main application window
 ├── settings_state.py # QSettings-backed state + settings registries/accessors
+├── flickr_upload/   # Flickr auth + upload workflows (filtered scope only)
+│   ├── constants.py      # Flickr workflow constants (token file name, stages, retries)
+│   ├── service.py        # Pure Flickr helpers (tags, retry, timestamps, ticket status)
+│   ├── auth.py           # Flickr client creation + token validation + browser auth
+│   ├── workers.py        # QRunnable workers (login + token validation)
+│   ├── media_worker.py   # Multiprocessing worker entrypoints for upload/date/public
+│   ├── manager.py        # Flickr upload manager (staged orchestration + cancellation)
+│   └── dialogs.py        # Tools dialogs + launch flow for Flickr upload
 ├── gpx2exif/        # GPX/OCR time-shift workflows (DB updates + KML, no EXIF write by default)
 │   ├── constants.py      # GPX workflow constants (TIME_SHIFT key, labels, defaults)
 │   ├── time_shift.py     # Time-shift parsing/formatting/validation
@@ -50,6 +58,7 @@ src/piqopiqo/
 ├── metadata/        # Metadata sqllite database layer
 │   ├── metadata_db.py   # SQLite database for cached metadata
 │   ├── db_fields.py     # Database field definitions and EXIF mappings
+│   ├── exif_write.py    # Shared DB->EXIF tag builder
 │   └── save_workers.py  # Background worker to save metadata
 ├── components/      # Reusable UI components
 │   └── ellided_label.py   # Truncated label with ellipsis
@@ -100,6 +109,7 @@ src/piqopiqo/
 - **GPS Time shift**: Tools dialog stores per-folder time-shift values in folder SQLite metadata (`folder_metadata.TIME_SHIFT`)
 - **Extract GPS Time shift**: Grid context menu action runs GCP Vision OCR in background for the clicked photo folder and persists computed shift
 - **Apply GPX**: Tools workflow processes all loaded source folders, generates KML, and optionally updates DB `time_taken` + coordinates (no EXIF writes by default)
+- **Upload to Flickr**: Tools workflow uploads only currently visible (filtered) photos in current sort order, with login/token validation, temp EXIF write, upload-date reset and make-public steps
 
 ## PhotoListModel Architecture
 
@@ -140,6 +150,7 @@ Useful env vars for agent testing:
 - `PIQO_GPX_KML_FOLDER` - Override GPX KML output folder setting (empty by default)
 - `PIQO_GCP_PROJECT` - Override GCP project used by OCR time extraction
 - `PIQO_GCP_SA_KEY_PATH` - Override service-account key path used by OCR time extraction
+- `PIQO_FLICKR_UPLOAD_MAX_WORKERS` - Flickr upload multiprocessing worker count (default: 2)
 
 
 ## EXIF Panel Configuration
@@ -253,6 +264,15 @@ Selection behavior:
 - GPX matching uses per-folder time shift and supports timezone correction (`GPX_TIMEZONE`) or EXIF `OffsetTimeOriginal` handling (unless `GPX_IGNORE_OFFSET` is enabled).
 - KML is always generated per completed folder using `photos_<root>_<relative_folder>.kml`; when KML folder setting is empty, output falls back to the loaded root folder.
 - Cancellation during Apply GPX rolls back metadata changes only for the in-progress folder; already completed folders remain committed and keep their generated KML.
+- Flickr API credentials are configured in Settings > External/Workflow > Flickr (`FLICKR_API_KEY`, `FLICKR_API_SECRET` user settings).
+- Flickr OAuth token cache is stored in `<cache_base>/flickr/oauth-tokens.sqlite`.
+- Flickr preflight token state is based on physical existence of `oauth-tokens.sqlite`.
+- Flickr upload scope always uses the current visible grid (`images_data`) only; hidden/filtered-out photos are not uploaded.
+- Flickr upload ordering follows the current visible sort order from the grid model.
+- Missing DB metadata for a photo is allowed: upload uses a temporary copy of the original file without DB-driven EXIF updates for that file.
+- Flickr token validation runs before upload and invalid tokens trigger token file deletion so the flow returns to Login.
+- Flickr upload manager stages are `Upload -> Reset date -> Make public` and run via multiprocessing workers.
+- Flickr flow currently does not handle albums (no create/add/reorder album operations).
 
 
 ## Development
