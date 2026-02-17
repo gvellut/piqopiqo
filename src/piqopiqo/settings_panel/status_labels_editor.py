@@ -81,7 +81,6 @@ class _ColorButton(QPushButton):
 class _StatusLabelRow(QWidget):
     remove_requested = Signal(object)
     value_changed = Signal()
-    drag_started = Signal(object)  # emitted with self when drag begins
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -165,25 +164,33 @@ class _StatusLabelRow(QWidget):
             super().mouseMoveEvent(event)
             return
 
-        self.drag_started.emit(self)
+        # Capture drag pixmap BEFORE applying opacity effect
+        pixmap = QPixmap(self.size())
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setOpacity(0.7)
+        self.render(painter, QPoint())
+        painter.end()
+
+        # Now make the in-place row transparent
+        from PySide6.QtWidgets import QGraphicsOpacityEffect
+
+        effect = QGraphicsOpacityEffect(self)
+        effect.setOpacity(0.25)
+        self.setGraphicsEffect(effect)
 
         drag = QDrag(self)
         mime = QMimeData()
         mime.setData(_MIME_TYPE, b"")
         drag.setMimeData(mime)
-
-        pixmap = QPixmap(self.size())
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.setOpacity(0.6)
-        self.render(painter, QPoint())
-        painter.end()
         drag.setPixmap(pixmap)
         drag.setHotSpot(self._drag_start)
 
         self._drag_start = None
         drag.exec(Qt.DropAction.MoveAction)
 
+        # Restore after drag ends (drop or cancel)
+        self.setGraphicsEffect(None)
         self.drag_handle.setCursor(Qt.CursorShape.OpenHandCursor)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
@@ -200,7 +207,6 @@ class StatusLabelsEditor(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._rows: list[_StatusLabelRow] = []
-        self._dragged_row: _StatusLabelRow | None = None
         self._drop_indicator_y: int | None = None
         self.setAcceptDrops(True)
 
@@ -209,7 +215,7 @@ class StatusLabelsEditor(QWidget):
 
         self._rows_container = QWidget()
         self._rows_layout = QVBoxLayout(self._rows_container)
-        self._rows_layout.setContentsMargins(0, 0, 0, 0)
+        self._rows_layout.setContentsMargins(0, 2, 0, 2)
         self._rows_layout.setSpacing(4)
         self._layout.addWidget(self._rows_container)
 
@@ -218,10 +224,6 @@ class StatusLabelsEditor(QWidget):
         self._layout.addWidget(self._add_btn)
 
     # --- Drag-and-drop ---
-
-    def _on_drag_started(self, row: _StatusLabelRow) -> None:
-        self._dragged_row = row
-        row.setVisible(False)
 
     def _drop_target_index(self, event) -> int:
         container_pos = self._rows_container.mapFrom(self, event.position().toPoint())
@@ -237,15 +239,18 @@ class StatusLabelsEditor(QWidget):
 
     def _indicator_y_for_index(self, target_idx: int) -> int:
         """Return the Y coordinate (in self) for the drop indicator line."""
+        offset = self._rows_container.mapTo(self, QPoint(0, 0)).y()
+        spacing = self._rows_layout.spacing()
         if not self._rows:
-            return self._rows_container.geometry().top()
+            return offset
+        if target_idx <= 0:
+            first = self._rows[0]
+            return offset + first.geometry().top()
         if target_idx >= len(self._rows):
             last = self._rows[-1]
-            pos = self._rows_container.mapTo(self, QPoint(0, 0))
-            return pos.y() + last.geometry().bottom() + 2
+            return offset + last.geometry().bottom() + 1
         row = self._rows[target_idx]
-        pos = self._rows_container.mapTo(self, QPoint(0, 0))
-        return pos.y() + row.geometry().top() - 2
+        return offset + row.geometry().top() - spacing // 2 - 1
 
     def dragEnterEvent(self, event) -> None:  # noqa: N802
         if event.mimeData().hasFormat(_MIME_TYPE):
@@ -272,10 +277,6 @@ class StatusLabelsEditor(QWidget):
 
         target_idx = self._drop_target_index(event)
         old_idx = self._rows.index(source)
-
-        # Restore visibility
-        source.setVisible(True)
-        self._dragged_row = None
 
         if old_idx == target_idx or old_idx + 1 == target_idx:
             return
@@ -313,7 +314,6 @@ class StatusLabelsEditor(QWidget):
         row.set_value(value)
         row.remove_requested.connect(self._remove_row)
         row.value_changed.connect(self._on_row_changed)
-        row.drag_started.connect(self._on_drag_started)
         self._rows.append(row)
         self._rows_layout.addWidget(row)
 

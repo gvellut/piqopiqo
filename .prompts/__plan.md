@@ -1,6 +1,6 @@
 * [Settings](D.A_Settings.md)
     !? [Arrange settings panel](D.A.A_Arrange_settings_panel.md)
-    *? [Arrange settings panel](D.A.B_Arrange_settings_panel.md)
+    !? [Arrange settings panel](D.A.B_Arrange_settings_panel.md)
 - [Details](F_Details.md)
 - [Settings create](G_Settings_create.md)
 - [gpx2exif](H_gpx2exif.md)
