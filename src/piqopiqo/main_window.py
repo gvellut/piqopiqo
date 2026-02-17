@@ -7,13 +7,13 @@ from functools import partial
 import logging
 import os
 import shutil
-import sys
 import time
 
 from PySide6.QtCore import Qt, QThreadPool, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QFileDialog,
     QMainWindow,
     QMenu,
@@ -81,6 +81,7 @@ class MainWindow(QMainWindow):
         self._model_refresh_scheduled = False
         self._folder_watcher: FolderWatcher | None = None
         self._watcher_suppressed: dict[str, float] = {}
+        self._active_apply_gpx_worker = None
 
         # Create metadata database manager
         self.db_manager = MetadataDBManager()
@@ -527,6 +528,89 @@ class MainWindow(QMainWindow):
             item.db_metadata = meta.copy()
         return True
 
+    def _apply_gpx_result_to_model(self, result, *, update_db: bool) -> None:
+        if not update_db:
+            return
+
+        updated_paths = list(getattr(result, "updated_paths", []) or [])
+        if not updated_paths:
+            return
+
+        for path in updated_paths:
+            item = self._items_by_path.get(path)
+            if item is None:
+                continue
+            db = self.db_manager.get_db_for_image(path)
+            meta = db.get_metadata(path)
+            if meta is None:
+                continue
+            item.db_metadata = meta.copy()
+
+        self.photo_model.refresh_after_metadata_update()
+
+        selected_items = self._get_selected_items()
+        if self.edit_panel:
+            self.edit_panel.update_for_selection(selected_items)
+        self.exif_panel.update_exif(selected_items)
+
+    def _extract_gps_time_shift_for_item(self, item: ImageItem) -> None:
+        from .gpx2exif.dialogs import (
+            ExtractGpsTimeShiftConfirmDialog,
+            ExtractGpsTimeShiftProgressDialog,
+        )
+        from .gpx2exif.gpx_processing import to_relative_folder
+        from .gpx2exif.workers import ExtractGpsTimeShiftWorker
+
+        folder_path = item.source_folder
+        db_folder = self.db_manager.get_db_for_folder(folder_path)
+        existing_shift = db_folder.get_time_shift()
+        relative_folder = to_relative_folder(
+            self.root_folder or folder_path, folder_path
+        )
+
+        confirm = ExtractGpsTimeShiftConfirmDialog(
+            folder_label=relative_folder,
+            existing_shift=existing_shift,
+            parent=self,
+        )
+        if confirm.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        metadata = item.db_metadata
+        if metadata is None:
+            metadata = self.db_manager.get_db_for_image(item.path).get_metadata(
+                item.path
+            )
+        if not metadata:
+            QMessageBox.warning(
+                self, "Extract GPS Time shift", "Metadata is not ready yet."
+            )
+            return
+
+        time_taken = metadata.get(DBFields.TIME_TAKEN)
+        if not isinstance(time_taken, datetime):
+            QMessageBox.warning(
+                self,
+                "Extract GPS Time shift",
+                "Time taken is missing for the selected photo.",
+            )
+            return
+
+        worker = ExtractGpsTimeShiftWorker(
+            photo_path=item.path,
+            exif_time=time_taken,
+            gcp_project=str(get_user_setting(UserSettingKey.GCP_PROJECT) or ""),
+            gcp_sa_key_path=str(get_user_setting(UserSettingKey.GCP_SA_KEY_PATH) or ""),
+        )
+
+        progress = ExtractGpsTimeShiftProgressDialog(parent=self)
+        progress.start(worker)
+        if progress.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        if progress.result_shift:
+            db_folder.set_time_shift(progress.result_shift)
+
     def _on_filter_changed(self, criteria: FilterCriteria):
         """Handle filter change.
 
@@ -641,6 +725,16 @@ class MainWindow(QMainWindow):
 
         tools_menu.addSeparator()
 
+        gps_time_shift_action = QAction("GPS Time shift...", self)
+        gps_time_shift_action.triggered.connect(self._on_gps_time_shift)
+        tools_menu.addAction(gps_time_shift_action)
+
+        apply_gpx_action = QAction("Apply GPX...", self)
+        apply_gpx_action.triggered.connect(self._on_apply_gpx)
+        tools_menu.addAction(apply_gpx_action)
+
+        tools_menu.addSeparator()
+
         save_exif_action = QAction("Save exif", self)
         save_exif_action.triggered.connect(self._on_save_exif)
         tools_menu.addAction(save_exif_action)
@@ -697,6 +791,100 @@ class MainWindow(QMainWindow):
         from .copy_sd import launch_copy_sd
 
         launch_copy_sd(self)
+
+    def _on_gps_time_shift(self):
+        if not self.root_folder or not self.photo_model.source_folders:
+            return
+
+        from .gpx2exif.dialogs import GpsTimeShiftDialog
+
+        dialog = GpsTimeShiftDialog(
+            root_folder=self.root_folder,
+            source_folders=self.photo_model.source_folders,
+            db_manager=self.db_manager,
+            parent=self,
+        )
+        dialog.exec()
+
+    def _on_apply_gpx(self):
+        if not self.root_folder or not self.photo_model.source_folders:
+            return
+        if self._active_apply_gpx_worker is not None:
+            QMessageBox.information(
+                self,
+                "Apply GPX",
+                "An Apply GPX operation is already running.",
+            )
+            return
+
+        from .gpx2exif.constants import APPLY_MODE_UPDATE_DB
+        from .gpx2exif.dialogs import ApplyGpxDialog, ApplyGpxProgressDialog
+        from .gpx2exif.workers import ApplyGpxWorker
+
+        input_dialog = ApplyGpxDialog(
+            root_folder=self.root_folder,
+            source_folders=self.photo_model.source_folders,
+            db_manager=self.db_manager,
+            kml_folder=str(get_user_setting(UserSettingKey.GPX_KML_FOLDER) or ""),
+            parent=self,
+        )
+        if input_dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        gpx_path, mode = input_dialog.get_values()
+        update_db = mode == APPLY_MODE_UPDATE_DB
+
+        folder_to_files: dict[str, list[str]] = {}
+        for item in self.photo_model.all_photos:
+            folder_to_files.setdefault(item.source_folder, []).append(item.path)
+
+        total = sum(len(paths) for paths in folder_to_files.values())
+        progress_dialog = ApplyGpxProgressDialog(total=total, parent=self)
+
+        worker = ApplyGpxWorker(
+            root_folder=self.root_folder,
+            folder_to_files=folder_to_files,
+            gpx_path=gpx_path,
+            db_manager=self.db_manager,
+            timezone_name=str(get_user_setting(UserSettingKey.GPX_TIMEZONE) or ""),
+            ignore_offset=bool(get_user_setting(UserSettingKey.GPX_IGNORE_OFFSET)),
+            kml_folder=str(get_user_setting(UserSettingKey.GPX_KML_FOLDER) or ""),
+            update_db=update_db,
+            exiftool_path=str(get_user_setting(UserSettingKey.EXIFTOOL_PATH) or ""),
+        )
+        self._active_apply_gpx_worker = worker
+
+        def on_folder_changed(relative_folder: str):
+            progress_dialog.set_folder(relative_folder)
+
+        def on_progress(completed: int, total_count: int):
+            progress_dialog.set_progress(completed, total_count)
+
+        def on_error(message: str):
+            self._active_apply_gpx_worker = None
+            if progress_dialog.isVisible():
+                progress_dialog.show_error(message)
+            else:
+                QMessageBox.warning(self, "Apply GPX", message)
+
+        def on_finished(result):
+            self._active_apply_gpx_worker = None
+            if result is None:
+                return
+
+            self._apply_gpx_result_to_model(result, update_db=update_db)
+
+            if progress_dialog.isVisible():
+                progress_dialog.finish(result)
+
+        worker.signals.folder_changed.connect(on_folder_changed)
+        worker.signals.progress.connect(on_progress)
+        worker.signals.error.connect(on_error)
+        worker.signals.finished.connect(on_finished)
+        progress_dialog.cancel_requested.connect(worker.request_cancel)
+
+        QThreadPool.globalInstance().start(worker)
+        progress_dialog.exec()
 
     def on_open(self):
         """Open a folder using a file dialog."""
@@ -1097,6 +1285,11 @@ class MainWindow(QMainWindow):
         selected = self.photo_model.get_selected_photos()
         if not selected:
             return
+        clicked_item = (
+            self.images_data[global_index]
+            if 0 <= global_index < len(self.images_data)
+            else selected[0]
+        )
 
         menu = QMenu(self)
 
@@ -1148,6 +1341,11 @@ class MainWindow(QMainWindow):
             )
         regen_exif_action.triggered.connect(
             lambda: self.media_manager.regenerate_exif([p.path for p in selected])
+        )
+
+        extract_shift_action = menu.addAction("Extract GPS Time shift")
+        extract_shift_action.triggered.connect(
+            lambda: self._extract_gps_time_shift_for_item(clicked_item)
         )
 
         menu.addSeparator()

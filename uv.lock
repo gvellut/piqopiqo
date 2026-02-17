@@ -282,6 +282,15 @@ wheels = [
 ]
 
 [[package]]
+name = "gpxpy"
+version = "1.6.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/20/ad/6f1a34e702c72cb495bb258396f237ded76c00f9fe67054a44d778d24ed9/gpxpy-1.6.2.tar.gz", hash = "sha256:a72c484b97ec42b80834353b029cc8ee1b79f0ffca1179b2210bb3baf26c01ae", size = 111695, upload-time = "2023-11-29T17:25:38.391Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/44/9f/62df6c1e52462bdd04275b36cec49efa9e8af7e7b834499eb288f73dcfbc/gpxpy-1.6.2-py3-none-any.whl", hash = "sha256:289bc2d80f116c988d0a1e763fda22838f83005573ece2bbc6521817b26fb40a", size = 42649, upload-time = "2023-11-29T17:25:35.76Z" },
+]
+
+[[package]]
 name = "grpcio"
 version = "1.78.0"
 source = { registry = "https://pypi.org/simple" }
@@ -462,6 +471,7 @@ dependencies = [
     { name = "click" },
     { name = "coloredlogs" },
     { name = "google-cloud-vision" },
+    { name = "gpxpy" },
     { name = "pillow" },
     { name = "pyexiftool" },
     { name = "pyobjc-framework-cocoa" },
@@ -469,6 +479,7 @@ dependencies = [
     { name = "pyside6" },
     { name = "send2trash" },
     { name = "show-in-file-manager" },
+    { name = "simplekml" },
     { name = "watchfiles" },
 ]
 
@@ -488,6 +499,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.3.1" },
     { name = "coloredlogs", specifier = ">=15.0.1" },
     { name = "google-cloud-vision", specifier = ">=3.12.1" },
+    { name = "gpxpy", specifier = ">=1.6.2" },
     { name = "pillow", specifier = ">=12.0.0" },
     { name = "pyexiftool", specifier = ">=0.5.6" },
     { name = "pyobjc-framework-cocoa", specifier = ">=12.1" },
@@ -495,6 +507,7 @@ requires-dist = [
     { name = "pyside6", specifier = ">=6.10.1" },
     { name = "send2trash", specifier = ">=1.8.0" },
     { name = "show-in-file-manager", specifier = ">=1.1.2" },
+    { name = "simplekml", specifier = ">=1.3.6" },
     { name = "watchfiles", specifier = ">=0.21.0" },
 ]
 
@@ -878,6 +891,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/72/6c/0b8b6acd1e20ffa4e
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8e/2d/cbae20c55a7a5a327de940eb217a5572ff6473e04406e56ece28729e447a/show_in_file_manager-1.1.5-py3-none-any.whl", hash = "sha256:a92a9ab2cd20fca45db5a8b2d2136e4bec624b182f000900855b2d992abd0cbc", size = 30102, upload-time = "2024-03-06T04:32:21.251Z" },
 ]
+
+[[package]]
+name = "simplekml"
+version = "1.3.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/15/e4/c333a93b7e3346437ad1ff42b8e362b853eb405ad6243ab6163f9af2a460/simplekml-1.3.6.tar.gz", hash = "sha256:cda687be2754395fcab664e908ebf589facd41e8436d233d2be37a69efb1c536", size = 52999, upload-time = "2021-09-16T17:08:27.038Z" }
 
 [[package]]
 name = "taskipy"

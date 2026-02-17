@@ -43,14 +43,16 @@ def test_save_cancel_mode_tracks_dirty_state(qapp, monkeypatch):
     assert dialog._dirty is True
 
 
-def test_autosave_mode_commits_on_field_update(qapp, monkeypatch):
+def test_autosave_mode_commits_on_field_update(qapp, monkeypatch, tmp_path):
     monkeypatch.setenv("PIQO_SETTINGS_PANEL_SAVE_MODE", "autosave")
     init_qsettings_store(dyn=True)
 
     dialog = SettingsDialog()
+    app_path = tmp_path / "Viewer.app"
+    app_path.mkdir()
     editor = dialog._editors[UserSettingKey.EXTERNAL_VIEWER]
-    editor.set_value("ViewerX")
+    editor.set_value(str(app_path))
     dialog._autosave_field(UserSettingKey.EXTERNAL_VIEWER)
 
-    assert get_user_setting(UserSettingKey.EXTERNAL_VIEWER) == "ViewerX"
+    assert get_user_setting(UserSettingKey.EXTERNAL_VIEWER) == str(app_path)
     assert UserSettingKey.EXTERNAL_VIEWER in dialog.changed_keys

@@ -1,9 +1,9 @@
 Look at /Users/guilhem/Documents/projects/github/gpx2exif
 
-- this project takes the existing photos based on the Date Time Original, optionally applies a time shift (if the times in the photo / camera and the times in the GPX do not correspond), reads the position at the time from the GPX and sets the GPS EXIF tags in the image files
+- this project takes the existing photos : starts with the Date Time Original, optionally applies a time shift (if the times in the photo / camera and the times in the GPX do not correspond), reads the position at the time from the GPX and sets the GPS EXIF tags in the image files
 - You will need to redo the functionalities in this project. Do not make any code reference to that project : it will not be a dependency. You can look or copy the code and reapply it here.
 
-!!!! Contrary to the reference gpx2exif : in piqopiqo there is no EXIF processed. The time taken (for reading) is in the Metadata DB + the latitude / longitude also are (for writing). So update the SQLLIte DB, not the image files. !!!!
+!!!! Contrary to the reference gpx2exif : in piqopiqo there is no EXIF written (in normal processing ; unless asked by the user explicitly ; this it not part of it). The time taken (for reading) is in the Metadata DB + the latitude / longitude also are (for writing). So update the SQLLIte DB, not the image files. !!!!
 
 - There are 2 workflows that piqopiqo needs to have and that you will implement :
 - read the time in an image using GCP Cloud Vision : gpx2exif has this in time_extractor.py.
@@ -36,7 +36,7 @@ GUI :
 - The Settingg panel src/piqopiqo/settings_panel src/piqopiqo/settings_panel/schema.py : will add a Timezone field in the External/Workflow tab
 - There will be a separate section in the Tools menu of the app. It will have an entry with label : GPS Time shift...  This will open a dialog with as many entries as they are folders in the current session (see the source_folders src/piqopiqo/main_window.py). The name of each folder (just the part relative to the loaded folder) + a field to enter a timeshift in the same format as gpx2exif. h + m + s in tha order. possibly with a - before. There will be a Save and Cancel (no confirmation dialog). The formats will need to be valid (otherwise vlaidation failed red border aorund the field + Save not enabled). Empty is fine (it will mean : no time shift). 
 
-- In the grid, the right click  menu will have an additional item : Extract GPS Time shift. On the menu click : there needs to be a dialog : that reminds :which folder (the folder where the image is located), if there is already a value set for the time shift for that folder (show the value) + warning that it will be erased if there is. Then OK / Cancel. On OK, this will call in the background the gcloud vision api using the Python lib like the code in time_extractor.py. See src/piqopiqo/copy_sd.py for the background. Do not block the GUI thread while doing the call. With a progress bar (with undetermined total: it just shows while the call is made). Then on return it either shows the error message. Or shows the computed time shift. Then only OK. If hte time shift has been successfully completed : set it as the timeshift for the folder in the SQLlite db.
+- In the grid, the right click  menu will have an additional item : Extract GPS Time shift. On the menu click : there needs to be a dialog : that reminds which folder is being processed (the folder where the image is directly located), if there is already a value set for the time shift for that folder (show the value) + warning that it will be erased if there is. Then OK / Cancel. On OK, this will call in the background the gcloud vision api using the Python lib like the code in time_extractor.py. See src/piqopiqo/copy_sd.py for the background. Do not block the GUI thread while doing the call. With a progress bar (with undetermined total: it just shows while the call is made). Then on return it either shows the error message. Or shows the computed time shift. Then only OK. If hte time shift has been successfully completed : set it as the timeshift for the folder in the SQLlite db. Do not use the equivalents of flags --time-range and --both-am-pm of the time_extractor.py : the output will be something like -1h16m5s 
 
 - In the tools Menu : in the section mentioned before : you will have an Apply GPX... menu. This will open a dialog with 3 sections
 - a section that reminds of the values for the time shifts for each of the folders (separately). If no value : will be NOT SET (define a constant for the label) + in red. (if 0 : will be showed as 0 with no color). When NOT SET : will be like 0 in the run later.
@@ -47,9 +47,11 @@ GUI :
 - When OK : launched in th e background. A new modal dialog opens with a progress bar (size determined by the number of photos in the folders summed up). Show a string in the dialog to know which folder is being processed. Do each folder in turn one after the other. That new dialog has a Cancel, which closes the dialog.
 - When finished, display the number of photos processed + the paths to the KML with an show in Finder button and OK is enabled. 
 
-- Note that the process  has changed the time taken  : the grid should be reordered (model and view) if needed (if the sort is time taken) + the currently selected items will need to refresh their data from the Metadata DB (date, + latitude / longitude)
+- Note that the process  has changed the time taken  : the grid should be reordered (model and view) if needed (if the sort is time taken) + the currently selected items will need to refresh their data for display from the Metadata DB (date, + latitude / longitude)
 
 - All the current folders are processed and all the photos in those folders are processed. The selected items or the filtered items are completely irrelevant.
+
+
 
 
 ```sh

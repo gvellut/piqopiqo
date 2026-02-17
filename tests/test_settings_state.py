@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import uuid
 
-from PySide6.QtCore import QCoreApplication, QSettings
+from PySide6.QtCore import QSettings
+from PySide6.QtWidgets import QApplication
 import pytest
 
 from piqopiqo.model import StatusLabel
@@ -24,10 +25,11 @@ from piqopiqo.shortcuts import Shortcut
 
 
 @pytest.fixture
-def qcore_app():
-    app = QCoreApplication.instance()
+def qcore_app(monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance()
     if app is None:
-        app = QCoreApplication([])
+        app = QApplication([])
     return app
 
 
@@ -43,6 +45,8 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_NUM_COLUMNS",
         "PIQO_SETTINGS_PANEL_SAVE_MODE",
         "PIQO_FONT_SIZE",
+        "PIQO_GPX_IGNORE_OFFSET",
+        "PIQO_GPX_TIMEZONE",
     ):
         monkeypatch.delenv(env_name, raising=False)
 
@@ -95,6 +99,17 @@ def test_env_override_takes_priority_over_persisted_values(
     assert get_user_setting(UserSettingKey.NUM_COLUMNS) == 7
 
 
+def test_gpx_settings_defaults_and_env_override(isolated_settings, monkeypatch):
+    assert get_user_setting(UserSettingKey.GPX_TIMEZONE) == ""
+    assert get_user_setting(UserSettingKey.GPX_IGNORE_OFFSET) is False
+    assert get_user_setting(UserSettingKey.GPX_KML_FOLDER) == ""
+
+    monkeypatch.setenv("PIQO_GPX_IGNORE_OFFSET", "true")
+    monkeypatch.setenv("PIQO_GPX_TIMEZONE", "Europe/Paris")
+    assert get_user_setting(UserSettingKey.GPX_IGNORE_OFFSET) is True
+    assert get_user_setting(UserSettingKey.GPX_TIMEZONE) == "Europe/Paris"
+
+
 def test_runtime_settings_are_memory_only(isolated_settings, monkeypatch):
     monkeypatch.setenv("PIQO_FONT_SIZE", "19")
 
@@ -123,7 +138,7 @@ def test_dyn_mode_is_memory_only(qcore_app):
 
     # New dyn store must not retain prior in-memory values.
     init_qsettings_store(dyn=True)
-    assert get_user_setting(UserSettingKey.EXTERNAL_EDITOR) == "Gimp"
+    assert get_user_setting(UserSettingKey.EXTERNAL_EDITOR) == ""
 
     # Nothing persisted to QSettings.
     settings = QSettings()

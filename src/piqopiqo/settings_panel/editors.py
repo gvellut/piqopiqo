@@ -8,6 +8,7 @@ import sys
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFileDialog,
     QHBoxLayout,
@@ -70,6 +71,23 @@ class NumberEditor(BaseEditor):
 
     def get_value(self):
         return int(self._spin.value())
+
+
+class BoolEditor(BaseEditor):
+    def __init__(self):
+        super().__init__()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self._checkbox = QCheckBox()
+        self._checkbox.stateChanged.connect(lambda _state: self.value_changed.emit())
+        layout.addWidget(self._checkbox)
+        layout.addStretch(1)
+
+    def set_value(self, value):
+        self._checkbox.setChecked(bool(value))
+
+    def get_value(self):
+        return bool(self._checkbox.isChecked())
 
 
 class ChoiceEditor(BaseEditor):
@@ -295,6 +313,8 @@ def build_editor(kind: EditorKind, **kwargs) -> BaseEditor:
             min_value=kwargs.get("min_value"),
             max_value=kwargs.get("max_value"),
         )
+    if kind == EditorKind.BOOL:
+        return BoolEditor()
     if kind == EditorKind.CHOICE:
         return ChoiceEditor(kwargs.get("choices") or ())
     if kind == EditorKind.PATH_DIR:

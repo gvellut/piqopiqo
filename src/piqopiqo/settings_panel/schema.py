@@ -17,6 +17,7 @@ class EditorKind(Enum):
     TEXT = auto()
     NUMBER = auto()
     CHOICE = auto()
+    BOOL = auto()
     LIST_TEXT = auto()
     STATUS_LABELS = auto()
     SHORTCUTS = auto()
@@ -165,6 +166,41 @@ SETTINGS_TABS: list[TabSpec] = [
                         key=UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER,
                         label="Copy SD Base External Folder",
                         editor=EditorKind.PATH_DIR,
+                    ),
+                    FieldSpec(
+                        key=UserSettingKey.SDCARD_NAMES,
+                        label="SD Card Names",
+                        editor=EditorKind.LIST_TEXT,
+                    ),
+                ],
+            ),
+            GroupSpec(
+                title="GPX",
+                fields=[
+                    FieldSpec(
+                        key=UserSettingKey.GPX_TIMEZONE,
+                        label="Timezone",
+                        editor=EditorKind.TEXT,
+                    ),
+                    FieldSpec(
+                        key=UserSettingKey.GPX_IGNORE_OFFSET,
+                        label="Ignore Offset",
+                        editor=EditorKind.BOOL,
+                    ),
+                    FieldSpec(
+                        key=UserSettingKey.GPX_KML_FOLDER,
+                        label="KML Folder",
+                        editor=EditorKind.PATH_DIR,
+                    ),
+                    FieldSpec(
+                        key=UserSettingKey.GCP_PROJECT,
+                        label="GCP Project",
+                        editor=EditorKind.TEXT,
+                    ),
+                    FieldSpec(
+                        key=UserSettingKey.GCP_SA_KEY_PATH,
+                        label="Service Account JSON Key",
+                        editor=EditorKind.PATH_FILE,
                     ),
                 ],
             ),

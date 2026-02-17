@@ -9,6 +9,7 @@ import sqlite3
 import threading
 
 from piqopiqo.cache_paths import get_cache_dir_for_folder
+from piqopiqo.gpx2exif.constants import FOLDER_META_TIME_SHIFT
 
 from .db_fields import DBFields
 
@@ -229,6 +230,11 @@ class MetadataDB:
     );
     CREATE INDEX IF NOT EXISTS idx_exif_fields_file_path
         ON photo_exif_fields(file_path);
+
+    CREATE TABLE IF NOT EXISTS folder_metadata (
+        data TEXT PRIMARY KEY,
+        value TEXT
+    );
     """
 
     def __init__(self, folder_path: str):
@@ -501,6 +507,67 @@ class MetadataDB:
         ).fetchone()
         return row is not None and int(row["cnt"]) == len(field_keys)
 
+    def get_folder_value(self, data: str) -> str | None:
+        """Get a folder-scoped metadata value.
+
+        Args:
+            data: Folder metadata key.
+
+        Returns:
+            Stored value or None.
+        """
+        conn = self._get_readonly_connection()
+        if conn is None:
+            return None
+
+        row = conn.execute(
+            "SELECT value FROM folder_metadata WHERE data = ?",
+            (str(data),),
+        ).fetchone()
+        if row is None:
+            return None
+        value = row["value"]
+        if value is None:
+            return None
+        return str(value)
+
+    def set_folder_value(self, data: str, value: str | None) -> None:
+        """Set or delete a folder-scoped metadata value.
+
+        Args:
+            data: Folder metadata key.
+            value: Value to store, or None to delete.
+        """
+        conn = self._ensure_db()
+        key = str(data)
+        if value is None:
+            conn.execute("DELETE FROM folder_metadata WHERE data = ?", (key,))
+            conn.commit()
+            return
+
+        conn.execute(
+            """
+            INSERT INTO folder_metadata (data, value)
+            VALUES (?, ?)
+            ON CONFLICT(data) DO UPDATE SET
+                value = excluded.value
+            """,
+            (key, str(value)),
+        )
+        conn.commit()
+
+    def get_time_shift(self) -> str | None:
+        """Get the stored GPX time shift for this folder."""
+        return self.get_folder_value(FOLDER_META_TIME_SHIFT)
+
+    def set_time_shift(self, value: str | None) -> None:
+        """Set the GPX time shift for this folder.
+
+        Empty strings are treated as unset values.
+        """
+        normalized = "" if value is None else str(value).strip()
+        self.set_folder_value(FOLDER_META_TIME_SHIFT, normalized or None)
+
     def get_exif_fields(
         self, file_path: str, field_keys: list[str]
     ) -> dict[str, str | None] | None:
@@ -597,6 +664,7 @@ class MetadataDB:
 
         conn.execute("DELETE FROM photo_exif_fields")
         conn.execute("DELETE FROM photo_metadata")
+        conn.execute("DELETE FROM folder_metadata")
         conn.commit()
         logger.info(f"Deleted all metadata for folder: {self.folder_path}")
 

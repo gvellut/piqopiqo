@@ -68,6 +68,11 @@ class UserSettingKey(StrEnum):
     SHORTCUTS = "shortcuts"
     COPY_SD_BASE_EXTERNAL_FOLDER = "copySdBaseExternalFolder"
     SDCARD_NAMES = "sdcardNames"
+    GPX_TIMEZONE = "gpxTimezone"
+    GPX_IGNORE_OFFSET = "gpxIgnoreOffset"
+    GPX_KML_FOLDER = "gpxKmlFolder"
+    GCP_PROJECT = "gcpProject"
+    GCP_SA_KEY_PATH = "gcpSaKeyPath"
 
 
 class RuntimeSettingKey(StrEnum):
@@ -362,6 +367,11 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         default=[],
         **_list_of_strings_params,
     ),
+    UserSettingKey.GPX_TIMEZONE: SettingDef(default="", read_type=str),
+    UserSettingKey.GPX_IGNORE_OFFSET: SettingDef(default=False, read_type=bool),
+    UserSettingKey.GPX_KML_FOLDER: SettingDef(default="", read_type=str),
+    UserSettingKey.GCP_PROJECT: SettingDef(default="", read_type=str),
+    UserSettingKey.GCP_SA_KEY_PATH: SettingDef(default="", read_type=str),
 }
 
 # read_type is to deserialize from an env var
