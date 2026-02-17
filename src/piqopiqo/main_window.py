@@ -558,15 +558,12 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
-        settings_label = "Settings..." if sys.platform == "darwin" else "Preferences..."
+        settings_label = "Preferences..."
         settings_action = QAction(settings_label, self)
         settings_action.triggered.connect(self.on_settings)
-        if sys.platform == "darwin":
-            # On macOS, Qt relocates this from File to the standard app menu.
-            settings_action.setMenuRole(QAction.MenuRole.ApplicationSpecificRole)
-            settings_action.setShortcut(QKeySequence.Preferences)
-        else:
-            settings_action.setMenuRole(QAction.MenuRole.NoRole)
+        # On macOS, Qt relocates this from File to the standard app menu.
+        settings_action.setMenuRole(QAction.MenuRole.PreferencesRole)
+        settings_action.setShortcut(QKeySequence.Preferences)
         file_menu.addAction(settings_action)
 
         quit_action = QAction(f"Quit {APP_NAME}", self)

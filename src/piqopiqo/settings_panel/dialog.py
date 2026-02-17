@@ -106,13 +106,14 @@ class SettingsDialog(QDialog):
             root.addWidget(buttons)
             return
 
-        buttons = QDialogButtonBox(
+        self._button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save
             | QDialogButtonBox.StandardButton.Cancel
         )
-        buttons.accepted.connect(self._on_save)
-        buttons.rejected.connect(self._on_cancel)
-        root.addWidget(buttons)
+        self._save_btn = self._button_box.button(QDialogButtonBox.StandardButton.Save)
+        self._button_box.accepted.connect(self._on_save)
+        self._button_box.rejected.connect(self._on_cancel)
+        root.addWidget(self._button_box)
 
     def _load_initial_values(self):
         self._loading = True
@@ -128,6 +129,14 @@ class SettingsDialog(QDialog):
         if self._loading:
             return
         self._dirty = self._compute_dirty()
+        self._update_save_enabled()
+
+    def _all_editors_valid(self) -> bool:
+        return all(editor.is_valid() for editor in self._editors.values())
+
+    def _update_save_enabled(self) -> None:
+        if hasattr(self, "_save_btn"):
+            self._save_btn.setEnabled(self._all_editors_valid())
 
     def _compute_dirty(self) -> bool:
         for key, editor in self._editors.items():
@@ -184,6 +193,9 @@ class SettingsDialog(QDialog):
             return
 
         editor = self._editors[key]
+        if not editor.is_valid():
+            return
+
         value = editor.get_value()
         if not self._validate_field(key, value):
             editor.set_value(self._initial_values.get(key))

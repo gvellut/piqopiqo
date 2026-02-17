@@ -33,6 +33,9 @@ class BaseEditor(QWidget):
     def get_value(self):
         raise NotImplementedError
 
+    def is_valid(self) -> bool:
+        return True
+
 
 class TextEditor(BaseEditor):
     def __init__(self, parent=None):
@@ -238,6 +241,9 @@ class StatusLabelsEditorAdapter(BaseEditor):
 
     def get_value(self):
         return self._editor.get_value()
+
+    def is_valid(self) -> bool:
+        return self._editor.is_valid()
 
 
 class ShortcutsEditorAdapter(BaseEditor):

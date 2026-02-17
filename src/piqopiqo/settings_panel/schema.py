@@ -128,7 +128,7 @@ SETTINGS_TABS: tuple[TabSpec, ...] = (
                 fields=(
                     FieldSpec(
                         key=UserSettingKey.STATUS_LABELS,
-                        label="Status Labels",
+                        label="",
                         editor=EditorKind.STATUS_LABELS,
                     ),
                 ),
