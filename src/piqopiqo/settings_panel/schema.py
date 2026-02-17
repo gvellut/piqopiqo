@@ -33,7 +33,7 @@ class FieldSpec:
     key: UserSettingKey
     label: str
     editor: EditorKind
-    choices: tuple[ChoiceOption, ...] = ()
+    choices: list[ChoiceOption] = ()
     min_value: int | None = None
     max_value: int | None = None
 
@@ -41,52 +41,47 @@ class FieldSpec:
 @define(frozen=True)
 class GroupSpec:
     title: str
-    fields: tuple[FieldSpec, ...]
+    fields: list[FieldSpec]
 
 
 @define(frozen=True)
 class TabSpec:
     title: str
-    groups: tuple[GroupSpec, ...]
+    groups: list[GroupSpec]
 
 
-SETTINGS_TABS: tuple[TabSpec, ...] = (
+SETTINGS_TABS: list[TabSpec] = [
     TabSpec(
-        title="Paths",
-        groups=(
+        title="Core",
+        groups=[
             GroupSpec(
-                title="Storage",
-                fields=(
+                title="Cache + Metadata DB",
+                fields=[
                     FieldSpec(
                         key=UserSettingKey.CACHE_BASE_DIR,
                         label="Cache Base Directory",
                         editor=EditorKind.PATH_DIR,
                     ),
-                    FieldSpec(
-                        key=UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER,
-                        label="Copy SD Base External Folder",
-                        editor=EditorKind.PATH_DIR,
-                    ),
-                ),
+                ],
             ),
             GroupSpec(
-                title="Tools",
-                fields=(
+                title="Exiftool",
+                fields=[
                     FieldSpec(
                         key=UserSettingKey.EXIFTOOL_PATH,
-                        label="Exiftool Path",
+                        label="Path",
                         editor=EditorKind.PATH_FILE,
                     ),
-                ),
+                ],
             ),
-        ),
+        ],
     ),
     TabSpec(
         title="Grid/Display",
-        groups=(
+        groups=[
             GroupSpec(
                 title="Grid",
-                fields=(
+                fields=[
                     FieldSpec(
                         key=UserSettingKey.NUM_COLUMNS,
                         label="Number of Columns",
@@ -98,7 +93,7 @@ SETTINGS_TABS: tuple[TabSpec, ...] = (
                         key=UserSettingKey.ON_FULLSCREEN_EXIT,
                         label="Fullscreen Exit Behavior",
                         editor=EditorKind.CHOICE,
-                        choices=(
+                        choices=[
                             ChoiceOption(
                                 label="Keep Selection",
                                 value=OnFullscreenExitMultipleSelected.KEEP_SELECTION,
@@ -109,48 +104,48 @@ SETTINGS_TABS: tuple[TabSpec, ...] = (
                                     OnFullscreenExitMultipleSelected.SELECT_LAST_VIEWED
                                 ),
                             ),
-                        ),
+                        ],
                     ),
                     FieldSpec(
                         key=UserSettingKey.CUSTOM_EXIF_FIELDS,
                         label="Custom EXIF Fields",
                         editor=EditorKind.LIST_TEXT,
                     ),
-                ),
+                ],
             ),
-        ),
+        ],
     ),
     TabSpec(
         title="Labels + Shortcuts",
-        groups=(
+        groups=[
             GroupSpec(
                 title="Status Labels",
-                fields=(
+                fields=[
                     FieldSpec(
                         key=UserSettingKey.STATUS_LABELS,
                         label="",
                         editor=EditorKind.STATUS_LABELS,
                     ),
-                ),
+                ],
             ),
             GroupSpec(
-                title="Keyboard",
-                fields=(
+                title="Shortcuts",
+                fields=[
                     FieldSpec(
                         key=UserSettingKey.SHORTCUTS,
-                        label="Shortcuts",
+                        label="",
                         editor=EditorKind.SHORTCUTS,
                     ),
-                ),
+                ],
             ),
-        ),
+        ],
     ),
     TabSpec(
         title="External/Workflow",
-        groups=(
+        groups=[
             GroupSpec(
                 title="External Apps",
-                fields=(
+                fields=[
                     FieldSpec(
                         key=UserSettingKey.EXTERNAL_VIEWER,
                         label="External Viewer",
@@ -161,11 +156,21 @@ SETTINGS_TABS: tuple[TabSpec, ...] = (
                         label="External Editor",
                         editor=EditorKind.PATH_APP,
                     ),
-                ),
+                ],
             ),
-        ),
+            GroupSpec(
+                title="Copy SD",
+                fields=[
+                    FieldSpec(
+                        key=UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER,
+                        label="Copy SD Base External Folder",
+                        editor=EditorKind.PATH_DIR,
+                    ),
+                ],
+            ),
+        ],
     ),
-)
+]
 
 
 def iter_all_field_specs() -> list[FieldSpec]:
