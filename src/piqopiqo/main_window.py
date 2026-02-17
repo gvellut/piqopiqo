@@ -736,7 +736,7 @@ class MainWindow(QMainWindow):
 
         tools_menu.addSeparator()
 
-        save_exif_action = QAction("Save exif", self)
+        save_exif_action = QAction("Save EXIF", self)
         save_exif_action.triggered.connect(self._on_save_exif)
         tools_menu.addAction(save_exif_action)
 
