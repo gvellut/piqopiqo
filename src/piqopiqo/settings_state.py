@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum, StrEnum, auto
 import json
 import logging
 import os
@@ -29,9 +29,9 @@ ORG_DOMAIN = "com.vellut"
 ENV_PREFIX = "PIQO_"
 
 
-class SettingsPanelSaveMode(StrEnum):
-    AUTOSAVE = "autosave"
-    SAVE_CANCEL = "saveCancel"
+class SettingsPanelSaveMode(Enum):
+    AUTOSAVE = auto()
+    SAVE_CANCEL = auto()
 
 
 class StateGroup(StrEnum):
