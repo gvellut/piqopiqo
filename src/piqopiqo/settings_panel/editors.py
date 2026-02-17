@@ -197,6 +197,30 @@ class AppPathEditor(PathEditor):
             start_dir_resolver=_resolve_app_path_start_dir,
         )
 
+    def _browse(self):
+        current = self._line_edit.text().strip()
+        start_dir = self._get_start_dir(current)
+
+        # On macOS, app bundles are directories; use file mode so `.app` bundles
+        # are selectable in the native picker.
+        if sys.platform == "darwin":
+            value, _ = QFileDialog.getOpenFileName(
+                self,
+                self._browse_title,
+                start_dir,
+                "Applications (*.app);;All Files (*)",
+            )
+        else:
+            value, _ = QFileDialog.getOpenFileName(
+                self,
+                self._browse_title,
+                start_dir,
+            )
+
+        if value:
+            self._line_edit.setText(value)
+            self.value_changed.emit()
+
 
 class _FocusOutPlainTextEdit(QPlainTextEdit):
     focus_left = Signal()

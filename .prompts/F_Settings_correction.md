@@ -1,0 +1,1 @@
+in AppPathEditor in src/piqopiqo/settings_panel/editors.py for the external app. The file browser does not allow to select the .app folders. It should allow it.
