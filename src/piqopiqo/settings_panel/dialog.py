@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from functools import partial
 import os
+import sys
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -67,6 +68,13 @@ class SettingsDialog(QDialog):
             for group_spec in tab_spec.groups:
                 group_box = QGroupBox(group_spec.title, tab)
                 group_layout = QFormLayout(group_box)
+                group_layout.setFieldGrowthPolicy(
+                    QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
+                )
+                group_layout.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
+                group_layout.setLabelAlignment(
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+                )
 
                 for field in group_spec.fields:
                     editor = build_editor(
@@ -143,6 +151,30 @@ class SettingsDialog(QDialog):
                     self,
                     "Invalid File",
                     f"The file does not exist:\n{value}",
+                )
+                return False
+        if field.editor == EditorKind.PATH_APP:
+            if not value:
+                return True
+            path = str(value).strip()
+            normalized_path = path
+            if normalized_path != os.sep:
+                normalized_path = normalized_path.rstrip(os.sep)
+            if sys.platform == "darwin":
+                if not normalized_path.lower().endswith(".app") or not os.path.isdir(
+                    path
+                ):
+                    QMessageBox.warning(
+                        self,
+                        "Invalid Application",
+                        f"Application path must be an existing .app bundle.\n{value}",
+                    )
+                    return False
+            elif not os.path.exists(path):
+                QMessageBox.warning(
+                    self,
+                    "Invalid Application",
+                    f"The path does not exist:\n{value}",
                 )
                 return False
         return True

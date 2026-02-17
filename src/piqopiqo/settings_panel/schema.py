@@ -13,6 +13,7 @@ from piqopiqo.settings_state import UserSettingKey
 class EditorKind(Enum):
     PATH_DIR = auto()
     PATH_FILE = auto()
+    PATH_APP = auto()
     TEXT = auto()
     NUMBER = auto()
     CHOICE = auto()
@@ -153,12 +154,12 @@ SETTINGS_TABS: tuple[TabSpec, ...] = (
                     FieldSpec(
                         key=UserSettingKey.EXTERNAL_VIEWER,
                         label="External Viewer",
-                        editor=EditorKind.TEXT,
+                        editor=EditorKind.PATH_APP,
                     ),
                     FieldSpec(
                         key=UserSettingKey.EXTERNAL_EDITOR,
                         label="External Editor",
-                        editor=EditorKind.TEXT,
+                        editor=EditorKind.PATH_APP,
                     ),
                 ),
             ),

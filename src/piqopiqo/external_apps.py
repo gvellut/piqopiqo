@@ -25,10 +25,11 @@ def reveal_in_file_manager(photos: list[ImageItem]) -> None:
 def open_in_external_app(app_name: str, paths: list[str]) -> None:
     """Open files in an external application.
 
-    On macOS, uses ``open -a AppName file1 file2 ...``.
+    On macOS, uses ``open -a AppNameOrPath file1 file2 ...``.
 
     Args:
-        app_name: The application name (e.g. "Preview").
+        app_name: The application name or path
+            (e.g. "Preview", "/Applications/Preview.app").
         paths: List of file paths to open.
     """
     if not app_name or not paths:

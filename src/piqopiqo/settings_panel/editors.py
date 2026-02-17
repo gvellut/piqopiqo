@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+import os
+import sys
+
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QComboBox,
@@ -10,6 +14,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QWidget,
 )
@@ -93,30 +98,57 @@ class ChoiceEditor(BaseEditor):
 
 
 class PathEditor(BaseEditor):
-    def __init__(self, *, is_file: bool):
+    def __init__(
+        self,
+        *,
+        is_file: bool,
+        browse_title: str,
+        start_dir_resolver: Callable[[str], str] | None = None,
+    ):
         super().__init__()
         self._is_file = is_file
+        self._browse_title = browse_title
+        self._start_dir_resolver = start_dir_resolver
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        self.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
 
         self._line_edit = QLineEdit()
         self._line_edit.editingFinished.connect(self.value_changed)
+        self._line_edit.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
         layout.addWidget(self._line_edit)
+        layout.setStretch(0, 1)
 
         browse_btn = QPushButton("Browse")
         browse_btn.clicked.connect(self._browse)
+        browse_btn.setSizePolicy(
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Fixed,
+        )
         layout.addWidget(browse_btn)
 
     def _browse(self):
         current = self._line_edit.text().strip()
+        start_dir = self._get_start_dir(current)
         if self._is_file:
-            value, _ = QFileDialog.getOpenFileName(self, "Select File", current or "")
+            value, _ = QFileDialog.getOpenFileName(
+                self,
+                self._browse_title,
+                start_dir,
+            )
         else:
             value = QFileDialog.getExistingDirectory(
                 self,
-                "Select Folder",
-                current or "",
+                self._browse_title,
+                start_dir,
                 QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.ReadOnly,
             )
 
@@ -129,6 +161,38 @@ class PathEditor(BaseEditor):
 
     def get_value(self):
         return self._line_edit.text().strip()
+
+    def _get_start_dir(self, current: str) -> str:
+        if self._start_dir_resolver is not None:
+            return self._start_dir_resolver(current)
+        return current or ""
+
+
+def _resolve_app_path_start_dir(current: str) -> str:
+    if current:
+        path = os.path.expanduser(current)
+        if path != os.sep:
+            path = path.rstrip(os.sep)
+        if path.lower().endswith(".app"):
+            return os.path.dirname(path) or path
+        if os.path.isdir(path):
+            return path
+        parent = os.path.dirname(path)
+        if parent:
+            return parent
+
+    if sys.platform == "darwin":
+        return "/Applications"
+    return os.path.expanduser("~")
+
+
+class AppPathEditor(PathEditor):
+    def __init__(self):
+        super().__init__(
+            is_file=False,
+            browse_title="Select Application",
+            start_dir_resolver=_resolve_app_path_start_dir,
+        )
 
 
 class _FocusOutPlainTextEdit(QPlainTextEdit):
@@ -204,9 +268,11 @@ def build_editor(kind: EditorKind, **kwargs) -> BaseEditor:
     if kind == EditorKind.CHOICE:
         return ChoiceEditor(kwargs.get("choices") or ())
     if kind == EditorKind.PATH_DIR:
-        return PathEditor(is_file=False)
+        return PathEditor(is_file=False, browse_title="Select Folder")
     if kind == EditorKind.PATH_FILE:
-        return PathEditor(is_file=True)
+        return PathEditor(is_file=True, browse_title="Select File")
+    if kind == EditorKind.PATH_APP:
+        return AppPathEditor()
     if kind == EditorKind.LIST_TEXT:
         return ListTextEditor()
     if kind == EditorKind.STATUS_LABELS:

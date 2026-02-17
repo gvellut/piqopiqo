@@ -329,8 +329,8 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         deserializer=_deserialize_status_labels,
         env_parser=lambda raw: _deserialize_status_labels(_parse_json(raw)),
     ),
-    UserSettingKey.EXTERNAL_VIEWER: SettingDef(default="Gimp", read_type=str),
-    UserSettingKey.EXTERNAL_EDITOR: SettingDef(default="Gimp", read_type=str),
+    UserSettingKey.EXTERNAL_VIEWER: SettingDef(default="", read_type=str),
+    UserSettingKey.EXTERNAL_EDITOR: SettingDef(default="", read_type=str),
     UserSettingKey.SHORTCUTS: SettingDef(
         default={
             Shortcut.ZOOM_IN: "=",

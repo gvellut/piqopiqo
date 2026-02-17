@@ -7,10 +7,11 @@ from functools import partial
 import logging
 import os
 import shutil
+import sys
 import time
 
 from PySide6.QtCore import Qt, QThreadPool, QTimer
-from PySide6.QtGui import QAction, QActionGroup, QShortcut
+from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -557,9 +558,15 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
-        settings_action = QAction("Settings...", self)
-        settings_action.setMenuRole(QAction.MenuRole.PreferencesRole)
+        settings_label = "Settings..." if sys.platform == "darwin" else "Preferences..."
+        settings_action = QAction(settings_label, self)
         settings_action.triggered.connect(self.on_settings)
+        if sys.platform == "darwin":
+            # On macOS, Qt relocates this from File to the standard app menu.
+            settings_action.setMenuRole(QAction.MenuRole.ApplicationSpecificRole)
+            settings_action.setShortcut(QKeySequence.Preferences)
+        else:
+            settings_action.setMenuRole(QAction.MenuRole.NoRole)
         file_menu.addAction(settings_action)
 
         quit_action = QAction(f"Quit {APP_NAME}", self)
@@ -1103,7 +1110,9 @@ class MainWindow(QMainWindow):
         # View in Application (only if configured)
         external_viewer = get_user_setting(UserSettingKey.EXTERNAL_VIEWER)
         if external_viewer:
-            view_app_action = menu.addAction(f"View in {external_viewer}")
+            view_app_action = menu.addAction(
+                f"View in {self._display_external_app_name(external_viewer)}"
+            )
             view_app_action.triggered.connect(
                 lambda: open_in_external_app(
                     external_viewer, [p.path for p in selected]
@@ -1113,7 +1122,9 @@ class MainWindow(QMainWindow):
         # Edit in Application (only if configured)
         external_editor = get_user_setting(UserSettingKey.EXTERNAL_EDITOR)
         if external_editor:
-            edit_app_action = menu.addAction(f"Edit in {external_editor}")
+            edit_app_action = menu.addAction(
+                f"Edit in {self._display_external_app_name(external_editor)}"
+            )
             edit_app_action.triggered.connect(
                 lambda: self._edit_in_external_app(selected)
             )
@@ -1234,6 +1245,13 @@ class MainWindow(QMainWindow):
 
         # Refresh the grid to show placeholders until new thumbs arrive
         self.grid.on_scroll(self.grid.scrollbar.value())
+
+    @staticmethod
+    def _display_external_app_name(app_path: str) -> str:
+        base = os.path.basename(app_path.rstrip(os.sep))
+        if base.lower().endswith(".app"):
+            return base[:-4]
+        return base or app_path
 
     def _edit_in_external_app(self, photos: list[ImageItem]):
         """Duplicate selected photos and open duplicates in external editor."""

@@ -52,6 +52,8 @@ pkill -9 -f "piqopiqo"
 
 Then launch with suitable initialization options.
 
+`piqopiqo` needs to be launched in foreground (outside sandbox), using `uv run piqopiqo`.
+
 ### 3. Write Automation Scripts
 
 Create a Python script to automate your application. It connects to the server running inside the application.
@@ -76,6 +78,10 @@ with PyQtAutoClient(port=9876) as client:
     result = client.get_text("@name:status_label")
     print(f"Status: {result}")
 ```
+
+#### Launch
+
+The PyQtAuto script must be run outside the sandbox. Otherwise it is blocked (PermissionError: Operation not permitted on socket connect).
 
 #### Location of temporary files
 
