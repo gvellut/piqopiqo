@@ -7,6 +7,7 @@ from pathlib import Path
 import threading
 
 from piqopiqo.cache_paths import set_cache_base_dir
+from piqopiqo.gpx2exif.constants import FOLDER_META_TIME_SHIFT
 from piqopiqo.gpx2exif.gpx_processing import GpxPoint, compute_position
 from piqopiqo.gpx2exif.service import apply_gpx_to_folders
 from piqopiqo.metadata.db_fields import DBFields
@@ -68,7 +69,7 @@ def test_apply_gpx_update_mode_updates_db_and_clears_missing(tmp_path) -> None:
     dbm = MetadataDBManager()
     _save_metadata(dbm, str(p1), datetime(2026, 1, 1, 10, 0, 30))
     _save_metadata(dbm, str(p2), datetime(2026, 1, 1, 9, 0, 0))
-    dbm.get_db_for_folder(str(folder)).set_time_shift("30s")
+    dbm.get_db_for_folder(str(folder)).set_folder_value(FOLDER_META_TIME_SHIFT, "30s")
 
     result = apply_gpx_to_folders(
         root_folder=str(root),
@@ -121,7 +122,7 @@ def test_apply_gpx_no_update_mode_keeps_db(tmp_path) -> None:
     dbm = MetadataDBManager()
     original_time = datetime(2026, 1, 1, 10, 0, 30)
     _save_metadata(dbm, str(p1), original_time)
-    dbm.get_db_for_folder(str(folder)).set_time_shift("30s")
+    dbm.get_db_for_folder(str(folder)).set_folder_value(FOLDER_META_TIME_SHIFT, "30s")
 
     result = apply_gpx_to_folders(
         root_folder=str(root),
@@ -172,8 +173,8 @@ def test_apply_gpx_folder_scoped_rollback_on_cancel(tmp_path) -> None:
     _save_metadata(dbm, str(b1), datetime(2026, 1, 1, 10, 0, 0))
     _save_metadata(dbm, str(b2), datetime(2026, 1, 1, 10, 0, 0))
 
-    dbm.get_db_for_folder(str(folder_a)).set_time_shift("1s")
-    dbm.get_db_for_folder(str(folder_b)).set_time_shift("2s")
+    dbm.get_db_for_folder(str(folder_a)).set_folder_value(FOLDER_META_TIME_SHIFT, "1s")
+    dbm.get_db_for_folder(str(folder_b)).set_folder_value(FOLDER_META_TIME_SHIFT, "2s")
 
     cancel_event = threading.Event()
 

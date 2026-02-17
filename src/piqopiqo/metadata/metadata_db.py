@@ -9,7 +9,6 @@ import sqlite3
 import threading
 
 from piqopiqo.cache_paths import get_cache_dir_for_folder
-from piqopiqo.gpx2exif.constants import FOLDER_META_TIME_SHIFT
 
 from .db_fields import DBFields
 
@@ -555,18 +554,6 @@ class MetadataDB:
             (key, str(value)),
         )
         conn.commit()
-
-    def get_time_shift(self) -> str | None:
-        """Get the stored GPX time shift for this folder."""
-        return self.get_folder_value(FOLDER_META_TIME_SHIFT)
-
-    def set_time_shift(self, value: str | None) -> None:
-        """Set the GPX time shift for this folder.
-
-        Empty strings are treated as unset values.
-        """
-        normalized = "" if value is None else str(value).strip()
-        self.set_folder_value(FOLDER_META_TIME_SHIFT, normalized or None)
 
     def get_exif_fields(
         self, file_path: str, field_keys: list[str]

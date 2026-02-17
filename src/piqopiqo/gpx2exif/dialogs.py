@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import Enum, auto
 import os
 
 from PySide6.QtCore import Signal
@@ -10,7 +11,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
-    QFormLayout,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -27,8 +27,7 @@ from PySide6.QtWidgets import (
 from piqopiqo.metadata.metadata_db import MetadataDBManager
 
 from .constants import (
-    APPLY_MODE_ONLY_KML,
-    APPLY_MODE_UPDATE_DB,
+    FOLDER_META_TIME_SHIFT,
     NOT_SET_TIME_SHIFT_LABEL,
 )
 from .gpx_processing import to_relative_folder
@@ -36,6 +35,11 @@ from .service import ApplyGpxResult
 from .time_shift import is_valid_time_shift
 
 _INVALID_STYLE = "border: 1px solid red;"
+
+
+class ApplyGpxMode(Enum):
+    ONLY_KML = auto()
+    UPDATE_DB = auto()
 
 
 class _TimeShiftEdit(QLineEdit):
@@ -97,7 +101,7 @@ class GpsTimeShiftDialog(QDialog):
 
             edit = _TimeShiftEdit(self)
             db = self._db_manager.get_db_for_folder(folder)
-            edit.setText(db.get_time_shift() or "")
+            edit.setText(db.get_folder_value(FOLDER_META_TIME_SHIFT) or "")
             edit.textChanged.connect(self._update_save_enabled)
             self._edits[folder] = edit
             grid.addWidget(edit, row, 1)
@@ -125,9 +129,13 @@ class GpsTimeShiftDialog(QDialog):
         for folder, edit in self._edits.items():
             value = edit.text().strip()
             db = self._db_manager.get_db_for_folder(folder)
-            db.set_time_shift(value or None)
+            db.set_folder_value(FOLDER_META_TIME_SHIFT, value or None)
 
         self.accept()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.setFixedSize(self.size())
 
 
 class ExtractGpsTimeShiftConfirmDialog(QDialog):
@@ -163,6 +171,10 @@ class ExtractGpsTimeShiftConfirmDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.setFixedSize(self.size())
 
 
 class ExtractGpsTimeShiftProgressDialog(QDialog):
@@ -232,6 +244,7 @@ class ExtractGpsTimeShiftProgressDialog(QDialog):
         self.ok_btn.setEnabled(True)
         self.ok_btn.show()
         self.ok_btn.setFocus()
+        self.adjustSize()
 
     def _on_error(self, message: str) -> None:
         self._result_shift = None
@@ -245,6 +258,7 @@ class ExtractGpsTimeShiftProgressDialog(QDialog):
         self.ok_btn.setEnabled(True)
         self.ok_btn.show()
         self.ok_btn.setFocus()
+        self.adjustSize()
 
     def _on_cancel(self) -> None:
         if self._worker is not None:
@@ -285,7 +299,9 @@ class ApplyGpxDialog(QDialog):
             shifts_layout.addWidget(QLabel(relative), row, 0)
 
             value_label = QLabel()
-            value = self._db_manager.get_db_for_folder(folder).get_time_shift()
+            value = self._db_manager.get_db_for_folder(folder).get_folder_value(
+                FOLDER_META_TIME_SHIFT
+            )
             if value is None or not str(value).strip():
                 value_label.setText(NOT_SET_TIME_SHIFT_LABEL)
                 value_label.setStyleSheet("color: red;")
@@ -299,30 +315,32 @@ class ApplyGpxDialog(QDialog):
 
         layout.addWidget(shifts_group)
 
-        source_group = QGroupBox("GPX")
-        source_layout = QFormLayout(source_group)
-
         path_row = QWidget(self)
         path_layout = QHBoxLayout(path_row)
         path_layout.setContentsMargins(0, 0, 0, 0)
         path_layout.setSpacing(8)
+        path_layout.addWidget(QLabel("GPX file", self))
 
         self.gpx_path_edit = QLineEdit(self)
         self.gpx_path_edit.textChanged.connect(self._update_ok_enabled)
-        path_layout.addWidget(self.gpx_path_edit)
+        path_layout.addWidget(self.gpx_path_edit, 1)
 
         browse_btn = QPushButton("Browse", self)
         browse_btn.clicked.connect(self._browse_gpx)
         path_layout.addWidget(browse_btn)
-
-        source_layout.addRow("GPX file", path_row)
+        layout.addWidget(path_row)
 
         self.mode_combo = QComboBox(self)
-        self.mode_combo.addItem("Only generate KML", APPLY_MODE_ONLY_KML)
-        self.mode_combo.addItem("Update images", APPLY_MODE_UPDATE_DB)
-        source_layout.addRow("Mode", self.mode_combo)
-
-        layout.addWidget(source_group)
+        self.mode_combo.addItem("Only generate KML", ApplyGpxMode.ONLY_KML)
+        self.mode_combo.addItem("Update images", ApplyGpxMode.UPDATE_DB)
+        mode_row = QWidget(self)
+        mode_layout = QHBoxLayout(mode_row)
+        mode_layout.setContentsMargins(0, 0, 0, 0)
+        mode_layout.setSpacing(8)
+        mode_layout.addWidget(QLabel("Mode", self))
+        mode_layout.addWidget(self.mode_combo)
+        mode_layout.addStretch(1)
+        layout.addWidget(mode_row)
 
         self.kml_warning = QLabel("")
         self.kml_warning.setWordWrap(True)
@@ -343,6 +361,10 @@ class ApplyGpxDialog(QDialog):
         layout.addWidget(buttons)
 
         self._update_ok_enabled()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.setFixedSize(self.size())
 
     def _browse_gpx(self) -> None:
         value, _ = QFileDialog.getOpenFileName(
@@ -368,10 +390,10 @@ class ApplyGpxDialog(QDialog):
             return
         self.accept()
 
-    def get_values(self) -> tuple[str, str]:
+    def get_values(self) -> tuple[str, ApplyGpxMode]:
         return (
             self.gpx_path_edit.text().strip(),
-            str(self.mode_combo.currentData()),
+            self.mode_combo.currentData(),
         )
 
 
@@ -426,6 +448,7 @@ class ApplyGpxProgressDialog(QDialog):
         button_row.addWidget(self.ok_btn)
 
         layout.addLayout(button_row)
+        self.setFixedSize(620, 300)
 
     def set_folder(self, relative_folder: str) -> None:
         self.folder_label.setText(f"Folder: {relative_folder}")

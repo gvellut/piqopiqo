@@ -56,7 +56,7 @@ SETTINGS_TABS: list[TabSpec] = [
         title="Core",
         groups=[
             GroupSpec(
-                title="Cache + Metadata DB",
+                title="Thumbnails + Metadata DB",
                 fields=[
                     FieldSpec(
                         key=UserSettingKey.CACHE_BASE_DIR,
@@ -178,14 +178,14 @@ SETTINGS_TABS: list[TabSpec] = [
                 title="GPX",
                 fields=[
                     FieldSpec(
-                        key=UserSettingKey.GPX_TIMEZONE,
-                        label="Timezone",
-                        editor=EditorKind.TEXT,
-                    ),
-                    FieldSpec(
                         key=UserSettingKey.GPX_IGNORE_OFFSET,
                         label="Ignore Offset",
                         editor=EditorKind.BOOL,
+                    ),
+                    FieldSpec(
+                        key=UserSettingKey.GPX_TIMEZONE,
+                        label="Timezone",
+                        editor=EditorKind.TEXT,
                     ),
                     FieldSpec(
                         key=UserSettingKey.GPX_KML_FOLDER,
@@ -193,14 +193,14 @@ SETTINGS_TABS: list[TabSpec] = [
                         editor=EditorKind.PATH_DIR,
                     ),
                     FieldSpec(
-                        key=UserSettingKey.GCP_PROJECT,
-                        label="GCP Project",
-                        editor=EditorKind.TEXT,
-                    ),
-                    FieldSpec(
                         key=UserSettingKey.GCP_SA_KEY_PATH,
                         label="Service Account JSON Key",
                         editor=EditorKind.PATH_FILE,
+                    ),
+                    FieldSpec(
+                        key=UserSettingKey.GCP_PROJECT,
+                        label="GCP Project Override",
+                        editor=EditorKind.TEXT,
                     ),
                 ],
             ),

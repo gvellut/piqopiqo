@@ -554,6 +554,7 @@ class MainWindow(QMainWindow):
         self.exif_panel.update_exif(selected_items)
 
     def _extract_gps_time_shift_for_item(self, item: ImageItem) -> None:
+        from .gpx2exif.constants import FOLDER_META_TIME_SHIFT
         from .gpx2exif.dialogs import (
             ExtractGpsTimeShiftConfirmDialog,
             ExtractGpsTimeShiftProgressDialog,
@@ -563,7 +564,7 @@ class MainWindow(QMainWindow):
 
         folder_path = item.source_folder
         db_folder = self.db_manager.get_db_for_folder(folder_path)
-        existing_shift = db_folder.get_time_shift()
+        existing_shift = db_folder.get_folder_value(FOLDER_META_TIME_SHIFT)
         relative_folder = to_relative_folder(
             self.root_folder or folder_path, folder_path
         )
@@ -609,7 +610,7 @@ class MainWindow(QMainWindow):
             return
 
         if progress.result_shift:
-            db_folder.set_time_shift(progress.result_shift)
+            db_folder.set_folder_value(FOLDER_META_TIME_SHIFT, progress.result_shift)
 
     def _on_filter_changed(self, criteria: FilterCriteria):
         """Handle filter change.
@@ -817,8 +818,11 @@ class MainWindow(QMainWindow):
             )
             return
 
-        from .gpx2exif.constants import APPLY_MODE_UPDATE_DB
-        from .gpx2exif.dialogs import ApplyGpxDialog, ApplyGpxProgressDialog
+        from .gpx2exif.dialogs import (
+            ApplyGpxDialog,
+            ApplyGpxMode,
+            ApplyGpxProgressDialog,
+        )
         from .gpx2exif.workers import ApplyGpxWorker
 
         input_dialog = ApplyGpxDialog(
@@ -832,7 +836,7 @@ class MainWindow(QMainWindow):
             return
 
         gpx_path, mode = input_dialog.get_values()
-        update_db = mode == APPLY_MODE_UPDATE_DB
+        update_db = mode == ApplyGpxMode.UPDATE_DB
 
         folder_to_files: dict[str, list[str]] = {}
         for item in self.photo_model.all_photos:
@@ -1343,7 +1347,9 @@ class MainWindow(QMainWindow):
             lambda: self.media_manager.regenerate_exif([p.path for p in selected])
         )
 
-        extract_shift_action = menu.addAction("Extract GPS Time shift")
+        menu.addSeparator()
+
+        extract_shift_action = menu.addAction("Extract GPS Time Shift")
         extract_shift_action.triggered.connect(
             lambda: self._extract_gps_time_shift_for_item(clicked_item)
         )
