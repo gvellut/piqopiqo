@@ -9,13 +9,13 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 
-from piqopiqo.config import Config
 from piqopiqo.keyword_utils import validate_keywords_balanced
 from piqopiqo.metadata.metadata_db import (
     validate_datetime,
     validate_latitude,
     validate_longitude,
 )
+from piqopiqo.settings_state import RuntimeSettingKey, get_runtime_setting
 
 # Placeholder for multiple values
 MULTIPLE_VALUES = "<Multiple Values>"
@@ -30,7 +30,7 @@ class TitleEdit(QLineEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._original_value = ""
-        self.setMaxLength(Config.TITLE_MAX_LENGTH)
+        self.setMaxLength(int(get_runtime_setting(RuntimeSettingKey.TITLE_MAX_LENGTH)))
 
     def set_value(self, value: str):
         """Set the field value and store as original."""
@@ -129,8 +129,9 @@ class DescriptionEdit(QPlainTextEdit):
         if text == MULTIPLE_VALUES:
             super().focusOutEvent(event)
             return
-        if len(text) > Config.DESCRIPTION_MAX_LENGTH:
-            text = text[: Config.DESCRIPTION_MAX_LENGTH]
+        max_len = int(get_runtime_setting(RuntimeSettingKey.DESCRIPTION_MAX_LENGTH))
+        if len(text) > max_len:
+            text = text[:max_len]
             self.setPlainText(text)
         if text != self._original_value:
             self.edit_finished.emit()

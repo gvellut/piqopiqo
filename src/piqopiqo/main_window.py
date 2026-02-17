@@ -25,7 +25,7 @@ from send2trash import send2trash
 
 from . import platform
 from .background.media_man import MediaManager
-from .config import Config, Shortcut
+from .cache_paths import set_cache_base_dir
 from .folder_scan import scan_folder
 from .folder_watcher import FolderWatcher
 from .fullscreen import FullscreenOverlay
@@ -48,8 +48,17 @@ from .panels import (
     LoadingStatusBar,
 )
 from .photo_model import PhotoListModel, SortOrder
-from .settings_state import APP_NAME, StateKey, get_state
-from .shortcuts import parse_shortcut
+from .settings_panel import SettingsDialog
+from .settings_state import (
+    APP_NAME,
+    RuntimeSettingKey,
+    StateKey,
+    UserSettingKey,
+    get_runtime_setting,
+    get_state,
+    get_user_setting,
+)
+from .shortcuts import Shortcut, parse_shortcut
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +106,7 @@ class MainWindow(QMainWindow):
 
         # Right side: vertical splitter with edit panel and EXIF panel
         self._right_splitter = None
-        if Config.SHOW_EDIT_PANEL:
+        if get_runtime_setting(RuntimeSettingKey.SHOW_EDIT_PANEL):
             self._right_splitter = QSplitter(Qt.Vertical)
 
             self.edit_panel = EditPanel(self.db_manager)
@@ -180,6 +189,7 @@ class MainWindow(QMainWindow):
 
         # Set up keyboard shortcuts
         self._label_save_pool = QThreadPool()
+        self._shortcut_objects: list[QShortcut] = []
         self._setup_shortcuts()
 
         # Undo state for label changes
@@ -201,8 +211,14 @@ class MainWindow(QMainWindow):
         return self.photo_model.all_photos
 
     def _setup_shortcuts(self):
-        """Set up application-wide keyboard shortcuts from config."""
-        shortcuts = Config.SHORTCUTS
+        """Set up application-wide keyboard shortcuts from user settings."""
+        for sc in self._shortcut_objects:
+            sc.setParent(None)
+            sc.deleteLater()
+        self._shortcut_objects = []
+
+        shortcuts = get_user_setting(UserSettingKey.SHORTCUTS)
+        status_labels = get_user_setting(UserSettingKey.STATUS_LABELS)
 
         # Label shortcuts (1-9 and backtick) - application-wide
         for i in range(1, 10):
@@ -210,7 +226,7 @@ class MainWindow(QMainWindow):
             if shortcut_enum in shortcuts:
                 # Find label with matching index
                 label_name = None
-                for sl in Config.STATUS_LABELS:
+                for sl in status_labels:
                     if sl.index == i:
                         label_name = sl.name
                         break
@@ -226,6 +242,7 @@ class MainWindow(QMainWindow):
                 sc.setContext(Qt.ApplicationShortcut)
 
                 sc.activated.connect(partial(self._apply_label, label_name))
+                self._shortcut_objects.append(sc)
 
         # No-label shortcut (backtick)
         if Shortcut.LABEL_NONE in shortcuts:
@@ -235,6 +252,7 @@ class MainWindow(QMainWindow):
             )
             sc.setContext(Qt.ApplicationShortcut)
             sc.activated.connect(partial(self._apply_label, None))
+            self._shortcut_objects.append(sc)
 
         # Select All shortcut
         if Shortcut.SELECT_ALL in shortcuts:
@@ -244,6 +262,7 @@ class MainWindow(QMainWindow):
             )
             sc.setContext(Qt.ApplicationShortcut)
             sc.activated.connect(self._select_all_photos)
+            self._shortcut_objects.append(sc)
 
     def _select_all_photos(self):
         """Select all visible photos (after filtering)."""
@@ -636,7 +655,39 @@ class MainWindow(QMainWindow):
         pass
 
     def on_settings(self):
-        pass
+        dialog = SettingsDialog(self)
+        dialog.setting_saved.connect(self._on_setting_saved)
+        dialog.exec()
+        self._apply_settings_changes(dialog.changed_keys)
+
+    def _on_setting_saved(self, key: object) -> None:
+        resolved_key = (
+            key if isinstance(key, UserSettingKey) else UserSettingKey(str(key))
+        )
+        self._apply_settings_changes({resolved_key})
+
+    def _apply_settings_changes(self, changed_keys: set[UserSettingKey]) -> None:
+        if not changed_keys:
+            return
+
+        if UserSettingKey.NUM_COLUMNS in changed_keys:
+            self.grid.set_num_columns(int(get_user_setting(UserSettingKey.NUM_COLUMNS)))
+
+        if UserSettingKey.STATUS_LABELS in changed_keys:
+            self.filter_panel.reload_status_labels()
+            self.grid.on_scroll(self.grid.scrollbar.value())
+            if self._fullscreen_overlay is not None:
+                self._fullscreen_overlay._update_color_swatch()
+                self._fullscreen_overlay.update()
+
+        if UserSettingKey.SHORTCUTS in changed_keys:
+            self._setup_shortcuts()
+
+        if UserSettingKey.CACHE_BASE_DIR in changed_keys:
+            try:
+                set_cache_base_dir(get_user_setting(UserSettingKey.CACHE_BASE_DIR))
+            except OSError as exc:
+                logger.error("Failed to apply cache base dir setting: %s", exc)
 
     def _on_copy_from_sd(self):
         from .copy_sd import launch_copy_sd
@@ -851,7 +902,10 @@ class MainWindow(QMainWindow):
         item = self._items_by_path.get(file_path)
         if item is None:
             return
-        if getattr(Config, "GRID_LOWRES_ONLY", False) and thumb_type != "embedded":
+        if (
+            get_runtime_setting(RuntimeSettingKey.GRID_LOWRES_ONLY)
+            and thumb_type != "embedded"
+        ):
             return
 
         state = 1 if thumb_type == "embedded" else 2
@@ -947,7 +1001,7 @@ class MainWindow(QMainWindow):
 
             if (
                 len(selected_indices) > 1
-                and Config.ON_FULLSCREEN_EXIT
+                and get_user_setting(UserSettingKey.ON_FULLSCREEN_EXIT)
                 == OnFullscreenExitMultipleSelected.SELECT_LAST_VIEWED
             ):
                 self.grid.on_cell_clicked(last_viewed_idx, False, False)
@@ -1047,17 +1101,19 @@ class MainWindow(QMainWindow):
         reveal_action.triggered.connect(lambda: reveal_in_file_manager(selected))
 
         # View in Application (only if configured)
-        if Config.EXTERNAL_VIEWER:
-            view_app_action = menu.addAction(f"View in {Config.EXTERNAL_VIEWER}")
+        external_viewer = get_user_setting(UserSettingKey.EXTERNAL_VIEWER)
+        if external_viewer:
+            view_app_action = menu.addAction(f"View in {external_viewer}")
             view_app_action.triggered.connect(
                 lambda: open_in_external_app(
-                    Config.EXTERNAL_VIEWER, [p.path for p in selected]
+                    external_viewer, [p.path for p in selected]
                 )
             )
 
         # Edit in Application (only if configured)
-        if Config.EXTERNAL_EDITOR:
-            edit_app_action = menu.addAction(f"Edit in {Config.EXTERNAL_EDITOR}")
+        external_editor = get_user_setting(UserSettingKey.EXTERNAL_EDITOR)
+        if external_editor:
+            edit_app_action = menu.addAction(f"Edit in {external_editor}")
             edit_app_action.triggered.connect(
                 lambda: self._edit_in_external_app(selected)
             )
@@ -1202,7 +1258,10 @@ class MainWindow(QMainWindow):
                 logger.error(f"Failed to duplicate {photo.path}: {e}")
 
         if duplicated_paths:
-            open_in_external_app(Config.EXTERNAL_EDITOR, duplicated_paths)
+            open_in_external_app(
+                get_user_setting(UserSettingKey.EXTERNAL_EDITOR),
+                duplicated_paths,
+            )
 
     def _on_clear_all_data(self):
         """Clear all cached data (thumbnails + DB) and reload the folder."""
@@ -1250,7 +1309,11 @@ class MainWindow(QMainWindow):
         # Stop background workers first to avoid noisy teardown.
         self._stop_folder_watcher()
         if hasattr(self, "media_manager"):
-            self.media_manager.stop(timeout_s=Config.SHUTDOWN_TIMEOUT_S)
+            self.media_manager.stop(
+                timeout_s=float(
+                    get_runtime_setting(RuntimeSettingKey.SHUTDOWN_TIMEOUT_S)
+                )
+            )
         if hasattr(self, "db_manager"):
             self.db_manager.close_all()
         super().closeEvent(event)

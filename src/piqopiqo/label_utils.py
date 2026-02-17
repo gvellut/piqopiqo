@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from piqopiqo.config import Config
+from piqopiqo.settings_state import UserSettingKey, get_user_setting
 
 
 def get_label_color(label: str) -> str | None:
@@ -14,7 +14,7 @@ def get_label_color(label: str) -> str | None:
     Returns:
         The color hex string, or None if not found.
     """
-    for sl in Config.STATUS_LABELS:
+    for sl in get_user_setting(UserSettingKey.STATUS_LABELS):
         if sl.name == label:
             return sl.color
     return None

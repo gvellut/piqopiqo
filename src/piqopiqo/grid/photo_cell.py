@@ -15,9 +15,9 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QFrame, QSizePolicy
 
-from piqopiqo.config import Config
 from piqopiqo.label_utils import get_label_color
 from piqopiqo.metadata.db_fields import DBFields
+from piqopiqo.settings_state import RuntimeSettingKey, get_runtime_setting
 
 
 class PhotoCell(QFrame):
@@ -116,7 +116,7 @@ class PhotoCell(QFrame):
                         painter.drawPixmap(pixmap_rect, scaled)
 
             # Draw label swatch (top-right corner of image area)
-            if Config.GRID_ITEM_SHOW_LABEL_SWATCH:
+            if get_runtime_setting(RuntimeSettingKey.GRID_ITEM_SHOW_LABEL_SWATCH):
                 label = db_meta.get(DBFields.LABEL)
                 if label:
                     color = get_label_color(label)
@@ -142,7 +142,9 @@ class PhotoCell(QFrame):
             )
 
             # Keep the same font sizing as PhotoGrid._calculate_metadata_height.
-            painter.font().setPointSize(Config.FONT_SIZE)
+            painter.font().setPointSize(
+                int(get_runtime_setting(RuntimeSettingKey.FONT_SIZE))
+            )
 
             painter.setPen(QPen(Qt.white))
             font_metrics = painter.fontMetrics()
@@ -154,7 +156,9 @@ class PhotoCell(QFrame):
             # use them when drawing.
             expected_lines = 1 + sum(
                 1
-                for field_name in Config.GRID_ITEM_FIELDS
+                for field_name in get_runtime_setting(
+                    RuntimeSettingKey.GRID_ITEM_FIELDS
+                )
                 if field_name != DBFields.LABEL
             )
             reserved_text_h = expected_lines * line_height
@@ -176,7 +180,7 @@ class PhotoCell(QFrame):
 
             # DB fields (subsequent lines)
             y_offset = line_height
-            for field_name in Config.GRID_ITEM_FIELDS:
+            for field_name in get_runtime_setting(RuntimeSettingKey.GRID_ITEM_FIELDS):
                 if field_name == DBFields.LABEL:
                     continue  # Label shown as swatch, not text
 

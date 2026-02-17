@@ -18,9 +18,14 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.cache_paths import get_thumb_dir_for_folder
-from piqopiqo.config import Config
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.orientation import apply_orientation_to_pixmap
+from piqopiqo.settings_state import (
+    RuntimeSettingKey,
+    UserSettingKey,
+    get_runtime_setting,
+    get_user_setting,
+)
 
 from .photo_cell import PhotoCell
 
@@ -43,7 +48,7 @@ class PhotoGrid(QWidget):
 
         self.setFocusPolicy(Qt.StrongFocus)
 
-        self.n_cols = Config.NUM_COLUMNS
+        self.n_cols = int(get_user_setting(UserSettingKey.NUM_COLUMNS))
         self.n_rows = 1
         self.items_data = []
         self._last_selected_index = -1
@@ -102,6 +107,12 @@ class PhotoGrid(QWidget):
         self._recalculate_scrollbar()
         self._render_current_view()
 
+    def set_num_columns(self, num_columns: int) -> None:
+        cols = max(1, int(num_columns))
+        if cols == self.n_cols:
+            return
+        self._rebuild_grid(self.n_rows, cols)
+
     def _rebuild_grid(self, rows, cols):
         """Recreate the grid widgets only if dimensions changed."""
         logger.debug(f"Rebuilding grid: {rows}x{cols}")
@@ -131,17 +142,20 @@ class PhotoGrid(QWidget):
     def _calculate_metadata_height(self) -> int:
         """Calculate the height needed for metadata display."""
         font = QFont()
-        font.setPointSize(Config.FONT_SIZE)
+        font.setPointSize(int(get_runtime_setting(RuntimeSettingKey.FONT_SIZE)))
         fm = QFontMetrics(font)
         line_height = fm.lineSpacing()
 
         # Count lines: 1 for filename + 1 per configured field (excluding label)
         num_lines = 1  # filename
-        for field in Config.GRID_ITEM_FIELDS:
+        for field in get_runtime_setting(RuntimeSettingKey.GRID_ITEM_FIELDS):
             if field != DBFields.LABEL:  # Label is swatch, not text line
                 num_lines += 1
 
-        return num_lines * line_height + Config.GRID_ITEM_TEXT_FIELDS_TOP_PADDING
+        top_padding = int(
+            get_runtime_setting(RuntimeSettingKey.GRID_ITEM_TEXT_FIELDS_TOP_PADDING)
+        )
+        return num_lines * line_height + top_padding
 
     def resizeEvent(self, event):
         # Width available for the grid (Total width - Scrollbar width)
@@ -149,9 +163,8 @@ class PhotoGrid(QWidget):
         panel_w = event.size().width() - sb_width
         panel_h = event.size().height()
 
-        cfg = Config
-        cols = cfg.NUM_COLUMNS
-        pad = cfg.PADDING
+        cols = max(1, int(self.n_cols))
+        pad = int(get_runtime_setting(RuntimeSettingKey.PADDING))
 
         # Horizontal Calculation
         total_h_pad = (cols + 1) * pad
@@ -226,12 +239,12 @@ class PhotoGrid(QWidget):
         self._render(int(value), allow_hq=self._allow_hq_now())
 
     def _is_lowres_only_mode(self) -> bool:
-        return bool(getattr(Config, "GRID_LOWRES_ONLY", False))
+        return bool(get_runtime_setting(RuntimeSettingKey.GRID_LOWRES_ONLY))
 
     def _is_hq_delay_enabled(self) -> bool:
         if self._is_lowres_only_mode():
             return False
-        return bool(getattr(Config, "GRID_HQ_THUMB_DELAY_ENABLED", False))
+        return bool(get_runtime_setting(RuntimeSettingKey.GRID_HQ_THUMB_DELAY_ENABLED))
 
     def _allow_hq_now(self) -> bool:
         if self._is_lowres_only_mode():
@@ -239,7 +252,9 @@ class PhotoGrid(QWidget):
         return (not self._is_hq_delay_enabled()) or self._hq_display_enabled
 
     def _restart_hq_idle_timer(self) -> None:
-        delay_ms = int(getattr(Config, "GRID_HQ_THUMB_LOAD_DELAY_MS", 200))
+        delay_ms = int(
+            get_runtime_setting(RuntimeSettingKey.GRID_HQ_THUMB_LOAD_DELAY_MS)
+        )
         if delay_ms <= 0:
             self._hq_display_enabled = True
             return
@@ -305,7 +320,7 @@ class PhotoGrid(QWidget):
 
     def _buffer_index_range(self, start_row: int) -> tuple[int, int]:
         """Return [start, end) data-index range to keep HQ pixmaps for."""
-        buffer_rows = int(getattr(Config, "GRID_THUMB_BUFFER_ROWS", 2))
+        buffer_rows = int(get_runtime_setting(RuntimeSettingKey.GRID_THUMB_BUFFER_ROWS))
         if self.n_cols <= 0:
             return (0, 0)
 
@@ -450,7 +465,9 @@ class PhotoGrid(QWidget):
 
     def _embedded_buffer_index_range(self, start_row: int) -> tuple[int, int]:
         """Return [start, end) data-index range to keep embedded pixmaps for."""
-        buffer_rows = int(getattr(Config, "GRID_EMBEDDED_BUFFER_ROWS", 20))
+        buffer_rows = int(
+            get_runtime_setting(RuntimeSettingKey.GRID_EMBEDDED_BUFFER_ROWS)
+        )
         if self.n_cols <= 0:
             return (0, 0)
 

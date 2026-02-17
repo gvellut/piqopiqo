@@ -9,8 +9,7 @@ from pathlib import Path
 
 from attrs import define, field
 
-from .config import Config
-from .settings_state import get_support_dir
+from .settings_state import RuntimeSettingKey, get_runtime_setting, get_support_dir
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +132,9 @@ class KeywordTreeManager:
     @property
     def root(self) -> KeywordNode:
         """Get the root node, loading from file if needed."""
-        if not self._loaded and not Config.DETACHED_KEYWORD_TREE:
+        if not self._loaded and not get_runtime_setting(
+            RuntimeSettingKey.DETACHED_KEYWORD_TREE
+        ):
             self.load()
         return self._root
 
@@ -147,7 +148,7 @@ class KeywordTreeManager:
         Returns:
             True if loaded successfully, False otherwise.
         """
-        if Config.DETACHED_KEYWORD_TREE:
+        if get_runtime_setting(RuntimeSettingKey.DETACHED_KEYWORD_TREE):
             self._loaded = True
             return False
 
@@ -177,7 +178,7 @@ class KeywordTreeManager:
         Returns:
             True if saved successfully, False otherwise.
         """
-        if Config.DETACHED_KEYWORD_TREE:
+        if get_runtime_setting(RuntimeSettingKey.DETACHED_KEYWORD_TREE):
             return False
 
         path = self.get_tree_path()

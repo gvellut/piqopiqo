@@ -18,8 +18,13 @@ import time
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from ..cache_paths import ensure_thumb_dir
-from ..config import Config
 from ..metadata.metadata_db import MetadataDBManager
+from ..settings_state import (
+    RuntimeSettingKey,
+    UserSettingKey,
+    get_runtime_setting,
+    get_user_setting,
+)
 from . import media_worker
 
 logger = logging.getLogger(__name__)
@@ -76,7 +81,7 @@ class MediaManager(QObject):
     editable_ready = Signal(str, dict)  # file_path, metadata
     exif_progress_updated = Signal(int, int)  # completed, total
 
-    # EXIF panel fields (Config.EXIF_FIELDS) signals
+    # EXIF panel fields signals
     panel_fields_ready = Signal(str, dict)  # file_path, key->value|None
 
     # Errors / completion
@@ -123,7 +128,9 @@ class MediaManager(QObject):
         self._deferred_combined: dict[str, _CombinedNeed] = {}
 
         # EXIF panel field keys
-        self._panel_field_keys: list[str] = [f.key for f in Config.EXIF_FIELDS]
+        self._panel_field_keys: list[str] = [
+            f.key for f in get_runtime_setting(RuntimeSettingKey.EXIF_FIELDS)
+        ]
 
         # EXIF writing state
         self._write_total = 0
@@ -167,7 +174,9 @@ class MediaManager(QObject):
         self._exif_total = len(file_paths)
         self._exif_completed = 0
 
-        self._panel_field_keys = [f.key for f in Config.EXIF_FIELDS]
+        self._panel_field_keys = [
+            f.key for f in get_runtime_setting(RuntimeSettingKey.EXIF_FIELDS)
+        ]
 
         for folder in source_folders:
             ensure_thumb_dir(folder)
@@ -322,7 +331,7 @@ class MediaManager(QObject):
             self.panel_fields_ready.emit(file_path, complete)
 
     def _is_lowres_only_mode(self) -> bool:
-        return bool(getattr(Config, "GRID_LOWRES_ONLY", False))
+        return bool(get_runtime_setting(RuntimeSettingKey.GRID_LOWRES_ONLY))
 
     def request_thumbnail(self, file_path: str) -> None:
         """Ensure a thumbnail is available for a file, prioritizing if visible."""
@@ -628,7 +637,9 @@ class MediaManager(QObject):
     # -------------------------------------------------------------------------
 
     def _ensure_min_idle_workers(self) -> None:
-        while len(self._workers) < max(1, int(getattr(Config, "MIN_IDLE_WORKERS", 1))):
+        while len(self._workers) < max(
+            1, int(get_runtime_setting(RuntimeSettingKey.MIN_IDLE_WORKERS))
+        ):
             self._spawn_worker()
 
     def _spawn_worker(self) -> None:
@@ -642,7 +653,7 @@ class MediaManager(QObject):
         self._workers.append(_Worker(process=proc, task_queue=task_q))
 
     def _stop_extra_idle_workers(self) -> None:
-        min_idle = max(1, int(getattr(Config, "MIN_IDLE_WORKERS", 1)))
+        min_idle = max(1, int(get_runtime_setting(RuntimeSettingKey.MIN_IDLE_WORKERS)))
         if len(self._workers) <= min_idle:
             return
 
@@ -713,7 +724,8 @@ class MediaManager(QObject):
     def _schedule_work(self) -> None:
         # Scale workers up if there's backpressure.
         if self._has_pending_work() and self._get_idle_worker() is None:
-            if len(self._workers) < int(Config.MAX_WORKERS):
+            max_workers = int(get_runtime_setting(RuntimeSettingKey.MAX_WORKERS))
+            if len(self._workers) < max_workers:
                 self._spawn_worker()
 
         while True:
@@ -738,14 +750,16 @@ class MediaManager(QObject):
     def _pop_next_task(self) -> dict | None:
         # Highest priority: user-initiated EXIF writes.
         if self._pending_write_items and not self._write_stopped:
-            batch_size = int(getattr(Config, "MAX_EXIFTOOLS_IMAGE_BATCH", 8))
+            batch_size = int(
+                get_runtime_setting(RuntimeSettingKey.MAX_EXIFTOOLS_IMAGE_BATCH)
+            )
             batch = self._pending_write_items[:batch_size]
             self._pending_write_items = self._pending_write_items[batch_size:]
 
             return {
                 "task_id": self._new_task_id(),
                 "kind": "write_exif",
-                "exiftool_path": Config.EXIFTOOL_PATH,
+                "exiftool_path": get_user_setting(UserSettingKey.EXIFTOOL_PATH),
                 "items": batch,
             }
 
@@ -788,7 +802,9 @@ class MediaManager(QObject):
         if not pending:
             return None
 
-        batch_size = int(getattr(Config, "MAX_EXIFTOOLS_IMAGE_BATCH", 8))
+        batch_size = int(
+            get_runtime_setting(RuntimeSettingKey.MAX_EXIFTOOLS_IMAGE_BATCH)
+        )
 
         # Pick a folder to batch together (thumb_dir is per folder).
         first_path = None
@@ -855,7 +871,7 @@ class MediaManager(QObject):
             "kind": "combined",
             "source_folder": source_folder,
             "thumb_dir": thumb_dir,
-            "exiftool_path": Config.EXIFTOOL_PATH,
+            "exiftool_path": get_user_setting(UserSettingKey.EXIFTOOL_PATH),
             "panel_field_keys": list(self._panel_field_keys),
             "files": files_payload,
         }
@@ -867,7 +883,7 @@ class MediaManager(QObject):
             "kind": "hq_thumb",
             "file_path": file_path,
             "thumb_dir": info.thumb_dir,
-            "max_dim": int(Config.THUMB_MAX_DIM),
+            "max_dim": int(get_runtime_setting(RuntimeSettingKey.THUMB_MAX_DIM)),
         }
 
     def _new_task_id(self) -> int:

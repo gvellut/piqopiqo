@@ -18,8 +18,8 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.components.scollable_strip import ScrollableStrip
-from piqopiqo.config import Config
 from piqopiqo.model import FilterCriteria
+from piqopiqo.settings_state import UserSettingKey, get_user_setting
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +112,8 @@ class FilterPanel(ScrollableStrip):
         self._folders: list[str] = []
         self._updating = False
         self._label_checkboxes: dict[str, LabelCheckbox] = {}  # label_name -> widget
+        self._label_widgets: list[QWidget] = []
+        self._label_insert_index = 0
         self._no_label_checkbox: QCheckBox | None = None
         self._setup_ui()
         # Start disabled until folders are set
@@ -153,13 +155,10 @@ class FilterPanel(ScrollableStrip):
         self._no_label_checkbox.setObjectName("filter_label_no_label")
         self._no_label_checkbox.stateChanged.connect(self._on_label_filter_changed)
         self.add_widget(self._no_label_checkbox)
+        self._label_insert_index = self._layout.count()
 
-        # Label checkboxes from config
-        for status_label in Config.STATUS_LABELS:
-            label_checkbox = LabelCheckbox(status_label.name, status_label.color)
-            label_checkbox.stateChanged.connect(self._on_label_filter_changed)
-            self._label_checkboxes[status_label.name] = label_checkbox
-            self.add_widget(label_checkbox)
+        # Label checkboxes from user settings
+        self._rebuild_label_checkboxes()
 
         # Add separator
         self._add_separator()
@@ -179,6 +178,43 @@ class FilterPanel(ScrollableStrip):
 
         # Add stretch to keep all widgets left-aligned
         self.add_stretch()
+
+    def _rebuild_label_checkboxes(self, preserve_checked: set[str] | None = None):
+        preserve_checked = preserve_checked or set()
+
+        for widget in self._label_widgets:
+            self._layout.removeWidget(widget)
+            widget.deleteLater()
+
+        self._label_widgets = []
+        self._label_checkboxes = {}
+
+        insert_idx = self._label_insert_index
+        for status_label in get_user_setting(UserSettingKey.STATUS_LABELS):
+            label_checkbox = LabelCheckbox(status_label.name, status_label.color)
+            label_checkbox.stateChanged.connect(self._on_label_filter_changed)
+            if status_label.name in preserve_checked:
+                label_checkbox.setChecked(True)
+
+            self._layout.insertWidget(insert_idx, label_checkbox)
+            insert_idx += 1
+
+            self._label_checkboxes[status_label.name] = label_checkbox
+            self._label_widgets.append(label_checkbox)
+
+    def reload_status_labels(self):
+        checked = {
+            label_name
+            for label_name, checkbox in self._label_checkboxes.items()
+            if checkbox.isChecked()
+        }
+        self._updating = True
+        try:
+            self._rebuild_label_checkboxes(checked)
+        finally:
+            self._updating = False
+
+        self._emit_filter()
 
     def _add_separator(self):
         """Add a vertical separator line."""

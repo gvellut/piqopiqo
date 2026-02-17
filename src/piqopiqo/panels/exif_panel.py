@@ -15,8 +15,8 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.components.ellided_label import EllidedLabel
-from piqopiqo.config import Config
 from piqopiqo.model import ExifField, ImageItem
+from piqopiqo.settings_state import RuntimeSettingKey, get_runtime_setting
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ def get_exif_display_label(field: ExifField) -> str:
     """
     if field.label is not None:
         return field.label
-    if Config.EXIF_AUTO_FORMAT:
+    if get_runtime_setting(RuntimeSettingKey.EXIF_AUTO_FORMAT):
         return format_exif_key(field.key)
     return field.key
 
@@ -91,15 +91,19 @@ class ExifPanel(QWidget):
         container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.layout = QGridLayout(container)
         self.layout.setContentsMargins(10, 10, 10, 10)
-        self.layout.setSpacing(Config.EXIF_PANEL_ROW_SPACING)
-        self.layout.setColumnStretch(0, Config.EXIF_PANEL_COLUMN_STRETCH[0])
-        self.layout.setColumnStretch(1, Config.EXIF_PANEL_COLUMN_STRETCH[1])
+        self.layout.setSpacing(
+            int(get_runtime_setting(RuntimeSettingKey.EXIF_PANEL_ROW_SPACING))
+        )
+        col_stretch = get_runtime_setting(RuntimeSettingKey.EXIF_PANEL_COLUMN_STRETCH)
+        self.layout.setColumnStretch(0, int(col_stretch[0]))
+        self.layout.setColumnStretch(1, int(col_stretch[1]))
 
         # Create labels once for all fields
         self.field_labels = []
         self.value_labels = []
 
-        for i, field in enumerate(Config.EXIF_FIELDS):
+        exif_fields = get_runtime_setting(RuntimeSettingKey.EXIF_FIELDS)
+        for i, field in enumerate(exif_fields):
             display_label = get_exif_display_label(field)
             field_label = EllidedLabel(display_label)
             value_label = EllidedLabel("")
@@ -127,11 +131,12 @@ class ExifPanel(QWidget):
                 value_label.setToolTip("")
             return
 
-        for i, field in enumerate(Config.EXIF_FIELDS):
+        exif_fields = get_runtime_setting(RuntimeSettingKey.EXIF_FIELDS)
+        for i, field in enumerate(exif_fields):
             # Defensive check in case config changed (shouldn't happen at runtime)
             if i >= len(self.value_labels):
                 logger.warning(
-                    f"Config.EXIF_FIELDS has more entries ({len(Config.EXIF_FIELDS)}) "
+                    f"EXIF_FIELDS has more entries ({len(exif_fields)}) "
                     f"than initialized labels ({len(self.value_labels)})"
                 )
                 break

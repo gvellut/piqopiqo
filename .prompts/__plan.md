@@ -1,4 +1,4 @@
-- [Settings](D.A_Settings.md)
+* [Settings](D.A_Settings.md)
 - [Details](F_Details.md)
 - [Settings create](G_Settings_create.md)
 - [gpx2exif](H_gpx2exif.md)

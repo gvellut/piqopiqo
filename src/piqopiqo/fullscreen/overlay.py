@@ -31,11 +31,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from piqopiqo.config import Config, Shortcut
 from piqopiqo.label_utils import get_label_color
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.orientation import apply_orientation_to_pixmap
-from piqopiqo.shortcuts import match_shortcut_sequence, match_simple_shortcut
+from piqopiqo.settings_state import (
+    RuntimeSettingKey,
+    UserSettingKey,
+    get_runtime_setting,
+    get_user_setting,
+)
+from piqopiqo.shortcuts import Shortcut, match_shortcut_sequence, match_simple_shortcut
 
 from .info_panel import ZoomOverlayController
 from .pan import calculate_allowed_extra_from_current
@@ -108,7 +113,7 @@ class FullscreenOverlay(QWidget):
 
         self.setAttribute(Qt.WA_DeleteOnClose)
 
-        bg_color = Config.FULLSCREEN_BACKGROUND_COLOR
+        bg_color = get_runtime_setting(RuntimeSettingKey.FULLSCREEN_BACKGROUND_COLOR)
         self.setStyleSheet(f"background-color: {bg_color};")
         self._background_color = QColor(bg_color)
 
@@ -142,7 +147,11 @@ class FullscreenOverlay(QWidget):
         """Creates the zoom overlay controller that manages visibility."""
         self._zoom_overlay_controller = ZoomOverlayController(
             overlay_widget=self.zoom_overlay,
-            timer_ms=Config.INFO_PANEL_ZOOM_PERCENT_OVERLAY_TIMER_MS,
+            timer_ms=int(
+                get_runtime_setting(
+                    RuntimeSettingKey.INFO_PANEL_ZOOM_PERCENT_OVERLAY_TIMER_MS
+                )
+            ),
             get_base_scale=self._get_base_scale_factor,
             get_device_pixel_ratio=lambda: self._device_pixel_ratio,
             update_overlay_position=self._position_zoom_overlay,
@@ -191,11 +200,23 @@ class FullscreenOverlay(QWidget):
         self.info_panel.setLayout(panel_layout)
 
         # Set panel stylesheet
-        bg_color = QColor(Config.INFO_PANEL_BACKGROUND_COLOR)
-        alpha = int(255 * (Config.INFO_PANEL_BACKGROUND_TRANSPARENCY / 100.0))
+        bg_color = QColor(
+            get_runtime_setting(RuntimeSettingKey.INFO_PANEL_BACKGROUND_COLOR)
+        )
+        alpha = int(
+            255
+            * (
+                int(
+                    get_runtime_setting(
+                        RuntimeSettingKey.INFO_PANEL_BACKGROUND_TRANSPARENCY
+                    )
+                )
+                / 100.0
+            )
+        )
         bg_color.setAlpha(alpha)
 
-        text_color = Config.INFO_PANEL_TEXT_COLOR
+        text_color = get_runtime_setting(RuntimeSettingKey.INFO_PANEL_TEXT_COLOR)
         bg_color_str = (
             f"rgba({bg_color.red()}, {bg_color.green()}, {bg_color.blue()}, "
             f"{bg_color.alpha()})"
@@ -271,9 +292,13 @@ class FullscreenOverlay(QWidget):
     def _position_info_panel(self):
         """Positions the panel on the left side, top or bottom per config."""
         if hasattr(self, "info_panel"):
-            margin_edge = Config.INFO_PANEL_MARGIN_BOTTOM
-            margin_side = Config.INFO_PANEL_MARGIN_SIDE
-            if Config.INFO_PANEL_POSITION == "top":
+            margin_edge = int(
+                get_runtime_setting(RuntimeSettingKey.INFO_PANEL_MARGIN_BOTTOM)
+            )
+            margin_side = int(
+                get_runtime_setting(RuntimeSettingKey.INFO_PANEL_MARGIN_SIDE)
+            )
+            if get_runtime_setting(RuntimeSettingKey.INFO_PANEL_POSITION) == "top":
                 y = margin_edge
             else:
                 y = self.height() - self.info_panel.height() - margin_edge
@@ -671,17 +696,23 @@ class FullscreenOverlay(QWidget):
         elif match_simple_shortcut(event, Qt.Key_Down):
             pass  # Ignore down key in fullscreen
         # Configurable shortcuts
-        elif match_shortcut_sequence(event, Config.SHORTCUTS.get(Shortcut.ZOOM_IN)):
+        elif match_shortcut_sequence(
+            event, get_user_setting(UserSettingKey.SHORTCUTS).get(Shortcut.ZOOM_IN)
+        ):
             # Zoom in centered on screen center
             center = QPointF(self.width() / 2.0, self.height() / 2.0)
             center_pos = self._screen_to_image_coords(center)
             self._zoom_in(center_pos)
-        elif match_shortcut_sequence(event, Config.SHORTCUTS.get(Shortcut.ZOOM_OUT)):
+        elif match_shortcut_sequence(
+            event, get_user_setting(UserSettingKey.SHORTCUTS).get(Shortcut.ZOOM_OUT)
+        ):
             # Zoom out centered on screen center
             center = QPointF(self.width() / 2.0, self.height() / 2.0)
             center_pos = self._screen_to_image_coords(center)
             self._zoom_out(center_pos)
-        elif match_shortcut_sequence(event, Config.SHORTCUTS.get(Shortcut.ZOOM_RESET)):
+        elif match_shortcut_sequence(
+            event, get_user_setting(UserSettingKey.SHORTCUTS).get(Shortcut.ZOOM_RESET)
+        ):
             # Reset zoom to base view
             self._zoom_to_base_view()
         else:
@@ -709,7 +740,10 @@ class FullscreenOverlay(QWidget):
         """Handle mouse wheel events for zooming."""
         self._wheel_acc += event.angleDelta().y()
 
-        if abs(self._wheel_acc) >= 120 * Config.ZOOM_WHEEL_SENSITIVITY:
+        zoom_wheel_sensitivity = int(
+            get_runtime_setting(RuntimeSettingKey.ZOOM_WHEEL_SENSITIVITY)
+        )
+        if abs(self._wheel_acc) >= 120 * zoom_wheel_sensitivity:
             # Convert mouse position to image coordinates
             center_pos = self._screen_to_image_coords(event.position())
 
@@ -823,7 +857,9 @@ class FullscreenOverlay(QWidget):
                 self._panning = True
                 self._pan_start_pos = event.position()
                 # Start timer for cursor change (don't change cursor immediately)
-                self._pan_cursor_timer.start(Config.PAN_CURSOR_DELAY_MS)
+                self._pan_cursor_timer.start(
+                    int(get_runtime_setting(RuntimeSettingKey.PAN_CURSOR_DELAY_MS))
+                )
             elif self._zoom_state == ZoomState.BASE_VIEW and not self._is_small_image:
                 # Base view with large image: zoom in immediately on mouse down
                 center_pos = self._screen_to_image_coords(event.position())
@@ -968,7 +1004,7 @@ class FullscreenOverlay(QWidget):
         Returns base PAN_EMPTY_SPACE plus any extra allowance set at load time.
         This allows larger space on sides where it was larger at image load time.
         """
-        base = Config.PAN_EMPTY_SPACE
+        base = int(get_runtime_setting(RuntimeSettingKey.PAN_EMPTY_SPACE))
         return {
             "left": base + self._allowed_extra_space["left"],
             "right": base + self._allowed_extra_space["right"],
@@ -988,7 +1024,7 @@ class FullscreenOverlay(QWidget):
         """
         current = self._get_current_space_per_side()
         self._allowed_extra_space = calculate_allowed_extra_from_current(
-            current, Config.PAN_EMPTY_SPACE
+            current, int(get_runtime_setting(RuntimeSettingKey.PAN_EMPTY_SPACE))
         )
 
     def _update_allowed_extra_space_after_pan(self):
@@ -998,7 +1034,7 @@ class FullscreenOverlay(QWidget):
         that side's extra allowance is reset to 0.
         """
         current = self._get_current_space_per_side()
-        base = Config.PAN_EMPTY_SPACE
+        base = int(get_runtime_setting(RuntimeSettingKey.PAN_EMPTY_SPACE))
         for side, space in current.items():
             if space < base:
                 self._allowed_extra_space[side] = 0

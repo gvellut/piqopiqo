@@ -10,7 +10,6 @@ from datetime import datetime
 import logging
 import os
 from pathlib import Path
-import subprocess
 from typing import Any
 
 from PIL import Image

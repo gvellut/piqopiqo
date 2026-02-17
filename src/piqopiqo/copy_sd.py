@@ -29,7 +29,12 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from .config import Config
+from .settings_state import (
+    RuntimeSettingKey,
+    UserSettingKey,
+    get_runtime_setting,
+    get_user_setting,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +147,8 @@ def to_dates(date_s, volume: PhotoVolume):
         if date_s == "last":
             folder_for_sd = volume.name
             dirs = find_date_folders(
-                Config.COPY_SD_BASE_EXTERNAL_FOLDER, subfolder=folder_for_sd
+                get_user_setting(UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER),
+                subfolder=folder_for_sd,
             )
             if dirs:
                 # replace with last folder in order
@@ -433,7 +439,8 @@ class CopySdInputDialog(QDialog):
 
         info_label = QLabel(
             f"Detected volume: {volume.name} ({volume.path})\n"
-            f"Destination base: {Config.COPY_SD_BASE_EXTERNAL_FOLDER}"
+            "Destination base: "
+            f"{get_user_setting(UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER)}"
         )
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
@@ -727,9 +734,10 @@ def _resolve_dates_with_progress(parent, date_spec: str, volume: PhotoVolume):
 
 
 def launch_copy_sd(parent=None):
-    if hasattr(Config, "SDCARD_NAMES"):
-        volume = get_volume(Config.SDCARD_NAMES)
-        cards = ", ".join(Config.SDCARD_NAMES)
+    sdcard_names = get_runtime_setting(RuntimeSettingKey.SDCARD_NAMES)
+    if sdcard_names:
+        volume = get_volume(sdcard_names)
+        cards = ", ".join(sdcard_names)
         error_txt = f"No relevant SD card found: {cards}. Volume not renamed?"
     else:
         volume = get_sd_volume()
@@ -739,7 +747,7 @@ def launch_copy_sd(parent=None):
         QMessageBox.warning(parent, "Copy from SD", error_txt)
         return
 
-    output_parent_folder = Config.COPY_SD_BASE_EXTERNAL_FOLDER
+    output_parent_folder = get_user_setting(UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER)
     if not output_parent_folder:
         QMessageBox.critical(
             parent,
