@@ -1,5 +1,3 @@
-* [gpx2exif](H_gpx2exif.md)
-    !? [Correc gpx](H.A_Correct_gpx.md)
 - [Flickr upload](I_Flickr_upload.md)
 ! [Fix date read delay if since:last](A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](B_Eject_SD_after_user_OK.md)
@@ -12,3 +10,5 @@
     !? [Arrange settings panel](D.A.A_Arrange_settings_panel.md)
     !? [Arrange settings panel](D.A.B_Arrange_settings_panel.md)
 ! [Settings correction](F_Settings_correction.md)
+! [gpx2exif](H_gpx2exif.md)
+    !? [Correc gpx](H.A_Correct_gpx.md)
