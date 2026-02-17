@@ -6,8 +6,8 @@ from enum import Enum, auto
 
 from attrs import define
 
-from ..model import OnFullscreenExitMultipleSelected
-from ..settings_state import UserSettingKey
+from piqopiqo.model import OnFullscreenExitMultipleSelected
+from piqopiqo.settings_state import UserSettingKey
 
 
 class EditorKind(Enum):

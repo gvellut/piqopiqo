@@ -17,14 +17,15 @@ import time
 from attrs import define
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from ..cache_paths import ensure_thumb_dir
-from ..metadata.metadata_db import MetadataDBManager
-from ..settings_state import (
+from piqopiqo.cache_paths import ensure_thumb_dir
+from piqopiqo.metadata.metadata_db import MetadataDBManager
+from piqopiqo.settings_state import (
     RuntimeSettingKey,
     UserSettingKey,
     get_runtime_setting,
     get_user_setting,
 )
+
 from . import media_worker
 
 logger = logging.getLogger(__name__)

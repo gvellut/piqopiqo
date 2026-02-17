@@ -17,13 +17,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from piqopiqo import __version__
 from piqopiqo.keyword_utils import parse_keywords
 from piqopiqo.metadata.db_fields import DB_TO_EXIF_WRITE_MAPPING, DBFields
 from piqopiqo.model import ImageItem
 from piqopiqo.settings_state import APP_NAME
 
 if TYPE_CHECKING:
-    from ..background.media_man import MediaManager
+    from piqopiqo.background.media_man import MediaManager
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,6 @@ def build_exif_tags(db_metadata: dict) -> dict:
     Returns:
         Dictionary of EXIF tags to write.
     """
-    from .. import __version__
 
     tags = {}
 

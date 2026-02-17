@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..settings_state import (
+from piqopiqo.settings_state import (
     RuntimeSettingKey,
     SettingsPanelSaveMode,
     UserSettingKey,
@@ -25,6 +25,7 @@ from ..settings_state import (
     get_user_setting,
     set_user_setting,
 )
+
 from .editors import BaseEditor, build_editor
 from .schema import SETTINGS_TABS, EditorKind, FieldSpec
 

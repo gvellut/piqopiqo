@@ -14,9 +14,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .custom_shortcuts import ShortcutsEditor
-from .custom_status_labels import StatusLabelsEditor
 from .schema import ChoiceOption, EditorKind
+from .shortcuts_editor import ShortcutsEditor
+from .status_labels_editor import StatusLabelsEditor
 
 
 class BaseEditor(QWidget):

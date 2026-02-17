@@ -14,9 +14,9 @@ from typing import Any
 
 from PIL import Image
 
-from ..keyword_utils import format_keywords, parse_keywords
-from ..metadata.db_fields import EXIF_TO_DB_MAPPING, GPS_REF_FIELDS, DBFields
-from ..metadata.metadata_db import parse_exif_datetime, parse_exif_gps
+from piqopiqo.keyword_utils import format_keywords, parse_keywords
+from piqopiqo.metadata.db_fields import EXIF_TO_DB_MAPPING, GPS_REF_FIELDS, DBFields
+from piqopiqo.metadata.metadata_db import parse_exif_datetime, parse_exif_gps
 
 logger = logging.getLogger(__name__)
 

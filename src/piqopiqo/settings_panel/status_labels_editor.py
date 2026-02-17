@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..model import StatusLabel
+from piqopiqo.model import StatusLabel
 
 
 class _StatusLabelRow(QWidget):

@@ -254,6 +254,8 @@ Do not use async.
 
 Never use dataclasses. Use attrs and @define, including frozen=True if relevant.
 
+Do not use .. for relative imports (in parent folder). Use the fully qualified name in that case (piqopiqo.). You can use a relative with single . if in the same folder or below.
+
 ## Update of AGENTS.md
 
 After completing a feature, update this file AGENTS.md with the updated project structure. Also add considerations for reference for future work.

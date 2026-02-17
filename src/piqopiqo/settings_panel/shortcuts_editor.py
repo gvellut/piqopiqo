@@ -5,7 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QFormLayout, QLineEdit, QWidget
 
-from ..shortcuts import Shortcut
+from piqopiqo.shortcuts import Shortcut
 
 
 class ShortcutsEditor(QWidget):
