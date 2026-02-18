@@ -78,7 +78,7 @@ class FlickrPreflightDialog(QDialog):
 
         token_status = "present" if token_exists else "missing"
         token_label = QLabel(
-            f"Token file state: {token_status}\\nPath: {token_file_path}"
+            f"Token file state: {token_status}\nPath: {token_file_path}"
         )
         token_label.setWordWrap(True)
         layout.addWidget(token_label)
@@ -89,7 +89,7 @@ class FlickrPreflightDialog(QDialog):
         self.album_error_label: QLabel | None = None
 
         if self._token_exists:
-            album_label = QLabel("Add to album")
+            album_label = QLabel("Add to album (Optional)")
             layout.addWidget(album_label)
 
             self.album_input = QLineEdit(self)
