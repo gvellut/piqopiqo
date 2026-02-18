@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
 )
 
@@ -89,8 +90,24 @@ class FlickrPreflightDialog(QDialog):
         self.album_error_label: QLabel | None = None
 
         if self._token_exists:
+            album_row = QHBoxLayout()
             album_label = QLabel("Add to album (Optional)")
-            layout.addWidget(album_label)
+            album_row.addWidget(album_label)
+
+            help_btn = QToolButton(self)
+            help_btn.setText("?")
+            help_btn.setFixedSize(20, 20)
+            help_btn.setToolTip(
+                "Album title (new or existing), Flickr Album ID or Flickr Album URL"
+            )
+            help_btn.setStyleSheet(
+                "QToolButton { border: 1px solid palette(mid); border-radius: 10px;"
+                " font-weight: bold; font-size: 11px; }"
+            )
+
+            album_row.addWidget(help_btn)
+            album_row.addStretch()
+            layout.addLayout(album_row)
 
             self.album_input = QLineEdit(self)
             self.album_input.setText(self.selected_album_text)
