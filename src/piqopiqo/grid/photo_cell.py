@@ -207,8 +207,8 @@ class PhotoCell(QFrame):
                     )
                 y_offset += line_height
 
-            # Draw red border around item
-            painter.setPen(QPen(QColor("red"), 2))
-            painter.drawRect(rect.adjusted(1, 1, -1, -1))
+            # Draw border around item Wiw look like lines of the grid
+            painter.setPen(QPen(QColor("#555555"), 1))
+            painter.drawRect(rect)
         finally:
             painter.end()

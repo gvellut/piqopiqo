@@ -30,7 +30,7 @@ from .cache_paths import set_cache_base_dir
 from .folder_scan import scan_folder
 from .folder_watcher import FolderWatcher
 from .fullscreen import FullscreenOverlay
-from .grid import PhotoGrid
+from .grid.photo_grid import PhotoGrid
 from .metadata.db_fields import DBFields
 from .metadata.metadata_db import MetadataDBManager
 from .metadata.save_workers import MetadataSaveWorker
