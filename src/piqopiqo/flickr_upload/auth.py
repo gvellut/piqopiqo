@@ -162,6 +162,8 @@ def validate_token_or_cleanup(
     )
     valid = bool(flickr.token_valid(perms=perms))
     if not valid:
+        # FIXME normally the token_valid of flickrapi lib took care of the deletion
+        # if not valid. Check and remove if the case
         if token_cache_dir:
             clear_token_file(Path(token_cache_dir) / FLICKR_TOKEN_DB_FILENAME)
         else:
