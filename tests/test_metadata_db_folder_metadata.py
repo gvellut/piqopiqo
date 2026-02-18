@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from piqopiqo.cache_paths import set_cache_base_dir
+from piqopiqo.flickr_upload.constants import FOLDER_META_FLICKR_ALBUM_ID
 from piqopiqo.gpx2exif.constants import FOLDER_META_TIME_SHIFT
 from piqopiqo.metadata.metadata_db import MetadataDB
 
@@ -41,5 +42,24 @@ def test_folder_metadata_time_shift_key_roundtrip(tmp_path) -> None:
 
     db.set_folder_value(FOLDER_META_TIME_SHIFT, None)
     assert db.get_folder_value(FOLDER_META_TIME_SHIFT) is None
+
+    db.close()
+
+
+def test_folder_metadata_flickr_album_id_roundtrip(tmp_path) -> None:
+    set_cache_base_dir(tmp_path / "cache")
+
+    source_folder = tmp_path / "photos" / "folder_c"
+    source_folder.mkdir(parents=True, exist_ok=True)
+
+    db = MetadataDB(str(source_folder))
+
+    assert db.get_folder_value(FOLDER_META_FLICKR_ALBUM_ID) is None
+
+    db.set_folder_value(FOLDER_META_FLICKR_ALBUM_ID, "72177720331888267")
+    assert db.get_folder_value(FOLDER_META_FLICKR_ALBUM_ID) == "72177720331888267"
+
+    db.set_folder_value(FOLDER_META_FLICKR_ALBUM_ID, None)
+    assert db.get_folder_value(FOLDER_META_FLICKR_ALBUM_ID) is None
 
     db.close()

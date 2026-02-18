@@ -18,6 +18,10 @@ MAX_NUM_CHECKS = 10
 STAGE_UPLOAD = "Upload"
 STAGE_RESET_DATE = "Reset date"
 STAGE_MAKE_PUBLIC = "Make public"
+STAGE_ALBUM_CHECK = "Album check"
+STAGE_ADD_TO_ALBUM = "Add to album"
+
+FOLDER_META_FLICKR_ALBUM_ID = "FLICKR_ALBUM_ID"
 
 TOKEN_VALIDATION_ERROR_TEXT = (
     "Flickr token is not valid anymore. Please login to Flickr again."

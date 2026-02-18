@@ -32,10 +32,11 @@ src/piqopiqo/
 ├── flickr_upload/   # Flickr auth + upload workflows (filtered scope only)
 │   ├── constants.py      # Flickr workflow constants (token file name, stages, retries)
 │   ├── service.py        # Pure Flickr helpers (tags, retry, timestamps, ticket status)
+│   ├── albums.py         # Album parsing/resolution helpers (ID/URL/title + album info/list)
 │   ├── auth.py           # Flickr client creation + token validation + browser auth
-│   ├── workers.py        # QRunnable workers (login + token validation)
-│   ├── media_worker.py   # Multiprocessing worker entrypoints for upload/date/public
-│   ├── manager.py        # Flickr upload manager (staged orchestration + cancellation)
+│   ├── workers.py        # QRunnable workers (login + token validation + album check)
+│   ├── media_worker.py   # Multiprocessing worker entrypoints (upload/date/public + album create/add)
+│   ├── manager.py        # Flickr upload manager (staged orchestration + cancellation + album stage)
 │   └── dialogs.py        # Tools dialogs + launch flow for Flickr upload
 ├── gpx2exif/        # GPX/OCR time-shift workflows (DB updates + KML, no EXIF write by default)
 │   ├── constants.py      # GPX workflow constants (TIME_SHIFT key, labels, defaults)
@@ -109,7 +110,7 @@ src/piqopiqo/
 - **GPS Time shift**: Tools dialog stores per-folder time-shift values in folder SQLite metadata (`folder_metadata.TIME_SHIFT`)
 - **Extract GPS Time shift**: Grid context menu action runs GCP Vision OCR in background for the clicked photo folder and persists computed shift
 - **Apply GPX**: Tools workflow processes all loaded source folders, generates KML, and optionally updates DB `time_taken` + coordinates (no EXIF writes by default)
-- **Upload to Flickr**: Tools workflow uploads only currently visible (filtered) photos in current sort order, with login/token validation, temp EXIF write, upload-date reset and make-public steps
+- **Upload to Flickr**: Tools workflow uploads only currently visible (filtered) photos in current sort order, with login/token validation, album preflight input (title/ID/URL), temp EXIF write, upload-date reset, make-public, and optional album add/create step
 
 ## PhotoListModel Architecture
 
@@ -265,14 +266,21 @@ Selection behavior:
 - KML is always generated per completed folder using `photos_<root>_<relative_folder>.kml`; when KML folder setting is empty, output falls back to the loaded root folder.
 - Cancellation during Apply GPX rolls back metadata changes only for the in-progress folder; already completed folders remain committed and keep their generated KML.
 - Flickr API credentials are configured in Settings > External/Workflow > Flickr (`FLICKR_API_KEY`, `FLICKR_API_SECRET` user settings).
+- If Flickr API credentials are missing when launching upload, the warning dialog offers `Go to settings` and opens Settings on the `External/Workflow` tab.
 - Flickr OAuth token cache is stored in `<cache_base>/flickr/oauth-tokens.sqlite`.
 - Flickr preflight token state is based on physical existence of `oauth-tokens.sqlite`.
 - Flickr upload scope always uses the current visible grid (`images_data`) only; hidden/filtered-out photos are not uploaded.
 - Flickr upload ordering follows the current visible sort order from the grid model.
 - Missing DB metadata for a photo is allowed: upload uses a temporary copy of the original file without DB-driven EXIF updates for that file.
 - Flickr token validation runs before upload and invalid tokens trigger token file deletion so the flow returns to Login.
-- Flickr upload manager stages are `Upload -> Reset date -> Make public` and run via multiprocessing workers.
-- Flickr flow currently does not handle albums (no create/add/reorder album operations).
+- Flickr preflight shows an `Add to album` field only when token file is present (Upload mode); it accepts album title, numeric album ID, or Flickr album URL.
+- When `Add to album` is empty at upload launch, `FLICKR_ALBUM_ID` is cleared for all loaded source folders.
+- Folder DB metadata key `FLICKR_ALBUM_ID` is written for all loaded source folders:
+  - before upload starts for existing album (resolved from title/ID/URL),
+  - after album creation succeeds for new album creation flow.
+- Preflight auto-prefills album input from the first non-empty folder `FLICKR_ALBUM_ID`; when album info is resolvable, it shows title + clickable Flickr album URL.
+- Flickr upload manager stages are `Upload -> Reset date -> Make public -> Add to album` when album mode is enabled.
+- Album add uses grouped `photosets.editPhotos` semantics (existing album photos + uploaded photo IDs).
 
 
 ## Development

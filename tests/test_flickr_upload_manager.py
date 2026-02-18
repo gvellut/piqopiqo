@@ -5,7 +5,9 @@ from __future__ import annotations
 from PySide6.QtWidgets import QApplication
 import pytest
 
+from piqopiqo.flickr_upload.albums import FlickrAlbumPlan
 from piqopiqo.flickr_upload.constants import (
+    STAGE_ADD_TO_ALBUM,
     STAGE_MAKE_PUBLIC,
     STAGE_RESET_DATE,
     STAGE_UPLOAD,
@@ -159,3 +161,128 @@ def test_manager_cancellation_short_circuit(qapp, monkeypatch) -> None:  # noqa:
     assert len(finished) == 1
     result = finished[0]
     assert result.cancelled is True
+
+
+def test_manager_album_stage_create_then_add(qapp, monkeypatch) -> None:  # noqa: ARG001
+    saved_album_ids: list[str] = []
+    manager = FlickrUploadManager(
+        api_key="k",
+        api_secret="s",
+        exiftool_path="/opt/homebrew/bin/exiftool",
+        token_cache_dir="/tmp",
+        max_workers=2,
+        album_plan=FlickrAlbumPlan(
+            raw_text="Trip 2026",
+            album_title="Trip 2026",
+            is_create=True,
+        ),
+        on_album_id_resolved=saved_album_ids.append,
+    )
+    items = [
+        {"file_path": "/a.jpg", "order": 0, "db_metadata": None},
+        {"file_path": "/b.jpg", "order": 1, "db_metadata": None},
+    ]
+
+    stages: list[str] = []
+    finished = []
+    manager.stage_changed.connect(stages.append)
+    manager.finished.connect(finished.append)
+
+    def _fake_pool(_func, payloads, *, stage, progress_total, result):  # noqa: ARG001
+        if stage == STAGE_UPLOAD:
+            return [
+                {"ok": True, "file_path": "/a.jpg", "order": 0, "ticket_id": "t1"},
+                {"ok": True, "file_path": "/b.jpg", "order": 1, "ticket_id": "t2"},
+            ]
+        if stage == STAGE_RESET_DATE:
+            return [{"ok": True}, {"ok": True}]
+        if stage == STAGE_MAKE_PUBLIC:
+            return [{"ok": True}, {"ok": True}]
+        raise AssertionError(stage)
+
+    monkeypatch.setattr(manager, "_run_parallel_pool", _fake_pool)
+    monkeypatch.setattr(
+        "piqopiqo.flickr_upload.manager.run_resolve_tickets_task",
+        lambda _payload: {"ok": True, "photo_ids": ["p1", "p2"], "failures": []},
+    )
+    monkeypatch.setattr(
+        "piqopiqo.flickr_upload.manager.run_create_album_task",
+        lambda _payload: {
+            "ok": True,
+            "album_id": "72177720331888267",
+            "album_title": "Trip 2026",
+            "user_nsid": "22539273@N00",
+            "album_url": (
+                "https://flickr.com/photos/22539273@N00/albums/72177720331888267"
+            ),
+        },
+    )
+    monkeypatch.setattr(
+        "piqopiqo.flickr_upload.manager.run_add_to_album_task",
+        lambda _payload: {"ok": True, "added_count": 2},
+    )
+
+    manager._run(items)
+
+    assert stages == [
+        STAGE_UPLOAD,
+        STAGE_RESET_DATE,
+        STAGE_MAKE_PUBLIC,
+        STAGE_ADD_TO_ALBUM,
+    ]
+    assert saved_album_ids == ["72177720331888267"]
+    assert len(finished) == 1
+    result = finished[0]
+    assert result.album_created is True
+    assert result.album_id == "72177720331888267"
+    assert result.album_added_count == 2
+
+
+def test_manager_album_stage_add_failure_is_reported(qapp, monkeypatch) -> None:  # noqa: ARG001
+    manager = FlickrUploadManager(
+        api_key="k",
+        api_secret="s",
+        exiftool_path="/opt/homebrew/bin/exiftool",
+        token_cache_dir="/tmp",
+        max_workers=2,
+        album_plan=FlickrAlbumPlan(
+            raw_text="72177720331888267",
+            album_id="72177720331888267",
+            album_title="Trip 2026",
+            is_create=False,
+        ),
+    )
+    items = [{"file_path": "/a.jpg", "order": 0, "db_metadata": None}]
+
+    finished = []
+    manager.finished.connect(finished.append)
+
+    def _fake_pool(_func, payloads, *, stage, progress_total, result):  # noqa: ARG001
+        if stage == STAGE_UPLOAD:
+            return [{"ok": True, "file_path": "/a.jpg", "order": 0, "ticket_id": "t1"}]
+        if stage == STAGE_RESET_DATE:
+            return [{"ok": True}]
+        if stage == STAGE_MAKE_PUBLIC:
+            return [{"ok": True}]
+        raise AssertionError(stage)
+
+    monkeypatch.setattr(manager, "_run_parallel_pool", _fake_pool)
+    monkeypatch.setattr(
+        "piqopiqo.flickr_upload.manager.run_resolve_tickets_task",
+        lambda _payload: {"ok": True, "photo_ids": ["p1"], "failures": []},
+    )
+    monkeypatch.setattr(
+        "piqopiqo.flickr_upload.manager.run_add_to_album_task",
+        lambda _payload: {"ok": False, "error": "Album update failed"},
+    )
+
+    manager._run(items)
+
+    assert len(finished) == 1
+    result = finished[0]
+    assert result.album_id == "72177720331888267"
+    assert result.album_added_count == 0
+    assert any(
+        failure.stage == STAGE_ADD_TO_ALBUM and "Album update failed" in failure.message
+        for failure in result.failures
+    )

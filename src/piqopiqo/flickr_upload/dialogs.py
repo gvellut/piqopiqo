@@ -5,11 +5,12 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QThreadPool, Signal
+from PySide6.QtCore import Qt, QThreadPool, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -25,10 +26,20 @@ from piqopiqo.settings_state import (
     get_user_setting,
 )
 
-from .auth import token_file_exists
-from .constants import TOKEN_VALIDATION_ERROR_TEXT
+from .albums import FlickrAlbumPlan, fetch_album_info
+from .auth import create_flickr_client, token_file_exists
+from .constants import (
+    FOLDER_META_FLICKR_ALBUM_ID,
+    STAGE_ADD_TO_ALBUM,
+    STAGE_ALBUM_CHECK,
+    TOKEN_VALIDATION_ERROR_TEXT,
+)
 from .manager import FlickrUploadManager, FlickrUploadResult
-from .workers import FlickrLoginWorker, FlickrTokenValidationWorker
+from .workers import (
+    FlickrAlbumCheckWorker,
+    FlickrLoginWorker,
+    FlickrTokenValidationWorker,
+)
 
 if TYPE_CHECKING:
     from piqopiqo.main_window import MainWindow
@@ -44,6 +55,10 @@ class FlickrPreflightDialog(QDialog):
         visible_count: int,
         token_file_path: str,
         token_exists: bool,
+        album_text: str = "",
+        album_error: str = "",
+        album_display_plan: FlickrAlbumPlan | None = None,
+        show_album_link: bool = False,
         parent=None,
     ):
         super().__init__(parent)
@@ -52,6 +67,7 @@ class FlickrPreflightDialog(QDialog):
         self.setMinimumWidth(560)
 
         self.selected_action: str | None = None
+        self.selected_album_text: str = str(album_text or "")
         self._token_exists = bool(token_exists)
 
         layout = QVBoxLayout(self)
@@ -62,10 +78,65 @@ class FlickrPreflightDialog(QDialog):
 
         token_status = "present" if token_exists else "missing"
         token_label = QLabel(
-            f"Token file state: {token_status}\nPath: {token_file_path}"
+            f"Token file state: {token_status}\\nPath: {token_file_path}"
         )
         token_label.setWordWrap(True)
         layout.addWidget(token_label)
+
+        self.album_input: QLineEdit | None = None
+        self.album_info_label: QLabel | None = None
+        self.album_link_label: QLabel | None = None
+        self.album_error_label: QLabel | None = None
+
+        if self._token_exists:
+            album_label = QLabel("Add to album")
+            layout.addWidget(album_label)
+
+            self.album_input = QLineEdit(self)
+            self.album_input.setText(self.selected_album_text)
+            self.album_input.textChanged.connect(self._on_album_text_changed)
+            layout.addWidget(self.album_input)
+
+            self.album_info_label = QLabel(self)
+            self.album_info_label.setWordWrap(True)
+            if (
+                album_display_plan is not None
+                and album_display_plan.is_existing_album()
+            ):
+                display_title = album_display_plan.album_title or "<untitled>"
+                self.album_info_label.setText(
+                    f"Album: '{display_title}' (ID: {album_display_plan.album_id})"
+                )
+                self.album_info_label.show()
+            else:
+                self.album_info_label.hide()
+            layout.addWidget(self.album_info_label)
+
+            self.album_link_label = QLabel(self)
+            self.album_link_label.setTextFormat(Qt.TextFormat.RichText)
+            self.album_link_label.setTextInteractionFlags(
+                Qt.TextInteractionFlag.TextBrowserInteraction
+            )
+            self.album_link_label.setOpenExternalLinks(True)
+            if (
+                show_album_link
+                and album_display_plan is not None
+                and album_display_plan.album_url
+            ):
+                url = album_display_plan.album_url
+                self.album_link_label.setText(
+                    f'<a href="{url}" style="color:#1f6feb;">{url}</a>'
+                )
+                self.album_link_label.show()
+            else:
+                self.album_link_label.hide()
+            layout.addWidget(self.album_link_label)
+
+            self.album_error_label = QLabel(self)
+            self.album_error_label.setStyleSheet("color: red;")
+            self.album_error_label.setWordWrap(True)
+            layout.addWidget(self.album_error_label)
+            self._set_album_error(album_error)
 
         button_row = QHBoxLayout()
         button_row.addStretch(1)
@@ -81,8 +152,24 @@ class FlickrPreflightDialog(QDialog):
 
         layout.addLayout(button_row)
 
+    def _set_album_error(self, message: str) -> None:
+        if self.album_error_label is None:
+            return
+        text = str(message or "").strip()
+        if text:
+            self.album_error_label.setText(text)
+            self.album_error_label.show()
+            return
+        self.album_error_label.clear()
+        self.album_error_label.hide()
+
+    def _on_album_text_changed(self, _value: str) -> None:
+        self._set_album_error("")
+
     def _on_action(self) -> None:
         self.selected_action = "upload" if self._token_exists else "login"
+        if self.album_input is not None:
+            self.selected_album_text = str(self.album_input.text() or "")
         self.accept()
 
 
@@ -159,6 +246,9 @@ class FlickrUploadProgressDialog(QDialog):
         api_secret: str,
         exiftool_path: str,
         upload_items: list[dict],
+        album_text: str,
+        cached_album_plan: FlickrAlbumPlan | None,
+        set_folder_album_id_callback,
         parent=None,
     ):
         super().__init__(parent)
@@ -170,13 +260,19 @@ class FlickrUploadProgressDialog(QDialog):
         self._api_secret = api_secret
         self._exiftool_path = exiftool_path
         self._upload_items = upload_items
+        self._album_text = str(album_text or "")
+        self._cached_album_plan = cached_album_plan
+        self._set_folder_album_id_callback = set_folder_album_id_callback
 
         self._manager: FlickrUploadManager | None = None
         self._token_worker: FlickrTokenValidationWorker | None = None
+        self._album_worker: FlickrAlbumCheckWorker | None = None
         self._finished = False
 
         self.invalid_token = False
         self.result: FlickrUploadResult | None = None
+        self.album_validation_error: str = ""
+        self.resolved_album_plan: FlickrAlbumPlan | None = None
 
         layout = QVBoxLayout(self)
 
@@ -191,6 +287,11 @@ class FlickrUploadProgressDialog(QDialog):
         self.progress_bar = QProgressBar(self)
         self.progress_bar.setRange(0, 0)
         layout.addWidget(self.progress_bar)
+
+        self.album_action_label = QLabel("")
+        self.album_action_label.setWordWrap(True)
+        self.album_action_label.hide()
+        layout.addWidget(self.album_action_label)
 
         self.details = QTextEdit(self)
         self.details.setReadOnly(True)
@@ -231,6 +332,43 @@ class FlickrUploadProgressDialog(QDialog):
             self.reject()
             return
 
+        self.stage_label.setText(f"Step: {STAGE_ALBUM_CHECK}")
+        self.status_label.setText("Checking album...")
+        self.progress_bar.setRange(0, 0)
+        self.progress_bar.setFormat("")
+
+        album_text = self._album_text.strip()
+        if not album_text:
+            self._set_folder_album_id_callback(None)
+            self.resolved_album_plan = FlickrAlbumPlan()
+            self._start_upload_manager(FlickrAlbumPlan())
+            return
+
+        worker = FlickrAlbumCheckWorker(
+            api_key=self._api_key,
+            api_secret=self._api_secret,
+            album_text=album_text,
+            cached_plan=(
+                self._cached_album_plan.to_dict()
+                if self._cached_album_plan is not None
+                else None
+            ),
+        )
+        self._album_worker = worker
+        worker.signals.finished.connect(self._on_album_checked)
+        worker.signals.cancelled.connect(self._on_album_check_cancelled)
+        worker.signals.error.connect(self._on_album_check_error)
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_album_checked(self, plan: FlickrAlbumPlan) -> None:
+        self.resolved_album_plan = plan
+
+        if plan.is_existing_album():
+            self._set_folder_album_id_callback(plan.album_id)
+
+        self._start_upload_manager(plan)
+
+    def _start_upload_manager(self, album_plan: FlickrAlbumPlan) -> None:
         self.progress_bar.setRange(0, max(1, len(self._upload_items)))
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("0/%v")
@@ -244,6 +382,8 @@ class FlickrUploadProgressDialog(QDialog):
             max_workers=int(
                 get_runtime_setting(RuntimeSettingKey.FLICKR_UPLOAD_MAX_WORKERS)
             ),
+            album_plan=album_plan,
+            on_album_id_resolved=self._set_folder_album_id_callback,
             parent=self,
         )
         self._manager = manager
@@ -251,8 +391,19 @@ class FlickrUploadProgressDialog(QDialog):
         manager.stage_changed.connect(self._on_stage_changed)
         manager.progress.connect(self._on_progress)
         manager.status.connect(self._on_status)
+        manager.album_status.connect(self._on_album_status)
         manager.finished.connect(self._on_finished)
         manager.start(self._upload_items)
+
+    def _on_album_check_cancelled(self) -> None:
+        self._finished = True
+        self.reject()
+
+    def _on_album_check_error(self, message: str) -> None:
+        self._finished = True
+        self.album_validation_error = str(message)
+        QMessageBox.warning(self, "Upload to Flickr", self.album_validation_error)
+        self.reject()
 
     def _on_validation_cancelled(self) -> None:
         self._finished = True
@@ -265,9 +416,16 @@ class FlickrUploadProgressDialog(QDialog):
 
     def _on_stage_changed(self, stage: str) -> None:
         self.stage_label.setText(f"Step: {stage}")
+        if stage != STAGE_ADD_TO_ALBUM:
+            self.album_action_label.clear()
+            self.album_action_label.hide()
 
     def _on_progress(self, completed: int, total: int) -> None:
-        self.progress_bar.setRange(0, max(0, int(total)))
+        if int(total) <= 0:
+            self.progress_bar.setRange(0, 0)
+            self.progress_bar.setFormat("")
+            return
+        self.progress_bar.setRange(0, int(total))
         self.progress_bar.setValue(max(0, int(completed)))
         self.progress_bar.setFormat(f"{completed}/{total}")
 
@@ -275,12 +433,31 @@ class FlickrUploadProgressDialog(QDialog):
         if message:
             self.status_label.setText(message)
 
+    def _on_album_status(self, message: str) -> None:
+        text = str(message or "").strip()
+        if not text:
+            self.album_action_label.clear()
+            self.album_action_label.hide()
+            return
+        self.album_action_label.setText(text)
+        self.album_action_label.show()
+
     def _on_finished(self, result: FlickrUploadResult) -> None:
         self._finished = True
         self.result = result
 
         if self._manager is not None:
             self.manager_finished.emit(self._manager)
+
+        if result.album_id:
+            self.resolved_album_plan = FlickrAlbumPlan(
+                raw_text=self._album_text.strip(),
+                album_id=result.album_id,
+                album_title=result.album_title,
+                user_nsid=result.album_user_nsid,
+                album_url=result.album_url,
+                is_create=False,
+            )
 
         self.cancel_btn.setEnabled(False)
 
@@ -310,6 +487,16 @@ class FlickrUploadProgressDialog(QDialog):
             lines.append(f"Reset date: {result.reset_date_count}")
             lines.append(f"Make public: {result.made_public_count}")
 
+        if result.album_id:
+            display_title = result.album_title or result.album_id
+            lines.append(f"Album: {display_title} ({result.album_id})")
+            if result.album_created:
+                lines.append(
+                    "Album operation: created album then added uploaded photos."
+                )
+            elif result.album_added_count:
+                lines.append(f"Added to album: {result.album_added_count} photo(s).")
+
         if result.failures:
             lines.append("")
             lines.append("Failures:")
@@ -332,6 +519,8 @@ class FlickrUploadProgressDialog(QDialog):
     def _on_cancel(self) -> None:
         if self._token_worker is not None:
             self._token_worker.request_cancel()
+        if self._album_worker is not None:
+            self._album_worker.request_cancel()
         if self._manager is not None:
             self._manager.request_cancel()
         self.reject()
@@ -368,18 +557,82 @@ def _build_upload_items(
     return upload_items
 
 
+def _set_album_for_folders(
+    parent: MainWindow,
+    source_folders: list[str],
+    album_id: str | None,
+) -> None:
+    value = str(album_id).strip() if album_id is not None else ""
+    to_store = value if value else None
+    for folder in source_folders:
+        db = parent.db_manager.get_db_for_folder(folder)
+        db.set_folder_value(FOLDER_META_FLICKR_ALBUM_ID, to_store)
+
+
+def _get_first_folder_album_id(parent: MainWindow, source_folders: list[str]) -> str:
+    for folder in source_folders:
+        value = parent.db_manager.get_db_for_folder(folder).get_folder_value(
+            FOLDER_META_FLICKR_ALBUM_ID
+        )
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _resolve_prefill_album_plan(
+    *,
+    api_key: str,
+    api_secret: str,
+    album_id: str,
+) -> FlickrAlbumPlan | None:
+    aid = str(album_id).strip()
+    if not aid:
+        return None
+
+    try:
+        flickr = create_flickr_client(
+            api_key,
+            api_secret,
+            token_cache_dir=get_flickr_cache_dir(),
+            response_format="parsed-json",
+        )
+        info = fetch_album_info(flickr, aid)
+    except Exception:
+        return None
+
+    return FlickrAlbumPlan(
+        raw_text=aid,
+        album_id=info.album_id,
+        album_title=info.title,
+        user_nsid=info.user_nsid,
+        album_url=info.url,
+        is_create=False,
+    )
+
+
 def launch_flickr_upload(parent: MainWindow) -> None:
     """Launch Flickr upload flow from MainWindow."""
     api_key = str(get_user_setting(UserSettingKey.FLICKR_API_KEY) or "").strip()
     api_secret = str(get_user_setting(UserSettingKey.FLICKR_API_SECRET) or "").strip()
 
     if not api_key or not api_secret:
-        QMessageBox.warning(
-            parent,
-            "Upload to Flickr",
+        dialog = QMessageBox(parent)
+        dialog.setIcon(QMessageBox.Icon.Warning)
+        dialog.setWindowTitle("Upload to Flickr")
+        dialog.setText(
             "Flickr API key and Flickr API secret are empty.\n"
-            "Set them in Settings > External/Workflow > Flickr.",
+            "Set them in Settings > External/Workflow > Flickr."
         )
+        go_to_settings_btn = dialog.addButton(
+            "Go to settings", QMessageBox.ButtonRole.AcceptRole
+        )
+        dialog.addButton(QMessageBox.StandardButton.Cancel)
+        dialog.exec()
+        if dialog.clickedButton() == go_to_settings_btn:
+            parent.open_settings(tab_title="External/Workflow")
         return
 
     visible_items = list(parent.images_data)
@@ -391,17 +644,44 @@ def launch_flickr_upload(parent: MainWindow) -> None:
         )
         return
 
+    source_folders = list(parent.photo_model.source_folders)
     token_path = str(get_flickr_token_file_path())
 
+    session_album_text = ""
+    session_album_error = ""
+    cached_album_plan: FlickrAlbumPlan | None = None
+    cached_album_from_folder_data = False
+
     while True:
+        token_exists = token_file_exists(token_path)
+
+        if token_exists and not session_album_text.strip():
+            folder_album_id = _get_first_folder_album_id(parent, source_folders)
+            if folder_album_id:
+                session_album_text = folder_album_id
+                cached_album_plan = _resolve_prefill_album_plan(
+                    api_key=api_key,
+                    api_secret=api_secret,
+                    album_id=folder_album_id,
+                )
+                cached_album_from_folder_data = cached_album_plan is not None
+
         preflight = FlickrPreflightDialog(
             visible_count=len(visible_items),
             token_file_path=token_path,
-            token_exists=token_file_exists(token_path),
+            token_exists=token_exists,
+            album_text=session_album_text,
+            album_error=session_album_error,
+            album_display_plan=(
+                cached_album_plan if cached_album_from_folder_data else None
+            ),
+            show_album_link=cached_album_from_folder_data,
             parent=parent,
         )
         if preflight.exec() != QDialog.DialogCode.Accepted:
             return
+
+        session_album_text = preflight.selected_album_text
 
         if preflight.selected_action == "login":
             worker = FlickrLoginWorker(api_key=api_key, api_secret=api_secret)
@@ -420,14 +700,29 @@ def launch_flickr_upload(parent: MainWindow) -> None:
             continue
 
         # Upload flow
+        session_album_error = ""
         upload_items = _build_upload_items(parent, visible_items)
         exiftool_path = str(get_user_setting(UserSettingKey.EXIFTOOL_PATH) or "")
+
+        cached_plan_for_upload = None
+        if (
+            cached_album_plan is not None
+            and cached_album_plan.normalized_raw_text() == session_album_text.strip()
+        ):
+            cached_plan_for_upload = cached_album_plan
 
         upload_dialog = FlickrUploadProgressDialog(
             api_key=api_key,
             api_secret=api_secret,
             exiftool_path=exiftool_path,
             upload_items=upload_items,
+            album_text=session_album_text,
+            cached_album_plan=cached_plan_for_upload,
+            set_folder_album_id_callback=lambda album_id: _set_album_for_folders(
+                parent,
+                source_folders,
+                album_id,
+            ),
             parent=parent,
         )
 
@@ -444,6 +739,16 @@ def launch_flickr_upload(parent: MainWindow) -> None:
 
         if upload_dialog.invalid_token:
             continue
+
+        if upload_dialog.album_validation_error:
+            session_album_error = upload_dialog.album_validation_error
+            cached_album_plan = None
+            cached_album_from_folder_data = False
+            continue
+
+        if upload_dialog.resolved_album_plan is not None:
+            cached_album_plan = upload_dialog.resolved_album_plan
+            cached_album_from_folder_data = False
 
         if parent._active_flickr_upload_manager is not None:
             parent._active_flickr_upload_manager.stop(timeout_s=0.5)

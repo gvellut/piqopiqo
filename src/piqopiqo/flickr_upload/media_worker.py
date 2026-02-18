@@ -19,12 +19,14 @@ from attrs import define
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.exif_write import build_exif_tags
 
+from .albums import build_album_url
 from .auth import create_flickr_client
 from .constants import (
     API_RETRIES,
     CHECK_TICKETS_SLEEP_S,
     MAX_NUM_CHECKS,
     QUICK_TIMEOUT_S,
+    STAGE_ADD_TO_ALBUM,
     STAGE_MAKE_PUBLIC,
     STAGE_RESET_DATE,
     STAGE_UPLOAD,
@@ -557,5 +559,193 @@ def run_set_public_task(task: dict) -> dict:
             "stage": STAGE_MAKE_PUBLIC,
             "photo_id": photo_id,
             "file_path": file_path,
+            "error": str(ex),
+        }
+
+
+def _extract_album_photo_rows(response: dict) -> list[dict]:
+    photoset = response.get("photoset") if isinstance(response, dict) else None
+    if not isinstance(photoset, dict):
+        return []
+    rows = photoset.get("photo")
+    if rows is None:
+        return []
+    if isinstance(rows, list):
+        return [row for row in rows if isinstance(row, dict)]
+    if isinstance(rows, dict):
+        return [rows]
+    return []
+
+
+def _get_album_photos(flickr, album_id: str) -> list[dict]:
+    photos: list[dict] = []
+    page = 1
+    while True:
+        response = flickr.photosets.getPhotos(
+            photoset_id=album_id,
+            page=page,
+            per_page=500,
+            timeout=UPLOAD_TIMEOUT_S,
+        )
+        photos.extend(_extract_album_photo_rows(response))
+
+        photoset = response.get("photoset") if isinstance(response, dict) else None
+        if not isinstance(photoset, dict):
+            break
+        try:
+            current_page = int(photoset.get("page", page))
+            pages = int(photoset.get("pages", 1))
+        except (TypeError, ValueError):
+            break
+        if current_page >= pages:
+            break
+        page += 1
+    return photos
+
+
+def _add_to_album_group(flickr, album_id: str, photo_ids: list[str]) -> None:
+    existing_rows = retry(
+        API_RETRIES,
+        lambda: _get_album_photos(flickr, album_id),
+    )
+    if existing_rows is None:
+        raise RuntimeError(f"Unable to list existing photos in album {album_id}.")
+
+    existing_photo_ids: list[str] = []
+    primary_photo_id = ""
+    for row in existing_rows:
+        pid = str(row.get("id") or "").strip()
+        if not pid:
+            continue
+        existing_photo_ids.append(pid)
+        if row.get("isprimary") in (1, "1"):
+            primary_photo_id = pid
+
+    all_photo_ids: list[str] = []
+    seen: set[str] = set()
+    for pid in [*existing_photo_ids, *photo_ids]:
+        cur = str(pid or "").strip()
+        if not cur or cur in seen:
+            continue
+        all_photo_ids.append(cur)
+        seen.add(cur)
+
+    if not all_photo_ids:
+        return
+
+    if not primary_photo_id:
+        primary_photo_id = all_photo_ids[0]
+
+    retry(
+        API_RETRIES,
+        lambda: flickr.photosets.editPhotos(
+            photoset_id=album_id,
+            primary_photo_id=primary_photo_id,
+            photo_ids=",".join(all_photo_ids),
+            timeout=UPLOAD_TIMEOUT_S,
+        ),
+    )
+
+
+def run_create_album_task(task: dict) -> dict:
+    """Create Flickr album with a primary photo."""
+    api_key = str(task["api_key"])
+    api_secret = str(task["api_secret"])
+    token_cache_dir = str(task["token_cache_dir"])
+    album_title = str(task.get("album_title") or "").strip()
+    primary_photo_id = str(task.get("primary_photo_id") or "").strip()
+
+    try:
+        if not album_title:
+            raise ValueError("Album title is empty.")
+        if not primary_photo_id:
+            raise ValueError("Primary photo id is empty.")
+
+        flickr = create_flickr_client(
+            api_key,
+            api_secret,
+            token_cache_dir=token_cache_dir,
+            response_format="parsed-json",
+        )
+
+        response = retry(
+            API_RETRIES,
+            lambda: flickr.photosets.create(
+                title=album_title,
+                primary_photo_id=primary_photo_id,
+                timeout=UPLOAD_TIMEOUT_S,
+            ),
+        )
+        if not isinstance(response, dict):
+            raise RuntimeError("Album creation returned an invalid response.")
+
+        photoset = response.get("photoset")
+        if not isinstance(photoset, dict):
+            raise RuntimeError("Album creation returned no photoset payload.")
+
+        album_id = str(photoset.get("id") or "").strip()
+        if not album_id:
+            raise RuntimeError("Album creation returned no album id.")
+
+        title_node = photoset.get("title")
+        if isinstance(title_node, dict):
+            resolved_title = str(title_node.get("_content") or "").strip()
+        elif title_node is None:
+            resolved_title = ""
+        else:
+            resolved_title = str(title_node).strip()
+        if not resolved_title:
+            resolved_title = album_title
+
+        user_nsid = str(photoset.get("owner") or "").strip()
+        return {
+            "ok": True,
+            "stage": STAGE_ADD_TO_ALBUM,
+            "album_id": album_id,
+            "album_title": resolved_title,
+            "user_nsid": user_nsid,
+            "album_url": build_album_url(user_nsid, album_id),
+        }
+    except Exception as ex:
+        return {
+            "ok": False,
+            "stage": STAGE_ADD_TO_ALBUM,
+            "error": str(ex),
+        }
+
+
+def run_add_to_album_task(task: dict) -> dict:
+    """Add uploaded photo ids to a Flickr album in one grouped edit call."""
+    api_key = str(task["api_key"])
+    api_secret = str(task["api_secret"])
+    token_cache_dir = str(task["token_cache_dir"])
+    album_id = str(task.get("album_id") or "").strip()
+    photo_ids = [str(x or "").strip() for x in list(task.get("photo_ids") or [])]
+    photo_ids = [x for x in photo_ids if x]
+
+    try:
+        if not album_id:
+            raise ValueError("Album id is empty.")
+        if not photo_ids:
+            raise ValueError("No photo id provided for album update.")
+
+        flickr = create_flickr_client(
+            api_key,
+            api_secret,
+            token_cache_dir=token_cache_dir,
+            response_format="parsed-json",
+        )
+        _add_to_album_group(flickr, album_id, photo_ids)
+        return {
+            "ok": True,
+            "stage": STAGE_ADD_TO_ALBUM,
+            "album_id": album_id,
+            "added_count": len(photo_ids),
+        }
+    except Exception as ex:
+        return {
+            "ok": False,
+            "stage": STAGE_ADD_TO_ALBUM,
+            "album_id": album_id,
             "error": str(ex),
         }

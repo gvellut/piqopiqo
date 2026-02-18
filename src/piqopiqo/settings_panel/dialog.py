@@ -34,7 +34,7 @@ from .schema import SETTINGS_TABS, EditorKind, FieldSpec
 class SettingsDialog(QDialog):
     setting_saved = Signal(object)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, initial_tab_title: str | None = None):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.resize(850, 620)
@@ -45,6 +45,8 @@ class SettingsDialog(QDialog):
         self._changed_keys: set[UserSettingKey] = set()
         self._loading = False
         self._dirty = False
+        self._tabs: QTabWidget | None = None
+        self._initial_tab_title = str(initial_tab_title or "").strip()
 
         self._mode = get_runtime_setting(RuntimeSettingKey.SETTINGS_PANEL_SAVE_MODE)
 
@@ -58,8 +60,8 @@ class SettingsDialog(QDialog):
     def _build_ui(self):
         root = QVBoxLayout(self)
 
-        tabs = QTabWidget(self)
-        root.addWidget(tabs)
+        self._tabs = QTabWidget(self)
+        root.addWidget(self._tabs)
 
         for tab_spec in SETTINGS_TABS:
             tab = QWidget(self)
@@ -97,7 +99,14 @@ class SettingsDialog(QDialog):
                 tab_layout.addWidget(group_box)
 
             tab_layout.addStretch(1)
-            tabs.addTab(tab, tab_spec.title)
+            self._tabs.addTab(tab, tab_spec.title)
+
+        if self._initial_tab_title and self._tabs is not None:
+            for i in range(self._tabs.count()):
+                if self._tabs.tabText(i) != self._initial_tab_title:
+                    continue
+                self._tabs.setCurrentIndex(i)
+                break
 
         if self._mode == SettingsPanelSaveMode.AUTOSAVE:
             buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)

@@ -56,3 +56,14 @@ def test_autosave_mode_commits_on_field_update(qapp, monkeypatch, tmp_path):
 
     assert get_user_setting(UserSettingKey.EXTERNAL_VIEWER) == str(app_path)
     assert UserSettingKey.EXTERNAL_VIEWER in dialog.changed_keys
+
+
+def test_initial_tab_title_selects_requested_tab(qapp, monkeypatch):
+    monkeypatch.delenv("PIQO_SETTINGS_PANEL_SAVE_MODE", raising=False)
+    init_qsettings_store(dyn=True)
+
+    dialog = SettingsDialog(initial_tab_title="External/Workflow")
+
+    assert dialog._tabs is not None
+    current_title = dialog._tabs.tabText(dialog._tabs.currentIndex())
+    assert current_title == "External/Workflow"

@@ -761,7 +761,10 @@ class MainWindow(QMainWindow):
         pass
 
     def on_settings(self):
-        dialog = SettingsDialog(self)
+        self.open_settings()
+
+    def open_settings(self, tab_title: str | None = None) -> None:
+        dialog = SettingsDialog(self, initial_tab_title=tab_title)
         dialog.setting_saved.connect(self._on_setting_saved)
         dialog.exec()
         self._apply_settings_changes(dialog.changed_keys)

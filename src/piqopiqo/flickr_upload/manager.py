@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 import multiprocessing
 import threading
@@ -11,12 +12,16 @@ from typing import Any
 from attrs import define, field
 from PySide6.QtCore import QObject, Signal
 
+from .albums import FlickrAlbumPlan
 from .constants import (
+    STAGE_ADD_TO_ALBUM,
     STAGE_MAKE_PUBLIC,
     STAGE_RESET_DATE,
     STAGE_UPLOAD,
 )
 from .media_worker import (
+    run_add_to_album_task,
+    run_create_album_task,
     run_resolve_tickets_task,
     run_set_date_task,
     run_set_public_task,
@@ -39,6 +44,12 @@ class FlickrUploadResult:
     reset_date_count: int = 0
     made_public_count: int = 0
     uploaded_photo_ids: list[str] = field(factory=list)
+    album_id: str = ""
+    album_title: str = ""
+    album_user_nsid: str = ""
+    album_url: str = ""
+    album_created: bool = False
+    album_added_count: int = 0
     cancelled: bool = False
     fatal_error: str = ""
     failures: list[FlickrUploadPhotoFailure] = field(factory=list)
@@ -50,6 +61,7 @@ class FlickrUploadManager(QObject):
     stage_changed = Signal(str)
     progress = Signal(int, int)
     status = Signal(str)
+    album_status = Signal(str)
     finished = Signal(object)  # FlickrUploadResult
 
     def __init__(
@@ -60,6 +72,8 @@ class FlickrUploadManager(QObject):
         exiftool_path: str,
         token_cache_dir: str,
         max_workers: int,
+        album_plan: FlickrAlbumPlan | None = None,
+        on_album_id_resolved: Callable[[str], None] | None = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -68,6 +82,8 @@ class FlickrUploadManager(QObject):
         self._exiftool_path = exiftool_path
         self._token_cache_dir = token_cache_dir
         self._max_workers = max(1, int(max_workers))
+        self._album_plan = album_plan if album_plan is not None else FlickrAlbumPlan()
+        self._on_album_id_resolved = on_album_id_resolved
 
         self._cancel_requested = threading.Event()
         self._thread: threading.Thread | None = None
@@ -115,6 +131,10 @@ class FlickrUploadManager(QObject):
                     return
 
                 self._run_make_public_stage(photo_pairs, result)
+                if result.cancelled:
+                    return
+
+                self._run_add_to_album_stage(photo_pairs, result)
             except Exception as ex:  # pragma: no cover - defensive
                 result.fatal_error = str(ex)
             finally:
@@ -311,6 +331,124 @@ class FlickrUploadManager(QObject):
             )
 
         result.made_public_count = success_count
+
+    def _run_add_to_album_stage(
+        self,
+        photo_pairs: list[dict],
+        result: FlickrUploadResult,
+    ) -> None:
+        plan = self._album_plan
+        if not plan.has_input():
+            return
+
+        self.stage_changed.emit(STAGE_ADD_TO_ALBUM)
+        self.progress.emit(0, 0)
+
+        album_id = plan.album_id
+        album_title = plan.album_title.strip() or album_id
+        album_user_nsid = plan.user_nsid
+        album_url = plan.album_url
+        if plan.is_create:
+            album_title = plan.album_title.strip() or plan.normalized_raw_text()
+            self.album_status.emit(f"Creating album '{album_title}'...")
+
+            if not photo_pairs:
+                result.failures.append(
+                    FlickrUploadPhotoFailure(
+                        file_path="",
+                        stage=STAGE_ADD_TO_ALBUM,
+                        message="No uploaded photo available to create album.",
+                    )
+                )
+                return
+
+            create_row = run_create_album_task(
+                self._build_worker_payload(
+                    {
+                        "album_title": album_title,
+                        "primary_photo_id": str(photo_pairs[0]["photo_id"]),
+                    }
+                )
+            )
+            if not create_row.get("ok"):
+                result.failures.append(
+                    FlickrUploadPhotoFailure(
+                        file_path="",
+                        stage=STAGE_ADD_TO_ALBUM,
+                        message=str(create_row.get("error", "Failed to create album")),
+                    )
+                )
+                return
+
+            album_id = str(create_row.get("album_id") or "").strip()
+            if not album_id:
+                result.failures.append(
+                    FlickrUploadPhotoFailure(
+                        file_path="",
+                        stage=STAGE_ADD_TO_ALBUM,
+                        message=(
+                            "Album creation succeeded but no album id was returned."
+                        ),
+                    )
+                )
+                return
+
+            album_title = str(create_row.get("album_title") or album_title).strip()
+            album_user_nsid = str(create_row.get("user_nsid") or "").strip()
+            album_url = str(create_row.get("album_url") or "").strip()
+            result.album_created = True
+            result.album_id = album_id
+            result.album_title = album_title or album_id
+            result.album_user_nsid = album_user_nsid
+            result.album_url = album_url
+
+            if self._on_album_id_resolved is not None:
+                try:
+                    self._on_album_id_resolved(album_id)
+                except Exception as ex:  # pragma: no cover - defensive callback guard
+                    result.failures.append(
+                        FlickrUploadPhotoFailure(
+                            file_path="",
+                            stage=STAGE_ADD_TO_ALBUM,
+                            message=(
+                                "Album created but failed to persist album id to "
+                                f"folder metadata: {ex}"
+                            ),
+                        )
+                    )
+
+        album_id = str(album_id or "").strip()
+        if not album_id:
+            return
+
+        display_title = album_title or album_id
+        result.album_id = album_id
+        result.album_title = display_title
+        result.album_user_nsid = album_user_nsid
+        result.album_url = album_url
+        self.album_status.emit(f"Adding to album '{display_title}'...")
+
+        add_row = run_add_to_album_task(
+            self._build_worker_payload(
+                {
+                    "album_id": album_id,
+                    "photo_ids": [str(row["photo_id"]) for row in photo_pairs],
+                }
+            )
+        )
+
+        if not add_row.get("ok"):
+            result.failures.append(
+                FlickrUploadPhotoFailure(
+                    file_path="",
+                    stage=STAGE_ADD_TO_ALBUM,
+                    message=str(add_row.get("error", "Failed to add photos to album")),
+                )
+            )
+            return
+
+        result.album_added_count = int(add_row.get("added_count") or len(photo_pairs))
+        self.status.emit(STAGE_ADD_TO_ALBUM)
 
     def _run_parallel_pool(
         self,
