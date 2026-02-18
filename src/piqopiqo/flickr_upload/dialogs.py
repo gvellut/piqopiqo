@@ -30,7 +30,7 @@ from piqopiqo.settings_state import (
 from .albums import FlickrAlbumPlan, fetch_album_info
 from .auth import create_flickr_client, token_file_exists
 from .constants import (
-    FOLDER_META_FLICKR_ALBUM_ID,
+    FOLDER_STATE_LAST_FLICKR_ALBUM_ID,
     STAGE_ADD_TO_ALBUM,
     STAGE_ALBUM_CHECK,
     TOKEN_VALIDATION_ERROR_TEXT,
@@ -583,13 +583,13 @@ def _set_album_for_folders(
     to_store = value if value else None
     for folder in source_folders:
         db = parent.db_manager.get_db_for_folder(folder)
-        db.set_folder_value(FOLDER_META_FLICKR_ALBUM_ID, to_store)
+        db.set_folder_value(FOLDER_STATE_LAST_FLICKR_ALBUM_ID, to_store)
 
 
 def _get_first_folder_album_id(parent: MainWindow, source_folders: list[str]) -> str:
     for folder in source_folders:
         value = parent.db_manager.get_db_for_folder(folder).get_folder_value(
-            FOLDER_META_FLICKR_ALBUM_ID
+            FOLDER_STATE_LAST_FLICKR_ALBUM_ID
         )
         if value is None:
             continue

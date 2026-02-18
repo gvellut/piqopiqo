@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 from piqopiqo.metadata.metadata_db import MetadataDBManager
 
 from .constants import (
-    FOLDER_META_TIME_SHIFT,
+    FOLDER_STATE_LAST_TIME_SHIFT,
     NOT_SET_TIME_SHIFT_LABEL,
 )
 from .gpx_processing import to_relative_folder
@@ -101,7 +101,7 @@ class GpsTimeShiftDialog(QDialog):
 
             edit = _TimeShiftEdit(self)
             db = self._db_manager.get_db_for_folder(folder)
-            edit.setText(db.get_folder_value(FOLDER_META_TIME_SHIFT) or "")
+            edit.setText(db.get_folder_value(FOLDER_STATE_LAST_TIME_SHIFT) or "")
             edit.textChanged.connect(self._update_save_enabled)
             self._edits[folder] = edit
             grid.addWidget(edit, row, 1)
@@ -129,7 +129,7 @@ class GpsTimeShiftDialog(QDialog):
         for folder, edit in self._edits.items():
             value = edit.text().strip()
             db = self._db_manager.get_db_for_folder(folder)
-            db.set_folder_value(FOLDER_META_TIME_SHIFT, value or None)
+            db.set_folder_value(FOLDER_STATE_LAST_TIME_SHIFT, value or None)
 
         self.accept()
 
@@ -300,7 +300,7 @@ class ApplyGpxDialog(QDialog):
 
             value_label = QLabel()
             value = self._db_manager.get_db_for_folder(folder).get_folder_value(
-                FOLDER_META_TIME_SHIFT
+                FOLDER_STATE_LAST_TIME_SHIFT
             )
             if value is None or not str(value).strip():
                 value_label.setText(NOT_SET_TIME_SHIFT_LABEL)

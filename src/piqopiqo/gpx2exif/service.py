@@ -14,7 +14,7 @@ from attrs import define, field
 
 from piqopiqo.metadata.db_fields import DBFields
 
-from .constants import DEFAULT_GPX_TOLERANCE_SECONDS, FOLDER_META_TIME_SHIFT
+from .constants import DEFAULT_GPX_TOLERANCE_SECONDS, FOLDER_STATE_LAST_TIME_SHIFT
 from .gpx_processing import (
     build_kml_output_path,
     compute_position,
@@ -194,7 +194,7 @@ def apply_gpx_to_folders(
         db = db_manager.get_db_for_folder(folder_path)
         try:
             folder_shift = _parse_folder_shift(
-                db.get_folder_value(FOLDER_META_TIME_SHIFT)
+                db.get_folder_value(FOLDER_STATE_LAST_TIME_SHIFT)
             )
         except ValueError as ex:
             message = f"Invalid time shift for {relative_folder}: {ex}"

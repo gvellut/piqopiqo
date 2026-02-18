@@ -328,8 +328,8 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         default=[
             StatusLabel("Approved", "#FF0000", 1),
             StatusLabel("Rejected", "#FFFF00", 2),
-            StatusLabel("Uploaded", "#00FF00", 3),
-            StatusLabel("Verification", "#0000FF", 4),
+            StatusLabel("Verification", "#0000FF", 3),
+            StatusLabel("Uploaded", "#00FF00", 4),
         ],
         read_type=str,
         json_storage=True,
@@ -362,10 +362,7 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         deserializer=_deserialize_shortcuts,
         env_parser=lambda raw: _deserialize_shortcuts(_parse_json(raw)),
     ),
-    UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER: SettingDef(
-        default="/Volumes/CrucialX8/photos",
-        read_type=str,
-    ),
+    UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER: SettingDef(default="", read_type=str),
     UserSettingKey.SDCARD_NAMES: SettingDef(
         default=[],
         **_list_of_strings_params,
