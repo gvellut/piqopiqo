@@ -49,6 +49,8 @@ class StateKey(StrEnum):
     COPY_SD_EJECT = "copySDEject"
     COPY_SD_NAME_SUFFIX = "copySdNameSuffix"
     COPY_SD_DATE_SPEC = "copySdDateSpec"
+    LAST_TIMESHIFT_BY_FOLDERS = "lastTimeshiftByFolders"
+    LAST_TIMESHIFT = "lastTimeshift"
     # AppState/Qt group
     WINDOW_GEOMETRY = "windowGeometry"
     WINDOW_STATE = "windowState"
@@ -71,6 +73,7 @@ class UserSettingKey(StrEnum):
     GPX_TIMEZONE = "gpxTimezone"
     GPX_IGNORE_OFFSET = "gpxIgnoreOffset"
     GPX_KML_FOLDER = "gpxKmlFolder"
+    TIME_SHIFT_UNKNOWN_FOLDER_IGNORE = "timeShiftUnknownFolderIgnore"
     GCP_PROJECT = "gcpProject"
     GCP_SA_KEY_PATH = "gcpSaKeyPath"
     FLICKR_API_KEY = "flickrApiKey"
@@ -85,6 +88,7 @@ class RuntimeSettingKey(StrEnum):
     GRID_ITEM_SHOW_LABEL_SWATCH = "gridItemShowLabelSwatch"
     EXIF_AUTO_FORMAT = "exifAutoFormat"
     MAX_WORKERS = "maxWorkers"
+    TIMESHIFT_CACHE_NUM = "timeshiftCacheNum"
     FLICKR_UPLOAD_MAX_WORKERS = "flickrUploadMaxWorkers"
     MIN_IDLE_WORKERS = "minIdleWorkers"
     MAX_EXIFTOOLS_IMAGE_BATCH = "maxExiftoolsImageBatch"
@@ -285,6 +289,13 @@ _STATE_REGISTRY: dict[StateKey, StateDef] = {
     StateKey.COPY_SD_EJECT: StateDef(StateGroup.APP_STATE, bool, True),
     StateKey.COPY_SD_NAME_SUFFIX: StateDef(StateGroup.APP_STATE, str, ""),
     StateKey.COPY_SD_DATE_SPEC: StateDef(StateGroup.APP_STATE, str, "since:last"),
+    StateKey.LAST_TIMESHIFT_BY_FOLDERS: StateDef(
+        StateGroup.APP_STATE,
+        str,
+        {},
+        json_storage=True,
+    ),
+    StateKey.LAST_TIMESHIFT: StateDef(StateGroup.APP_STATE, str, None),
     StateKey.WINDOW_GEOMETRY: StateDef(StateGroup.QT, QByteArray, None),
     StateKey.WINDOW_STATE: StateDef(StateGroup.QT, QByteArray, None),
     StateKey.MAIN_SPLITTER: StateDef(StateGroup.QT, QByteArray, None),
@@ -370,6 +381,10 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
     UserSettingKey.GPX_TIMEZONE: SettingDef(default="", read_type=str),
     UserSettingKey.GPX_IGNORE_OFFSET: SettingDef(default=False, read_type=bool),
     UserSettingKey.GPX_KML_FOLDER: SettingDef(default="", read_type=str),
+    UserSettingKey.TIME_SHIFT_UNKNOWN_FOLDER_IGNORE: SettingDef(
+        default=True,
+        read_type=bool,
+    ),
     UserSettingKey.GCP_PROJECT: SettingDef(default="", read_type=str),
     UserSettingKey.GCP_SA_KEY_PATH: SettingDef(default="", read_type=str),
     UserSettingKey.FLICKR_API_KEY: SettingDef(default="", read_type=str),
@@ -396,6 +411,7 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     ),
     RuntimeSettingKey.EXIF_AUTO_FORMAT: SettingDef(default=True, read_type=bool),
     RuntimeSettingKey.MAX_WORKERS: SettingDef(default=4, read_type=int),
+    RuntimeSettingKey.TIMESHIFT_CACHE_NUM: SettingDef(default=10, read_type=int),
     RuntimeSettingKey.FLICKR_UPLOAD_MAX_WORKERS: SettingDef(default=2, read_type=int),
     RuntimeSettingKey.MIN_IDLE_WORKERS: SettingDef(default=1, read_type=int),
     RuntimeSettingKey.MAX_EXIFTOOLS_IMAGE_BATCH: SettingDef(default=8, read_type=int),

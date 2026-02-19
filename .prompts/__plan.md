@@ -13,3 +13,4 @@
     !? [Correc gpx](H.A_Correct_gpx.md)
 ! [Flickr upload](I_Flickr_upload.md)
 ! [Flickr addtional](G_Flickr_addtional.md)
+! [gpx2exif remember last](J_gpx2exif_remember_last.md)

@@ -47,6 +47,8 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_FONT_SIZE",
         "PIQO_GPX_IGNORE_OFFSET",
         "PIQO_GPX_TIMEZONE",
+        "PIQO_TIME_SHIFT_UNKNOWN_FOLDER_IGNORE",
+        "PIQO_TIMESHIFT_CACHE_NUM",
         "PIQO_FLICKR_UPLOAD_MAX_WORKERS",
     ):
         monkeypatch.delenv(env_name, raising=False)
@@ -64,6 +66,23 @@ def test_typed_state_roundtrip(isolated_settings):
     value = get_state_value(StateKey.COPY_SD_EJECT)
     assert value is False
     assert isinstance(value, bool)
+
+
+def test_gpx_timeshift_state_defaults(isolated_settings):
+    assert get_state_value(StateKey.LAST_TIMESHIFT) is None
+    assert get_state_value(StateKey.LAST_TIMESHIFT_BY_FOLDERS) == {}
+
+
+def test_gpx_timeshift_state_ordered_json_roundtrip(isolated_settings):
+    value = {
+        "abc/def": "1s",
+        "poi/def": "2s",
+    }
+    set_state_value(StateKey.LAST_TIMESHIFT_BY_FOLDERS, value)
+
+    roundtrip = get_state_value(StateKey.LAST_TIMESHIFT_BY_FOLDERS)
+    assert roundtrip == value
+    assert list(roundtrip.items()) == list(value.items())
 
 
 def test_json_roundtrip_for_complex_user_settings(isolated_settings):
@@ -104,11 +123,18 @@ def test_gpx_settings_defaults_and_env_override(isolated_settings, monkeypatch):
     assert get_user_setting(UserSettingKey.GPX_TIMEZONE) == ""
     assert get_user_setting(UserSettingKey.GPX_IGNORE_OFFSET) is False
     assert get_user_setting(UserSettingKey.GPX_KML_FOLDER) == ""
+    assert get_user_setting(UserSettingKey.TIME_SHIFT_UNKNOWN_FOLDER_IGNORE) is True
+    assert get_runtime_setting(RuntimeSettingKey.TIMESHIFT_CACHE_NUM) == 10
 
     monkeypatch.setenv("PIQO_GPX_IGNORE_OFFSET", "true")
     monkeypatch.setenv("PIQO_GPX_TIMEZONE", "Europe/Paris")
+    monkeypatch.setenv("PIQO_TIME_SHIFT_UNKNOWN_FOLDER_IGNORE", "false")
+    monkeypatch.setenv("PIQO_TIMESHIFT_CACHE_NUM", "3")
+    init_qsettings_store(dyn=False)
     assert get_user_setting(UserSettingKey.GPX_IGNORE_OFFSET) is True
     assert get_user_setting(UserSettingKey.GPX_TIMEZONE) == "Europe/Paris"
+    assert get_user_setting(UserSettingKey.TIME_SHIFT_UNKNOWN_FOLDER_IGNORE) is False
+    assert get_runtime_setting(RuntimeSettingKey.TIMESHIFT_CACHE_NUM) == 3
 
 
 def test_flickr_settings_defaults_and_roundtrip(isolated_settings):

@@ -24,10 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from piqopiqo.metadata.metadata_db import MetadataDBManager
-
 from .constants import (
-    FOLDER_STATE_LAST_TIME_SHIFT,
     NOT_SET_TIME_SHIFT_LABEL,
 )
 from .gpx_processing import to_relative_folder
@@ -56,86 +53,6 @@ class _TimeShiftEdit(QLineEdit):
 
     def is_valid(self) -> bool:
         return self._is_valid
-
-
-class GpsTimeShiftDialog(QDialog):
-    """Edit per-folder GPX time shifts."""
-
-    def __init__(
-        self,
-        *,
-        root_folder: str,
-        source_folders: list[str],
-        db_manager: MetadataDBManager,
-        parent=None,
-    ):
-        super().__init__(parent)
-        self.setWindowTitle("GPS Time shift")
-        self.setModal(True)
-        self.setMinimumWidth(560)
-
-        self._root_folder = root_folder
-        self._source_folders = sorted(source_folders)
-        self._db_manager = db_manager
-        self._edits: dict[str, _TimeShiftEdit] = {}
-
-        layout = QVBoxLayout(self)
-
-        info = QLabel(
-            "Set one optional time shift per source folder. "
-            "Accepted format: -1h16m5s, 59m9s, 16:18:56-17:15:03."
-        )
-        info.setWordWrap(True)
-        layout.addWidget(info)
-
-        grid_container = QWidget(self)
-        grid = QGridLayout(grid_container)
-        grid.setColumnStretch(0, 3)
-        grid.setColumnStretch(1, 2)
-        grid.addWidget(QLabel("Folder"), 0, 0)
-        grid.addWidget(QLabel("Time shift"), 0, 1)
-
-        for row, folder in enumerate(self._source_folders, start=1):
-            relative = to_relative_folder(self._root_folder, folder)
-            grid.addWidget(QLabel(relative), row, 0)
-
-            edit = _TimeShiftEdit(self)
-            db = self._db_manager.get_db_for_folder(folder)
-            edit.setText(db.get_folder_value(FOLDER_STATE_LAST_TIME_SHIFT) or "")
-            edit.textChanged.connect(self._update_save_enabled)
-            self._edits[folder] = edit
-            grid.addWidget(edit, row, 1)
-
-        layout.addWidget(grid_container)
-
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save
-            | QDialogButtonBox.StandardButton.Cancel
-        )
-        self._save_btn = buttons.button(QDialogButtonBox.StandardButton.Save)
-        buttons.accepted.connect(self._on_save)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-        self._update_save_enabled()
-
-    def _update_save_enabled(self) -> None:
-        self._save_btn.setEnabled(all(edit.is_valid() for edit in self._edits.values()))
-
-    def _on_save(self) -> None:
-        if not all(edit.is_valid() for edit in self._edits.values()):
-            return
-
-        for folder, edit in self._edits.items():
-            value = edit.text().strip()
-            db = self._db_manager.get_db_for_folder(folder)
-            db.set_folder_value(FOLDER_STATE_LAST_TIME_SHIFT, value or None)
-
-        self.accept()
-
-    def showEvent(self, event) -> None:
-        super().showEvent(event)
-        self.setFixedSize(self.size())
 
 
 class ExtractGpsTimeShiftConfirmDialog(QDialog):
@@ -274,7 +191,8 @@ class ApplyGpxDialog(QDialog):
         *,
         root_folder: str,
         source_folders: list[str],
-        db_manager: MetadataDBManager,
+        initial_time_shifts: dict[str, str],
+        previous_time_shift_folders: set[str],
         kml_folder: str,
         parent=None,
     ):
@@ -285,33 +203,39 @@ class ApplyGpxDialog(QDialog):
 
         self._root_folder = root_folder
         self._source_folders = sorted(source_folders)
-        self._db_manager = db_manager
+        self._initial_time_shifts = initial_time_shifts
+        self._previous_time_shift_folders = previous_time_shift_folders
+        self._time_shift_edits: dict[str, _TimeShiftEdit] = {}
+        self._previous_labels: dict[str, QLabel] = {}
 
         layout = QVBoxLayout(self)
 
         shifts_group = QGroupBox("Folder time shifts")
         shifts_layout = QGridLayout(shifts_group)
+        shifts_layout.setColumnStretch(0, 3)
+        shifts_layout.setColumnStretch(1, 2)
         shifts_layout.addWidget(QLabel("Folder"), 0, 0)
         shifts_layout.addWidget(QLabel("Time shift"), 0, 1)
+        shifts_layout.addWidget(QLabel(""), 0, 2)
 
         for row, folder in enumerate(self._source_folders, start=1):
             relative = to_relative_folder(self._root_folder, folder)
             shifts_layout.addWidget(QLabel(relative), row, 0)
 
-            value_label = QLabel()
-            value = self._db_manager.get_db_for_folder(folder).get_folder_value(
-                FOLDER_STATE_LAST_TIME_SHIFT
+            edit = _TimeShiftEdit(self)
+            edit.setText(str(self._initial_time_shifts.get(folder, "")).strip())
+            edit.textChanged.connect(self._update_ok_enabled)
+            self._time_shift_edits[folder] = edit
+            shifts_layout.addWidget(edit, row, 1)
+
+            previous_label = QLabel("Previous", self)
+            previous_label.setStyleSheet("color: red; font-size: 10px;")
+            previous_label.setVisible(
+                folder in self._previous_time_shift_folders
+                and bool(edit.text().strip())
             )
-            if value is None or not str(value).strip():
-                value_label.setText(NOT_SET_TIME_SHIFT_LABEL)
-                value_label.setStyleSheet("color: red;")
-            elif str(value).strip() == "0":
-                value_label.setText("0")
-                value_label.setStyleSheet("")
-            else:
-                value_label.setText(str(value).strip())
-                value_label.setStyleSheet("")
-            shifts_layout.addWidget(value_label, row, 1)
+            self._previous_labels[folder] = previous_label
+            shifts_layout.addWidget(previous_label, row, 2)
 
         layout.addWidget(shifts_group)
 
@@ -378,7 +302,11 @@ class ApplyGpxDialog(QDialog):
 
     def _update_ok_enabled(self) -> None:
         path = self.gpx_path_edit.text().strip()
-        self._ok_btn.setEnabled(bool(path) and os.path.isfile(path))
+        has_valid_path = bool(path) and os.path.isfile(path)
+        has_valid_shifts = all(
+            edit.is_valid() for edit in self._time_shift_edits.values()
+        )
+        self._ok_btn.setEnabled(has_valid_path and has_valid_shifts)
 
     def _on_accept(self) -> None:
         path = self.gpx_path_edit.text().strip()
@@ -388,12 +316,24 @@ class ApplyGpxDialog(QDialog):
         if not os.path.isfile(path):
             QMessageBox.warning(self, "Apply GPX", "GPX file does not exist.")
             return
+        if not all(edit.is_valid() for edit in self._time_shift_edits.values()):
+            QMessageBox.warning(
+                self,
+                "Apply GPX",
+                "One or more time shifts are invalid.",
+            )
+            return
         self.accept()
 
-    def get_values(self) -> tuple[str, ApplyGpxMode]:
+    def get_values(self) -> tuple[str, ApplyGpxMode, dict[str, str]]:
+        folder_shifts = {
+            folder: edit.text().strip()
+            for folder, edit in self._time_shift_edits.items()
+        }
         return (
             self.gpx_path_edit.text().strip(),
             self.mode_combo.currentData(),
+            folder_shifts,
         )
 
 

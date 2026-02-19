@@ -41,11 +41,12 @@ src/piqopiqo/
 ├── gpx2exif/        # GPX/OCR time-shift workflows (DB updates + KML, no EXIF write by default)
 │   ├── constants.py      # GPX workflow constants (TIME_SHIFT key, labels, defaults)
 │   ├── time_shift.py     # Time-shift parsing/formatting/validation
+│   ├── time_shift_memory.py # Time-shift fallback resolution + LRU cache helpers
 │   ├── gpx_processing.py # GPX loading, interpolation and KML generation helpers
 │   ├── ocr_time_shift.py # GCP Vision OCR time extraction and shift computation
 │   ├── service.py        # Apply GPX service + folder-scoped rollback semantics
 │   ├── workers.py        # QRunnable worker wrappers for background execution
-│   └── dialogs.py        # GPS tools dialogs (time-shift, apply GPX, progress)
+│   └── dialogs.py        # GPX dialogs (extract confirm/progress, apply GPX input/progress)
 ├── photo_model.py   # PhotoListModel: filtering, sorting, selection, add/remove photos
 ├── shortcuts.py     # Keyboard shortcut matching utilities
 ├── model.py         # Data models (ImageItem, FilterCriteria, StatusLabel, ExifField)
@@ -107,9 +108,8 @@ src/piqopiqo/
 - **Clear All Data**: File menu action to wipe cached thumbnails + DB and reload from scratch
 - **Settings panel**: Descriptor-driven, tabbed settings UI with Save/Cancel or autosave mode
 - **External app paths**: External Viewer/Editor settings use app paths (e.g. `/Applications/Preview.app`) with Browse support
-- **GPS Time shift**: Tools dialog stores per-folder time-shift values in folder SQLite metadata (`folder_metadata.TIME_SHIFT`)
 - **Extract GPS Time shift**: Grid context menu action runs GCP Vision OCR in background for the clicked photo folder and persists computed shift
-- **Apply GPX**: Tools workflow processes all loaded source folders, generates KML, and optionally updates DB `time_taken` + coordinates (no EXIF writes by default)
+- **Apply GPX**: Tools workflow edits per-folder time shifts, applies fallback from remembered state, then processes all loaded source folders to generate KML and optionally update DB `time_taken` + coordinates (no EXIF writes by default)
 - **Upload to Flickr**: Tools workflow uploads only currently visible (filtered) photos in current sort order, with login/token validation, album preflight input (title/ID/URL), temp EXIF write, upload-date reset, make-public, and optional album add/create step
 
 ## PhotoListModel Architecture
@@ -149,6 +149,8 @@ Useful env vars for agent testing:
 - `PIQO_GPX_TIMEZONE` - Override GPX timezone setting (empty by default)
 - `PIQO_GPX_IGNORE_OFFSET` - Override GPX ignore-offset setting (default false)
 - `PIQO_GPX_KML_FOLDER` - Override GPX KML output folder setting (empty by default)
+- `PIQO_TIME_SHIFT_UNKNOWN_FOLDER_IGNORE` - Ignore global last time shift for unknown folders (default true)
+- `PIQO_TIMESHIFT_CACHE_NUM` - Max remembered folder time shifts in LRU cache (default 10)
 - `PIQO_GCP_PROJECT` - Override GCP project used by OCR time extraction
 - `PIQO_GCP_SA_KEY_PATH` - Override service-account key path used by OCR time extraction
 - `PIQO_FLICKR_UPLOAD_MAX_WORKERS` - Flickr upload multiprocessing worker count (default: 2)
@@ -261,7 +263,10 @@ Selection behavior:
 - Folder DB schema includes `folder_metadata(data, value)` for per-folder workflow values; GPX time shift uses key `TIME_SHIFT`.
 - GPX workflows are DB-first: "Update images" mode label is kept for compatibility, but normal processing updates SQLite metadata and KML outputs; it does not write EXIF.
 - Apply GPX scope ignores grid selection/filter and always processes all photos in all loaded source folders.
-- Empty time shift means "not set"; Apply GPX treats it as `0` while UI displays `NOT SET`.
+- Empty time shift means "not set"; Apply GPX shows an empty field and treats it as `0` during processing.
+- Apply GPX initial shift precedence per folder is: folder DB `TIME_SHIFT` -> state cache `LAST_TIMESHIFT_BY_FOLDERS[relative_folder]` -> global `LAST_TIMESHIFT` (unless `TIME_SHIFT_UNKNOWN_FOLDER_IGNORE` is enabled).
+- Time-shift memory cache keys use root-relative folder names (for example `abc/def`, `poi/def`) and are stored in insertion order for LRU behavior.
+- Non-empty saved shifts from OCR extraction and Apply GPX update both `LAST_TIMESHIFT_BY_FOLDERS` (with LRU eviction based on `TIMESHIFT_CACHE_NUM`) and global `LAST_TIMESHIFT`.
 - GPX matching uses per-folder time shift and supports timezone correction (`GPX_TIMEZONE`) or EXIF `OffsetTimeOriginal` handling (unless `GPX_IGNORE_OFFSET` is enabled).
 - KML is always generated per completed folder using `photos_<root>_<relative_folder>.kml`; when KML folder setting is empty, output falls back to the loaded root folder.
 - Cancellation during Apply GPX rolls back metadata changes only for the in-progress folder; already completed folders remain committed and keep their generated KML.

@@ -30,6 +30,12 @@ from .cache_paths import set_cache_base_dir
 from .folder_scan import scan_folder
 from .folder_watcher import FolderWatcher
 from .fullscreen import FullscreenOverlay
+from .gpx2exif.time_shift_memory import (
+    normalize_time_shift,
+    normalize_timeshift_cache,
+    remember_timeshift_value,
+    resolve_timeshift_for_folder,
+)
 from .grid.photo_grid import PhotoGrid
 from .metadata.db_fields import DBFields
 from .metadata.metadata_db import MetadataDBManager
@@ -611,9 +617,94 @@ class MainWindow(QMainWindow):
             return
 
         if progress.result_shift:
-            db_folder.set_folder_value(
-                FOLDER_STATE_LAST_TIME_SHIFT, progress.result_shift
+            self._persist_folder_time_shift(folder_path, progress.result_shift)
+
+    def _read_last_timeshift_by_folders_state(self) -> dict[str, str]:
+        state = get_state()
+        return normalize_timeshift_cache(state.get(StateKey.LAST_TIMESHIFT_BY_FOLDERS))
+
+    def _read_last_timeshift_state(self) -> str | None:
+        state = get_state()
+        return normalize_time_shift(state.get(StateKey.LAST_TIMESHIFT))
+
+    def _remember_time_shift(self, *, relative_folder: str, time_shift: str) -> None:
+        shift = normalize_time_shift(time_shift)
+        if shift is None:
+            return
+
+        current_cache = self._read_last_timeshift_by_folders_state()
+        updated_cache = remember_timeshift_value(
+            current_cache,
+            folder_key=relative_folder,
+            value=shift,
+            limit=max(
+                0,
+                int(get_runtime_setting(RuntimeSettingKey.TIMESHIFT_CACHE_NUM)),
+            ),
+        )
+
+        state = get_state()
+        state.set(StateKey.LAST_TIMESHIFT_BY_FOLDERS, updated_cache)
+        state.set(StateKey.LAST_TIMESHIFT, shift)
+
+    def _persist_folder_time_shift(
+        self,
+        folder_path: str,
+        time_shift: str | None,
+    ) -> None:
+        from .gpx2exif.constants import FOLDER_STATE_LAST_TIME_SHIFT
+        from .gpx2exif.gpx_processing import to_relative_folder
+
+        shift = normalize_time_shift(time_shift)
+        db_folder = self.db_manager.get_db_for_folder(folder_path)
+        db_folder.set_folder_value(FOLDER_STATE_LAST_TIME_SHIFT, shift)
+        if shift is None:
+            return
+
+        relative_folder = to_relative_folder(
+            self.root_folder or folder_path,
+            folder_path,
+        )
+        self._remember_time_shift(relative_folder=relative_folder, time_shift=shift)
+
+    def _resolve_apply_gpx_initial_time_shifts(
+        self,
+    ) -> tuple[dict[str, str], set[str]]:
+        from .gpx2exif.constants import FOLDER_STATE_LAST_TIME_SHIFT
+        from .gpx2exif.gpx_processing import to_relative_folder
+
+        ignore_unknown_folder_last = bool(
+            get_user_setting(UserSettingKey.TIME_SHIFT_UNKNOWN_FOLDER_IGNORE)
+        )
+        cache_by_folder = self._read_last_timeshift_by_folders_state()
+        last_timeshift = self._read_last_timeshift_state()
+
+        initial_time_shifts: dict[str, str] = {}
+        previous_time_shift_folders: set[str] = set()
+        for folder in sorted(self.photo_model.source_folders):
+            db_shift = self.db_manager.get_db_for_folder(folder).get_folder_value(
+                FOLDER_STATE_LAST_TIME_SHIFT
             )
+            relative_folder = to_relative_folder(self.root_folder or folder, folder)
+            resolved_shift, from_state = resolve_timeshift_for_folder(
+                db_value=db_shift,
+                folder_key=relative_folder,
+                cache_by_folder=cache_by_folder,
+                last_timeshift=last_timeshift,
+                ignore_unknown_folder_last=ignore_unknown_folder_last,
+            )
+            initial_time_shifts[folder] = resolved_shift
+            if from_state and resolved_shift:
+                previous_time_shift_folders.add(folder)
+
+        return initial_time_shifts, previous_time_shift_folders
+
+    def _persist_apply_gpx_time_shifts(
+        self,
+        folder_time_shifts: dict[str, str],
+    ) -> None:
+        for folder_path, time_shift in folder_time_shifts.items():
+            self._persist_folder_time_shift(folder_path, time_shift)
 
     def _on_filter_changed(self, criteria: FilterCriteria):
         """Handle filter change.
@@ -729,10 +820,6 @@ class MainWindow(QMainWindow):
 
         tools_menu.addSeparator()
 
-        gps_time_shift_action = QAction("GPS Time shift...", self)
-        gps_time_shift_action.triggered.connect(self._on_gps_time_shift)
-        tools_menu.addAction(gps_time_shift_action)
-
         apply_gpx_action = QAction("Apply GPX...", self)
         apply_gpx_action.triggered.connect(self._on_apply_gpx)
         tools_menu.addAction(apply_gpx_action)
@@ -805,20 +892,6 @@ class MainWindow(QMainWindow):
 
         launch_copy_sd(self)
 
-    def _on_gps_time_shift(self):
-        if not self.root_folder or not self.photo_model.source_folders:
-            return
-
-        from .gpx2exif.dialogs import GpsTimeShiftDialog
-
-        dialog = GpsTimeShiftDialog(
-            root_folder=self.root_folder,
-            source_folders=self.photo_model.source_folders,
-            db_manager=self.db_manager,
-            parent=self,
-        )
-        dialog.exec()
-
     def _on_apply_gpx(self):
         if not self.root_folder or not self.photo_model.source_folders:
             return
@@ -837,17 +910,22 @@ class MainWindow(QMainWindow):
         )
         from .gpx2exif.workers import ApplyGpxWorker
 
+        initial_time_shifts, previous_time_shift_folders = (
+            self._resolve_apply_gpx_initial_time_shifts()
+        )
         input_dialog = ApplyGpxDialog(
             root_folder=self.root_folder,
             source_folders=self.photo_model.source_folders,
-            db_manager=self.db_manager,
+            initial_time_shifts=initial_time_shifts,
+            previous_time_shift_folders=previous_time_shift_folders,
             kml_folder=str(get_user_setting(UserSettingKey.GPX_KML_FOLDER) or ""),
             parent=self,
         )
         if input_dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
-        gpx_path, mode = input_dialog.get_values()
+        gpx_path, mode, folder_time_shifts = input_dialog.get_values()
+        self._persist_apply_gpx_time_shifts(folder_time_shifts)
         update_db = mode == ApplyGpxMode.UPDATE_DB
 
         folder_to_files: dict[str, list[str]] = {}

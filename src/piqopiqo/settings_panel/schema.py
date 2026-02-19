@@ -178,6 +178,11 @@ SETTINGS_TABS: list[TabSpec] = [
                 title="GPX",
                 fields=[
                     FieldSpec(
+                        key=UserSettingKey.TIME_SHIFT_UNKNOWN_FOLDER_IGNORE,
+                        label="Ingore last timeshift if unknown folder",
+                        editor=EditorKind.BOOL,
+                    ),
+                    FieldSpec(
                         key=UserSettingKey.GPX_IGNORE_OFFSET,
                         label="Ignore Offset",
                         editor=EditorKind.BOOL,
