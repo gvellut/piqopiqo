@@ -116,7 +116,7 @@ class _StatusLabelRow(QWidget):
 
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText("Name")
-        self.name_edit.editingFinished.connect(self._on_editing_finished)
+        self.name_edit.textChanged.connect(self._on_name_text_changed)
         layout.addWidget(self.name_edit, 2)
 
         self.color_btn = _ColorButton()
@@ -133,8 +133,7 @@ class _StatusLabelRow(QWidget):
         remove_btn.clicked.connect(lambda: self.remove_requested.emit(self))
         layout.addWidget(remove_btn, 0)
 
-    def _on_editing_finished(self) -> None:
-        self._update_name_validation()
+    def _on_name_text_changed(self) -> None:
         self.value_changed.emit()
 
     def set_index(self, index: int) -> None:
@@ -143,7 +142,6 @@ class _StatusLabelRow(QWidget):
     def set_value(self, value: StatusLabel) -> None:
         self.name_edit.setText(value.name)
         self.color_btn.set_color(value.color)
-        self._update_name_validation()
 
     def get_label_data(self) -> tuple[str, str]:
         """Return (name, color) — index is set by position."""
@@ -152,8 +150,8 @@ class _StatusLabelRow(QWidget):
     def has_valid_name(self) -> bool:
         return bool(self.name_edit.text().strip())
 
-    def _update_name_validation(self) -> None:
-        if self.name_edit.text().strip():
+    def set_name_valid(self, is_valid: bool) -> None:
+        if is_valid:
             self.name_edit.setStyleSheet("")
         else:
             self.name_edit.setStyleSheet("QLineEdit { border: 2px solid red; }")
@@ -235,6 +233,7 @@ class StatusLabelsEditor(QWidget):
         self._layout.addWidget(self._rows_container)
 
         self._add_btn = QPushButton("Add Label")
+        self._add_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._add_btn.clicked.connect(self._on_add_row)
         self._layout.addWidget(self._add_btn)
 
@@ -370,6 +369,7 @@ class StatusLabelsEditor(QWidget):
         self._add_row(StatusLabel(name="", color=color, index=idx))
         self._update_add_btn()
         self._update_indices()
+        self._update_name_validation()
         self.value_changed.emit()
 
     def _add_row(self, value: StatusLabel):
@@ -388,9 +388,11 @@ class StatusLabelsEditor(QWidget):
         row.deleteLater()
         self._update_add_btn()
         self._update_indices()
+        self._update_name_validation()
         self.value_changed.emit()
 
     def _on_row_changed(self):
+        self._update_name_validation()
         self.value_changed.emit()
 
     def _rebuild_layout(self):
@@ -406,8 +408,32 @@ class StatusLabelsEditor(QWidget):
     def _update_add_btn(self):
         self._add_btn.setEnabled(len(self._rows) < _MAX_LABELS)
 
+    def _update_name_validation(self) -> bool:
+        counts: dict[str, int] = {}
+        for row in self._rows:
+            name = row.name_edit.text().strip()
+            if not name:
+                continue
+            normalized_name = name.casefold()
+            counts[normalized_name] = counts.get(normalized_name, 0) + 1
+
+        is_valid = True
+        for row in self._rows:
+            name = row.name_edit.text().strip()
+            if not name:
+                row.set_name_valid(False)
+                is_valid = False
+                continue
+            if counts.get(name.casefold(), 0) > 1:
+                row.set_name_valid(False)
+                is_valid = False
+                continue
+            row.set_name_valid(True)
+
+        return is_valid
+
     def is_valid(self) -> bool:
-        return all(row.has_valid_name() for row in self._rows)
+        return self._update_name_validation()
 
     def set_value(self, value: list[StatusLabel] | None) -> None:
         for row in self._rows:
@@ -420,6 +446,7 @@ class StatusLabelsEditor(QWidget):
 
         self._update_add_btn()
         self._update_indices()
+        self._update_name_validation()
 
     def get_value(self) -> list[StatusLabel]:
         out: list[StatusLabel] = []

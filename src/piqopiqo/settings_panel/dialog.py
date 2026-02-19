@@ -6,13 +6,17 @@ from functools import partial
 import os
 import sys
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
+    QApplication,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
     QGroupBox,
+    QLineEdit,
     QMessageBox,
+    QPlainTextEdit,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -47,10 +51,12 @@ class SettingsDialog(QDialog):
         self._dirty = False
         self._tabs: QTabWidget | None = None
         self._initial_tab_title = str(initial_tab_title or "").strip()
+        self._initial_focus_cleared = False
 
         self._mode = get_runtime_setting(RuntimeSettingKey.SETTINGS_PANEL_SAVE_MODE)
 
         self._build_ui()
+        self._install_text_field_event_filters()
         self._load_initial_values()
 
     @property
@@ -120,9 +126,68 @@ class SettingsDialog(QDialog):
             | QDialogButtonBox.StandardButton.Cancel
         )
         self._save_btn = self._button_box.button(QDialogButtonBox.StandardButton.Save)
+        self._save_btn.setDefault(False)
+        self._save_btn.setAutoDefault(False)
         self._button_box.accepted.connect(self._on_save)
         self._button_box.rejected.connect(self._on_cancel)
         root.addWidget(self._button_box)
+
+    def _install_text_field_event_filters(self) -> None:
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
+
+    def eventFilter(self, watched, event):  # noqa: N802
+        is_enter = event.type() == QEvent.Type.KeyPress and event.key() in (
+            Qt.Key.Key_Return,
+            Qt.Key.Key_Enter,
+        )
+        is_self_or_child = watched is self or (
+            isinstance(watched, QWidget) and self.isAncestorOf(watched)
+        )
+        if is_enter and is_self_or_child:
+            if hasattr(self, "_save_btn") and watched is self._save_btn:
+                return super().eventFilter(watched, event)
+
+            if isinstance(watched, QPlainTextEdit):
+                return super().eventFilter(watched, event)
+
+            # Leave in-field edit mode (including QSpinBox editors) and move
+            # focus to Save, but never submit the dialog implicitly.
+            if isinstance(watched, QLineEdit):
+                spin_parent = watched.parentWidget()
+                if isinstance(spin_parent, QAbstractSpinBox):
+                    spin_parent.clearFocus()
+                else:
+                    watched.clearFocus()
+                if hasattr(self, "_save_btn"):
+                    self._save_btn.setFocus(Qt.FocusReason.TabFocusReason)
+                event.accept()
+                return True
+
+            if isinstance(watched, QAbstractSpinBox):
+                watched.clearFocus()
+                if hasattr(self, "_save_btn"):
+                    self._save_btn.setFocus(Qt.FocusReason.TabFocusReason)
+                event.accept()
+                return True
+
+            if isinstance(watched, QWidget):
+                watched.clearFocus()
+                if hasattr(self, "_save_btn"):
+                    self._save_btn.setFocus(Qt.FocusReason.TabFocusReason)
+                event.accept()
+                return True
+
+            event.accept()
+            return True
+        return super().eventFilter(watched, event)
+
+    def done(self, result: int) -> None:
+        app = QApplication.instance()
+        if app is not None:
+            app.removeEventFilter(self)
+        super().done(result)
 
     def _load_initial_values(self):
         self._loading = True
@@ -133,6 +198,7 @@ class SettingsDialog(QDialog):
                 self._initial_values[key] = value
         finally:
             self._loading = False
+        self._update_save_enabled()
 
     def _on_field_changed(self):
         if self._loading:
@@ -143,9 +209,35 @@ class SettingsDialog(QDialog):
     def _all_editors_valid(self) -> bool:
         return all(editor.is_valid() for editor in self._editors.values())
 
+    def _changed_editors_valid(self) -> bool:
+        for key, editor in self._editors.items():
+            if editor.get_value() == self._initial_values.get(key):
+                continue
+            if not editor.is_valid():
+                return False
+        return True
+
     def _update_save_enabled(self) -> None:
         if hasattr(self, "_save_btn"):
-            self._save_btn.setEnabled(self._all_editors_valid())
+            can_save = self._changed_editors_valid()
+            is_fully_valid = self._all_editors_valid()
+            self._save_btn.setEnabled(can_save)
+            self._save_btn.setDefault(can_save and is_fully_valid)
+            self._save_btn.setAutoDefault(False)
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        if self._initial_focus_cleared:
+            return
+        self._initial_focus_cleared = True
+        QTimer.singleShot(0, self._clear_initial_focus)
+
+    def _clear_initial_focus(self) -> None:
+        current = self.focusWidget()
+        if current is not None and current is not self:
+            current.clearFocus()
+        self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+        self._update_save_enabled()
 
     def _compute_dirty(self) -> bool:
         for key, editor in self._editors.items():
@@ -225,6 +317,8 @@ class SettingsDialog(QDialog):
             value = editor.get_value()
             if value == self._initial_values.get(key):
                 continue
+            if not editor.is_valid():
+                return
             if not self._validate_field(key, value):
                 return
             changed[key] = value

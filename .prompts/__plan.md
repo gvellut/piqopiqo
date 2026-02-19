@@ -1,4 +1,6 @@
 - [Model sync 2](M_Model_sync_2.md)
+* [Settings add label validation](O_Settings_add_label_validation.md)
+    !? [Initial focus](O.A_Initial_focus.md)
 ! [Fix date read delay if since:last](A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](B_Eject_SD_after_user_OK.md)
     !? [GUI lag](B.A_GUI_lag.md)
