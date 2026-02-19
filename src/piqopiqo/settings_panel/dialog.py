@@ -8,7 +8,6 @@ import sys
 
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QAbstractSpinBox,
     QApplication,
     QDialog,
     QDialogButtonBox,
@@ -67,6 +66,7 @@ class SettingsDialog(QDialog):
         root = QVBoxLayout(self)
 
         self._tabs = QTabWidget(self)
+        self._tabs.currentChanged.connect(self._on_tab_changed)
         root.addWidget(self._tabs)
 
         for tab_spec in SETTINGS_TABS:
@@ -146,26 +146,18 @@ class SettingsDialog(QDialog):
             isinstance(watched, QWidget) and self.isAncestorOf(watched)
         )
         if is_enter and is_self_or_child:
-            if hasattr(self, "_save_btn") and watched is self._save_btn:
-                return super().eventFilter(watched, event)
+            if hasattr(self, "_save_btn") and self._save_btn.hasFocus():
+                if self._save_btn.isEnabled():
+                    self._on_save()
+                event.accept()
+                return True
 
             if isinstance(watched, QPlainTextEdit):
                 return super().eventFilter(watched, event)
 
-            # Leave in-field edit mode (including QSpinBox editors) and move
-            # focus to Save, but never submit the dialog implicitly.
+            # Leave text-field edit mode and move focus to Save, but never
+            # submit the dialog implicitly.
             if isinstance(watched, QLineEdit):
-                spin_parent = watched.parentWidget()
-                if isinstance(spin_parent, QAbstractSpinBox):
-                    spin_parent.clearFocus()
-                else:
-                    watched.clearFocus()
-                if hasattr(self, "_save_btn"):
-                    self._save_btn.setFocus(Qt.FocusReason.TabFocusReason)
-                event.accept()
-                return True
-
-            if isinstance(watched, QAbstractSpinBox):
                 watched.clearFocus()
                 if hasattr(self, "_save_btn"):
                     self._save_btn.setFocus(Qt.FocusReason.TabFocusReason)
@@ -220,9 +212,8 @@ class SettingsDialog(QDialog):
     def _update_save_enabled(self) -> None:
         if hasattr(self, "_save_btn"):
             can_save = self._changed_editors_valid()
-            is_fully_valid = self._all_editors_valid()
             self._save_btn.setEnabled(can_save)
-            self._save_btn.setDefault(can_save and is_fully_valid)
+            self._save_btn.setDefault(False)
             self._save_btn.setAutoDefault(False)
 
     def showEvent(self, event) -> None:  # noqa: N802
@@ -238,6 +229,15 @@ class SettingsDialog(QDialog):
             current.clearFocus()
         self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
         self._update_save_enabled()
+
+    def _on_tab_changed(self, _index: int) -> None:
+        QTimer.singleShot(0, self._clear_tab_focus)
+
+    def _clear_tab_focus(self) -> None:
+        current = self.focusWidget()
+        if current is not None and current is not self:
+            current.clearFocus()
+        self.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _compute_dirty(self) -> bool:
         for key, editor in self._editors.items():
