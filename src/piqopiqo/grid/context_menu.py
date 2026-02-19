@@ -173,9 +173,9 @@ def show_context_menu(window: MainWindow, global_index: int, pos) -> None:
 
     # Regenerate EXIF action
     if len(selected) == 1:
-        regen_exif_action = menu.addAction("Regenerate EXIF")
+        regen_exif_action = menu.addAction("Reload EXIF")
     else:
-        regen_exif_action = menu.addAction(f"Regenerate EXIF ({len(selected)} photos)")
+        regen_exif_action = menu.addAction(f"Reload EXIF ({len(selected)} photos)")
     regen_exif_action.triggered.connect(
         lambda: window.media_manager.reload_exif([p.path for p in selected])
     )

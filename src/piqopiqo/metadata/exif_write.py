@@ -66,6 +66,7 @@ def build_exif_tags(db_metadata: dict) -> dict:
     now = datetime.now().strftime("%Y:%m:%d %H:%M:%S")
     software_agent = f"{APP_NAME} v{__version__}"
 
+    # TODO Add simple history
     tags["XMP-xmpMM:HistoryAction"] = "saved"
     tags["XMP-xmpMM:HistoryWhen"] = now
     tags["XMP-xmpMM:HistorySoftwareAgent"] = software_agent

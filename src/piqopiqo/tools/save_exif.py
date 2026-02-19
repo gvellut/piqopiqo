@@ -48,7 +48,7 @@ class SaveExifDialog(QDialog):
     ):
         super().__init__(parent)
         self.setWindowTitle("Save EXIF Metadata")
-        self.setMinimumSize(500, 300)
+        self.setMinimumWidth(500)
         self.setModal(True)
 
         self._items = items
@@ -59,6 +59,7 @@ class SaveExifDialog(QDialog):
 
         self._setup_ui()
         self._update_confirmation_text()
+        self.adjustSize()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -129,6 +130,7 @@ class SaveExifDialog(QDialog):
         self.progress_bar.setValue(0)
 
         self.confirm_label.setText("Writing EXIF metadata...")
+        self.adjustSize()
 
         # Prepare items with their tags
         items_with_tags = []
@@ -192,7 +194,10 @@ class SaveExifDialog(QDialog):
             # Add to error text
             filename = os.path.basename(file_path)
             self.error_text.append(f"{filename}: {error_message}")
-            self.error_text.show()
+            if not self.error_text.isVisible():
+                self.error_text.setFixedHeight(120)
+                self.error_text.show()
+                self.adjustSize()
 
     def _on_all_completed(self):
         self._disconnect_signals()

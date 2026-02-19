@@ -66,7 +66,8 @@ def extract_editable_metadata(exif_data: dict) -> dict:
         if db_field == DBFields.TIME_TAKEN and isinstance(value, str):
             value = parse_exif_datetime(value)
 
-        if db_field == DBFields.ORIENTATION and value is not None:
+        if db_field == DBFields.ORIENTATION:
+            # set the orientation to 1 if not there
             try:
                 value = int(value)
                 if not (1 <= value <= 8):
@@ -307,7 +308,7 @@ def run_write_exif_task(task: dict) -> dict:
 
     results: list[dict] = []
     try:
-        common_args = ["-use", "MWG"]
+        common_args = ["-use", "MWG", "-overwrite_original", "-n"]
         with exiftool.ExifToolHelper(
             executable=exiftool_path, common_args=common_args
         ) as helper:
@@ -315,7 +316,7 @@ def run_write_exif_task(task: dict) -> dict:
                 file_path = str(entry["file_path"])
                 tags = dict(entry.get("tags") or {})
                 try:
-                    helper.set_tags(file_path, tags, params=["-overwrite_original"])
+                    helper.set_tags(file_path, tags)
                     results.append({"file_path": file_path, "ok": True, "error": ""})
                 except Exception as e:
                     results.append(

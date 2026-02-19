@@ -22,7 +22,7 @@ class DBFields:
 # Uses MWG (Metadata Working Group) composite tags where available
 # See: https://exiftool.org/TagNames/MWG.html
 EXIF_TO_DB_MAPPING = {
-    DBFields.TITLE: ["XMP:Title", "IPTC:ObjectName"],  # No MWG for title
+    DBFields.TITLE: ["XMP:Title", "IPTC:ObjectName"],
     DBFields.DESCRIPTION: ["Composite:Description"],  # MWG reads from EXIF/IPTC/XMP
     DBFields.LATITUDE: ["EXIF:GPSLatitude"],
     DBFields.LONGITUDE: ["EXIF:GPSLongitude"],
@@ -43,7 +43,7 @@ DB_TO_EXIF_WRITE_MAPPING = {
     DBFields.LONGITUDE: "EXIF:GPSLongitude",
     DBFields.TIME_TAKEN: "EXIF:DateTimeOriginal",
     DBFields.LABEL: "XMP:Label",
-    DBFields.ORIENTATION: "EXIF:Orientation",
+    DBFields.ORIENTATION: "MWG:Orientation",
 }
 
 # GPS reference fields (special handling for lat/lon conversion)
