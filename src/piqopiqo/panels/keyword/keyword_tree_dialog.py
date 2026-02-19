@@ -18,9 +18,10 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from piqopiqo.keyword_tree import KeywordTreeManager
 from piqopiqo.keyword_utils import parse_keywords
 from piqopiqo.model import ImageItem
+
+from .keyword_tree import KeywordTreeManager
 
 logger = logging.getLogger(__name__)
 

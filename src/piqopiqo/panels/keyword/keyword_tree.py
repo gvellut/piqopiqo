@@ -9,7 +9,11 @@ from pathlib import Path
 
 from attrs import define, field
 
-from .settings_state import RuntimeSettingKey, get_runtime_setting, get_support_dir
+from piqopiqo.settings_state import (
+    RuntimeSettingKey,
+    get_runtime_setting,
+    get_support_dir,
+)
 
 logger = logging.getLogger(__name__)
 

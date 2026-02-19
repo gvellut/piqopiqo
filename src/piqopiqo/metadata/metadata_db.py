@@ -696,6 +696,21 @@ class MetadataDBManager:
         folder_path = os.path.dirname(file_path)
         return self.get_db_for_folder(folder_path)
 
+    def ensure_items_metadata_ready(self, items) -> bool:
+        """Ensure editable DB metadata exists for all items.
+
+        Returns False if any item is still missing metadata (EXIF not read yet).
+        """
+        for item in items:
+            if item.db_metadata is not None:
+                continue
+            db = self.get_db_for_image(item.path)
+            meta = db.get_metadata(item.path)
+            if meta is None:
+                return False
+            item.db_metadata = meta.copy()
+        return True
+
     def delete_all_metadata(self) -> None:
         """Delete all metadata from all registered databases."""
         for db in self._databases.values():

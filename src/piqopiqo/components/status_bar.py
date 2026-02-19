@@ -1,68 +1,13 @@
-"""Status bar with loading progress and error display."""
-
-import os
+"""Status bar with loading progress."""
 
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
-    QDialog,
-    QDialogButtonBox,
     QLabel,
     QProgressBar,
     QPushButton,
     QStatusBar,
-    QTreeWidget,
-    QTreeWidgetItem,
-    QVBoxLayout,
 )
-
-
-class ErrorListDialog(QDialog):
-    """Dialog showing list of files with loading errors."""
-
-    def __init__(
-        self,
-        thumb_errors: dict[str, str],
-        exif_errors: dict[str, str],
-        parent=None,
-    ):
-        super().__init__(parent)
-        self.setWindowTitle("Loading Errors")
-        self.setMinimumSize(500, 300)
-
-        layout = QVBoxLayout(self)
-
-        # Create tree widget with two top-level items
-        self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["File", "Error"])
-        self.tree.setColumnWidth(0, 250)
-
-        if thumb_errors:
-            thumb_item = QTreeWidgetItem(
-                [f"Thumbnail Errors ({len(thumb_errors)})", ""]
-            )
-            for path, error in thumb_errors.items():
-                child = QTreeWidgetItem([os.path.basename(path), error])
-                child.setToolTip(0, path)
-                thumb_item.addChild(child)
-            self.tree.addTopLevelItem(thumb_item)
-            thumb_item.setExpanded(True)
-
-        if exif_errors:
-            exif_item = QTreeWidgetItem([f"EXIF Errors ({len(exif_errors)})", ""])
-            for path, error in exif_errors.items():
-                child = QTreeWidgetItem([os.path.basename(path), error])
-                child.setToolTip(0, path)
-                exif_item.addChild(child)
-            self.tree.addTopLevelItem(exif_item)
-            exif_item.setExpanded(True)
-
-        layout.addWidget(self.tree)
-
-        # Close button
-        btn_box = QDialogButtonBox(QDialogButtonBox.Close)
-        btn_box.rejected.connect(self.close)
-        layout.addWidget(btn_box)
 
 
 class LoadingStatusBar(QStatusBar):
@@ -107,12 +52,7 @@ class LoadingStatusBar(QStatusBar):
         self.setSizeGripEnabled(False)
 
     def set_photo_count(self, total: int, filtered: int | None = None):
-        """Set the photo count display.
-
-        Args:
-            total: Total number of photos.
-            filtered: Number of photos after filtering (None = no filter).
-        """
+        """Set the photo count display."""
         self._photo_count = total
         self._filtered_count = filtered if filtered is not None else total
 
@@ -135,7 +75,6 @@ class LoadingStatusBar(QStatusBar):
 
     def _update_progress(self):
         """Update the combined progress bar."""
-        # Combined progress: each photo counts once for thumb + once for exif
         total = self._thumb_total + self._exif_total
         completed = self._thumb_completed + self._exif_completed
 

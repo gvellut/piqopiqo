@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from piqopiqo.components.scollable_strip import ScrollableStrip
+from piqopiqo.components.scrollable_strip import ScrollableStrip
 from piqopiqo.model import FilterCriteria
 from piqopiqo.settings_state import UserSettingKey, get_user_setting
 

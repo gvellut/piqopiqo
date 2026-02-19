@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from piqopiqo.keyword_tree import KeywordTreeManager
 from piqopiqo.keyword_utils import format_keywords, parse_keywords
 from piqopiqo.metadata.db_fields import EDITABLE_FIELDS, FIELD_DISPLAY_LABELS, DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBManager
@@ -30,6 +29,7 @@ from .edit_widgets import (
     TimeEdit,
     TitleEdit,
 )
+from .keyword.keyword_tree import KeywordTreeManager
 
 logger = logging.getLogger(__name__)
 
@@ -373,7 +373,7 @@ class EditPanel(QWidget):
         if not self._current_items:
             return
 
-        from piqopiqo.panels.keyword_tree_dialog import KeywordTreeDialog
+        from .keyword.keyword_tree_dialog import KeywordTreeDialog
 
         dialog = KeywordTreeDialog(
             self._current_items,

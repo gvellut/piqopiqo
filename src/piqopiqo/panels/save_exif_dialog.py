@@ -21,8 +21,20 @@ from piqopiqo.model import ImageItem
 
 if TYPE_CHECKING:
     from piqopiqo.background.media_man import MediaManager
+    from piqopiqo.main_window import MainWindow
 
 logger = logging.getLogger(__name__)
+
+
+def launch_save_exif(window: MainWindow) -> None:
+    """Save DB metadata to EXIF for selected or all filtered photos."""
+    selected = window.photo_model.get_selected_photos()
+    items = selected if selected else list(window.images_data)
+    if not items:
+        return
+
+    dialog = SaveExifDialog(items, window.media_manager, window)
+    dialog.exec()
 
 
 class SaveExifDialog(QDialog):
