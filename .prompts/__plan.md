@@ -1,6 +1,3 @@
-
-* [Generate color for label](N_Generate_color_for_label.md)
-    !? [Predefined colors](N.A_Predefined_colors.md)
 - [Model sync 2](M_Model_sync_2.md)
 ! [Fix date read delay if since:last](A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](B_Eject_SD_after_user_OK.md)
@@ -20,3 +17,5 @@
 ! [gpx2exif remember last](J_gpx2exif_remember_last.md)
 ! [Clean up main_window](L_Clean_up_main_window.md)
 ! [Model sync correct](K_Model_sync_correct.md)
+! [Generate color for label](N_Generate_color_for_label.md)
+    !? [Predefined colors](N.A_Predefined_colors.md)

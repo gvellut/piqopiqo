@@ -12,42 +12,29 @@ logger = logging.getLogger(__name__)
 
 
 class Shortcut(UpperStrEnum):
-    ZOOM_IN = auto()
-    ZOOM_OUT = auto()
-    ZOOM_RESET = auto()
-    LABEL_1 = auto()
-    LABEL_2 = auto()
-    LABEL_3 = auto()
-    LABEL_4 = auto()
-    LABEL_5 = auto()
-    LABEL_6 = auto()
-    LABEL_7 = auto()
-    LABEL_8 = auto()
-    LABEL_9 = auto()
-    LABEL_NONE = auto()
-    SELECT_ALL = auto()
+    ZOOM_IN = auto(), "Zoom in"
+    ZOOM_OUT = auto(), "Zoom out"
+    ZOOM_RESET = auto(), "Zoom reset"
+    LABEL_1 = auto(), "Label 1"
+    LABEL_2 = auto(), "Label 2"
+    LABEL_3 = auto(), "Label 3"
+    LABEL_4 = auto(), "Label 4"
+    LABEL_5 = auto(), "Label 5"
+    LABEL_6 = auto(), "Label 6"
+    LABEL_7 = auto(), "Label 7"
+    LABEL_8 = auto(), "Label 8"
+    LABEL_9 = auto(), "Label 9"
+    LABEL_NONE = auto(), "No label"
+    SELECT_ALL = auto(), "Select all"
 
-    @property
-    def label(self) -> str:
-        return _SHORTCUT_LABELS[self]
+    def __new__(cls, name, label):
+        obj = str.__new__(cls, name)
 
+        obj._value_ = name
+        return obj
 
-_SHORTCUT_LABELS: dict[Shortcut, str] = {
-    Shortcut.ZOOM_IN: "Zoom in",
-    Shortcut.ZOOM_OUT: "Zoom out",
-    Shortcut.ZOOM_RESET: "Zoom reset",
-    Shortcut.LABEL_1: "Label 1",
-    Shortcut.LABEL_2: "Label 2",
-    Shortcut.LABEL_3: "Label 3",
-    Shortcut.LABEL_4: "Label 4",
-    Shortcut.LABEL_5: "Label 5",
-    Shortcut.LABEL_6: "Label 6",
-    Shortcut.LABEL_7: "Label 7",
-    Shortcut.LABEL_8: "Label 8",
-    Shortcut.LABEL_9: "Label 9",
-    Shortcut.LABEL_NONE: "No label",
-    Shortcut.SELECT_ALL: "Select all",
-}
+    def __init__(self, name, label):
+        self.label = label
 
 
 def parse_shortcut(shortcut_str: str) -> QKeySequence:
