@@ -10,14 +10,9 @@ import logging
 import threading
 
 from PySide6.QtCore import QObject, Signal
+from watchfiles import watch
 
 logger = logging.getLogger(__name__)
-
-try:
-    from watchfiles import Change, watch
-except ImportError:  # pragma: no cover
-    Change = None
-    watch = None
 
 
 def _iter_image_changes(
@@ -48,10 +43,6 @@ class FolderWatcher(QObject):
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        if watch is None:
-            logger.warning("watchfiles is not installed; folder watching is disabled")
-            return
-
         if self._thread is not None and self._thread.is_alive():
             return
 
@@ -66,8 +57,6 @@ class FolderWatcher(QObject):
         self._thread = None
 
     def _run(self) -> None:  # pragma: no cover
-        assert watch is not None
-
         for changes in watch(
             self._root_folder,
             stop_event=self._stop_event,
