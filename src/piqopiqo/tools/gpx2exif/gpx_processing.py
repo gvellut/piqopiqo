@@ -10,18 +10,10 @@ import re
 from xml.etree import ElementTree
 
 from attrs import define
+import gpxpy
+import simplekml
 
 from .constants import KML_THUMBNAIL_SIZE
-
-try:
-    import gpxpy
-except ImportError:  # pragma: no cover - dependency fallback
-    gpxpy = None
-
-try:
-    import simplekml
-except ImportError:  # pragma: no cover - dependency fallback
-    simplekml = None
 
 
 @define(frozen=True)
@@ -200,6 +192,11 @@ def _file_uri(path: str) -> str:
     return f"file://{text}"
 
 
+def _kml_title(image_path: str) -> str:
+    image_name = os.path.basename(image_path)
+    return image_name
+
+
 def _kml_description(image_path: str, kml_thumbnail_size: int) -> str:
     image_name = os.path.basename(image_path)
     src = _file_uri(image_path)
@@ -220,32 +217,15 @@ def write_kml(
     path = Path(kml_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    if simplekml is not None:
-        kml = simplekml.Kml()
-        style = simplekml.Style()
-        style.balloonstyle.text = "$[description]"
-        for (lat, lon), image_path in positions:
-            desc = _kml_description(image_path, kml_thumbnail_size)
-            point = kml.newpoint(description=desc, coords=[(lon, lat)])
-            point.style = style
-        kml.save(str(path))
-        return
-
-    # Lightweight XML fallback for environments without simplekml.
-    root = ElementTree.Element("kml", xmlns="http://www.opengis.net/kml/2.2")
-    document = ElementTree.SubElement(root, "Document")
-
+    kml = simplekml.Kml()
+    style = simplekml.Style()
+    style.balloonstyle.text = "$[description]"
     for (lat, lon), image_path in positions:
-        placemark = ElementTree.SubElement(document, "Placemark")
-        description = ElementTree.SubElement(placemark, "description")
-        description.text = _kml_description(image_path, kml_thumbnail_size)
-
-        point = ElementTree.SubElement(placemark, "Point")
-        coords = ElementTree.SubElement(point, "coordinates")
-        coords.text = f"{lon},{lat},0"
-
-    tree = ElementTree.ElementTree(root)
-    tree.write(path, encoding="utf-8", xml_declaration=True)
+        title = _kml_title(image_path)
+        desc = _kml_description(image_path, kml_thumbnail_size)
+        point = kml.newpoint(name=title, description=desc, coords=[(lon, lat)])
+        point.style = style
+    kml.save(str(path))
 
 
 def to_relative_folder(root_folder: str, source_folder: str) -> str:
