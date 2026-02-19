@@ -4,7 +4,7 @@ from datetime import timedelta
 
 import pytest
 
-from piqopiqo.gpx2exif.time_shift import (
+from piqopiqo.tools.gpx2exif.time_shift import (
     format_time_shift,
     is_valid_time_shift,
     parse_time_shift,

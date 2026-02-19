@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from piqopiqo.flickr_upload.albums import (
+from piqopiqo.tools.flickr_upload.albums import (
     FlickrAlbumPlan,
     extract_album_id,
     fetch_album_info,
@@ -41,7 +41,7 @@ def test_fetch_album_info_parses_response(monkeypatch) -> None:
                     }
                 }
 
-    monkeypatch.setattr("piqopiqo.flickr_upload.albums.API_RETRIES", 1)
+    monkeypatch.setattr("piqopiqo.tools.flickr_upload.albums.API_RETRIES", 1)
     info = fetch_album_info(_FakeFlickr(), "721")
     assert info.album_id == "721"
     assert info.title == "Trip"
@@ -56,7 +56,7 @@ def test_fetch_album_info_not_found_raises(monkeypatch) -> None:
             def getInfo(photoset_id: str, timeout: int):  # noqa: ARG004
                 raise RuntimeError("not found")
 
-    monkeypatch.setattr("piqopiqo.flickr_upload.albums.API_RETRIES", 1)
+    monkeypatch.setattr("piqopiqo.tools.flickr_upload.albums.API_RETRIES", 1)
     with pytest.raises(RuntimeError):
         fetch_album_info(_FakeFlickr(), "721")
 
@@ -78,7 +78,7 @@ def test_find_album_by_exact_title_first_page_match(monkeypatch) -> None:
                     }
                 }
 
-    monkeypatch.setattr("piqopiqo.flickr_upload.albums.API_RETRIES", 1)
+    monkeypatch.setattr("piqopiqo.tools.flickr_upload.albums.API_RETRIES", 1)
     info = find_album_by_exact_title(_FakeFlickr(), "Trip")
     assert info is not None
     assert info.album_id == "22"
@@ -92,7 +92,7 @@ def test_resolve_album_plan_title_miss_creates_album(monkeypatch) -> None:
             def getList(per_page: int, page: int, timeout: int):  # noqa: ARG004
                 return {"photosets": {"owner": "x", "photoset": []}}
 
-    monkeypatch.setattr("piqopiqo.flickr_upload.albums.API_RETRIES", 1)
+    monkeypatch.setattr("piqopiqo.tools.flickr_upload.albums.API_RETRIES", 1)
     plan = resolve_album_plan(_FakeFlickr(), "New Album")
     assert plan.is_create is True
     assert plan.album_title == "New Album"

@@ -1,6 +1,6 @@
 """Tests for GPX time-shift memory helpers."""
 
-from piqopiqo.gpx2exif.time_shift_memory import (
+from piqopiqo.tools.gpx2exif.time_shift_memory import (
     remember_timeshift_value,
     resolve_timeshift_for_folder,
 )

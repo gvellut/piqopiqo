@@ -7,11 +7,11 @@ from pathlib import Path
 import threading
 
 from piqopiqo.cache_paths import set_cache_base_dir
-from piqopiqo.gpx2exif.constants import FOLDER_STATE_LAST_TIME_SHIFT
-from piqopiqo.gpx2exif.gpx_processing import GpxPoint, compute_position
-from piqopiqo.gpx2exif.service import apply_gpx_to_folders
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBManager
+from piqopiqo.tools.gpx2exif.constants import FOLDER_STATE_LAST_TIME_SHIFT
+from piqopiqo.tools.gpx2exif.gpx_processing import GpxPoint, compute_position
+from piqopiqo.tools.gpx2exif.service import apply_gpx_to_folders
 
 
 def _write_gpx(path: Path) -> None:

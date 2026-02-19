@@ -115,7 +115,7 @@ def clear_thumb_cache_for_folders(folder_paths: list[str]) -> None:
 
 def get_flickr_cache_dir() -> Path:
     """Get (and ensure) the Flickr token cache directory."""
-    from piqopiqo.flickr_upload.constants import FLICKR_TOKEN_DIR_NAME
+    from piqopiqo.tools.flickr_upload.constants import FLICKR_TOKEN_DIR_NAME
 
     path = get_cache_base_dir() / FLICKR_TOKEN_DIR_NAME
     path.mkdir(parents=True, exist_ok=True)
@@ -124,6 +124,6 @@ def get_flickr_cache_dir() -> Path:
 
 def get_flickr_token_file_path() -> Path:
     """Get the Flickr oauth token SQLite file path."""
-    from piqopiqo.flickr_upload.constants import FLICKR_TOKEN_DB_FILENAME
+    from piqopiqo.tools.flickr_upload.constants import FLICKR_TOKEN_DB_FILENAME
 
     return get_flickr_cache_dir() / FLICKR_TOKEN_DB_FILENAME

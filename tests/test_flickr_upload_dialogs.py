@@ -5,8 +5,8 @@ from __future__ import annotations
 from PySide6.QtWidgets import QApplication
 import pytest
 
-from piqopiqo.flickr_upload.albums import FlickrAlbumPlan
-from piqopiqo.flickr_upload.dialogs import FlickrPreflightDialog
+from piqopiqo.tools.flickr_upload.albums import FlickrAlbumPlan
+from piqopiqo.tools.flickr_upload.dialogs import FlickrPreflightDialog
 
 
 @pytest.fixture

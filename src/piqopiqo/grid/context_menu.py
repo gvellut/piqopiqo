@@ -123,7 +123,7 @@ def edit_in_external_app(window: MainWindow, photos: list[ImageItem]) -> None:
 
 
 def show_context_menu(window: MainWindow, global_index: int, pos) -> None:
-    from piqopiqo.gpx2exif.actions import extract_gps_time_shift_for_item
+    from piqopiqo.tools.gpx2exif.actions import extract_gps_time_shift_for_item
 
     selected = window.photo_model.get_selected_photos()
     if not selected:

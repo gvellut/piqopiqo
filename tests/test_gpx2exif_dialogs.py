@@ -5,7 +5,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QApplication
 import pytest
 
-from piqopiqo.gpx2exif.dialogs import ApplyGpxDialog
+from piqopiqo.tools.gpx2exif.dialogs import ApplyGpxDialog
 
 
 @pytest.fixture

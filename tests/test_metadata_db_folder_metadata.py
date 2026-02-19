@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from piqopiqo.cache_paths import set_cache_base_dir
-from piqopiqo.flickr_upload.constants import FOLDER_STATE_LAST_FLICKR_ALBUM_ID
-from piqopiqo.gpx2exif.constants import FOLDER_STATE_LAST_TIME_SHIFT
 from piqopiqo.metadata.metadata_db import MetadataDB
+from piqopiqo.tools.flickr_upload.constants import FOLDER_STATE_LAST_FLICKR_ALBUM_ID
+from piqopiqo.tools.gpx2exif.constants import FOLDER_STATE_LAST_TIME_SHIFT
 
 
 def test_folder_metadata_roundtrip(tmp_path) -> None:

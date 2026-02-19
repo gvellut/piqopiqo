@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from piqopiqo.flickr_upload.service import (
+from piqopiqo.tools.flickr_upload.service import (
     TicketStatus,
     classify_ticket_complete,
     format_flickr_tags,

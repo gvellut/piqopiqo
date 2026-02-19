@@ -691,12 +691,12 @@ class MainWindow(QMainWindow):
                 logger.error("Failed to apply cache base dir setting: %s", exc)
 
     def _on_copy_from_sd(self):
-        from .copy_sd import launch_copy_sd
+        from .tools.copy_sd import launch_copy_sd
 
         launch_copy_sd(self)
 
     def _on_apply_gpx(self):
-        from .gpx2exif.actions import launch_apply_gpx
+        from .tools.gpx2exif.actions import launch_apply_gpx
 
         launch_apply_gpx(self)
 
@@ -710,7 +710,7 @@ class MainWindow(QMainWindow):
             )
             return
 
-        from .flickr_upload import launch_flickr_upload
+        from .tools.flickr_upload import launch_flickr_upload
 
         launch_flickr_upload(self)
 
@@ -902,7 +902,7 @@ class MainWindow(QMainWindow):
         self.media_manager.regenerate_exif([p.path for p in items])
 
     def _on_save_exif(self):
-        from .panels.save_exif_dialog import launch_save_exif
+        from .tools.save_exif import launch_save_exif
 
         launch_save_exif(self)
 
