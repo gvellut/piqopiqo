@@ -121,6 +121,7 @@ src/piqopiqo/
 - **Extract GPS Time shift**: Grid context menu action runs GCP Vision OCR in background for the clicked photo folder and persists computed shift
 - **Apply GPX**: Tools workflow edits per-folder time shifts, applies fallback from remembered state, then processes all loaded source folders to generate KML and optionally update DB `time_taken` + coordinates (no EXIF writes by default)
 - **Upload to Flickr**: Tools workflow uploads only currently visible (filtered) photos in current sort order, with login/token validation, album preflight input (title/ID/URL), temp EXIF write, upload-date reset, make-public, and optional album add/create step
+- **Fullscreen filter sync**: Optional `FILTER_IN_FULLSCREEN` setting immediately updates fullscreen loop membership after label shortcut changes without leaving fullscreen
 
 ## PhotoListModel Architecture
 
@@ -142,6 +143,7 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - `UserSettingKey` values are persisted under `Settings/<lowerCamelKey>`
 - `RuntimeSettingKey` values are memory-only (not written to QSettings)
 - Resolution priority is: env var > persisted value (user settings only) > default
+- `UserSettingKey.FILTER_IN_FULLSCREEN` (default `False`) controls whether fullscreen immediately drops label-filtered-out images from the navigation loop after label shortcut changes
 
 Useful env vars for agent testing:
 
@@ -296,6 +298,7 @@ Selection behavior:
 - Preflight auto-prefills album input from the first non-empty folder `FLICKR_ALBUM_ID`; when album info is resolvable, it shows title + clickable Flickr album URL.
 - Flickr upload manager stages are `Upload -> Reset date -> Make public -> Add to album` when album mode is enabled.
 - Album add uses grouped `photosets.editPhotos` semantics (existing album photos + uploaded photo IDs).
+- Model/filter/sort synchronization after metadata writes is centralized in `MainWindow.sync_model_after_metadata_update(...)`. Any new feature/tool that mutates metadata DB fields must call this method with the changed fields so grid filtering, sort order, selection panels, and fullscreen loop state stay consistent.
 
 
 ## Development

@@ -71,6 +71,10 @@ class MainWindow(QMainWindow):
         self._items_by_path: dict[str, ImageItem] = {}
         self._last_visible_paths: list[str] = []
         self._model_refresh_scheduled = False
+        self._pending_scheduled_sync_fields: set[str] = set()
+        self._pending_model_sync_after_fullscreen = False
+        self._pending_model_sync_fields: set[str] = set()
+        self._fullscreen_started_with_multi_selection = False
         self._folder_watcher: FolderWatcher | None = None
         self._watcher_suppressed: dict[str, float] = {}
         self._active_apply_gpx_worker = None
@@ -106,6 +110,7 @@ class MainWindow(QMainWindow):
 
             self.edit_panel = EditPanel(self.db_manager)
             self.edit_panel.edit_finished.connect(self._on_edit_finished)
+            self.edit_panel.metadata_saved.connect(self._on_edit_panel_metadata_saved)
             self._right_splitter.addWidget(self.edit_panel)
 
             self.exif_panel = ExifPanel()
@@ -336,6 +341,12 @@ class MainWindow(QMainWindow):
         if self.edit_panel:
             self.edit_panel.update_for_selection(selected_items)
 
+        self.sync_model_after_metadata_update(
+            {DBFields.LABEL},
+            source="apply_label_shortcut",
+            allow_fullscreen_filter=True,
+        )
+
     def _on_rotate_left(self):
         """Rotate selected photos 90° counter-clockwise."""
         self._apply_rotation(rotate_orientation_left)
@@ -432,12 +443,24 @@ class MainWindow(QMainWindow):
         if self.edit_panel and selected_items:
             self.edit_panel.update_for_selection(selected_items)
 
+        self.sync_model_after_metadata_update(
+            {DBFields.LABEL},
+            source="undo_redo_label",
+            allow_fullscreen_filter=True,
+        )
+
     def _on_edit_finished(self):
         """Return focus to grid after editing, unless still in edit panel."""
         focus_widget = QApplication.focusWidget()
         # Only return focus to grid if focus left the edit panel entirely
         if focus_widget is None or not self.edit_panel.isAncestorOf(focus_widget):
             self.grid.setFocus()
+
+    def _on_edit_panel_metadata_saved(self, field_name: str):
+        self.sync_model_after_metadata_update(
+            {field_name},
+            source="edit_panel",
+        )
 
     def _on_thumb_progress(self, completed: int, total: int):
         """Handle thumbnail progress update."""
@@ -474,13 +497,136 @@ class MainWindow(QMainWindow):
                 or self._current_filter.labels
                 or self._current_filter.include_no_label
             )
-        if needs_resort and not self._model_refresh_scheduled:
-            self._model_refresh_scheduled = True
-            QTimer.singleShot(50, self._refresh_model_after_metadata)
+        if needs_resort:
+            self._pending_scheduled_sync_fields.update(
+                {
+                    DBFields.TIME_TAKEN,
+                    DBFields.TITLE,
+                    DBFields.KEYWORDS,
+                    DBFields.LABEL,
+                }
+            )
+            if not self._model_refresh_scheduled:
+                self._model_refresh_scheduled = True
+                QTimer.singleShot(50, self._flush_scheduled_model_sync)
 
-    def _refresh_model_after_metadata(self):
+    def _flush_scheduled_model_sync(self):
         self._model_refresh_scheduled = False
+        changed_fields = set(self._pending_scheduled_sync_fields)
+        self._pending_scheduled_sync_fields.clear()
+        if not changed_fields:
+            return
+        self.sync_model_after_metadata_update(
+            changed_fields,
+            source="editable_ready",
+        )
+
+    def sync_model_after_metadata_update(
+        self,
+        changed_fields: set[str],
+        source: str,
+        allow_fullscreen_filter: bool = False,
+    ) -> None:
+        fields = {str(field) for field in changed_fields if field}
+        if not fields:
+            return
+
+        label_only = fields == {DBFields.LABEL}
+        can_filter_in_fullscreen = (
+            allow_fullscreen_filter
+            and label_only
+            and bool(get_user_setting(UserSettingKey.FILTER_IN_FULLSCREEN))
+        )
+
+        if self._fullscreen_overlay is not None and not can_filter_in_fullscreen:
+            self._pending_model_sync_after_fullscreen = True
+            self._pending_model_sync_fields.update(fields)
+            logger.debug(
+                "Deferring model sync during fullscreen (%s): %s",
+                source,
+                sorted(fields),
+            )
+            return
+
+        self._execute_metadata_model_sync(
+            fields,
+            source=source,
+            rebind_fullscreen_loop=can_filter_in_fullscreen,
+        )
+
+    def _execute_metadata_model_sync(
+        self,
+        changed_fields: set[str],
+        *,
+        source: str,
+        rebind_fullscreen_loop: bool,
+    ) -> None:
+        old_loop_paths: list[str] = []
+        old_current_path: str | None = None
+        if rebind_fullscreen_loop and self._fullscreen_overlay is not None:
+            old_loop_paths = self._fullscreen_overlay.get_visible_paths()
+            old_current_path = self._fullscreen_overlay.get_current_path()
+
+        logger.debug(
+            "Refreshing model after metadata update from %s: %s",
+            source,
+            sorted(changed_fields),
+        )
         self.photo_model.refresh_after_metadata_update()
+
+        if rebind_fullscreen_loop:
+            self._rebind_fullscreen_loop_after_model_sync(
+                old_loop_paths,
+                old_current_path,
+            )
+
+    def _pick_next_path_in_loop(
+        self,
+        loop_paths: list[str],
+        valid_paths: set[str],
+        current_path: str | None,
+    ) -> str | None:
+        if not loop_paths:
+            return None
+        if current_path not in loop_paths:
+            for path in loop_paths:
+                if path in valid_paths:
+                    return path
+            return None
+
+        start = loop_paths.index(current_path)
+        for offset in range(1, len(loop_paths) + 1):
+            path = loop_paths[(start + offset) % len(loop_paths)]
+            if path in valid_paths:
+                return path
+        return None
+
+    def _rebind_fullscreen_loop_after_model_sync(
+        self,
+        old_loop_paths: list[str],
+        old_current_path: str | None,
+    ) -> None:
+        overlay = self._fullscreen_overlay
+        if overlay is None:
+            return
+
+        valid_paths = {item.path for item in self.images_data}
+        surviving_paths = [path for path in old_loop_paths if path in valid_paths]
+        if not surviving_paths:
+            overlay.close()
+            return
+
+        preferred_path = old_current_path
+        if preferred_path not in valid_paths:
+            preferred_path = self._pick_next_path_in_loop(
+                old_loop_paths,
+                set(surviving_paths),
+                old_current_path,
+            )
+
+        overlay.all_items = self.images_data
+        if not overlay.rebind_to_paths(surviving_paths, preferred_path=preferred_path):
+            overlay.close()
 
     def _on_panel_fields_ready(self, file_path: str, fields: dict):
         item = self._items_by_path.get(file_path)
@@ -517,11 +663,6 @@ class MainWindow(QMainWindow):
         """
         self._current_filter = criteria
         self.photo_model.set_filter(criteria)
-
-        # Clear panels since selection changed
-        self.exif_panel.update_exif([])
-        if self.edit_panel:
-            self.edit_panel.update_for_selection([])
 
     def _create_menu_bar(self):
         menubar = self.menuBar()
@@ -681,7 +822,10 @@ class MainWindow(QMainWindow):
                 self._fullscreen_overlay._update_color_swatch()
                 self._fullscreen_overlay.update()
 
-        if UserSettingKey.SHORTCUTS in changed_keys:
+        if (
+            UserSettingKey.SHORTCUTS in changed_keys
+            or UserSettingKey.STATUS_LABELS in changed_keys
+        ):
             self._setup_shortcuts()
 
         if UserSettingKey.CACHE_BASE_DIR in changed_keys:
@@ -930,7 +1074,11 @@ class MainWindow(QMainWindow):
         # Mark selection as changed for undo tracking
         self._selection_changed_since_edit = True
 
-        selected_items = [self.images_data[i] for i in selected_indices]
+        selected_items = [
+            self.images_data[i]
+            for i in selected_indices
+            if 0 <= i < len(self.images_data)
+        ]
 
         # Load db_metadata for selected items if not already loaded
         for item in selected_items:
@@ -938,15 +1086,21 @@ class MainWindow(QMainWindow):
                 db = self.db_manager.get_db_for_image(item.path)
                 item.db_metadata = db.get_metadata(item.path)
 
-        # Update edit panel immediately (uses DB data)
-        if self.edit_panel:
-            self.edit_panel.update_for_selection(selected_items)
+        self._update_panels_for_selection(selected_items)
 
-        # Load EXIF panel fields from DB or schedule extraction
+    def _update_panels_for_selection(self, items: list[ImageItem]) -> None:
+        if self.edit_panel:
+            self.edit_panel.update_for_selection(items)
+
         self.media_manager.ensure_panel_fields_loaded_from_db(
-            [item.path for item in selected_items]
+            [item.path for item in items]
         )
-        self.exif_panel.update_exif(selected_items)
+        self.exif_panel.update_exif(items)
+
+    def _reconcile_selection_and_panels(self) -> None:
+        selected_items = self.photo_model.get_selected_photos()
+        self._selection_changed_since_edit = True
+        self._update_panels_for_selection(selected_items)
 
     def request_thumb_handler(self, index):
         if 0 <= index < len(self.images_data):
@@ -962,6 +1116,7 @@ class MainWindow(QMainWindow):
         if self._fullscreen_overlay is not None:
             self._fullscreen_overlay.close()
             self._fullscreen_overlay = None
+            self._fullscreen_started_with_multi_selection = False
 
         start_index = selected_indices[0]
 
@@ -988,7 +1143,8 @@ class MainWindow(QMainWindow):
         phy_w, phy_h = platform.get_screen_true_resolution(current_screen)
         logger.debug(f"Physical resolution:  {phy_w} x {phy_h}")
 
-        if len(selected_indices) > 1:
+        self._fullscreen_started_with_multi_selection = len(selected_indices) > 1
+        if self._fullscreen_started_with_multi_selection:
             visible_indices = selected_indices
         else:
             visible_indices = list(range(len(self.images_data)))
@@ -996,19 +1152,26 @@ class MainWindow(QMainWindow):
         self._fullscreen_overlay = FullscreenOverlay(
             self.images_data, visible_indices, start_index
         )
+        overlay_ref = self._fullscreen_overlay
 
-        self._fullscreen_overlay.index_changed.connect(
-            self._on_fullscreen_index_changed
-        )
+        overlay_ref.index_changed.connect(self._on_fullscreen_index_changed)
 
         # Handle cleanup and selection logic on close
         def on_fullscreen_close():
-            last_viewed_idx = self._fullscreen_overlay.visible_indices[
-                self._fullscreen_overlay.current_visible_idx
-            ]
+            if self._fullscreen_overlay is not overlay_ref:
+                return
+
+            last_viewed_idx = None
+            if overlay_ref.visible_indices:
+                clamped_idx = min(
+                    max(0, overlay_ref.current_visible_idx),
+                    len(overlay_ref.visible_indices) - 1,
+                )
+                last_viewed_idx = overlay_ref.visible_indices[clamped_idx]
 
             if (
-                len(selected_indices) > 1
+                self._fullscreen_started_with_multi_selection
+                and last_viewed_idx is not None
                 and get_user_setting(UserSettingKey.ON_FULLSCREEN_EXIT)
                 == OnFullscreenExitMultipleSelected.SELECT_LAST_VIEWED
             ):
@@ -1016,15 +1179,25 @@ class MainWindow(QMainWindow):
                 self.grid._ensure_visible(last_viewed_idx)
 
             self._fullscreen_overlay = None
+            self._fullscreen_started_with_multi_selection = False
 
-        self._fullscreen_overlay.destroyed.connect(on_fullscreen_close)
-        self._fullscreen_overlay.show_on_screen(current_screen)
+            if self._pending_model_sync_after_fullscreen:
+                pending_fields = set(self._pending_model_sync_fields)
+                self._pending_model_sync_after_fullscreen = False
+                self._pending_model_sync_fields.clear()
+                if pending_fields:
+                    self._execute_metadata_model_sync(
+                        pending_fields,
+                        source="fullscreen_exit_deferred",
+                        rebind_fullscreen_loop=False,
+                    )
+
+        overlay_ref.destroyed.connect(on_fullscreen_close)
+        overlay_ref.show_on_screen(current_screen)
 
     def _on_fullscreen_index_changed(self, new_index: int):
         """Update grid selection when navigating in fullscreen mode."""
-        if self._fullscreen_overlay and len(
-            self._fullscreen_overlay.visible_indices
-        ) < len(self.images_data):
+        if self._fullscreen_overlay and self._fullscreen_started_with_multi_selection:
             # In multi-selection mode, just update the last selected index
             self.grid._last_selected_index = new_index
             self.grid._ensure_visible(new_index)
@@ -1040,12 +1213,8 @@ class MainWindow(QMainWindow):
     def _on_model_changed(self):
         """Handle model data change - refresh grid."""
         self.grid.set_data(self.photo_model.photos)
-        total = len(self.photo_model.all_photos)
-        filtered = len(self.photo_model.photos)
-        if total == filtered:
-            self.status_bar.set_photo_count(total)
-        else:
-            self.status_bar.set_photo_count(total, filtered)
+        self._update_status_bar_count()
+        self._reconcile_selection_and_panels()
 
     def _on_photo_added(self, file_path: str, index: int):
         """Handle photo added to model."""
@@ -1062,20 +1231,17 @@ class MainWindow(QMainWindow):
         if index >= 0:
             self.grid._ensure_visible(index)
         self._update_status_bar_count()
+        self._reconcile_selection_and_panels()
 
-    def _on_photo_removed(self, file_path: str, former_index: int):
+    def _on_photo_removed(self, file_path: str, _former_index: int):
         """Handle photo removed from model."""
         self._items_by_path.pop(file_path, None)
         self.media_manager.remove_files([file_path])
         self.filter_panel.set_folders(self.photo_model.source_folders)
 
-        # Determine new index to show
-        new_index = min(former_index, len(self.photo_model.photos) - 1)
         self.grid.set_data(self.photo_model.photos)
-        if new_index >= 0:
-            self.photo_model.select_photo(new_index)
-            self.grid._ensure_visible(new_index)
         self._update_status_bar_count()
+        self._reconcile_selection_and_panels()
 
     def _update_status_bar_count(self):
         """Update status bar photo count."""

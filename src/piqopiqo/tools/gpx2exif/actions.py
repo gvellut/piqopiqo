@@ -140,12 +140,10 @@ def apply_gpx_result_to_model(window: MainWindow, result, *, update_db: bool) ->
             continue
         item.db_metadata = meta.copy()
 
-    window.photo_model.refresh_after_metadata_update()
-
-    selected_items = window._get_selected_items()
-    if window.edit_panel:
-        window.edit_panel.update_for_selection(selected_items)
-    window.exif_panel.update_exif(selected_items)
+    window.sync_model_after_metadata_update(
+        {DBFields.TIME_TAKEN, DBFields.LATITUDE, DBFields.LONGITUDE},
+        source="apply_gpx",
+    )
 
 
 def extract_gps_time_shift_for_item(window: MainWindow, item: ImageItem) -> None:

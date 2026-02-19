@@ -120,6 +120,65 @@ class FullscreenOverlay(QWidget):
         # Register safety cleanup
         atexit.register(self.restore_macos_ui)
 
+    def get_visible_paths(self) -> list[str]:
+        paths: list[str] = []
+        for index in self.visible_indices:
+            if 0 <= index < len(self.all_items):
+                path = getattr(self.all_items[index], "path", None)
+                if isinstance(path, str):
+                    paths.append(path)
+        return paths
+
+    def get_current_path(self) -> str | None:
+        if not self.visible_indices:
+            return None
+        if not (0 <= self.current_visible_idx < len(self.visible_indices)):
+            return None
+
+        global_index = self.visible_indices[self.current_visible_idx]
+        if not (0 <= global_index < len(self.all_items)):
+            return None
+
+        path = getattr(self.all_items[global_index], "path", None)
+        return path if isinstance(path, str) else None
+
+    def rebind_to_paths(
+        self, paths: list[str], preferred_path: str | None = None
+    ) -> bool:
+        path_to_index: dict[str, int] = {}
+        for i, item in enumerate(self.all_items):
+            path = getattr(item, "path", None)
+            if isinstance(path, str):
+                path_to_index[path] = i
+
+        new_visible_indices = [
+            path_to_index[path] for path in paths if path in path_to_index
+        ]
+        if not new_visible_indices:
+            return False
+
+        self.visible_indices = new_visible_indices
+
+        preferred_index = None
+        if preferred_path is not None:
+            preferred_global = path_to_index.get(preferred_path)
+            if (
+                preferred_global is not None
+                and preferred_global in self.visible_indices
+            ):
+                preferred_index = self.visible_indices.index(preferred_global)
+
+        if preferred_index is None:
+            self.current_visible_idx = min(
+                max(0, self.current_visible_idx),
+                len(self.visible_indices) - 1,
+            )
+        else:
+            self.current_visible_idx = preferred_index
+
+        self._load_current_image()
+        return True
+
     def _setup_zoom_overlay(self):
         """Creates the zoom level overlay widget."""
         self.zoom_overlay = QLabel(self)

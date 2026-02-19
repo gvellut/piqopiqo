@@ -68,6 +68,7 @@ class UserSettingKey(StrEnum):
     EXTERNAL_VIEWER = "externalViewer"
     EXTERNAL_EDITOR = "externalEditor"
     SHORTCUTS = "shortcuts"
+    FILTER_IN_FULLSCREEN = "filterInFullscreen"
     COPY_SD_BASE_EXTERNAL_FOLDER = "copySdBaseExternalFolder"
     SDCARD_NAMES = "sdcardNames"
     GPX_TIMEZONE = "gpxTimezone"
@@ -373,6 +374,7 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         deserializer=_deserialize_shortcuts,
         env_parser=lambda raw: _deserialize_shortcuts(_parse_json(raw)),
     ),
+    UserSettingKey.FILTER_IN_FULLSCREEN: SettingDef(default=False, read_type=bool),
     UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER: SettingDef(default="", read_type=str),
     UserSettingKey.SDCARD_NAMES: SettingDef(
         default=[],

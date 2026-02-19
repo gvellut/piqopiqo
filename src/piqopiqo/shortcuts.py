@@ -27,6 +27,28 @@ class Shortcut(UpperStrEnum):
     LABEL_NONE = auto()
     SELECT_ALL = auto()
 
+    @property
+    def label(self) -> str:
+        return _SHORTCUT_LABELS[self]
+
+
+_SHORTCUT_LABELS: dict[Shortcut, str] = {
+    Shortcut.ZOOM_IN: "Zoom in",
+    Shortcut.ZOOM_OUT: "Zoom out",
+    Shortcut.ZOOM_RESET: "Zoom reset",
+    Shortcut.LABEL_1: "Label 1",
+    Shortcut.LABEL_2: "Label 2",
+    Shortcut.LABEL_3: "Label 3",
+    Shortcut.LABEL_4: "Label 4",
+    Shortcut.LABEL_5: "Label 5",
+    Shortcut.LABEL_6: "Label 6",
+    Shortcut.LABEL_7: "Label 7",
+    Shortcut.LABEL_8: "Label 8",
+    Shortcut.LABEL_9: "Label 9",
+    Shortcut.LABEL_NONE: "No label",
+    Shortcut.SELECT_ALL: "Select all",
+}
+
 
 def parse_shortcut(shortcut_str: str) -> QKeySequence:
     return QKeySequence(shortcut_str)

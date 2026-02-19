@@ -154,6 +154,13 @@ def test_flickr_runtime_workers_env_override(isolated_settings, monkeypatch):
     assert get_runtime_setting(RuntimeSettingKey.FLICKR_UPLOAD_MAX_WORKERS) == 7
 
 
+def test_filter_in_fullscreen_default_and_roundtrip(isolated_settings):
+    assert get_user_setting(UserSettingKey.FILTER_IN_FULLSCREEN) is False
+
+    set_user_setting(UserSettingKey.FILTER_IN_FULLSCREEN, True)
+    assert get_user_setting(UserSettingKey.FILTER_IN_FULLSCREEN) is True
+
+
 def test_runtime_settings_are_memory_only(isolated_settings, monkeypatch):
     monkeypatch.setenv("PIQO_FONT_SIZE", "19")
 

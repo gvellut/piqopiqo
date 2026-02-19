@@ -38,6 +38,7 @@ class EditPanel(QWidget):
     """Panel for editing photo metadata."""
 
     edit_finished = Signal()  # Emitted when editing is complete (for focus return)
+    metadata_saved = Signal(str)  # DBFields name for synchronization
 
     def __init__(self, db_manager: MetadataDBManager, parent=None):
         super().__init__(parent)
@@ -323,6 +324,7 @@ class EditPanel(QWidget):
         for item in self._current_items:
             self._save_field_for_item(item, field_name, value)
 
+        self.metadata_saved.emit(field_name)
         self.edit_finished.emit()
 
     def _get_field_value(self, field_name: str):
@@ -418,4 +420,5 @@ class EditPanel(QWidget):
 
         # Update the keywords field display
         self.update_for_selection(self._current_items)
+        self.metadata_saved.emit(DBFields.KEYWORDS)
         self.edit_finished.emit()

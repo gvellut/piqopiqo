@@ -24,7 +24,7 @@ class ShortcutsEditor(QWidget):
             line_edit = QLineEdit()
             line_edit.setPlaceholderText("e.g. ctrl+a")
             line_edit.editingFinished.connect(self.value_changed)
-            layout.addRow(shortcut.value, line_edit)
+            layout.addRow(shortcut.label, line_edit)
             self._inputs[shortcut] = line_edit
 
     def set_value(self, value: dict[Shortcut, str] | dict[str, str] | None) -> None:
