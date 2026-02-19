@@ -29,6 +29,19 @@ from piqopiqo.model import StatusLabel
 _MAX_LABELS = 9
 _MIME_TYPE = "application/x-piqo-label-row"
 
+# 9 distinct vivid colors, spread around the hue wheel.
+_DEFAULT_COLORS = [
+    "#ff0000",  # red
+    "#00DD00",  # green
+    "#0000ff",  # blue
+    "#ffff00",  # yellow
+    "#8800aa",  # purple
+    "#00ddff",  # cyan
+    "#ff8800",  # orange
+    "#ff00ff",  # magenta
+    "#88ff00",  # lime
+]
+
 
 class _DragHandle(QLabel):
     """Small grip icon indicating the row is draggable."""
@@ -341,9 +354,19 @@ class StatusLabelsEditor(QWidget):
         r, g, b = colorsys.hls_to_rgb(new_hue, avg_l, avg_s)
         return QColor.fromRgbF(r, g, b).name()
 
+    def _pick_default_color(self) -> str:
+        """Pick the next unused color from the default palette."""
+        used = {row.color_btn.color().lower() for row in self._rows}
+        start = len(self._rows) % len(_DEFAULT_COLORS)
+        for i in range(len(_DEFAULT_COLORS)):
+            candidate = _DEFAULT_COLORS[(start + i) % len(_DEFAULT_COLORS)]
+            if candidate.lower() not in used:
+                return candidate
+        return _DEFAULT_COLORS[start]
+
     def _on_add_row(self):
         idx = len(self._rows) + 1
-        color = self._generate_next_color()
+        color = self._pick_default_color()
         self._add_row(StatusLabel(name="", color=color, index=idx))
         self._update_add_btn()
         self._update_indices()
