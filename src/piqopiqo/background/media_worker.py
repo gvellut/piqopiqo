@@ -336,9 +336,9 @@ def run_write_exif_task(task: dict) -> dict:
 
 def worker_main(task_queue, result_queue) -> None:
     """Worker loop."""
-    try:
-        import signal
+    import signal
 
+    try:
         signal.signal(signal.SIGINT, signal.SIG_IGN)
     except Exception:
         pass
