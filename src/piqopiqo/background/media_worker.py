@@ -308,7 +308,10 @@ def run_write_exif_task(task: dict) -> dict:
 
     results: list[dict] = []
     try:
-        common_args = ["-use", "MWG", "-overwrite_original", "-n"]
+        # use overwrite_original_in_place instead of overwrite_original since
+        # with overwrite_original the modified files have only the "added" change
+        # with overwrite_original_in_place: it is modified
+        common_args = ["-use", "MWG", "-overwrite_original_in_place", "-n"]
         with exiftool.ExifToolHelper(
             executable=exiftool_path, common_args=common_args
         ) as helper:
