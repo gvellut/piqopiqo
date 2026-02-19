@@ -564,6 +564,12 @@ class MainWindow(QMainWindow):
         self._undo_label_action.triggered.connect(self._on_undo_redo_label)
         edit_menu.addAction(self._undo_label_action)
 
+        edit_menu.addSeparator()
+
+        regenerate_exif_action = QAction("Reload EXIF", self)
+        regenerate_exif_action.triggered.connect(self.on_reload_exif)
+        edit_menu.addAction(regenerate_exif_action)
+
         # Image menu
         image_menu = menubar.addMenu("Image")
 
@@ -608,8 +614,6 @@ class MainWindow(QMainWindow):
 
         view_menu.addSeparator()
 
-        view_menu.addSeparator()
-
         regenerate_action = QAction("Regenerate Thumbnails", self)
         regenerate_action.triggered.connect(self.on_regenerate_thumbnails)
         view_menu.addAction(regenerate_action)
@@ -638,10 +642,6 @@ class MainWindow(QMainWindow):
         save_exif_action = QAction("Save EXIF", self)
         save_exif_action.triggered.connect(self._on_save_exif)
         tools_menu.addAction(save_exif_action)
-
-        regenerate_exif_action = QAction("Regenerate EXIF", self)
-        regenerate_exif_action.triggered.connect(self.on_regenerate_exif)
-        tools_menu.addAction(regenerate_exif_action)
 
         help_menu = menubar.addMenu("Help")
         about_action = QAction(f"About {APP_NAME}", self)
@@ -892,14 +892,14 @@ class MainWindow(QMainWindow):
         # Refresh the grid to trigger thumbnail requests
         self.grid.on_scroll(self.grid.scrollbar.value())
 
-    def on_regenerate_exif(self):
-        """Regenerate EXIF (editable + panel fields) for selected or all filtered."""
+    def on_reload_exif(self):
+        """Reload EXIF (editable + panel fields) for selected or all filtered."""
         selected = self.photo_model.get_selected_photos()
         items = selected if selected else list(self.images_data)
         if not items:
             return
 
-        self.media_manager.regenerate_exif([p.path for p in items])
+        self.media_manager.reload_exif([p.path for p in items])
 
     def _on_save_exif(self):
         from .tools.save_exif import launch_save_exif

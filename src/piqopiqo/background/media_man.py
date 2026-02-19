@@ -396,7 +396,7 @@ class MediaManager(QObject):
                 to_visible=file_path in self._visible_paths,
             )
 
-    def regenerate_exif(self, file_paths: list[str]) -> None:
+    def reload_exif(self, file_paths: list[str]) -> None:
         """Re-read EXIF for editable + panel fields and overwrite DB values."""
         for file_path in file_paths:
             self._queue_combined(

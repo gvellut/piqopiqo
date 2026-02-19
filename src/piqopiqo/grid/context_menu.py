@@ -177,7 +177,7 @@ def show_context_menu(window: MainWindow, global_index: int, pos) -> None:
     else:
         regen_exif_action = menu.addAction(f"Regenerate EXIF ({len(selected)} photos)")
     regen_exif_action.triggered.connect(
-        lambda: window.media_manager.regenerate_exif([p.path for p in selected])
+        lambda: window.media_manager.reload_exif([p.path for p in selected])
     )
 
     menu.addSeparator()
