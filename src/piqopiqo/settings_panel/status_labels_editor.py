@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import colorsys
+
 from PySide6.QtCore import QMimeData, QPoint, Qt, Signal
 from PySide6.QtGui import (
     QColor,
@@ -302,9 +304,47 @@ class StatusLabelsEditor(QWidget):
 
     # --- Row management ---
 
+    def _generate_next_color(self) -> str:
+        """Pick a hue maximally distant from existing labels."""
+        existing_hsl: list[tuple[float, ...]] = []
+        for row in self._rows:
+            c = QColor(row.color_btn.color())
+            existing_hsl.append((c.hslHueF(), c.hslSaturationF(), c.lightnessF()))
+
+        # Default vivid color if no existing labels
+        if not existing_hsl:
+            r, g, b = colorsys.hls_to_rgb(0.0, 0.45, 0.85)
+            return QColor.fromRgbF(r, g, b).name()
+
+        avg_s = sum(s for _, s, _ in existing_hsl) / len(existing_hsl)
+        avg_l = sum(el for _, _, el in existing_hsl) / len(existing_hsl)
+
+        # Clamp to keep vivid range
+        avg_s = max(avg_s, 0.5)
+        avg_l = max(0.3, min(avg_l, 0.6))
+
+        # Find largest gap in hue wheel
+        hues = sorted(h for h, _, _ in existing_hsl if h >= 0)
+        if not hues:
+            new_hue = 0.0
+        elif len(hues) == 1:
+            new_hue = (hues[0] + 0.5) % 1.0
+        else:
+            gaps = []
+            for i in range(len(hues)):
+                next_h = hues[(i + 1) % len(hues)]
+                gap = (next_h - hues[i]) % 1.0
+                gaps.append((gap, hues[i]))
+            largest_gap, gap_start = max(gaps)
+            new_hue = (gap_start + largest_gap / 2) % 1.0
+
+        r, g, b = colorsys.hls_to_rgb(new_hue, avg_l, avg_s)
+        return QColor.fromRgbF(r, g, b).name()
+
     def _on_add_row(self):
         idx = len(self._rows) + 1
-        self._add_row(StatusLabel(name="", color="#000000", index=idx))
+        color = self._generate_next_color()
+        self._add_row(StatusLabel(name="", color=color, index=idx))
         self._update_add_btn()
         self._update_indices()
         self.value_changed.emit()

@@ -5,7 +5,7 @@ Or have a central controller that manages the sync
 
 Make the loading of folder initial currently in __main__.py dealt with in controller or model. The scan folder should not be part of the main
 
-all syncs :  selection filtered settings panels grid cells shortcuts
+all syncs : folder selection sort filtered settings panels grid cells shortcuts status_bar
 must be coherent between them (except possibly temporarily when acting on the sync)
 
 main_window (Pyside Window)  should not be the central hub for the model
