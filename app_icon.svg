@@ -11,7 +11,7 @@
    inkscape:export-xdpi="61.927616"
    inkscape:export-ydpi="61.927616"
    inkscape:version="1.4 (e7c3feb1, 2024-10-09)"
-   sodipodi:docname="icon.svg"
+   sodipodi:docname="app_icon.svg"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
@@ -27,8 +27,8 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      inkscape:zoom="0.89887065"
-     inkscape:cx="396.60879"
-     inkscape:cy="560.70359"
+     inkscape:cx="396.05254"
+     inkscape:cy="364.90234"
      inkscape:window-width="2560"
      inkscape:window-height="1387"
      inkscape:window-x="2304"
@@ -50,25 +50,36 @@
        y="-11.774034" />
     <text
        xml:space="preserve"
-       style="font-size:189.866px;line-height:1;font-family:Sans;-inkscape-font-specification:'Sans, Normal';text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;direction:ltr;text-orientation:upright;text-anchor:middle;fill:#2925ff;fill-opacity:0.570248;stroke-width:0.406857"
-       x="83.86972"
-       y="174.25569"
-       id="text1"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:189.866px;line-height:1;font-family:Sans;-inkscape-font-specification:'Sans, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;direction:ltr;text-orientation:upright;text-anchor:middle;fill:#f82509;fill-opacity:1;stroke-width:0.406857"
+       x="48.841969"
+       y="148.05847"
+       id="text1"
+       inkscape:highlight-color="#ff0000"><tspan
          sodipodi:role="line"
          id="tspan1"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:189.866px;font-family:Geneva;-inkscape-font-specification:'Geneva, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#f82509;fill-opacity:1;stroke-width:0.406857"
-         x="83.86972"
-         y="174.25569">P</tspan></text>
+         x="48.841969"
+         y="148.05847">P</tspan></text>
     <text
        xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:123.472px;line-height:1;font-family:Geneva;-inkscape-font-specification:'Geneva, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;direction:ltr;text-orientation:upright;text-anchor:middle;fill:#f82509;fill-opacity:1;stroke-width:0.264583"
-       x="166.89691"
-       y="111.85333"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:74.516px;line-height:1;font-family:Geneva;-inkscape-font-specification:'Geneva, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;direction:ltr;text-orientation:upright;text-anchor:middle;fill:#f82509;fill-opacity:1;stroke-width:0.159677"
+       x="192.36575"
+       y="145.77023"
        id="text2"><tspan
          sodipodi:role="line"
          id="tspan2"
-         style="stroke-width:0.264583"
-         x="166.89691"
-         y="111.85333">²</tspan></text>
+         style="stroke-width:0.159677"
+         x="192.36575"
+         y="145.77023">²</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:99.3811px;line-height:1;font-family:Sans;-inkscape-font-specification:'Sans, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;direction:ltr;text-orientation:upright;text-anchor:middle;fill:#f82509;fill-opacity:1;stroke-width:0.13849"
+       x="110.67593"
+       y="185.44102"
+       id="text3"><tspan
+         sodipodi:role="line"
+         id="tspan3"
+         style="stroke-width:0.13849"
+         x="110.67593"
+         y="185.44102">iqo</tspan></text>
   </g>
 </svg>
