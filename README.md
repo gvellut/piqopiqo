@@ -27,3 +27,7 @@ You can generate a `.app`. Run:
 `uv run task build`
 
 Copy the generated file in build to your `/Applications` folder.
+
+## icns converter
+
+https://cloudconvert.com/png-to-icns
