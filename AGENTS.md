@@ -299,7 +299,7 @@ Selection behavior:
 - Flickr upload manager stages are `Upload -> Reset date -> Make public -> Add to album` when album mode is enabled.
 - Album add uses grouped `photosets.editPhotos` semantics (existing album photos + uploaded photo IDs).
 - Model/filter/sort synchronization after metadata writes is centralized in `MainWindow.sync_model_after_metadata_update(...)`. Any new feature/tool that mutates metadata DB fields must call this method with the changed fields so grid filtering, sort order, selection panels, and fullscreen loop state stay consistent.
-- Settings dialog Enter handling is centralized in `settings_panel/dialog.py`: Enter is consumed for focused controls in the dialog unless Save itself is focused; for editable/focusable controls, Enter exits focus and moves focus to Save without triggering Save/accept, and Enter on focused Save triggers `_on_save()`.
+- Settings dialog Enter handling is widget-scoped (no app-wide/global interception): `QLineEdit` and `QAbstractSpinBox` consume Enter to exit field focus, while focused Save consumes Enter to trigger `_on_save()`. Save remains non-default to avoid implicit submits from other controls.
 - Settings dialog initial focus is cleared on first show, so opening Settings does not auto-focus the first text field or Save button.
 - Settings dialog clears focus after tab switches (`QTabWidget.currentChanged`), preventing first-focusable controls (for example checkboxes) from getting blue focus highlight automatically.
 - PyQtAuto tab switching note: `@text:` selectors do not reliably target `QTabWidget` tabs; use `@class:QTabBar` click with `pos` (relative coords) and verify tab changes via `@class:QTabWidget` `currentIndex`.

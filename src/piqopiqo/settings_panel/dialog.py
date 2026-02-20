@@ -8,14 +8,13 @@ import sys
 
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QApplication,
+    QAbstractSpinBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
     QGroupBox,
     QLineEdit,
     QMessageBox,
-    QPlainTextEdit,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -55,7 +54,7 @@ class SettingsDialog(QDialog):
         self._mode = get_runtime_setting(RuntimeSettingKey.SETTINGS_PANEL_SAVE_MODE)
 
         self._build_ui()
-        self._install_text_field_event_filters()
+        self._install_line_edit_filters()
         self._load_initial_values()
 
     @property
@@ -128,58 +127,49 @@ class SettingsDialog(QDialog):
         self._save_btn = self._button_box.button(QDialogButtonBox.StandardButton.Save)
         self._save_btn.setDefault(False)
         self._save_btn.setAutoDefault(False)
+        self._save_btn.installEventFilter(self)
         self._button_box.accepted.connect(self._on_save)
         self._button_box.rejected.connect(self._on_cancel)
         root.addWidget(self._button_box)
 
-    def _install_text_field_event_filters(self) -> None:
-        app = QApplication.instance()
-        if app is not None:
-            app.installEventFilter(self)
-
     def eventFilter(self, watched, event):  # noqa: N802
-        is_enter = event.type() == QEvent.Type.KeyPress and event.key() in (
-            Qt.Key.Key_Return,
-            Qt.Key.Key_Enter,
-        )
-        is_self_or_child = watched is self or (
-            isinstance(watched, QWidget) and self.isAncestorOf(watched)
-        )
-        if is_enter and is_self_or_child:
-            if hasattr(self, "_save_btn") and self._save_btn.hasFocus():
-                if self._save_btn.isEnabled():
-                    self._on_save()
-                event.accept()
-                return True
+        if (
+            isinstance(watched, QAbstractSpinBox)
+            and event.type() == QEvent.Type.KeyPress
+            and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+        ):
+            watched.clearFocus()
+            self.setFocus(Qt.FocusReason.OtherFocusReason)
+            event.accept()
+            return True
 
-            if isinstance(watched, QPlainTextEdit):
-                return super().eventFilter(watched, event)
+        if (
+            isinstance(watched, QLineEdit)
+            and event.type() == QEvent.Type.KeyPress
+            and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+        ):
+            watched.clearFocus()
+            self.setFocus(Qt.FocusReason.OtherFocusReason)
+            event.accept()
+            return True
 
-            # Leave text-field edit mode and move focus to Save, but never
-            # submit the dialog implicitly.
-            if isinstance(watched, QLineEdit):
-                watched.clearFocus()
-                if hasattr(self, "_save_btn"):
-                    self._save_btn.setFocus(Qt.FocusReason.TabFocusReason)
-                event.accept()
-                return True
-
-            if isinstance(watched, QWidget):
-                watched.clearFocus()
-                if hasattr(self, "_save_btn"):
-                    self._save_btn.setFocus(Qt.FocusReason.TabFocusReason)
-                event.accept()
-                return True
-
+        if (
+            hasattr(self, "_save_btn")
+            and watched is self._save_btn
+            and event.type() == QEvent.Type.KeyPress
+            and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+        ):
+            if self._save_btn.isEnabled():
+                self._on_save()
             event.accept()
             return True
         return super().eventFilter(watched, event)
 
-    def done(self, result: int) -> None:
-        app = QApplication.instance()
-        if app is not None:
-            app.removeEventFilter(self)
-        super().done(result)
+    def _install_line_edit_filters(self) -> None:
+        for spin_box in self.findChildren(QAbstractSpinBox):
+            spin_box.installEventFilter(self)
+        for line_edit in self.findChildren(QLineEdit):
+            line_edit.installEventFilter(self)
 
     def _load_initial_values(self):
         self._loading = True

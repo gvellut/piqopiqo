@@ -21,4 +21,5 @@
     !? [Predefined colors](N.A_Predefined_colors.md)
 ! [Settings add label validation](O_Settings_add_label_validation.md)
     !? [Initial focus](O.A_Initial_focus.md)
-    ? [Simplify settings](O.B_Simplify_settings.md)
+    !? [Simplify settings](O.B_Simplify_settings.md)
+    !? [Correct Enter save settings](O.C_Correct_Enter_save_settings.md)
