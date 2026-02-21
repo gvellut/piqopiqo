@@ -193,6 +193,7 @@ class ApplyGpxDialog(QDialog):
         source_folders: list[str],
         initial_time_shifts: dict[str, str],
         previous_time_shift_folders: set[str],
+        initial_gpx_path: str,
         kml_folder: str,
         parent=None,
     ):
@@ -284,6 +285,7 @@ class ApplyGpxDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+        self.gpx_path_edit.setText(str(initial_gpx_path).strip())
         self._update_ok_enabled()
 
     def showEvent(self, event) -> None:

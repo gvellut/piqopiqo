@@ -1,4 +1,3 @@
-* [Gpx in Folder data](Q_Gpx_in_Folder_data.md)
 - [Dir file selector](R_Dir_file_selector.md)
 - [Model sync 2](M_Model_sync_2.md)
 - [Manual lens](P_Manual_lens.md)
@@ -26,3 +25,4 @@
     !? [Initial focus](O.A_Initial_focus.md)
     !? [Simplify settings](O.B_Simplify_settings.md)
     !? [Correct Enter save settings](O.C_Correct_Enter_save_settings.md)
+! [Gpx in Folder data](Q_Gpx_in_Folder_data.md)

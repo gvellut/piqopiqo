@@ -5,7 +5,10 @@ from __future__ import annotations
 from piqopiqo.cache_paths import set_cache_base_dir
 from piqopiqo.metadata.metadata_db import MetadataDB
 from piqopiqo.tools.flickr_upload.constants import FOLDER_STATE_LAST_FLICKR_ALBUM_ID
-from piqopiqo.tools.gpx2exif.constants import FOLDER_STATE_LAST_TIME_SHIFT
+from piqopiqo.tools.gpx2exif.constants import (
+    FOLDER_STATE_LAST_GPX_PATH,
+    FOLDER_STATE_LAST_TIME_SHIFT,
+)
 
 
 def test_folder_metadata_roundtrip(tmp_path) -> None:
@@ -61,5 +64,24 @@ def test_folder_metadata_flickr_album_id_roundtrip(tmp_path) -> None:
 
     db.set_folder_value(FOLDER_STATE_LAST_FLICKR_ALBUM_ID, None)
     assert db.get_folder_value(FOLDER_STATE_LAST_FLICKR_ALBUM_ID) is None
+
+    db.close()
+
+
+def test_folder_metadata_gpx_path_roundtrip(tmp_path) -> None:
+    set_cache_base_dir(tmp_path / "cache")
+
+    source_folder = tmp_path / "photos" / "folder_d"
+    source_folder.mkdir(parents=True, exist_ok=True)
+
+    db = MetadataDB(str(source_folder))
+
+    assert db.get_folder_value(FOLDER_STATE_LAST_GPX_PATH) is None
+
+    db.set_folder_value(FOLDER_STATE_LAST_GPX_PATH, "/tmp/track.gpx")
+    assert db.get_folder_value(FOLDER_STATE_LAST_GPX_PATH) == "/tmp/track.gpx"
+
+    db.set_folder_value(FOLDER_STATE_LAST_GPX_PATH, None)
+    assert db.get_folder_value(FOLDER_STATE_LAST_GPX_PATH) is None
 
     db.close()

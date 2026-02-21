@@ -24,6 +24,7 @@ def test_apply_gpx_dialog_requires_valid_time_shifts_and_file(qapp, tmp_path):
         source_folders=[folder],
         initial_time_shifts={folder: "invalid"},
         previous_time_shift_folders=set(),
+        initial_gpx_path="",
         kml_folder="",
     )
 
@@ -45,6 +46,7 @@ def test_apply_gpx_dialog_returns_folder_shift_values(qapp, tmp_path):
         source_folders=[folder_a, folder_b],
         initial_time_shifts={folder_a: "1s", folder_b: ""},
         previous_time_shift_folders=set(),
+        initial_gpx_path="",
         kml_folder="",
     )
 
@@ -73,9 +75,27 @@ def test_apply_gpx_dialog_previous_label_only_for_state_sourced_values(qapp):
             folder_c: "",
         },
         previous_time_shift_folders={folder_a, folder_c},
+        initial_gpx_path="",
         kml_folder="",
     )
 
     assert dialog._previous_labels[folder_a].isHidden() is False
     assert dialog._previous_labels[folder_b].isHidden() is True
     assert dialog._previous_labels[folder_c].isHidden() is True
+
+
+def test_apply_gpx_dialog_prefills_initial_gpx_path(qapp, tmp_path):
+    folder = "/root/photos/folder-a"
+    gpx_path = tmp_path / "track.gpx"
+    gpx_path.write_text("<gpx></gpx>", encoding="utf-8")
+    dialog = ApplyGpxDialog(
+        root_folder="/root/photos",
+        source_folders=[folder],
+        initial_time_shifts={folder: ""},
+        previous_time_shift_folders=set(),
+        initial_gpx_path=f"  {gpx_path}  ",
+        kml_folder="",
+    )
+
+    path, _mode, _shifts = dialog.get_values()
+    assert path == str(gpx_path)

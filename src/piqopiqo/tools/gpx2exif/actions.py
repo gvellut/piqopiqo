@@ -19,7 +19,7 @@ from piqopiqo.settings_state import (
     get_user_setting,
 )
 
-from .constants import FOLDER_STATE_LAST_TIME_SHIFT
+from .constants import FOLDER_STATE_LAST_GPX_PATH, FOLDER_STATE_LAST_TIME_SHIFT
 from .gpx_processing import to_relative_folder
 from .time_shift_memory import (
     normalize_time_shift,
@@ -90,6 +90,31 @@ def _persist_apply_gpx_time_shifts(
 ) -> None:
     for folder_path, time_shift in folder_time_shifts.items():
         persist_folder_time_shift(window, folder_path, time_shift)
+
+
+def _set_gpx_path_for_folders(
+    window: MainWindow,
+    source_folders: list[str],
+    gpx_path: str | None,
+) -> None:
+    value = str(gpx_path).strip() if gpx_path is not None else ""
+    to_store = value if value else None
+    for folder in source_folders:
+        db = window.db_manager.get_db_for_folder(folder)
+        db.set_folder_value(FOLDER_STATE_LAST_GPX_PATH, to_store)
+
+
+def _get_first_folder_gpx_path(window: MainWindow, source_folders: list[str]) -> str:
+    for folder in source_folders:
+        value = window.db_manager.get_db_for_folder(folder).get_folder_value(
+            FOLDER_STATE_LAST_GPX_PATH
+        )
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
 
 
 def _resolve_apply_gpx_initial_time_shifts(
@@ -218,14 +243,17 @@ def launch_apply_gpx(window: MainWindow) -> None:
     )
     from .workers import ApplyGpxWorker
 
+    source_folders = list(window.photo_model.source_folders)
+    initial_gpx_path = _get_first_folder_gpx_path(window, source_folders)
     initial_time_shifts, previous_time_shift_folders = (
         _resolve_apply_gpx_initial_time_shifts(window)
     )
     input_dialog = ApplyGpxDialog(
         root_folder=window.root_folder,
-        source_folders=window.photo_model.source_folders,
+        source_folders=source_folders,
         initial_time_shifts=initial_time_shifts,
         previous_time_shift_folders=previous_time_shift_folders,
+        initial_gpx_path=initial_gpx_path,
         kml_folder=str(get_user_setting(UserSettingKey.GPX_KML_FOLDER) or ""),
         parent=window,
     )
@@ -234,6 +262,7 @@ def launch_apply_gpx(window: MainWindow) -> None:
 
     gpx_path, mode, folder_time_shifts = input_dialog.get_values()
     _persist_apply_gpx_time_shifts(window, folder_time_shifts)
+    _set_gpx_path_for_folders(window, source_folders, gpx_path)
     update_db = mode == ApplyGpxMode.UPDATE_DB
 
     folder_to_files: dict[str, list[str]] = {}
