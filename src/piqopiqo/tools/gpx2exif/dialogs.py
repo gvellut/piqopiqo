@@ -257,7 +257,7 @@ class ApplyGpxDialog(QDialog):
 
         self.mode_combo = QComboBox(self)
         self.mode_combo.addItem("Only generate KML", ApplyGpxMode.ONLY_KML)
-        self.mode_combo.addItem("Update images", ApplyGpxMode.UPDATE_DB)
+        self.mode_combo.addItem("Update metadata", ApplyGpxMode.UPDATE_DB)
         mode_row = QWidget(self)
         mode_layout = QHBoxLayout(mode_row)
         mode_layout.setContentsMargins(0, 0, 0, 0)
