@@ -340,7 +340,7 @@ class FlickrUploadProgressDialog(QDialog):
         stage_text = self._current_stage.strip() or "-"
         if stage_text == STAGE_ADD_TO_ALBUM and self._album_action_text:
             stage_text = f"{stage_text} - {self._album_action_text}"
-        self.stage_label.setText(f"Step: {stage_text}")
+        self.stage_label.setText(stage_text)
 
     def _sync_height_to_content(self) -> None:
         layout = self.layout()

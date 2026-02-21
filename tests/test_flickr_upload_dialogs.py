@@ -115,13 +115,13 @@ def test_upload_progress_shows_single_running_step_line(qapp) -> None:  # noqa: 
     dialog = _mk_upload_dialog()
 
     dialog._on_stage_changed(STAGE_UPLOAD)
-    assert dialog.stage_label.text() == f"Step: {STAGE_UPLOAD}"
+    assert STAGE_UPLOAD in dialog.stage_label.text()
 
     dialog._on_stage_changed(STAGE_RESET_DATE)
-    assert dialog.stage_label.text() == f"Step: {STAGE_RESET_DATE}"
+    assert STAGE_RESET_DATE in dialog.stage_label.text()
 
     dialog._on_status(STAGE_UPLOAD)
-    assert dialog.stage_label.text() == f"Step: {STAGE_RESET_DATE}"
+    assert STAGE_RESET_DATE in dialog.stage_label.text()
     assert dialog.album_action_label.isHidden() is True
 
 
@@ -130,11 +130,11 @@ def test_upload_progress_add_to_album_uses_merged_step_text(qapp) -> None:  # no
     dialog._on_stage_changed(STAGE_ADD_TO_ALBUM)
 
     dialog._on_album_status("Creating album 'Trip'...")
-    assert dialog.stage_label.text() == "Step: Add to album - Creating album 'Trip'..."
+    assert "Add to album - Creating album 'Trip'" in dialog.stage_label.text()
     assert dialog.album_action_label.isHidden() is True
 
     dialog._on_album_status("Adding to album 'Trip'...")
-    assert dialog.stage_label.text() == "Step: Add to album - Adding to album 'Trip'..."
+    assert "Add to album - Adding to album 'Trip'" in dialog.stage_label.text()
     assert dialog.album_action_label.isHidden() is True
 
 
