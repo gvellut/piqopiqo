@@ -309,7 +309,9 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         # FIXME set default to the support dir / cache
         # (Library / Application Support / cache on macos)
         # this is my default.
-        default="/Volumes/CrucialX9Pro/projects/piqopiqo/cache",
+        # FIXME add a check at laucnh : it must be valid. If not : ask to reset to
+        # default or enter new path
+        default="/Volumes/CrucialX8/projects/piqopiqo/cache",
         read_type=str,
     ),
     # TODO default : depends on the platform. This is the default for macos
@@ -324,7 +326,7 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         default=[],
         **_list_of_strings_params,
     ),
-    # FIXME put in State. Add a slider. Beware : due to constraints in the cells
+    # FIXME put in the State. Add a slider. Beware : due to constraints in the cells
     # may not go to 1 or 2 depending on the screen size. So need to check the min num
     # or relax the constraints. Also see if constraints are related to screen or window
     # size
@@ -340,8 +342,9 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         default=[
             StatusLabel("Approved", "#FF0000", 1),
             StatusLabel("Rejected", "#FFFF00", 2),
-            StatusLabel("Verification", "#0000FF", 3),
-            StatusLabel("Uploaded", "#00FF00", 4),
+            StatusLabel("Maybe", "#EA9412", 3),
+            StatusLabel("Review", "#0000FF", 4),
+            StatusLabel("Uploaded", "#00FF00", 5),
         ],
         read_type=str,
         json_storage=True,

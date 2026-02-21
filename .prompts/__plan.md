@@ -1,4 +1,7 @@
+* [Gpx in Folder data](Q_Gpx_in_Folder_data.md)
+- [Dir file selector](R_Dir_file_selector.md)
 - [Model sync 2](M_Model_sync_2.md)
+- [Manual lens](P_Manual_lens.md)
 ! [Fix date read delay if since:last](A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](B_Eject_SD_after_user_OK.md)
     !? [GUI lag](B.A_GUI_lag.md)

@@ -90,9 +90,9 @@ def _write_exif_to_temp_file(
 
     with exiftool.ExifToolHelper(
         executable=exiftool_path,
-        common_args=["-use", "MWG"],
+        common_args=["-use", "MWG", "-overwrite_original", "-n"],
     ) as helper:
-        helper.set_tags(temp_path, tags, params=["-overwrite_original"])
+        helper.set_tags(temp_path, tags, params=[])
 
 
 def _extract_title_and_tags(db_metadata: dict | None) -> tuple[str | None, str | None]:

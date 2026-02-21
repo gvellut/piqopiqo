@@ -147,7 +147,7 @@ SETTINGS_TABS: list[TabSpec] = [
         ],
     ),
     TabSpec(
-        title="External/Workflow",
+        title="External/Tools",
         groups=[
             GroupSpec(
                 title="External Apps",

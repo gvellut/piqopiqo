@@ -170,7 +170,6 @@ class PathEditor(BaseEditor):
                 self,
                 self._browse_title,
                 start_dir,
-                QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.ReadOnly,
             )
 
         if value:
