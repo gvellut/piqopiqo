@@ -6,7 +6,19 @@ from PySide6.QtWidgets import QApplication
 import pytest
 
 from piqopiqo.tools.flickr_upload.albums import FlickrAlbumPlan
-from piqopiqo.tools.flickr_upload.dialogs import FlickrPreflightDialog
+from piqopiqo.tools.flickr_upload.constants import (
+    STAGE_ADD_TO_ALBUM,
+    STAGE_RESET_DATE,
+    STAGE_UPLOAD,
+)
+from piqopiqo.tools.flickr_upload.dialogs import (
+    FlickrPreflightDialog,
+    FlickrUploadProgressDialog,
+)
+from piqopiqo.tools.flickr_upload.manager import (
+    FlickrUploadPhotoFailure,
+    FlickrUploadResult,
+)
 
 
 @pytest.fixture
@@ -82,3 +94,101 @@ def test_preflight_folder_data_link_visibility(qapp) -> None:  # noqa: ARG001
     )
     assert without_link.album_link_label is not None
     assert without_link.album_link_label.isHidden() is True
+
+
+def _mk_upload_dialog() -> FlickrUploadProgressDialog:
+    return FlickrUploadProgressDialog(
+        api_key="k",
+        api_secret="s",
+        exiftool_path="/opt/homebrew/bin/exiftool",
+        upload_items=[
+            {"file_path": "/a.jpg", "order": 0, "db_metadata": None},
+            {"file_path": "/b.jpg", "order": 1, "db_metadata": None},
+        ],
+        album_text="Trip",
+        cached_album_plan=None,
+        set_folder_album_id_callback=lambda _album_id: None,
+    )
+
+
+def test_upload_progress_shows_single_running_step_line(qapp) -> None:  # noqa: ARG001
+    dialog = _mk_upload_dialog()
+
+    dialog._on_stage_changed(STAGE_UPLOAD)
+    assert dialog.stage_label.text() == f"Step: {STAGE_UPLOAD}"
+
+    dialog._on_stage_changed(STAGE_RESET_DATE)
+    assert dialog.stage_label.text() == f"Step: {STAGE_RESET_DATE}"
+
+    dialog._on_status(STAGE_UPLOAD)
+    assert dialog.stage_label.text() == f"Step: {STAGE_RESET_DATE}"
+    assert dialog.album_action_label.isHidden() is True
+
+
+def test_upload_progress_add_to_album_uses_merged_step_text(qapp) -> None:  # noqa: ARG001
+    dialog = _mk_upload_dialog()
+    dialog._on_stage_changed(STAGE_ADD_TO_ALBUM)
+
+    dialog._on_album_status("Creating album 'Trip'...")
+    assert dialog.stage_label.text() == "Step: Add to album - Creating album 'Trip'..."
+    assert dialog.album_action_label.isHidden() is True
+
+    dialog._on_album_status("Adding to album 'Trip'...")
+    assert dialog.stage_label.text() == "Step: Add to album - Adding to album 'Trip'..."
+    assert dialog.album_action_label.isHidden() is True
+
+
+def test_upload_progress_completion_hides_running_widgets_and_shows_summary(  # noqa: ARG001
+    qapp,
+) -> None:
+    dialog = _mk_upload_dialog()
+    dialog._on_stage_changed(STAGE_UPLOAD)
+
+    dialog._on_finished(
+        FlickrUploadResult(
+            total_photos=2,
+            uploaded_count=2,
+            reset_date_count=2,
+            made_public_count=2,
+        )
+    )
+
+    assert dialog.stage_label.isHidden() is True
+    assert dialog.progress_bar.isHidden() is True
+    assert dialog.status_label.isHidden() is False
+    assert dialog.details.isHidden() is False
+    assert dialog.ok_btn.isHidden() is False
+    assert dialog.ok_btn.isEnabled() is True
+
+
+def test_upload_progress_height_tracks_content_changes(qapp) -> None:
+    dialog = _mk_upload_dialog()
+    dialog.show()
+    qapp.processEvents()
+
+    initial_height = dialog.height()
+    assert initial_height < 300
+    assert dialog.minimumHeight() == dialog.maximumHeight() == initial_height
+
+    failures = [
+        FlickrUploadPhotoFailure(
+            file_path="/a.jpg",
+            stage=STAGE_ADD_TO_ALBUM,
+            message="Album operation failed",
+        )
+        for _ in range(6)
+    ]
+    dialog._on_finished(
+        FlickrUploadResult(
+            total_photos=2,
+            uploaded_count=1,
+            reset_date_count=1,
+            made_public_count=1,
+            failures=failures,
+        )
+    )
+    qapp.processEvents()
+
+    final_height = dialog.height()
+    assert dialog.minimumHeight() == dialog.maximumHeight() == final_height
+    assert final_height != initial_height

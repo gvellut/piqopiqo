@@ -33,6 +33,7 @@ from .constants import (
     FOLDER_STATE_LAST_FLICKR_ALBUM_ID,
     STAGE_ADD_TO_ALBUM,
     STAGE_ALBUM_CHECK,
+    STAGE_UPLOAD,
     TOKEN_VALIDATION_ERROR_TEXT,
 )
 from .manager import FlickrUploadManager, FlickrUploadResult
@@ -271,7 +272,7 @@ class FlickrUploadProgressDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Upload to Flickr")
         self.setModal(True)
-        self.setMinimumSize(620, 300)
+        self.setMinimumWidth(620)
 
         self._api_key = api_key
         self._api_secret = api_secret
@@ -285,6 +286,8 @@ class FlickrUploadProgressDialog(QDialog):
         self._token_worker: FlickrTokenValidationWorker | None = None
         self._album_worker: FlickrAlbumCheckWorker | None = None
         self._finished = False
+        self._current_stage = "Validating Flickr token..."
+        self._album_action_text = ""
 
         self.invalid_token = False
         self.result: FlickrUploadResult | None = None
@@ -293,11 +296,12 @@ class FlickrUploadProgressDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        self.status_label = QLabel("Validating Flickr token...")
+        self.status_label = QLabel("")
         self.status_label.setWordWrap(True)
+        self.status_label.hide()
         layout.addWidget(self.status_label)
 
-        self.stage_label = QLabel("Step: -")
+        self.stage_label = QLabel("")
         self.stage_label.setWordWrap(True)
         layout.addWidget(self.stage_label)
 
@@ -329,6 +333,23 @@ class FlickrUploadProgressDialog(QDialog):
         button_row.addWidget(self.ok_btn)
 
         layout.addLayout(button_row)
+        self._update_stage_label()
+        self._sync_height_to_content()
+
+    def _update_stage_label(self) -> None:
+        stage_text = self._current_stage.strip() or "-"
+        if stage_text == STAGE_ADD_TO_ALBUM and self._album_action_text:
+            stage_text = f"{stage_text} - {self._album_action_text}"
+        self.stage_label.setText(f"Step: {stage_text}")
+
+    def _sync_height_to_content(self) -> None:
+        layout = self.layout()
+        if layout is not None:
+            layout.activate()
+        self.adjustSize()
+        target_height = self.sizeHint().height()
+        if target_height > 0:
+            self.setFixedHeight(target_height)
 
     def start(self) -> None:
         worker = FlickrTokenValidationWorker(
@@ -349,10 +370,12 @@ class FlickrUploadProgressDialog(QDialog):
             self.reject()
             return
 
-        self.stage_label.setText(f"Step: {STAGE_ALBUM_CHECK}")
-        self.status_label.setText("Checking album...")
+        self._current_stage = STAGE_ALBUM_CHECK
+        self._album_action_text = ""
+        self._update_stage_label()
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setFormat("")
+        self._sync_height_to_content()
 
         album_text = self._album_text.strip()
         if not album_text:
@@ -389,7 +412,10 @@ class FlickrUploadProgressDialog(QDialog):
         self.progress_bar.setRange(0, max(1, len(self._upload_items)))
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("0/%v")
-        self.status_label.setText("Uploading to Flickr...")
+        self._current_stage = STAGE_UPLOAD
+        self._album_action_text = ""
+        self._update_stage_label()
+        self._sync_height_to_content()
 
         manager = FlickrUploadManager(
             api_key=self._api_key,
@@ -432,12 +458,19 @@ class FlickrUploadProgressDialog(QDialog):
         self.reject()
 
     def _on_stage_changed(self, stage: str) -> None:
-        self.stage_label.setText(f"Step: {stage}")
+        if self._finished:
+            return
+        self._current_stage = str(stage or "").strip() or "-"
         if stage != STAGE_ADD_TO_ALBUM:
-            self.album_action_label.clear()
-            self.album_action_label.hide()
+            self._album_action_text = ""
+        self._update_stage_label()
+        self.album_action_label.clear()
+        self.album_action_label.hide()
+        self._sync_height_to_content()
 
     def _on_progress(self, completed: int, total: int) -> None:
+        if self._finished:
+            return
         if int(total) <= 0:
             self.progress_bar.setRange(0, 0)
             self.progress_bar.setFormat("")
@@ -446,18 +479,22 @@ class FlickrUploadProgressDialog(QDialog):
         self.progress_bar.setValue(max(0, int(completed)))
         self.progress_bar.setFormat(f"{completed}/{total}")
 
-    def _on_status(self, message: str) -> None:
-        if message:
-            self.status_label.setText(message)
+    def _on_status(self, _message: str) -> None:
+        # Keep running-step text driven by stage_changed only to avoid stale
+        # previous-stage status updates overriding the current step label.
+        return
 
     def _on_album_status(self, message: str) -> None:
-        text = str(message or "").strip()
-        if not text:
-            self.album_action_label.clear()
-            self.album_action_label.hide()
+        if self._finished:
             return
-        self.album_action_label.setText(text)
-        self.album_action_label.show()
+        text = str(message or "").strip()
+        if self._current_stage != STAGE_ADD_TO_ALBUM:
+            return
+        self._album_action_text = text
+        self._update_stage_label()
+        self.album_action_label.clear()
+        self.album_action_label.hide()
+        self._sync_height_to_content()
 
     def _on_finished(self, result: FlickrUploadResult) -> None:
         self._finished = True
@@ -477,6 +514,13 @@ class FlickrUploadProgressDialog(QDialog):
             )
 
         self.cancel_btn.setEnabled(False)
+        self.stage_label.hide()
+        self.progress_bar.hide()
+        self.album_action_label.clear()
+        self.album_action_label.hide()
+        self.status_label.show()
+        self.details.clear()
+        self.details.hide()
 
         lines: list[str] = []
         if result.fatal_error:
@@ -532,6 +576,7 @@ class FlickrUploadProgressDialog(QDialog):
         self.ok_btn.setEnabled(True)
         self.ok_btn.show()
         self.ok_btn.setFocus()
+        self._sync_height_to_content()
 
     def _on_cancel(self) -> None:
         if self._token_worker is not None:
