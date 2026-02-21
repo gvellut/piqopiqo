@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from piqopiqo import __version__
+from piqopiqo import __version__ as piqopiqo_version
 from piqopiqo.keyword_utils import parse_keywords
 from piqopiqo.metadata.db_fields import DB_TO_EXIF_WRITE_MAPPING, DBFields
 from piqopiqo.settings_state import APP_NAME
@@ -64,7 +64,7 @@ def build_exif_tags(db_metadata: dict) -> dict:
             tags[exif_config] = value
 
     now = datetime.now().strftime("%Y:%m:%d %H:%M:%S")
-    software_agent = f"{APP_NAME} v{__version__}"
+    software_agent = f"{APP_NAME} v{piqopiqo_version}"
 
     # TODO Add simple history
     tags["XMP-xmpMM:HistoryAction"] = "saved"

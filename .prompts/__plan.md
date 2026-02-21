@@ -1,6 +1,8 @@
-- [Dir file selector](R_Dir_file_selector.md)
+
+- [Flickr dialog](S_Flickr_dialog.md)
+- [Base data redirect to settings](Q_Base_data_redirect_to_settings.md)
 - [Model sync 2](M_Model_sync_2.md)
-- [Manual lens](P_Manual_lens.md)
+- [Manual lens tool](P_Manual_lens.md)
 ! [Fix date read delay if since:last](A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](B_Eject_SD_after_user_OK.md)
     !? [GUI lag](B.A_GUI_lag.md)

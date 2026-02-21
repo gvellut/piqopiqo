@@ -12,7 +12,9 @@ import webbrowser
 from attrs import define
 import flickrapi
 
+from piqopiqo import __version__ as piqopiqo_version
 from piqopiqo.cache_paths import get_flickr_cache_dir, get_flickr_token_file_path
+from piqopiqo.settings_state import APP_NAME
 
 from .constants import FLICKR_REQUIRED_PERMS, FLICKR_TOKEN_DB_FILENAME
 
@@ -53,10 +55,7 @@ def create_flickr_client(
 
     v = _random_suffix(5)
     flickr.flickr_oauth.session.headers.update(
-        {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit"
-            f"/537.36 (KHTML, like Gecko) Chrome/120.0.0.0v{v} Safari/537.3"
-        }
+        {"User-Agent": f"{APP_NAME} v{piqopiqo_version}"}
     )
     return flickr
 
