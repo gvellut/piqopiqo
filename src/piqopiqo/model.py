@@ -26,10 +26,12 @@ class ExifField:
     Attributes:
         key: The exiftool key (e.g., "EXIF:DateTimeOriginal")
         label: Optional display label. If None, uses auto-formatted key or raw key.
+        format: Optional display formatter id used only in the EXIF panel UI.
     """
 
     key: str
     label: str | None = None
+    format: str | None = None
 
 
 @define

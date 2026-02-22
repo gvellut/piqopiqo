@@ -8,12 +8,14 @@ from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 import pytest
 
-from piqopiqo.model import StatusLabel
+from piqopiqo.model import ExifField, StatusLabel
 from piqopiqo.settings_state import (
     RuntimeSettingKey,
     SettingsPanelSaveMode,
     StateKey,
     UserSettingKey,
+    _deserialize_exif_fields,
+    get_effective_exif_panel_fields,
     get_runtime_setting,
     get_state_value,
     get_user_setting,
@@ -204,3 +206,44 @@ def test_dyn_mode_is_memory_only(qcore_app):
     # Nothing persisted to QSettings.
     settings = QSettings()
     assert not settings.contains("Settings/externalEditor")
+
+
+def test_deserialize_exif_fields_accepts_optional_format():
+    fields = _deserialize_exif_fields(
+        [
+            {
+                "key": "Composite:ShutterSpeed",
+                "label": "Shutter",
+                "format": "shutter_speed",
+            },
+            {"key": "EXIF:ISO"},
+            {"key": "EXIF:FNumber", "format": ""},
+        ]
+    )
+
+    assert fields == [
+        ExifField("Composite:ShutterSpeed", "Shutter", "shutter_speed"),
+        ExifField("EXIF:ISO", None, None),
+        ExifField("EXIF:FNumber", None, None),
+    ]
+
+
+def test_effective_exif_panel_fields_merge_custom_fields_dedupes(isolated_settings):
+    set_user_setting(
+        UserSettingKey.CUSTOM_EXIF_FIELDS,
+        [" ", "EXIF:ISO", "File:FileSize", "EXIF:LensModel", "File:FileSize"],
+    )
+
+    fields = get_effective_exif_panel_fields()
+    keys = [field.key for field in fields]
+
+    assert keys[:6] == [
+        "EXIF:FocalLength",
+        "EXIF:FocalLengthIn35mmFormat",
+        "Composite:ShutterSpeed",
+        "EXIF:FNumber",
+        "EXIF:ISO",
+        "File:FileName",
+    ]
+    assert keys[6:] == ["File:FileSize", "EXIF:LensModel"]
+    assert all(field.format is None for field in fields[6:])

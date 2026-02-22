@@ -47,6 +47,7 @@ from .settings_state import (
     RuntimeSettingKey,
     StateKey,
     UserSettingKey,
+    get_effective_exif_panel_field_keys,
     get_runtime_setting,
     get_state,
     get_user_setting,
@@ -1011,6 +1012,15 @@ class MainWindow(QMainWindow):
         if UserSettingKey.NUM_COLUMNS in changed_keys:
             self.grid.set_num_columns(int(get_user_setting(UserSettingKey.NUM_COLUMNS)))
 
+        if UserSettingKey.CUSTOM_EXIF_FIELDS in changed_keys:
+            self.media_manager.refresh_exif_field_keys(
+                get_effective_exif_panel_field_keys()
+            )
+            self.exif_panel.refresh_fields()
+            for item in self._items_by_path.values():
+                item.exif_data = None
+            self._reconcile_selection_and_panels()
+
         if UserSettingKey.STATUS_LABELS in changed_keys:
             self.filter_panel.reload_status_labels()
             self.grid.on_scroll(self.grid.scrollbar.value())
@@ -1553,7 +1563,10 @@ class MainWindow(QMainWindow):
             try:
                 return SortOrder[raw]
             except KeyError:
-                logger.warning("Invalid persisted sort order %r; fallback to FILE_NAME", raw)
+                logger.warning(
+                    "Invalid persisted sort order %r; fallback to FILE_NAME",
+                    raw,
+                )
         return SortOrder.FILE_NAME
 
     def _set_sort_menu_checked(self, order: SortOrder) -> None:

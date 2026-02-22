@@ -202,6 +202,7 @@ def run_combined_task(task: dict) -> dict:
             if want_panel_paths:
                 panel_params = [
                     "-G",
+                    "-n",
                     "-use",
                     "MWG",
                     *_build_panel_tag_args(panel_field_keys),

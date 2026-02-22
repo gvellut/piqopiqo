@@ -22,6 +22,7 @@ from piqopiqo.metadata.metadata_db import MetadataDBManager
 from piqopiqo.settings_state import (
     RuntimeSettingKey,
     UserSettingKey,
+    get_effective_exif_panel_field_keys,
     get_runtime_setting,
     get_user_setting,
 )
@@ -129,9 +130,7 @@ class MediaManager(QObject):
         self._deferred_combined: dict[str, _CombinedNeed] = {}
 
         # EXIF panel field keys
-        self._panel_field_keys: list[str] = [
-            f.key for f in get_runtime_setting(RuntimeSettingKey.EXIF_FIELDS)
-        ]
+        self._panel_field_keys: list[str] = get_effective_exif_panel_field_keys()
 
         # EXIF writing state
         self._write_total = 0
@@ -175,9 +174,7 @@ class MediaManager(QObject):
         self._exif_total = len(file_paths)
         self._exif_completed = 0
 
-        self._panel_field_keys = [
-            f.key for f in get_runtime_setting(RuntimeSettingKey.EXIF_FIELDS)
-        ]
+        self._panel_field_keys = get_effective_exif_panel_field_keys()
 
         for folder in source_folders:
             ensure_thumb_dir(folder)

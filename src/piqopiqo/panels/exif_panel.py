@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import logging
 import re
 
@@ -16,7 +17,11 @@ from PySide6.QtWidgets import (
 
 from piqopiqo.components.ellided_label import EllidedLabel
 from piqopiqo.model import ExifField, ImageItem
-from piqopiqo.settings_state import RuntimeSettingKey, get_runtime_setting
+from piqopiqo.settings_state import (
+    RuntimeSettingKey,
+    get_effective_exif_panel_fields,
+    get_runtime_setting,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +73,66 @@ def get_exif_display_label(field: ExifField) -> str:
     return field.key
 
 
+def _format_number_1_decimal(value: float) -> str:
+    rounded = round(value, 1)
+    if float(rounded).is_integer():
+        return str(int(rounded))
+    return f"{rounded:.1f}"
+
+
+def _format_shutter_speed_value(value: str) -> str:
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return value
+
+    if seconds <= 0:
+        return value
+
+    if seconds < 1:
+        denom = round(1 / seconds)
+        if denom <= 0:
+            return value
+        return f"1/{denom} s"
+
+    return f"{_format_number_1_decimal(seconds)} s"
+
+
+def _format_focal_mm_value(value: str) -> str:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return value
+    return f"{_format_number_1_decimal(numeric)} mm"
+
+
+_EXIF_VALUE_FORMATTERS: dict[str, Callable[[str], str]] = {
+    "shutter_speed": _format_shutter_speed_value,
+    "focal_mm": _format_focal_mm_value,
+}
+
+
+def format_exif_display_value(field: ExifField, value: str) -> str:
+    """Format a raw EXIF value for display in the EXIF panel."""
+    formatter_id = None if field.format is None else str(field.format).strip()
+    if not formatter_id:
+        return value
+
+    formatter = _EXIF_VALUE_FORMATTERS.get(formatter_id)
+    if formatter is None:
+        return value
+
+    try:
+        return formatter(value)
+    except Exception:
+        logger.exception(
+            "Failed to format EXIF field %s with %s",
+            field.key,
+            formatter_id,
+        )
+        return value
+
+
 class ExifPanel(QWidget):
     """Panel for displaying EXIF metadata."""
 
@@ -88,10 +153,10 @@ class ExifPanel(QWidget):
         self._scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         # Create container widget for the grid
-        container = QWidget()
+        self._container = QWidget()
         # Set size policy to prevent vertical expansion
-        container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        self.layout = QGridLayout(container)
+        self._container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.layout = QGridLayout(self._container)
         self.layout.setContentsMargins(10, 10, 10, 10)
         self.layout.setSpacing(
             int(get_runtime_setting(RuntimeSettingKey.EXIF_PANEL_ROW_SPACING))
@@ -100,12 +165,37 @@ class ExifPanel(QWidget):
         self.layout.setColumnStretch(0, int(col_stretch[0]))
         self.layout.setColumnStretch(1, int(col_stretch[1]))
 
-        # Create labels once for all fields
+        self._active_fields: list[ExifField] = []
         self.field_labels = []
         self.value_labels = []
+        self.refresh_fields()
 
-        exif_fields = get_runtime_setting(RuntimeSettingKey.EXIF_FIELDS)
-        for i, field in enumerate(exif_fields):
+        # Set the container as the scroll area's widget
+        self._scroll_area.setWidget(self._container)
+
+        self._scroll_area.viewport().installEventFilter(self)
+        self._scroll_area.verticalScrollBar().installEventFilter(self)
+        self._scroll_area.horizontalScrollBar().installEventFilter(self)
+
+        # Add scroll area to main layout
+        main_layout.addWidget(self._scroll_area)
+
+    def _clear_field_rows(self) -> None:
+        while self.layout.count():
+            item = self.layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        self.field_labels.clear()
+        self.value_labels.clear()
+
+    def refresh_fields(self) -> None:
+        """Rebuild EXIF panel rows from the current effective EXIF field list."""
+        self._active_fields = list(get_effective_exif_panel_fields())
+        self._clear_field_rows()
+
+        for i, field in enumerate(self._active_fields):
             display_label = get_exif_display_label(field)
             field_label = EllidedLabel(display_label)
             value_label = EllidedLabel("")
@@ -117,16 +207,6 @@ class ExifPanel(QWidget):
 
             self.field_labels.append(field_label)
             self.value_labels.append(value_label)
-
-        # Set the container as the scroll area's widget
-        self._scroll_area.setWidget(container)
-
-        self._scroll_area.viewport().installEventFilter(self)
-        self._scroll_area.verticalScrollBar().installEventFilter(self)
-        self._scroll_area.horizontalScrollBar().installEventFilter(self)
-
-        # Add scroll area to main layout
-        main_layout.addWidget(self._scroll_area)
 
     def eventFilter(self, watched, event):
         if event.type() in (QEvent.Type.MouseButtonRelease, QEvent.Type.Wheel):
@@ -142,12 +222,11 @@ class ExifPanel(QWidget):
                 value_label.setToolTip("")
             return
 
-        exif_fields = get_runtime_setting(RuntimeSettingKey.EXIF_FIELDS)
-        for i, field in enumerate(exif_fields):
+        for i, field in enumerate(self._active_fields):
             # Defensive check in case config changed (shouldn't happen at runtime)
             if i >= len(self.value_labels):
                 logger.warning(
-                    f"EXIF_FIELDS has more entries ({len(exif_fields)}) "
+                    f"EXIF panel has more entries ({len(self._active_fields)}) "
                     f"than initialized labels ({len(self.value_labels)})"
                 )
                 break
@@ -165,6 +244,7 @@ class ExifPanel(QWidget):
 
                 if not isinstance(value, str):
                     value = str(value)
+                value = format_exif_display_value(field, value)
                 values.add(value)
 
             value_str = values.pop() if len(values) == 1 else "<Multiple values>"

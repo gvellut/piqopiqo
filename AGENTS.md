@@ -175,8 +175,9 @@ Useful env vars for agent testing:
 ## EXIF Panel Configuration
 
 EXIF fields are defined in `RuntimeSettingKey.EXIF_FIELDS` as a list of `ExifField` objects:
-- `ExifField(key, label)` - key is the exiftool field (e.g., "EXIF:DateTimeOriginal"), label is optional display name
+- `ExifField(key, label, format)` - key is the exiftool field (e.g., "EXIF:DateTimeOriginal"), label is optional display name, `format` is an optional display-only formatter id used by the EXIF panel UI
 - If `label` is None and `EXIF_AUTO_FORMAT` is True, the key is auto-formatted (e.g., "File:FileName" → "File Name")
+- Built-in EXIF panel fields can use display formatters (currently `shutter_speed`, `focal_mm`) without affecting DB values or EXIF writes
 - `format_exif_key(key)` function handles the auto-formatting (removes prefix, adds spaces around capitals)
 
 ## Edit Panel
@@ -269,6 +270,9 @@ Selection behavior:
   - `thumb/hq/<base>.jpg` (HQ thumbnail from full image)
   - Legacy `*_embedded.jpg` / `*_hq.jpg` are migrated best-effort.
 - EXIF panel fields are cached in the per-folder DB (`photo_exif_fields` key/value table).
+- EXIF panel field list is the effective merge of `RuntimeSettingKey.EXIF_FIELDS` + `UserSettingKey.CUSTOM_EXIF_FIELDS` (base fields first, custom fields appended, deduped by key, empty custom keys ignored).
+- `UserSettingKey.CUSTOM_EXIF_FIELDS` changes are applied at runtime: `MainWindow` rebuilds the EXIF panel rows and `MediaManager.refresh_exif_field_keys(...)` incrementally backfills missing EXIF rows (no folder rescan needed).
+- EXIF panel extraction requests use exiftool `-n` (numeric output); EXIF panel display formatters convert those raw values for user display only.
 - Folder watching uses `watchfiles`; internal create/delete actions suppress watcher events briefly to avoid double-processing.
 - Grid memory policy: both embedded and HQ thumbnails are evicted outside their respective buffer ranges. Embedded previews are kept for `RuntimeSettingKey.GRID_EMBEDDED_BUFFER_ROWS` (default 20) rows around the visible area. HQ thumbnails are kept for `RuntimeSettingKey.GRID_THUMB_BUFFER_ROWS` (default 2) rows. If `RuntimeSettingKey.GRID_HQ_THUMB_DELAY_ENABLED` is true, embedded previews are displayed while navigating (scroll/row movement) and HQ is shown after `RuntimeSettingKey.GRID_HQ_THUMB_LOAD_DELAY_MS` of idle time; if false, HQ is preferred immediately in the buffered range. Selection state does not affect which thumbnail quality mode is active. Orientation is pre-applied to `item.pixmap` (the display pixmap) when loaded, not on every paint; rotating invalidates this cache via `item.pixmap = None`.
 - Grid sort/filter changes preserve viewport context by path (not index): the grid scrolls minimally to keep a previously visible selected item visible, or falls back to the previous first visible item / nearest surviving item for filter changes.

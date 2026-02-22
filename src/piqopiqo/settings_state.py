@@ -209,10 +209,14 @@ def _deserialize_exif_fields(data: Any) -> list[ExifField]:
         label = row.get("label")
         if label is not None:
             label = str(label)
+        fmt = row.get("format")
+        if fmt is not None:
+            fmt = str(fmt).strip() or None
         out.append(
             ExifField(
                 key=str(row.get("key", "")),
                 label=label,
+                format=fmt,
             )
         )
     return out
@@ -467,9 +471,13 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.EXIF_AUTO_FORMAT: SettingDef(default=True, read_type=bool),
     RuntimeSettingKey.EXIF_FIELDS: SettingDef(
         default=[
-            ExifField("EXIF:FocalLength"),
-            ExifField("EXIF:FocalLengthIn35mmFormat", "Focal Length (35 mm)"),
-            ExifField("Composite:ShutterSpeed", "Shutter Speed"),
+            ExifField("EXIF:FocalLength", format="focal_mm"),
+            ExifField(
+                "EXIF:FocalLengthIn35mmFormat",
+                "Focal Length (35 mm)",
+                "focal_mm",
+            ),
+            ExifField("Composite:ShutterSpeed", "Shutter Speed", "shutter_speed"),
             ExifField("EXIF:FNumber", "F-Number"),
             ExifField("EXIF:ISO"),
             ExifField("File:FileName", "File Name"),
@@ -703,6 +711,40 @@ def set_user_setting(key: UserSettingKey, value: object) -> None:
 
 def get_runtime_setting(key: RuntimeSettingKey):
     return get_qsettings_store().get_runtime_setting(key)
+
+
+def get_effective_exif_panel_fields() -> list[ExifField]:
+    """Return EXIF panel fields: built-ins plus user custom fields.
+
+    Built-in runtime fields keep their order and labels/formatters.
+    User custom fields are appended, deduped by key, and use default label/formatter
+    behavior (label=None, format=None).
+    """
+    base_fields = list(get_runtime_setting(RuntimeSettingKey.EXIF_FIELDS))
+    custom_keys = list(get_user_setting(UserSettingKey.CUSTOM_EXIF_FIELDS) or [])
+
+    out: list[ExifField] = []
+    seen_keys: set[str] = set()
+
+    for field in base_fields:
+        key = str(field.key).strip()
+        if not key or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        out.append(field)
+
+    for raw_key in custom_keys:
+        key = str(raw_key).strip()
+        if not key or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        out.append(ExifField(key=key))
+
+    return out
+
+
+def get_effective_exif_panel_field_keys() -> list[str]:
+    return [field.key for field in get_effective_exif_panel_fields()]
 
 
 # Backward-compatible aliases for existing callsites.
