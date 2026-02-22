@@ -420,7 +420,6 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.GRID_ITEM_SHOW_LABEL_SWATCH: SettingDef(
         default=True, read_type=bool
     ),
-    RuntimeSettingKey.EXIF_AUTO_FORMAT: SettingDef(default=True, read_type=bool),
     RuntimeSettingKey.MAX_WORKERS: SettingDef(default=4, read_type=int),
     RuntimeSettingKey.TIMESHIFT_CACHE_NUM: SettingDef(default=10, read_type=int),
     RuntimeSettingKey.FLICKR_UPLOAD_MAX_WORKERS: SettingDef(default=2, read_type=int),
@@ -465,13 +464,14 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
         read_type=str,
         env_parser=_parse_list_of_str,
     ),
+    RuntimeSettingKey.EXIF_AUTO_FORMAT: SettingDef(default=True, read_type=bool),
     RuntimeSettingKey.EXIF_FIELDS: SettingDef(
         default=[
             ExifField("EXIF:FocalLength"),
+            ExifField("EXIF:FocalLengthIn35mmFormat", "Focal Length (35 mm)"),
             ExifField("Composite:ShutterSpeed", "Shutter Speed"),
             ExifField("EXIF:FNumber", "F-Number"),
             ExifField("EXIF:ISO"),
-            ExifField("EXIF:DateTimeOriginal", "Date/Time Original"),
             ExifField("File:FileName", "File Name"),
         ],
         read_type=str,
