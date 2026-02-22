@@ -91,7 +91,7 @@ SETTINGS_TABS: list[TabSpec] = [
                         max_value=50,
                     ),
                     FieldSpec(
-                        key=UserSettingKey.ON_FULLSCREEN_EXIT,
+                        key=UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE,
                         label="Fullscreen Exit Behavior",
                         editor=EditorKind.CHOICE,
                         choices=[

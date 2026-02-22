@@ -104,7 +104,7 @@ tests/
 ## Key Features
 
 - **Grid view**: Thumbnails with configurable columns, lazy loading
-- **Fullscreen**: Full resolution with zoom/pan, keyboard navigation
+- **Fullscreen**: Full resolution with zoom/pan, keyboard navigation. The fullscreen view can be started with a single image selected (then it can go on a user-controlled loop through the complete image list) OR it is started with a list of selected images (then it can go on a loop though those images).
 - **EXIF panel**: Read-only EXIF data display (uses pyexiftool)
 - **Edit panel**: Editable metadata (title, description, keywords, coordinates, time taken)
 - **Filter panel**: Fields to use for filtering the images displayed on the photo grid
@@ -147,6 +147,7 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - `RuntimeSettingKey` values are memory-only (not written to QSettings)
 - Resolution priority is: env var > persisted value (user settings only) > default
 - `UserSettingKey.FILTER_IN_FULLSCREEN` (default `False`) controls whether fullscreen immediately drops label-filtered-out images from the navigation loop after label shortcut changes
+- `UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE` (default : `KEEP_SELECTION`) controls whether exiting from fullscreen keeps all the images selected or just the last, if the fullscreen naviagation was started with multiple selected images (instead of a single image and a loop through all the current image list).
 
 Useful env vars for agent testing:
 

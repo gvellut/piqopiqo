@@ -63,7 +63,7 @@ class UserSettingKey(StrEnum):
     EXIFTOOL_PATH = "exiftoolPath"
     CUSTOM_EXIF_FIELDS = "customExifFields"
     NUM_COLUMNS = "numColumns"
-    ON_FULLSCREEN_EXIT = "onFullscreenExit"
+    ON_FULLSCREEN_EXIT_SELECTION_MODE = "onFullscreenExit"
     STATUS_LABELS = "statusLabels"
     EXTERNAL_VIEWER = "externalViewer"
     EXTERNAL_EDITOR = "externalEditor"
@@ -252,13 +252,17 @@ def _deserialize_shortcuts(data: Any) -> dict[Shortcut, str]:
     return out
 
 
-def _serialize_on_fullscreen_exit(value: OnFullscreenExitMultipleSelected | str) -> str:
+def _serialize_on_fullscreen_exit_selection_mode(
+    value: OnFullscreenExitMultipleSelected | str,
+) -> str:
     if isinstance(value, OnFullscreenExitMultipleSelected):
         return value.value
     return str(value)
 
 
-def _deserialize_on_fullscreen_exit(data: Any) -> OnFullscreenExitMultipleSelected:
+def _deserialize_on_fullscreen_exit_selection_mode(
+    data: Any,
+) -> OnFullscreenExitMultipleSelected:
     raw = str(data)
     try:
         return OnFullscreenExitMultipleSelected(raw)
@@ -331,12 +335,12 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
     # or relax the constraints. Also see if constraints are related to screen or window
     # size
     UserSettingKey.NUM_COLUMNS: SettingDef(default=6, read_type=int),
-    UserSettingKey.ON_FULLSCREEN_EXIT: SettingDef(
+    UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE: SettingDef(
         default=OnFullscreenExitMultipleSelected.KEEP_SELECTION,
         read_type=str,
-        serializer=_serialize_on_fullscreen_exit,
-        deserializer=_deserialize_on_fullscreen_exit,
-        env_parser=_deserialize_on_fullscreen_exit,
+        serializer=_serialize_on_fullscreen_exit_selection_mode,
+        deserializer=_deserialize_on_fullscreen_exit_selection_mode,
+        env_parser=_deserialize_on_fullscreen_exit_selection_mode,
     ),
     UserSettingKey.STATUS_LABELS: SettingDef(
         default=[

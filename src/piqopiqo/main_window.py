@@ -1173,7 +1173,7 @@ class MainWindow(QMainWindow):
             if (
                 self._fullscreen_started_with_multi_selection
                 and last_viewed_idx is not None
-                and get_user_setting(UserSettingKey.ON_FULLSCREEN_EXIT)
+                and get_user_setting(UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE)
                 == OnFullscreenExitMultipleSelected.SELECT_LAST_VIEWED
             ):
                 self.grid.on_cell_clicked(last_viewed_idx, False, False)
