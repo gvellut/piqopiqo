@@ -29,5 +29,7 @@ ou bien qqch diff si pas sélectionnées ? non faire qqch de plus cohérent pour
 + shortcut pour remettre dans la liste si ejecté en fullscreen ?
 
 
+- Also remmember : once an image disappears from the grid (because it was filtered out) : it is no longer selected. The only exception is when fullscreen : the image can still be part of the loop (if Filter in fullscreen option set to False) so even after a change of status when it is filtered out, another change of status can be performed so that it will make it filtered in. If exiting from fullscreen on it : the image is still in the grid AND is selected (if loop with selected photos : it is still part of the selected photos ; if loop with all the photos : the photo on exit from fullscreen is selected => check if is implemented like that)
+
 
 - When doing Edit in ... (EXTERNAL_EDITOR processing cf config.py ; _edit_in_external_app in src/piqopiqo/main_window.py) : change selected item in grid to the newly duplicated files.

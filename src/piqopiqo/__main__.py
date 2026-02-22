@@ -57,12 +57,43 @@ def suppress_macos_menus():
         defaults.setBool_forKey_(True, "NSDisabledPasswordsMenuItem")
 
 
+def patch_cpython_dummy_thread_finalizer() -> None:
+    """Work around CPython 3.13 DummyThread finalizer shutdown bug.
+
+    Qt/QThreadPool worker threads can appear as threading._DummyThread instances.
+    On interpreter shutdown, CPython 3.13 may run _DeleteDummyThreadOnDel.__del__
+    after threading globals are torn down, causing a noisy ignored exception.
+    """
+    deleter_cls = getattr(threading, "_DeleteDummyThreadOnDel", None)
+    if deleter_cls is None:
+        return
+    if getattr(deleter_cls, "_piqo_safe_del_patched", False):
+        return
+
+    def _safe_del(self):
+        lock = getattr(threading, "_active_limbo_lock", None)
+        active = getattr(threading, "_active", None)
+        if lock is None or active is None:
+            return
+        try:
+            with lock:
+                if active.get(self._tident) is self._dummy_thread:
+                    active.pop(self._tident, None)
+        except Exception:
+            # Best-effort cleanup only; never raise during finalization.
+            return
+
+    deleter_cls.__del__ = _safe_del
+    deleter_cls._piqo_safe_del_patched = True
+
+
 @click.command()
 @click.argument("folder", type=click.Path(exists=True), required=False)
 @click.option("--dyn", is_flag=True, default=False, help="Ignore saved state/settings")
 def cli(folder, dyn):
     logger = logging.getLogger(__package__)
     setup_logging(logger)
+    patch_cpython_dummy_thread_finalizer()
 
     suppress_macos_menus()
 

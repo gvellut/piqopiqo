@@ -13,6 +13,10 @@ def drain_qthread_pool(
     pool: QThreadPool, timeout_ms: int, *, clear_queued: bool = True
 ) -> bool:
     """Bounded shutdown helper for QThreadPool-backed background work."""
+    # Expire idle Qt pool threads immediately during shutdown so the Python
+    # interpreter is less likely to outlive thread finalizers.
+    if hasattr(pool, "setExpiryTimeout"):
+        pool.setExpiryTimeout(0)
     if clear_queued:
         pool.clear()
     return bool(pool.waitForDone(max(0, int(timeout_ms))))

@@ -1,5 +1,4 @@
 
-* [Error on exiting](U_Error_on_exiting.md)
 - [Base data redirect to settings](Q_Base_data_redirect_to_settings.md)
 - [Model sync 2](M_Model_sync_2.md)
 - [Manual lens tool](P_Manual_lens.md)
@@ -31,3 +30,5 @@
     !? [Correct Enter save settings](O.C_Correct_Enter_save_settings.md)
 ! [Gpx in Folder data](Q_Gpx_in_Folder_data.md)
 ! [Flickr dialog](S_Flickr_dialog.md)
+! [Error on exiting](U_Error_on_exiting.md)
+    !? [Fix context manager protocol error on exit](U.A_Fix_context_manager_protocol_error_on_exit.md)
