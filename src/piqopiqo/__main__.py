@@ -57,6 +57,8 @@ def suppress_macos_menus():
         defaults.setBool_forKey_(True, "NSDisabledPasswordsMenuItem")
 
 
+# does not seem necessary in 3.14
+# keep it around just in case
 def patch_cpython_dummy_thread_finalizer() -> None:
     """Work around CPython 3.13 DummyThread finalizer shutdown bug.
 
@@ -93,7 +95,7 @@ def patch_cpython_dummy_thread_finalizer() -> None:
 def cli(folder, dyn):
     logger = logging.getLogger(__package__)
     setup_logging(logger)
-    patch_cpython_dummy_thread_finalizer()
+    # patch_cpython_dummy_thread_finalizer()
 
     suppress_macos_menus()
 

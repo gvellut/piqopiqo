@@ -315,7 +315,7 @@ Selection behavior:
 - In the Labels + Shortcuts tab, `Add Label` uses `NoFocus` policy so tab switches do not auto-focus it with the blue focus ring.
 - Quit-time cleanup is split in two phases: `MainWindow.closeEvent` stays fast (state persistence only), while heavy teardown runs from `QApplication.aboutToQuit`.
 - Metadata-save `QThreadPool`s (label shortcut saves and edit panel saves) are drained on quit with bounded wait semantics (`clear()` queued tasks, then `waitForDone()` up to `SHUTDOWN_TIMEOUT_S`) before DB connections are closed.
-- On CPython 3.13, app startup patches `threading._DeleteDummyThreadOnDel.__del__` defensively to suppress a known interpreter-shutdown race (`_active_limbo_lock` becoming `None`) that can be triggered by Qt worker threads.
+- On CPython 3.13, app startup patches `threading._DeleteDummyThreadOnDel.__del__` defensively to suppress a known interpreter-shutdown race (`_active_limbo_lock` becoming `None`) that can be triggered by Qt worker threads. Switched the pyproject.toml to 3.14.
 
 
 ## Development
