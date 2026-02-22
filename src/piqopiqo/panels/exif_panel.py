@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import (
     QGridLayout,
     QScrollArea,
@@ -71,6 +71,8 @@ def get_exif_display_label(field: ExifField) -> str:
 class ExifPanel(QWidget):
     """Panel for displaying EXIF metadata."""
 
+    interaction_finished = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -80,10 +82,10 @@ class ExifPanel(QWidget):
         main_layout.setSpacing(0)
 
         # Create scroll area
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._scroll_area = QScrollArea()
+        self._scroll_area.setWidgetResizable(True)
+        self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         # Create container widget for the grid
         container = QWidget()
@@ -117,10 +119,19 @@ class ExifPanel(QWidget):
             self.value_labels.append(value_label)
 
         # Set the container as the scroll area's widget
-        scroll_area.setWidget(container)
+        self._scroll_area.setWidget(container)
+
+        self._scroll_area.viewport().installEventFilter(self)
+        self._scroll_area.verticalScrollBar().installEventFilter(self)
+        self._scroll_area.horizontalScrollBar().installEventFilter(self)
 
         # Add scroll area to main layout
-        main_layout.addWidget(scroll_area)
+        main_layout.addWidget(self._scroll_area)
+
+    def eventFilter(self, watched, event):
+        if event.type() in (QEvent.Type.MouseButtonRelease, QEvent.Type.Wheel):
+            self.interaction_finished.emit()
+        return super().eventFilter(watched, event)
 
     def update_exif(self, items: list[ImageItem]):
         """Update the panel with EXIF data from the given items."""

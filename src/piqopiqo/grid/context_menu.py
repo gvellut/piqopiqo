@@ -116,6 +116,11 @@ def edit_in_external_app(window: MainWindow, photos: list[ImageItem]) -> None:
             logger.error(f"Failed to duplicate {photo.path}: {e}")
 
     if duplicated_paths:
+        window.select_paths_in_grid(
+            duplicated_paths,
+            anchor_path=duplicated_paths[-1],
+            reveal_path=duplicated_paths[-1],
+        )
         open_in_external_app(
             get_user_setting(UserSettingKey.EXTERNAL_EDITOR),
             duplicated_paths,

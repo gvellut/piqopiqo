@@ -52,6 +52,7 @@ class PhotoGrid(QWidget):
         self.n_rows = 1
         self.items_data = []
         self._last_selected_index = -1
+        self._last_selected_path: str | None = None
         self.layout_info = {}
 
         # Main Layout: Grid Container + Scrollbar
@@ -89,6 +90,7 @@ class PhotoGrid(QWidget):
         self._wheel_streak_count = 0
 
     def set_data(self, items):
+        previous_anchor_path = self._last_selected_path
         # Inject index for click handling (preserve selection state)
         for i, item in enumerate(items):
             item._global_index = i
@@ -102,10 +104,104 @@ class PhotoGrid(QWidget):
 
         # Update last selected index based on current selection
         selected = [i for i, item in enumerate(items) if item.is_selected]
-        self._last_selected_index = selected[-1] if selected else -1
+        if selected and previous_anchor_path is not None:
+            anchor_idx = self.get_index_for_path(previous_anchor_path)
+            if anchor_idx is not None and self.items_data[anchor_idx].is_selected:
+                self._set_selection_anchor(anchor_idx)
+            else:
+                self._set_selection_anchor(selected[-1])
+        elif selected:
+            self._set_selection_anchor(selected[-1])
+        else:
+            self._set_selection_anchor(-1)
 
         self._recalculate_scrollbar()
         self._render_current_view()
+
+    def get_index_for_path(self, path: str) -> int | None:
+        for i, item in enumerate(self.items_data):
+            if item.path == path:
+                return i
+        return None
+
+    def get_viewport_visible_indices(self) -> list[int]:
+        if not self.items_data or self.n_cols <= 0 or self.n_rows <= 0:
+            return []
+        start_idx = int(self.scrollbar.value()) * self.n_cols
+        end_idx = min(len(self.items_data), start_idx + (self.n_rows * self.n_cols))
+        return list(range(start_idx, end_idx))
+
+    def get_viewport_visible_paths(self) -> list[str]:
+        return [self.items_data[i].path for i in self.get_viewport_visible_indices()]
+
+    def get_viewport_selected_paths(self) -> list[str]:
+        result: list[str] = []
+        for i in self.get_viewport_visible_indices():
+            item = self.items_data[i]
+            if item.is_selected:
+                result.append(item.path)
+        return result
+
+    def select_paths(
+        self,
+        paths: list[str],
+        *,
+        anchor_path: str | None = None,
+    ) -> set[int]:
+        path_set = set(paths)
+        selected_indices: set[int] = set()
+        for i, item in enumerate(self.items_data):
+            item.is_selected = item.path in path_set
+            if item.is_selected:
+                selected_indices.add(i)
+
+        anchor_index = None
+        if anchor_path is not None:
+            idx = self.get_index_for_path(anchor_path)
+            if idx is not None and idx in selected_indices:
+                anchor_index = idx
+
+        if anchor_index is None:
+            for path in reversed(paths):
+                idx = self.get_index_for_path(path)
+                if idx is not None and idx in selected_indices:
+                    anchor_index = idx
+                    break
+
+        if anchor_index is None:
+            if selected_indices:
+                anchor_index = max(selected_indices)
+            else:
+                anchor_index = -1
+
+        self._set_selection_anchor(anchor_index)
+        self.selection_changed.emit(selected_indices)
+        self._render_current_view()
+        return selected_indices
+
+    def _set_selection_anchor(self, index: int) -> None:
+        if 0 <= index < len(self.items_data):
+            self._last_selected_index = index
+            self._last_selected_path = self.items_data[index].path
+        else:
+            self._last_selected_index = -1
+            self._last_selected_path = None
+
+    def _choose_anchor_from_current_selection(self) -> int:
+        if not self.items_data:
+            return -1
+
+        if self._last_selected_path is not None:
+            idx = self.get_index_for_path(self._last_selected_path)
+            if idx is not None and self.items_data[idx].is_selected:
+                return idx
+
+        if 0 <= self._last_selected_index < len(self.items_data):
+            if self.items_data[self._last_selected_index].is_selected:
+                return self._last_selected_index
+
+        selected = [i for i, item in enumerate(self.items_data) if item.is_selected]
+        return selected[-1] if selected else -1
 
     def set_num_columns(self, num_columns: int) -> None:
         cols = max(1, int(num_columns))
@@ -538,31 +634,37 @@ class PhotoGrid(QWidget):
         if global_index == -1:
             for item in self.items_data:
                 item.is_selected = False
-            self._last_selected_index = -1
+            self._set_selection_anchor(-1)
             self.selection_changed.emit(set())
             self._render_current_view()
             return
 
         if is_ctrl:
-            self.items_data[global_index].is_selected = not self.items_data[
-                global_index
-            ].is_selected
+            item = self.items_data[global_index]
+            item.is_selected = not item.is_selected
+            if item.is_selected:
+                self._set_selection_anchor(global_index)
+            elif self._last_selected_path == item.path:
+                self._set_selection_anchor(self._choose_anchor_from_current_selection())
         elif is_shift:
-            if self._last_selected_index != -1:
-                start = min(self._last_selected_index, global_index)
-                end = max(self._last_selected_index, global_index)
+            anchor_index = self._choose_anchor_from_current_selection()
+            if anchor_index != -1:
+                start = min(anchor_index, global_index)
+                end = max(anchor_index, global_index)
                 for i in range(start, end + 1):
                     self.items_data[i].is_selected = True
+            self._set_selection_anchor(global_index)
         else:
             for item in self.items_data:
                 item.is_selected = False
             self.items_data[global_index].is_selected = True
-
-        self._last_selected_index = global_index
+            self._set_selection_anchor(global_index)
 
         selected_indices = {
             i for i, item in enumerate(self.items_data) if item.is_selected
         }
+        if not selected_indices:
+            self._set_selection_anchor(-1)
         self.selection_changed.emit(selected_indices)
 
         self._render_current_view()
@@ -583,7 +685,7 @@ class PhotoGrid(QWidget):
             for item in self.items_data:
                 item.is_selected = False
             self.items_data[global_index].is_selected = True
-            self._last_selected_index = global_index
+            self._set_selection_anchor(global_index)
 
             selected_indices = {global_index}
             self.selection_changed.emit(selected_indices)
@@ -655,14 +757,17 @@ class PhotoGrid(QWidget):
         # Handle navigation
         if len(selected_indices) > 1:
             # Multi-selection: collapse and move
+            anchor_index = self._choose_anchor_from_current_selection()
+            if anchor_index == -1:
+                anchor_index = selected_indices[-1]
             if key == Qt.Key_Left:
-                new_index = min(selected_indices) - 1
+                new_index = anchor_index - 1
             elif key == Qt.Key_Right:
-                new_index = max(selected_indices) + 1
+                new_index = anchor_index + 1
             elif key == Qt.Key_Up:
-                new_index = min(selected_indices) - self.n_cols
+                new_index = anchor_index - self.n_cols
             elif key == Qt.Key_Down:
-                new_index = max(selected_indices) + self.n_cols
+                new_index = anchor_index + self.n_cols
             else:
                 super().keyPressEvent(event)
                 return

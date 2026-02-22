@@ -38,6 +38,7 @@ class EditPanel(QWidget):
     """Panel for editing photo metadata."""
 
     edit_finished = Signal()  # Emitted when editing is complete (for focus return)
+    interaction_finished = Signal()  # Explicit user completion/cancel for focus restore
     metadata_saved = Signal(str)  # DBFields name for synchronization
 
     def __init__(self, db_manager: MetadataDBManager, parent=None):
@@ -95,7 +96,9 @@ class EditPanel(QWidget):
         self.title_edit.edit_finished.connect(
             lambda: self._on_field_saved(DBFields.TITLE)
         )
+        self.title_edit.edit_finished_explicit.connect(self.interaction_finished.emit)
         self.title_edit.edit_cancelled.connect(self._on_edit_cancelled)
+        self.title_edit.edit_cancelled.connect(self.interaction_finished.emit)
         self.layout.addWidget(self.title_edit, row, 1)
         row += 1
 
@@ -106,7 +109,11 @@ class EditPanel(QWidget):
         self.description_edit.edit_finished.connect(
             lambda: self._on_field_saved(DBFields.DESCRIPTION)
         )
+        self.description_edit.edit_finished_explicit.connect(
+            self.interaction_finished.emit
+        )
         self.description_edit.edit_cancelled.connect(self._on_edit_cancelled)
+        self.description_edit.edit_cancelled.connect(self.interaction_finished.emit)
         self.layout.addWidget(self.description_edit, row, 1)
         row += 1
 
@@ -118,7 +125,9 @@ class EditPanel(QWidget):
         self.lat_edit.edit_finished.connect(
             lambda: self._on_field_saved(DBFields.LATITUDE)
         )
+        self.lat_edit.edit_finished_explicit.connect(self.interaction_finished.emit)
         self.lat_edit.edit_cancelled.connect(self._on_edit_cancelled)
+        self.lat_edit.edit_cancelled.connect(self.interaction_finished.emit)
         self.layout.addWidget(self.lat_edit, row, 1)
         row += 1
 
@@ -130,7 +139,9 @@ class EditPanel(QWidget):
         self.lon_edit.edit_finished.connect(
             lambda: self._on_field_saved(DBFields.LONGITUDE)
         )
+        self.lon_edit.edit_finished_explicit.connect(self.interaction_finished.emit)
         self.lon_edit.edit_cancelled.connect(self._on_edit_cancelled)
+        self.lon_edit.edit_cancelled.connect(self.interaction_finished.emit)
         self.layout.addWidget(self.lon_edit, row, 1)
         row += 1
 
@@ -142,7 +153,11 @@ class EditPanel(QWidget):
         self.keywords_edit.edit_finished.connect(
             lambda: self._on_field_saved(DBFields.KEYWORDS)
         )
+        self.keywords_edit.edit_finished_explicit.connect(
+            self.interaction_finished.emit
+        )
         self.keywords_edit.edit_cancelled.connect(self._on_edit_cancelled)
+        self.keywords_edit.edit_cancelled.connect(self.interaction_finished.emit)
         self.layout.addWidget(self.keywords_edit, row, 1)
         row += 1
 
@@ -161,7 +176,9 @@ class EditPanel(QWidget):
         self.time_edit.edit_finished.connect(
             lambda: self._on_field_saved(DBFields.TIME_TAKEN)
         )
+        self.time_edit.edit_finished_explicit.connect(self.interaction_finished.emit)
         self.time_edit.edit_cancelled.connect(self._on_edit_cancelled)
+        self.time_edit.edit_cancelled.connect(self.interaction_finished.emit)
         self.layout.addWidget(self.time_edit, row, 1)
 
         scroll_area.setWidget(container)
@@ -398,10 +415,13 @@ class EditPanel(QWidget):
             parent=self,
         )
 
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            modifications = dialog.get_modifications()
-            if modifications:
-                self._apply_keyword_modifications(modifications)
+        try:
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                modifications = dialog.get_modifications()
+                if modifications:
+                    self._apply_keyword_modifications(modifications)
+        finally:
+            self.interaction_finished.emit()
 
     def _apply_keyword_modifications(self, modifications: dict[str, bool]):
         """Apply keyword modifications to all selected items.

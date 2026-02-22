@@ -129,6 +129,14 @@ class FullscreenOverlay(QWidget):
                     paths.append(path)
         return paths
 
+    def get_all_paths(self) -> list[str]:
+        paths: list[str] = []
+        for item in self.all_items:
+            path = getattr(item, "path", None)
+            if isinstance(path, str):
+                paths.append(path)
+        return paths
+
     def get_current_path(self) -> str | None:
         if not self.visible_indices:
             return None
@@ -145,6 +153,12 @@ class FullscreenOverlay(QWidget):
     def rebind_to_paths(
         self, paths: list[str], preferred_path: str | None = None
     ) -> bool:
+        old_global_index = None
+        if self.visible_indices and (
+            0 <= self.current_visible_idx < len(self.visible_indices)
+        ):
+            old_global_index = self.visible_indices[self.current_visible_idx]
+
         path_to_index: dict[str, int] = {}
         for i, item in enumerate(self.all_items):
             path = getattr(item, "path", None)
@@ -177,6 +191,9 @@ class FullscreenOverlay(QWidget):
             self.current_visible_idx = preferred_index
 
         self._load_current_image()
+        new_global_index = self.visible_indices[self.current_visible_idx]
+        if new_global_index != old_global_index:
+            self.index_changed.emit(new_global_index)
         return True
 
     def _setup_zoom_overlay(self):

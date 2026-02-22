@@ -95,6 +95,9 @@ class MainWindow(QMainWindow):
         # Folder filter panel (at top)
         self.filter_panel = FilterPanel()
         self.filter_panel.filter_changed.connect(self._on_filter_changed)
+        self.filter_panel.interaction_finished.connect(
+            self._schedule_grid_focus_restore
+        )
         main_layout.addWidget(self.filter_panel, 0)
 
         # Main horizontal splitter: grid | right panel(s)
@@ -111,10 +114,16 @@ class MainWindow(QMainWindow):
 
             self.edit_panel = EditPanel(self.db_manager)
             self.edit_panel.edit_finished.connect(self._on_edit_finished)
+            self.edit_panel.interaction_finished.connect(
+                self._schedule_grid_focus_restore
+            )
             self.edit_panel.metadata_saved.connect(self._on_edit_panel_metadata_saved)
             self._right_splitter.addWidget(self.edit_panel)
 
             self.exif_panel = ExifPanel()
+            self.exif_panel.interaction_finished.connect(
+                self._schedule_grid_focus_restore
+            )
             self._right_splitter.addWidget(self.exif_panel)
 
             # Split evenly between edit and exif panels
@@ -124,6 +133,9 @@ class MainWindow(QMainWindow):
         else:
             self.edit_panel = None
             self.exif_panel = ExifPanel()
+            self.exif_panel.interaction_finished.connect(
+                self._schedule_grid_focus_restore
+            )
             self._main_splitter.addWidget(self.exif_panel)
 
         self._main_splitter.setSizes([int(self.width() * 0.8), int(self.width() * 0.2)])
@@ -191,6 +203,8 @@ class MainWindow(QMainWindow):
         # Set up keyboard shortcuts
         self._label_save_pool = QThreadPool()
         self._shortcut_objects: list[QShortcut] = []
+        self._grid_label_shortcut_objects: list[QShortcut] = []
+        self._fullscreen_label_shortcut_objects: list[QShortcut] = []
         self._setup_shortcuts()
 
         # Undo state for label changes
@@ -212,48 +226,24 @@ class MainWindow(QMainWindow):
         return self.photo_model.all_photos
 
     def _setup_shortcuts(self):
-        """Set up application-wide keyboard shortcuts from user settings."""
-        for sc in self._shortcut_objects:
-            sc.setParent(None)
-            sc.deleteLater()
-        self._shortcut_objects = []
+        """Set up keyboard shortcuts from user settings."""
+        self._clear_shortcut_bucket(self._shortcut_objects)
+        self._clear_shortcut_bucket(self._grid_label_shortcut_objects)
+        self._clear_shortcut_bucket(self._fullscreen_label_shortcut_objects)
 
         shortcuts = get_user_setting(UserSettingKey.SHORTCUTS)
-        status_labels = get_user_setting(UserSettingKey.STATUS_LABELS)
 
-        # Label shortcuts (1-9 and backtick) - application-wide
-        for i in range(1, 10):
-            shortcut_enum = Shortcut(f"LABEL_{i}")
-            if shortcut_enum in shortcuts:
-                # Find label with matching index
-                label_name = None
-                for sl in status_labels:
-                    if sl.index == i:
-                        label_name = sl.name
-                        break
-
-                # do not set to no label if no shortcut defined
-                if label_name is None:
-                    continue
-
-                sc = QShortcut(
-                    parse_shortcut(shortcuts[shortcut_enum]),
-                    self,
-                )
-                sc.setContext(Qt.ApplicationShortcut)
-
-                sc.activated.connect(partial(self._apply_label, label_name))
-                self._shortcut_objects.append(sc)
-
-        # No-label shortcut (backtick)
-        if Shortcut.LABEL_NONE in shortcuts:
-            sc = QShortcut(
-                parse_shortcut(shortcuts[Shortcut.LABEL_NONE]),
-                self,
+        self._install_label_shortcuts(
+            self.grid,
+            self._grid_label_shortcut_objects,
+            self._apply_label_to_grid_selection,
+        )
+        if self._fullscreen_overlay is not None:
+            self._install_label_shortcuts(
+                self._fullscreen_overlay,
+                self._fullscreen_label_shortcut_objects,
+                self._apply_label_to_fullscreen_current,
             )
-            sc.setContext(Qt.ApplicationShortcut)
-            sc.activated.connect(partial(self._apply_label, None))
-            self._shortcut_objects.append(sc)
 
         # Select All shortcut
         if Shortcut.SELECT_ALL in shortcuts:
@@ -265,6 +255,53 @@ class MainWindow(QMainWindow):
             sc.activated.connect(self._select_all_photos)
             self._shortcut_objects.append(sc)
 
+    def _clear_shortcut_bucket(self, bucket: list[QShortcut]) -> None:
+        for sc in bucket:
+            try:
+                sc.setParent(None)
+                sc.deleteLater()
+            except RuntimeError:
+                # Parent widget may already be deleted (e.g. fullscreen overlay).
+                pass
+        bucket.clear()
+
+    def _iter_label_shortcut_bindings(self) -> list[tuple[str, str | None]]:
+        shortcuts = get_user_setting(UserSettingKey.SHORTCUTS)
+        status_labels = get_user_setting(UserSettingKey.STATUS_LABELS)
+        bindings: list[tuple[str, str | None]] = []
+
+        for i in range(1, 10):
+            shortcut_enum = Shortcut(f"LABEL_{i}")
+            if shortcut_enum not in shortcuts:
+                continue
+
+            label_name = None
+            for status_label in status_labels:
+                if status_label.index == i:
+                    label_name = status_label.name
+                    break
+            if label_name is None:
+                continue
+
+            bindings.append((shortcuts[shortcut_enum], label_name))
+
+        if Shortcut.LABEL_NONE in shortcuts:
+            bindings.append((shortcuts[Shortcut.LABEL_NONE], None))
+
+        return bindings
+
+    def _install_label_shortcuts(
+        self,
+        parent: QWidget,
+        bucket: list[QShortcut],
+        handler,
+    ) -> None:
+        for shortcut_str, label_name in self._iter_label_shortcut_bindings():
+            sc = QShortcut(parse_shortcut(shortcut_str), parent)
+            sc.setContext(Qt.WidgetWithChildrenShortcut)
+            sc.activated.connect(partial(handler, label_name))
+            bucket.append(sc)
+
     def _select_all_photos(self):
         """Select all visible photos (after filtering)."""
         photos = self.photo_model.photos
@@ -274,17 +311,57 @@ class MainWindow(QMainWindow):
         for photo in photos:
             photo.is_selected = True
 
-        # Update grid's last selected index
-        self.grid._last_selected_index = len(photos) - 1
+        # Update grid's selection anchor to the last selected item
+        self.grid._set_selection_anchor(len(photos) - 1)
 
         # Emit selection changed and refresh grid
         selected_indices = set(range(len(photos)))
         self.grid.selection_changed.emit(selected_indices)
         self.grid.on_scroll(self.grid.scrollbar.value())
 
-    def _apply_label(self, label_name: str | None):
-        """Apply a label to all selected photos."""
+    def _apply_label_to_grid_selection(self, label_name: str | None):
+        """Apply a label to the current grid selection."""
         selected_items = self._get_selected_items()
+        self._apply_label_to_items(
+            selected_items,
+            label_name,
+            record_undo=True,
+            sync_source="apply_label_shortcut_grid",
+        )
+
+    def _apply_label_to_fullscreen_current(self, label_name: str | None):
+        """Apply a label to only the currently visible fullscreen image."""
+        if self._fullscreen_overlay is None:
+            return
+
+        current_path = self._fullscreen_overlay.get_current_path()
+        if current_path is None:
+            return
+
+        item = self._items_by_path.get(current_path)
+        if item is None:
+            return
+
+        self._apply_label_to_items(
+            [item],
+            label_name,
+            record_undo=False,
+            sync_source="apply_label_shortcut_fullscreen",
+        )
+
+    def _apply_label(self, label_name: str | None):
+        """Backward-compatible grid label shortcut handler."""
+        self._apply_label_to_grid_selection(label_name)
+
+    def _apply_label_to_items(
+        self,
+        selected_items: list[ImageItem],
+        label_name: str | None,
+        *,
+        record_undo: bool,
+        sync_source: str,
+    ) -> None:
+        """Apply a label to the given items and sync model/grid/fullscreen state."""
         if not selected_items:
             return
 
@@ -299,26 +376,25 @@ class MainWindow(QMainWindow):
             # Capture the current label before changing
             previous_labels[item.path] = item.db_metadata.get(DBFields.LABEL)
 
-        # Create undo entry if selection changed since last edit
-        if self._selection_changed_since_edit:
-            # New undo session: create new entry with captured previous labels
-            self._label_undo_entry = LabelUndoEntry(
-                items=list(selected_items),
-                previous_labels=previous_labels,
-                new_labels={item.path: label_name for item in selected_items},
-            )
-            self._selection_changed_since_edit = False
-        else:
-            # Same selection: update the new_labels in existing entry
-            if self._label_undo_entry is not None:
-                self._label_undo_entry.new_labels = {
-                    item.path: label_name for item in selected_items
-                }
+        if record_undo:
+            # Create undo entry if selection changed since last edit
+            if self._selection_changed_since_edit:
+                self._label_undo_entry = LabelUndoEntry(
+                    items=list(selected_items),
+                    previous_labels=previous_labels,
+                    new_labels={item.path: label_name for item in selected_items},
+                )
+                self._selection_changed_since_edit = False
+            else:
+                if self._label_undo_entry is not None:
+                    self._label_undo_entry.new_labels = {
+                        item.path: label_name for item in selected_items
+                    }
 
-        # Reset to undo mode and enable the menu action
-        self._label_undo_is_redo = False
-        self._undo_label_action.setText("Undo label")
-        self._undo_label_action.setEnabled(True)
+            self._label_undo_is_redo = False
+            self._undo_label_action.setText("Undo label")
+            if self._fullscreen_overlay is None:
+                self._undo_label_action.setEnabled(True)
 
         # Apply the label changes
         for item in selected_items:
@@ -344,7 +420,7 @@ class MainWindow(QMainWindow):
 
         self.sync_model_after_metadata_update(
             {DBFields.LABEL},
-            source="apply_label_shortcut",
+            source=sync_source,
             allow_fullscreen_filter=True,
         )
 
@@ -396,6 +472,8 @@ class MainWindow(QMainWindow):
 
     def _on_undo_redo_label(self):
         """Handle undo/redo label action."""
+        if self._fullscreen_overlay is not None:
+            return
         if self._label_undo_entry is None:
             return
 
@@ -451,11 +529,17 @@ class MainWindow(QMainWindow):
         )
 
     def _on_edit_finished(self):
-        """Return focus to grid after editing, unless still in edit panel."""
-        focus_widget = QApplication.focusWidget()
-        # Only return focus to grid if focus left the edit panel entirely
-        if focus_widget is None or not self.edit_panel.isAncestorOf(focus_widget):
-            self.grid.setFocus()
+        """Edit panel completion hook (focus restore handled by interaction signals)."""
+
+    def _schedule_grid_focus_restore(self) -> None:
+        QTimer.singleShot(0, self._restore_grid_focus_after_panel_interaction)
+
+    def _restore_grid_focus_after_panel_interaction(self) -> None:
+        if self._fullscreen_overlay is not None:
+            return
+        if not self.isVisible():
+            return
+        self.grid.setFocus()
 
     def _on_edit_panel_metadata_saved(self, field_name: str):
         self.sync_model_after_metadata_update(
@@ -656,14 +740,124 @@ class MainWindow(QMainWindow):
     def _ensure_db_metadata_ready(self, items: list[ImageItem]) -> bool:
         return self.db_manager.ensure_items_metadata_ready(items)
 
+    def _capture_grid_viewport_snapshot(self) -> dict:
+        return {
+            "photo_list_paths": [item.path for item in self.images_data],
+            "visible_paths": self.grid.get_viewport_visible_paths(),
+            "selected_visible_paths": self.grid.get_viewport_selected_paths(),
+        }
+
+    def _ensure_grid_path_visible(self, path: str | None) -> bool:
+        if not path:
+            return False
+        index = self.grid.get_index_for_path(path)
+        if index is None:
+            return False
+        self.grid._ensure_visible(index)
+        return True
+
+    def _pick_filter_fallback_target_path(
+        self,
+        previous_visible_paths: list[str],
+        old_photo_list_paths: list[str],
+        new_photo_list_paths: list[str],
+    ) -> str | None:
+        """Pick a fallback target near the previous viewport when filter removes it."""
+        if not previous_visible_paths or not new_photo_list_paths:
+            return None
+
+        old_index_by_path = {path: i for i, path in enumerate(old_photo_list_paths)}
+        previous_indices = [
+            old_index_by_path[path]
+            for path in previous_visible_paths
+            if path in old_index_by_path
+        ]
+        if not previous_indices:
+            return None
+
+        best_path = None
+        best_distance = None
+        best_old_index = None
+        for path in new_photo_list_paths:
+            old_index = old_index_by_path.get(path)
+            if old_index is None:
+                continue
+            distance = min(abs(old_index - prev_idx) for prev_idx in previous_indices)
+            if (
+                best_distance is None
+                or distance < best_distance
+                or (distance == best_distance and old_index < best_old_index)
+            ):
+                best_path = path
+                best_distance = distance
+                best_old_index = old_index
+        return best_path
+
+    def _restore_grid_viewport_after_sort_change(self, snapshot: dict) -> None:
+        target_path = None
+        for path in snapshot["selected_visible_paths"]:
+            target_path = path
+            break
+        if target_path is None:
+            for path in snapshot["visible_paths"]:
+                target_path = path
+                break
+        self._ensure_grid_path_visible(target_path)
+
+    def _restore_grid_viewport_after_filter_change(self, snapshot: dict) -> None:
+        new_photo_list_paths = [item.path for item in self.images_data]
+        new_path_set = set(new_photo_list_paths)
+
+        target_path = next(
+            (
+                path
+                for path in snapshot["selected_visible_paths"]
+                if path in new_path_set
+            ),
+            None,
+        )
+        if target_path is None:
+            target_path = next(
+                (path for path in snapshot["visible_paths"] if path in new_path_set),
+                None,
+            )
+        if target_path is None:
+            target_path = self._pick_filter_fallback_target_path(
+                snapshot["visible_paths"],
+                snapshot["photo_list_paths"],
+                new_photo_list_paths,
+            )
+        self._ensure_grid_path_visible(target_path)
+
+    def select_paths_in_grid(
+        self,
+        paths: list[str],
+        *,
+        anchor_path: str | None = None,
+        reveal_path: str | None = None,
+    ) -> None:
+        if not self.images_data:
+            self.grid.select_paths([], anchor_path=None)
+            return
+
+        current_paths = {item.path for item in self.images_data}
+        visible_paths = [path for path in paths if path in current_paths]
+        self.grid.select_paths(visible_paths, anchor_path=anchor_path)
+        target_reveal = reveal_path or anchor_path
+        if target_reveal is None and visible_paths:
+            target_reveal = visible_paths[0]
+        self._ensure_grid_path_visible(target_reveal)
+
     def _on_filter_changed(self, criteria: FilterCriteria):
         """Handle filter change.
 
         Args:
             criteria: Filter criteria to apply.
         """
+        snapshot = self._capture_grid_viewport_snapshot()
         self._current_filter = criteria
         self.photo_model.set_filter(criteria)
+        self._restore_grid_viewport_after_filter_change(snapshot)
 
     def _create_menu_bar(self):
         menubar = self.menuBar()
@@ -1108,6 +1302,110 @@ class MainWindow(QMainWindow):
             file_path = self.images_data[index].path
             self.media_manager.request_thumbnail(file_path)
 
+    def _refresh_undo_label_action_enabled_for_context(self) -> None:
+        if not hasattr(self, "_undo_label_action"):
+            return
+        self._undo_label_action.setEnabled(
+            self._fullscreen_overlay is None and self._label_undo_entry is not None
+        )
+
+    def _capture_fullscreen_exit_snapshot(self, overlay: FullscreenOverlay) -> dict:
+        return {
+            "current_path": overlay.get_current_path(),
+            "loop_paths": overlay.get_visible_paths(),
+            "all_paths": overlay.get_all_paths(),
+            "started_with_multi_selection": (
+                self._fullscreen_started_with_multi_selection
+            ),
+        }
+
+    def _clear_grid_selection(self) -> None:
+        self.grid.select_paths([], anchor_path=None)
+
+    def _restore_grid_after_fullscreen_exit(self, snapshot: dict | None) -> None:
+        if snapshot is None:
+            return
+
+        current_photo_list_paths = [item.path for item in self.images_data]
+        current_path_set = set(current_photo_list_paths)
+        if not current_photo_list_paths:
+            self._clear_grid_selection()
+            return
+
+        current_path = snapshot.get("current_path")
+        loop_paths = [
+            path
+            for path in snapshot.get("loop_paths", [])
+            if isinstance(path, str) and path
+        ]
+        all_paths = [
+            path
+            for path in snapshot.get("all_paths", [])
+            if isinstance(path, str) and path
+        ]
+        started_with_multi = bool(snapshot.get("started_with_multi_selection"))
+
+        if not started_with_multi:
+            target_path = (
+                current_path
+                if current_path in current_path_set
+                else self._pick_next_path_in_loop(
+                    all_paths,
+                    current_path_set,
+                    current_path,
+                )
+            )
+            if target_path is None:
+                self._clear_grid_selection()
+                return
+            self.select_paths_in_grid(
+                [target_path],
+                anchor_path=target_path,
+                reveal_path=target_path,
+            )
+            return
+
+        surviving_loop_paths = [path for path in loop_paths if path in current_path_set]
+
+        if current_path in current_path_set:
+            target_path = current_path
+        else:
+            target_path = self._pick_next_path_in_loop(
+                loop_paths,
+                set(surviving_loop_paths),
+                current_path,
+            )
+
+        if target_path is None:
+            target_path = self._pick_next_path_in_loop(
+                all_paths,
+                current_path_set,
+                current_path,
+            )
+            if target_path is None:
+                self._clear_grid_selection()
+                return
+            self.select_paths_in_grid(
+                [target_path],
+                anchor_path=target_path,
+                reveal_path=target_path,
+            )
+            return
+
+        if (
+            get_user_setting(UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE)
+            == OnFullscreenExitMultipleSelected.KEEP_SELECTION
+        ):
+            selection_paths = surviving_loop_paths
+        else:
+            selection_paths = [target_path]
+
+        self.select_paths_in_grid(
+            selection_paths,
+            anchor_path=target_path,
+            reveal_path=target_path,
+        )
+
     def _handle_fullscreen_overlay(self, selected_indices: list):
         """Display the selected image in a fullscreen overlay."""
         if not selected_indices:
@@ -1154,6 +1452,8 @@ class MainWindow(QMainWindow):
             self.images_data, visible_indices, start_index
         )
         overlay_ref = self._fullscreen_overlay
+        self._setup_shortcuts()
+        self._refresh_undo_label_action_enabled_for_context()
 
         overlay_ref.index_changed.connect(self._on_fullscreen_index_changed)
 
@@ -1162,25 +1462,12 @@ class MainWindow(QMainWindow):
             if self._fullscreen_overlay is not overlay_ref:
                 return
 
-            last_viewed_idx = None
-            if overlay_ref.visible_indices:
-                clamped_idx = min(
-                    max(0, overlay_ref.current_visible_idx),
-                    len(overlay_ref.visible_indices) - 1,
-                )
-                last_viewed_idx = overlay_ref.visible_indices[clamped_idx]
-
-            if (
-                self._fullscreen_started_with_multi_selection
-                and last_viewed_idx is not None
-                and get_user_setting(UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE)
-                == OnFullscreenExitMultipleSelected.SELECT_LAST_VIEWED
-            ):
-                self.grid.on_cell_clicked(last_viewed_idx, False, False)
-                self.grid._ensure_visible(last_viewed_idx)
+            exit_snapshot = self._capture_fullscreen_exit_snapshot(overlay_ref)
 
             self._fullscreen_overlay = None
             self._fullscreen_started_with_multi_selection = False
+            self._setup_shortcuts()
+            self._refresh_undo_label_action_enabled_for_context()
 
             if self._pending_model_sync_after_fullscreen:
                 pending_fields = set(self._pending_model_sync_fields)
@@ -1193,6 +1480,9 @@ class MainWindow(QMainWindow):
                         rebind_fullscreen_loop=False,
                     )
 
+            self._restore_grid_after_fullscreen_exit(exit_snapshot)
+            self.grid.setFocus()
+
         overlay_ref.destroyed.connect(on_fullscreen_close)
         overlay_ref.show_on_screen(current_screen)
 
@@ -1200,7 +1490,7 @@ class MainWindow(QMainWindow):
         """Update grid selection when navigating in fullscreen mode."""
         if self._fullscreen_overlay and self._fullscreen_started_with_multi_selection:
             # In multi-selection mode, just update the last selected index
-            self.grid._last_selected_index = new_index
+            self.grid._set_selection_anchor(new_index)
             self.grid._ensure_visible(new_index)
             # We still need to repaint the grid to show the new "last selected" item
             self.grid.on_scroll(self.grid.scrollbar.value())
@@ -1257,7 +1547,11 @@ class MainWindow(QMainWindow):
 
     def _set_sort_order(self, order: SortOrder):
         """Set the sort order via menu."""
+        if self.photo_model.sort_order == order:
+            return
+        snapshot = self._capture_grid_viewport_snapshot()
         self.photo_model.set_sort_order(order)
+        self._restore_grid_viewport_after_sort_change(snapshot)
 
     # --- Context menu ---
 

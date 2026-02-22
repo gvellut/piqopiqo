@@ -106,6 +106,7 @@ class LabelCheckbox(QWidget):
 
 class FilterPanel(ScrollableStrip):
     filter_changed = Signal(FilterCriteria)
+    interaction_finished = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -172,7 +173,7 @@ class FilterPanel(ScrollableStrip):
         self.search_field.setObjectName("filter_search_field")
         self.search_field.setPlaceholderText("Search ...")
         self.search_field.setMaximumWidth(200)
-        self.search_field.returnPressed.connect(self._on_search_changed)
+        self.search_field.returnPressed.connect(self._on_search_submitted)
         self.search_field.editingFinished.connect(self._on_search_changed)
         self.add_widget(self.search_field)
 
@@ -287,18 +288,25 @@ class FilterPanel(ScrollableStrip):
         if self._updating:
             return
         self._emit_filter()
+        self.interaction_finished.emit()
 
     def _on_label_filter_changed(self, state: int):
         """Handle label checkbox state change."""
         if self._updating:
             return
         self._emit_filter()
+        self.interaction_finished.emit()
 
     def _on_search_changed(self):
         """Handle search field change (Enter or focus lost)."""
         if self._updating:
             return
         self._emit_filter()
+
+    def _on_search_submitted(self):
+        """Handle search field Enter key."""
+        self._on_search_changed()
+        self.interaction_finished.emit()
 
     def _on_clear_filter(self):
         """Reset all filters to default state."""
@@ -318,6 +326,7 @@ class FilterPanel(ScrollableStrip):
 
         self._updating = False
         self._emit_filter()
+        self.interaction_finished.emit()
 
     def _emit_filter(self):
         """Build and emit the current filter criteria."""

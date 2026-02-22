@@ -25,6 +25,7 @@ class TitleEdit(QLineEdit):
     """Single-line title editor with special key handling."""
 
     edit_finished = Signal()
+    edit_finished_explicit = Signal()
     edit_cancelled = Signal()
 
     def __init__(self, parent=None):
@@ -52,6 +53,7 @@ class TitleEdit(QLineEdit):
                 # Cmd+Enter does nothing for title
                 return
             # Enter saves and finishes
+            self.edit_finished_explicit.emit()
             self.edit_finished.emit()
             return
 
@@ -84,6 +86,7 @@ class DescriptionEdit(QPlainTextEdit):
     """Multi-line description editor with special key handling."""
 
     edit_finished = Signal()
+    edit_finished_explicit = Signal()
     edit_cancelled = Signal()
 
     def __init__(self, parent=None):
@@ -112,6 +115,7 @@ class DescriptionEdit(QPlainTextEdit):
                 self.insertPlainText("\n")
                 return
             # Enter saves and finishes
+            self.edit_finished_explicit.emit()
             self.edit_finished.emit()
             return
 
@@ -142,6 +146,7 @@ class CoordinateEdit(QLineEdit):
     """Coordinate editor with validation."""
 
     edit_finished = Signal()
+    edit_finished_explicit = Signal()
     edit_cancelled = Signal()
 
     def __init__(self, is_latitude: bool, parent=None):
@@ -199,6 +204,7 @@ class CoordinateEdit(QLineEdit):
 
         if key == Qt.Key_Return or key == Qt.Key_Enter:
             if self._is_valid:
+                self.edit_finished_explicit.emit()
                 self.edit_finished.emit()
             return
 
@@ -229,6 +235,7 @@ class KeywordsEdit(QPlainTextEdit):
     """
 
     edit_finished = Signal()
+    edit_finished_explicit = Signal()
     edit_cancelled = Signal()
 
     def __init__(self, parent=None):
@@ -330,6 +337,7 @@ class KeywordsEdit(QPlainTextEdit):
 
         if key == Qt.Key_Return or key == Qt.Key_Enter:
             # Save even if validation fails (red border is just a warning)
+            self.edit_finished_explicit.emit()
             self.edit_finished.emit()
             return
 
@@ -363,6 +371,7 @@ class TimeEdit(QLineEdit):
     """DateTime editor with validation."""
 
     edit_finished = Signal()
+    edit_finished_explicit = Signal()
     edit_cancelled = Signal()
 
     def __init__(self, parent=None):
@@ -416,6 +425,7 @@ class TimeEdit(QLineEdit):
 
         if key == Qt.Key_Return or key == Qt.Key_Enter:
             if self._is_valid:
+                self.edit_finished_explicit.emit()
                 self.edit_finished.emit()
             return
 
