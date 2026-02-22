@@ -175,6 +175,7 @@ class MainWindow(QMainWindow):
             self.db_manager,
             parent=self,
         )
+        self._apply_saved_sort_order_for_load()
         photos = [ImageItem(**data) for data in images]
         self.photo_model.set_photos(photos, source_folders)
         self._items_by_path = {item.path: item for item in self.photo_model.all_photos}
@@ -1088,6 +1089,7 @@ class MainWindow(QMainWindow):
 
         # Update photo model (replaces old _all_images_data and images_data)
         photos = [ImageItem(**data) for data in images]
+        self._apply_saved_sort_order_for_load()
         self.photo_model.set_photos(photos, source_folders)
         self._items_by_path = {item.path: item for item in self.photo_model.all_photos}
 
@@ -1545,6 +1547,25 @@ class MainWindow(QMainWindow):
 
     # --- Sort order ---
 
+    def _read_saved_sort_order(self) -> SortOrder:
+        raw = get_state().get(StateKey.SORT_ORDER)
+        if isinstance(raw, str):
+            try:
+                return SortOrder[raw]
+            except KeyError:
+                logger.warning("Invalid persisted sort order %r; fallback to FILE_NAME", raw)
+        return SortOrder.FILE_NAME
+
+    def _set_sort_menu_checked(self, order: SortOrder) -> None:
+        action = self._sort_actions.get(order)
+        if action is not None and not action.isChecked():
+            action.setChecked(True)
+
+    def _apply_saved_sort_order_for_load(self) -> None:
+        order = self._read_saved_sort_order()
+        self.photo_model.set_sort_order(order, emit_signals=False)
+        self._set_sort_menu_checked(order)
+
     def _set_sort_order(self, order: SortOrder):
         """Set the sort order via menu."""
         if self.photo_model.sort_order == order:
@@ -1552,6 +1573,8 @@ class MainWindow(QMainWindow):
         snapshot = self._capture_grid_viewport_snapshot()
         self.photo_model.set_sort_order(order)
         self._restore_grid_viewport_after_sort_change(snapshot)
+        self._set_sort_menu_checked(order)
+        get_state().set(StateKey.SORT_ORDER, order.name)
 
     # --- Context menu ---
 

@@ -1,4 +1,3 @@
-* [Sort order keep for folder or last](W_Sort_order_keep_for_folder_or_last.md)
 - [Base data redirect to settings](Q_Base_data_redirect_to_settings.md)
 - [Model sync 2](M_Model_sync_2.md)
 - [Manual lens tool](P_Manual_lens.md)
@@ -33,3 +32,4 @@
     !? [Fix context manager protocol error on exit](U.A_Fix_context_manager_protocol_error_on_exit.md)
 ! [Selection + return from fullscreen](T_Selection_return_from_fullscreen.md)
     - [Grid refresh exit fullscreen](V_Grid_refresh_exit_fullscreen.md)
+! [Sort order keep for folder or last](W_Sort_order_keep_for_folder_or_last.md)

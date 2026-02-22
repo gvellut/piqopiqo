@@ -68,6 +68,16 @@ def test_typed_state_roundtrip(isolated_settings):
     assert isinstance(value, bool)
 
 
+def test_sort_order_state_default_and_roundtrip(isolated_settings):
+    assert get_state_value(StateKey.SORT_ORDER) == "FILE_NAME"
+
+    set_state_value(StateKey.SORT_ORDER, "TIME_TAKEN")
+    assert get_state_value(StateKey.SORT_ORDER) == "TIME_TAKEN"
+
+    set_state_value(StateKey.SORT_ORDER, "FILE_NAME_BY_FOLDER")
+    assert get_state_value(StateKey.SORT_ORDER) == "FILE_NAME_BY_FOLDER"
+
+
 def test_gpx_timeshift_state_defaults(isolated_settings):
     assert get_state_value(StateKey.LAST_TIMESHIFT) is None
     assert get_state_value(StateKey.LAST_TIMESHIFT_BY_FOLDERS) == {}

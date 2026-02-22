@@ -298,17 +298,19 @@ class PhotoListModel(QObject):
 
     # --- Sorting ---
 
-    def set_sort_order(self, order: SortOrder):
+    def set_sort_order(self, order: SortOrder, *, emit_signals: bool = True):
         """Set the sort order.
 
         Args:
             order: New sort order.
+            emit_signals: Emit sort/photos changed signals when True.
         """
         if self._sort_order != order:
             self._sort_order = order
             self._apply_filter_and_sort()
-            self.sort_order_changed.emit(order)
-            self.photos_changed.emit()
+            if emit_signals:
+                self.sort_order_changed.emit(order)
+                self.photos_changed.emit()
 
     def _get_sort_key(self, photo: ImageItem):
         """Get the sort key for a photo based on current sort order."""
