@@ -4,9 +4,18 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import QRunnable
+from PySide6.QtCore import QRunnable, QThreadPool
 
 logger = logging.getLogger(__name__)
+
+
+def drain_qthread_pool(
+    pool: QThreadPool, timeout_ms: int, *, clear_queued: bool = True
+) -> bool:
+    """Bounded shutdown helper for QThreadPool-backed background work."""
+    if clear_queued:
+        pool.clear()
+    return bool(pool.waitForDone(max(0, int(timeout_ms))))
 
 
 class MetadataSaveWorker(QRunnable):

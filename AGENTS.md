@@ -96,6 +96,9 @@ src/piqopiqo/
     │   └── dialogs.py        # GPX dialogs (extract confirm/progress, apply GPX input/progress)
 └── platform/        # Platform-specific code
     └── macos.py     # macOS utilities (resolution, move_to_trash)
+
+tests/
+└── test_metadata_save_workers.py # QThreadPool drain helper shutdown semantics
 ```
 
 ## Key Features
@@ -310,6 +313,8 @@ Selection behavior:
 - In manual mode, Save button stays non-default (no implicit Enter-submit behavior from other focused controls); enablement tracks changed-field validity.
 - Status labels editor validation in `settings_panel/status_labels_editor.py` is live while typing: each label name must be non-empty and unique (case-insensitive), and invalid rows keep the red border until fixed.
 - In the Labels + Shortcuts tab, `Add Label` uses `NoFocus` policy so tab switches do not auto-focus it with the blue focus ring.
+- Quit-time cleanup is split in two phases: `MainWindow.closeEvent` stays fast (state persistence only), while heavy teardown runs from `QApplication.aboutToQuit`.
+- Metadata-save `QThreadPool`s (label shortcut saves and edit panel saves) are drained on quit with bounded wait semantics (`clear()` queued tasks, then `waitForDone()` up to `SHUTDOWN_TIMEOUT_S`) before DB connections are closed.
 
 
 ## Development

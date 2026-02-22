@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 from piqopiqo.keyword_utils import format_keywords, parse_keywords
 from piqopiqo.metadata.db_fields import EDITABLE_FIELDS, FIELD_DISPLAY_LABELS, DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBManager
-from piqopiqo.metadata.save_workers import MetadataSaveWorker
+from piqopiqo.metadata.save_workers import MetadataSaveWorker, drain_qthread_pool
 from piqopiqo.model import ImageItem
 
 from .edit_widgets import (
@@ -185,6 +185,21 @@ class EditPanel(QWidget):
             self.keyword_tree_btn,
         ):
             widget.setEnabled(enabled)
+
+    def shutdown_background_saves(
+        self, timeout_ms: int, *, clear_queued: bool = True
+    ) -> bool:
+        """Stop pending DB save tasks for a clean app shutdown."""
+        completed = drain_qthread_pool(
+            self._db_writer_pool,
+            timeout_ms,
+            clear_queued=clear_queued,
+        )
+        if not completed:
+            logger.warning(
+                "Timed out waiting for edit panel metadata saves to finish on shutdown"
+            )
+        return completed
 
     def update_for_selection(self, items: list[ImageItem]):
         """Update the panel for a selection of items.

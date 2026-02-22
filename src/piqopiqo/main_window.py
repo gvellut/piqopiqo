@@ -31,7 +31,7 @@ from .fullscreen import FullscreenOverlay
 from .grid.photo_grid import PhotoGrid
 from .metadata.db_fields import DBFields
 from .metadata.metadata_db import MetadataDBManager
-from .metadata.save_workers import MetadataSaveWorker
+from .metadata.save_workers import MetadataSaveWorker, drain_qthread_pool
 from .model import (
     FilterCriteria,
     ImageItem,
@@ -79,6 +79,7 @@ class MainWindow(QMainWindow):
         self._watcher_suppressed: dict[str, float] = {}
         self._active_apply_gpx_worker = None
         self._active_flickr_upload_manager = None
+        self._shutdown_started = False
 
         # Create metadata database manager
         self.db_manager = MetadataDBManager()
@@ -1308,21 +1309,38 @@ class MainWindow(QMainWindow):
         if self._right_splitter:
             state.set(StateKey.RIGHT_SPLITTER, self._right_splitter.saveState())
 
-        # Stop background workers first to avoid noisy teardown.
+        super().closeEvent(event)
+
+    def shutdown_for_quit(self) -> None:
+        """Run app teardown after the window closes, before process exit."""
+        if self._shutdown_started:
+            return
+        self._shutdown_started = True
+
+        timeout_s = float(get_runtime_setting(RuntimeSettingKey.SHUTDOWN_TIMEOUT_S))
+        timeout_ms = int(max(0.0, timeout_s) * 1000)
+
+        label_pool_completed = drain_qthread_pool(
+            self._label_save_pool,
+            timeout_ms,
+            clear_queued=True,
+        )
+        if not label_pool_completed:
+            logger.warning(
+                "Timed out waiting for label metadata saves to finish on shutdown"
+            )
+
+        if self.edit_panel is not None:
+            self.edit_panel.shutdown_background_saves(
+                timeout_ms,
+                clear_queued=True,
+            )
+
         self._stop_folder_watcher()
         if self._active_flickr_upload_manager is not None:
-            self._active_flickr_upload_manager.stop(
-                timeout_s=float(
-                    get_runtime_setting(RuntimeSettingKey.SHUTDOWN_TIMEOUT_S)
-                )
-            )
+            self._active_flickr_upload_manager.stop(timeout_s=timeout_s)
             self._active_flickr_upload_manager = None
         if hasattr(self, "media_manager"):
-            self.media_manager.stop(
-                timeout_s=float(
-                    get_runtime_setting(RuntimeSettingKey.SHUTDOWN_TIMEOUT_S)
-                )
-            )
+            self.media_manager.stop(timeout_s=timeout_s)
         if hasattr(self, "db_manager"):
             self.db_manager.close_all()
-        super().closeEvent(event)

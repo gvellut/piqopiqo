@@ -391,9 +391,7 @@ def run_resolve_tickets_task(task: dict) -> dict:
 
             if current_status == TicketStatus.INCOMPLETE:
                 incomplete_found = True
-                continue
-
-            if current_status == TicketStatus.COMPLETE:
+            elif current_status == TicketStatus.COMPLETE:
                 ticket_status[ticket_id] = PhotoTicketStatus(
                     status=TicketStatus.COMPLETE,
                     photo_id=str(row.get("photoid", "") or ""),
@@ -401,15 +399,15 @@ def run_resolve_tickets_task(task: dict) -> dict:
                     order=current.order,
                     api_tags=current.api_tags,
                 )
-                continue
-
-            ticket_status[ticket_id] = PhotoTicketStatus(
-                status=TicketStatus.INVALID,
-                photo_id=None,
-                file_path=current.file_path,
-                order=current.order,
-                api_tags=current.api_tags,
-            )
+            else:
+                # invalid
+                ticket_status[ticket_id] = PhotoTicketStatus(
+                    status=TicketStatus.INVALID,
+                    photo_id=None,
+                    file_path=current.file_path,
+                    order=current.order,
+                    api_tags=current.api_tags,
+                )
 
         if incomplete_found:
             checks += 1
