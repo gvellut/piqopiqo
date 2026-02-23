@@ -12,15 +12,15 @@ def setup_logging(logger=None):
 
     # Always ensure the root logger is set to INFO
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
     coloredlogs.install(
-        level=logging.INFO,
+        level=logging.DEBUG,
         logger=root_logger,
         isatty=True,
         fmt=fmt,
         stream=sys.stdout,
         datefmt=datefmt,
     )
+    root_logger.setLevel(logging.INFO)
 
     level_for_passed = logging.DEBUG if os.getenv("DEBUG") == "1" else logging.INFO
     if logger and logger is not root_logger:

@@ -876,8 +876,29 @@ class MainWindow(QMainWindow):
         self._pending_filter_snapshot = None
         if criteria is None or snapshot is None:
             return
+        started = time.perf_counter()
+        total_before = len(self.photo_model.all_photos)
+
         self.photo_model.set_filter(criteria)
+        after_filter = time.perf_counter()
+
         self._restore_grid_viewport_after_filter_change(snapshot)
+        after_restore = time.perf_counter()
+
+        logger.debug(
+            "Deferred filter apply completed: "
+            "folder=%r labels=%s include_no_label=%s search=%r "
+            "result=%d/%d model=%.1fms restore=%.1fms total=%.1fms",
+            criteria.folder,
+            sorted(criteria.labels),
+            criteria.include_no_label,
+            criteria.search_text,
+            len(self.photo_model.photos),
+            total_before,
+            (after_filter - started) * 1000.0,
+            (after_restore - after_filter) * 1000.0,
+            (after_restore - started) * 1000.0,
+        )
 
     def _create_menu_bar(self):
         menubar = self.menuBar()
