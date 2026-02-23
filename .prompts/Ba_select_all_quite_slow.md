@@ -1,0 +1,1 @@
+Shortcut Cmd A : takes a lot of time for feedback : it is instant in Bridge. Even with scroll. In PiqoPiqo : the GUI is blocked (eg scroll) while the cmd a is being processed is going on. Also filter while cmd-A has been performed (many selected) : blocks the GUI. Visibly slower than when a single one  is selected
