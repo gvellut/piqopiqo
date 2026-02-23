@@ -1,0 +1,2 @@
+Remove all attempts of platform independance. It will be for macos. So remove the try import for pyobjc or other macos specific libraries
+Put everything where it belongs in the normal code. use a _macos suffix though.

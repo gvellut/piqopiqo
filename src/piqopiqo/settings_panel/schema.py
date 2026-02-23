@@ -6,6 +6,7 @@ from enum import Enum, auto
 
 from attrs import define
 
+from piqopiqo.color_management import ScreenColorProfileMode
 from piqopiqo.model import OnFullscreenExitMultipleSelected
 from piqopiqo.settings_state import UserSettingKey
 
@@ -109,6 +110,43 @@ SETTINGS_TABS: list[TabSpec] = [
                                 value=(
                                     OnFullscreenExitMultipleSelected.SELECT_LAST_VIEWED
                                 ),
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+            GroupSpec(
+                title="Color",
+                fields=[
+                    FieldSpec(
+                        key=UserSettingKey.FORCE_SRGB,
+                        label="Force sRGB",
+                        editor=EditorKind.BOOL,
+                    ),
+                    FieldSpec(
+                        key=UserSettingKey.SCREEN_COLOR_PROFILE,
+                        label="Screen Color Profile",
+                        editor=EditorKind.CHOICE,
+                        choices=[
+                            ChoiceOption(
+                                label="From main screen",
+                                value=ScreenColorProfileMode.FROM_MAIN_SCREEN,
+                            ),
+                            ChoiceOption(
+                                label="sRGB",
+                                value=ScreenColorProfileMode.SRGB,
+                            ),
+                            ChoiceOption(
+                                label="Display P3",
+                                value=ScreenColorProfileMode.DISPLAY_P3,
+                            ),
+                            ChoiceOption(
+                                label="Bt2020",
+                                value=ScreenColorProfileMode.BT2020,
+                            ),
+                            ChoiceOption(
+                                label="No conversion",
+                                value=ScreenColorProfileMode.NO_CONVERSION,
                             ),
                         ],
                     ),

@@ -8,6 +8,7 @@ from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import QApplication
 import pytest
 
+from piqopiqo.color_management import ScreenColorProfileMode
 from piqopiqo.settings_panel.dialog import SettingsDialog
 from piqopiqo.settings_state import (
     UserSettingKey,
@@ -67,3 +68,19 @@ def test_initial_tab_title_selects_requested_tab(qapp, monkeypatch):
     assert dialog._tabs is not None
     current_title = dialog._tabs.tabText(dialog._tabs.currentIndex())
     assert current_title == "External/Tools"
+
+
+def test_autosave_choice_enum_setting_roundtrip(qapp, monkeypatch):
+    monkeypatch.setenv("PIQO_SETTINGS_PANEL_SAVE_MODE", "autosave")
+    init_qsettings_store(dyn=True)
+
+    dialog = SettingsDialog(initial_tab_title="Interface")
+    editor = dialog._editors[UserSettingKey.SCREEN_COLOR_PROFILE]
+    editor.set_value(ScreenColorProfileMode.BT2020)
+    dialog._autosave_field(UserSettingKey.SCREEN_COLOR_PROFILE)
+
+    assert (
+        get_user_setting(UserSettingKey.SCREEN_COLOR_PROFILE)
+        == ScreenColorProfileMode.BT2020
+    )
+    assert UserSettingKey.SCREEN_COLOR_PROFILE in dialog.changed_keys

@@ -3,7 +3,6 @@
 - [Model sync 2](M_Model_sync_2.md)
 - [fullscreen color](Ca_fullscreen_color.md)
 - [Specific macos](Da_Specific_macos.md)
-- [Handle color profile setting appkit](Ea_Handle_color_profile_setting_appkit.md)
 ! [Fix date read delay if since:last](A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](B_Eject_SD_after_user_OK.md)
     !? [GUI lag](B.A_GUI_lag.md)
@@ -41,3 +40,5 @@
 ! [Metadata panel moves if keyword has multiple lines](Z_Metadata_panel_moves_if_keyword_has_multiple_lin.md)
 ! [select all quite slow](Ba_select_all_quite_slow.md)
 ! [Shortcut local to screen](Aa_Shortcut_local_to_screen.md)
+! [Handle color profile setting appkit](Ea_Handle_color_profile_setting_appkit.md)
+    ? [Save icc thumbnails + assume default sRGB](Ea.A_Save_icc_thumbnails_assume_default_sRGB.md)

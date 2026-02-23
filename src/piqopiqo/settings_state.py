@@ -15,6 +15,7 @@ from typing import Any
 from attrs import define
 from PySide6.QtCore import QByteArray, QSettings
 
+from .color_management import ScreenColorProfileMode
 from .model import ExifField, OnFullscreenExitMultipleSelected, StatusLabel
 from .shortcuts import Shortcut
 
@@ -65,6 +66,8 @@ class UserSettingKey(StrEnum):
     CUSTOM_EXIF_FIELDS = "customExifFields"
     NUM_COLUMNS = "numColumns"
     ON_FULLSCREEN_EXIT_SELECTION_MODE = "onFullscreenExit"
+    FORCE_SRGB = "forceSrgb"
+    SCREEN_COLOR_PROFILE = "screenColorProfile"
     SHOW_DESCRIPTION_FIELD = "showDescriptionField"
     STATUS_LABELS = "statusLabels"
     EXTERNAL_VIEWER = "externalViewer"
@@ -104,6 +107,9 @@ class RuntimeSettingKey(StrEnum):
     GRID_HQ_THUMB_DELAY_ENABLED = "gridHqThumbDelayEnabled"
     GRID_HQ_THUMB_LOAD_DELAY_MS = "gridHqThumbLoadDelayMs"
     GRID_LOWRES_ONLY = "gridLowresOnly"
+    COLOR_MANAGE_EMBEDDED_THUMBNAILS = "colorManageEmbeddedThumbnails"
+    COLOR_MANAGE_HQ_THUMBNAILS = "colorManageHqThumbnails"
+    PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE = "pillowForExtractImageColorProfile"
     ZOOM_WHEEL_SENSITIVITY = "zoomWheelSensitivity"
     PAN_EMPTY_SPACE = "panEmptySpace"
     PAN_CURSOR_DELAY_MS = "panCursorDelayMs"
@@ -276,6 +282,25 @@ def _deserialize_on_fullscreen_exit_selection_mode(
         return OnFullscreenExitMultipleSelected.KEEP_SELECTION
 
 
+def _serialize_screen_color_profile_mode(
+    value: ScreenColorProfileMode | str,
+) -> str:
+    if isinstance(value, ScreenColorProfileMode):
+        return value.value
+    return str(value)
+
+
+def _deserialize_screen_color_profile_mode(data: Any) -> ScreenColorProfileMode:
+    raw = str(data)
+    try:
+        return ScreenColorProfileMode(raw)
+    except ValueError:
+        try:
+            return ScreenColorProfileMode[raw]
+        except KeyError:
+            return ScreenColorProfileMode.FROM_MAIN_SCREEN
+
+
 def _deserialize_column_stretch(data: Any) -> tuple[int, int]:
     if isinstance(data, list) and len(data) >= 2:
         return (int(data[0]), int(data[1]))
@@ -348,6 +373,18 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         serializer=_serialize_on_fullscreen_exit_selection_mode,
         deserializer=_deserialize_on_fullscreen_exit_selection_mode,
         env_parser=_deserialize_on_fullscreen_exit_selection_mode,
+    ),
+    UserSettingKey.FORCE_SRGB: SettingDef(default=False, read_type=bool),
+    UserSettingKey.SCREEN_COLOR_PROFILE: SettingDef(
+        default=ScreenColorProfileMode.FROM_MAIN_SCREEN,
+        read_type=str,
+        serializer=_serialize_screen_color_profile_mode,
+        deserializer=_deserialize_screen_color_profile_mode,
+        env_parser=lambda raw: _parse_enum(
+            raw,
+            ScreenColorProfileMode,
+            ScreenColorProfileMode.FROM_MAIN_SCREEN,
+        ),
     ),
     UserSettingKey.SHOW_DESCRIPTION_FIELD: SettingDef(default=True, read_type=bool),
     UserSettingKey.STATUS_LABELS: SettingDef(
@@ -446,6 +483,18 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
         default=100, read_type=int
     ),
     RuntimeSettingKey.GRID_LOWRES_ONLY: SettingDef(default=False, read_type=bool),
+    RuntimeSettingKey.COLOR_MANAGE_EMBEDDED_THUMBNAILS: SettingDef(
+        default=True,
+        read_type=bool,
+    ),
+    RuntimeSettingKey.COLOR_MANAGE_HQ_THUMBNAILS: SettingDef(
+        default=True,
+        read_type=bool,
+    ),
+    RuntimeSettingKey.PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE: SettingDef(
+        default=False,
+        read_type=bool,
+    ),
     RuntimeSettingKey.ZOOM_WHEEL_SENSITIVITY: SettingDef(default=1, read_type=int),
     RuntimeSettingKey.PAN_EMPTY_SPACE: SettingDef(default=300, read_type=int),
     RuntimeSettingKey.PAN_CURSOR_DELAY_MS: SettingDef(default=100, read_type=int),

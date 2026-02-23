@@ -25,6 +25,7 @@ PIQO_NUM_COLUMNS=10 uv run piqopiqo /path/to/images
 src/piqopiqo/
 ├── __main__.py      # Entry point, CLI with click, Qt app setup
 ├── cache_paths.py   # Cache path helpers (thumb/db dirs) - no Qt imports
+├── color_management.py # Shared image/screen color-space extraction + conversion helpers
 ├── config.py        # Reference-only legacy config (kept for migration checks)
 ├── folder_scan.py   # Folder scan (initial image list)
 ├── folder_watcher.py # watchfiles-based folder watcher (auto add/remove/modify)
@@ -154,6 +155,8 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - Resolution priority is: env var > persisted value (user settings only) > default
 - `UserSettingKey.FILTER_IN_FULLSCREEN` (default `False`) controls whether fullscreen immediately drops label-filtered-out images from the navigation loop after label shortcut changes
 - `UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE` (default : `KEEP_SELECTION`) controls whether exiting from fullscreen keeps all the images selected or just the last, if the fullscreen naviagation was started with multiple selected images (instead of a single image and a loop through all the current image list).
+- `UserSettingKey.FORCE_SRGB` (default `False`) skips image-profile extraction and tags fullscreen/grid images as sRGB before optional screen conversion.
+- `UserSettingKey.SCREEN_COLOR_PROFILE` (default `FROM_MAIN_SCREEN`) controls the display conversion target (`From main screen`, `sRGB`, `Display P3`, `Bt2020`, `No conversion`) used by fullscreen and color-managed thumbnails.
 - `UserSettingKey.SHOW_DESCRIPTION_FIELD` (default `True`) controls whether the Description editor row is shown in the Metadata panel (`EditPanel`); hiding it is UI-only and does not change DB/EXIF behavior.
 
 Useful env vars for agent testing:
@@ -169,6 +172,9 @@ Useful env vars for agent testing:
 - `PIQO_GRID_HQ_THUMB_LOAD_DELAY_MS` - Idle delay before switching grid thumbnails to HQ when delay mode is enabled
 - `PIQO_GRID_EMBEDDED_BUFFER_ROWS` - Rows around visible area to keep embedded thumbnails in memory (default: 20)
 - `PIQO_GRID_LOWRES_ONLY` - If true, only embedded previews are used (HQ thumbnails are not queued/loaded)
+- `PIQO_COLOR_MANAGE_EMBEDDED_THUMBNAILS` - If true, apply color management when loading embedded thumbnail pixmaps for grid display
+- `PIQO_COLOR_MANAGE_HQ_THUMBNAILS` - If true, apply color management when loading HQ thumbnail pixmaps for grid display
+- `PIQO_PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE` - If true, fullscreen fallback profile extraction uses Pillow instead of the default PyObjC path
 - `PIQO_GPX_TIMEZONE` - Override GPX timezone setting (empty by default)
 - `PIQO_GPX_IGNORE_OFFSET` - Override GPX ignore-offset setting (default false)
 - `PIQO_GPX_KML_FOLDER` - Override GPX KML output folder setting (empty by default)
@@ -330,7 +336,11 @@ Selection behavior:
 - `EditPanel` metadata rows are top-anchored for layout stability: the form `QGridLayout` uses `Qt.AlignTop`, the scroll-area content container uses a non-fixed vertical size policy, and the `Keywords:` label is top-aligned so only the keyword editor row height change is visible when `KeywordsEdit` auto-height changes.
 - Filter panel controls still emit synchronously, but `MainWindow` queues filter application to the next event-loop turn (`QTimer.singleShot(0, ...)`) so checkbox/button/combo visual feedback appears before the model/grid refresh work.
 - `Edit in {External App}` now selects the newly duplicated files in the grid before launching the editor.
-- Settings tab `Grid/Display` was renamed to `Interface`; its groups are split into `Grid`, `Fullscreen`, `Metadata Panel`, and `EXIF Panel`.
+- Settings tab `Grid/Display` was renamed to `Interface`; its groups are split into `Grid`, `Fullscreen`, `Color`, `Metadata Panel`, and `EXIF Panel`.
+- Color management is centralized in `piqopiqo.color_management`; fullscreen and optional grid thumbnail loading share the same source-tag + target-conversion pipeline.
+- `Screen Color Profile = From main screen` uses a cached macOS main-screen ICC profile read at startup and refreshed when color settings change.
+- Grid thumbnail color management uses the thumbnail file profile detected by Qt (or `Force sRGB`); expensive fallback profile extraction remains fullscreen-only for scrolling performance.
+- Fullscreen source-profile fallback tries Qt first, then uses PyObjC by default or Pillow when `RuntimeSettingKey.PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE` is enabled.
 - Settings dialog Enter handling is widget-scoped (no app-wide/global interception): `QLineEdit` and `QAbstractSpinBox` consume Enter to exit field focus, while focused Save consumes Enter to trigger `_on_save()`. Save remains non-default to avoid implicit submits from other controls.
 - Settings dialog initial focus is cleared on first show, so opening Settings does not auto-focus the first text field or Save button.
 - Settings dialog clears focus after tab switches (`QTabWidget.currentChanged`), preventing first-focusable controls (for example checkboxes) from getting blue focus highlight automatically.

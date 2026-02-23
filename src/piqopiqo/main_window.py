@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from . import platform
 from .background.media_man import MediaManager
 from .cache_paths import set_cache_base_dir
+from .color_management import refresh_main_screen_color_space_cache
 from .components.status_bar import LoadingStatusBar
 from .dialogs.error_list_dialog import ErrorListDialog
 from .folder_scan import scan_folder
@@ -64,6 +65,7 @@ class MainWindow(QMainWindow):
     def __init__(self, images, source_folders, root_folder):
         super().__init__()
         self.setWindowTitle(APP_NAME)
+        refresh_main_screen_color_space_cache()
 
         self._fullscreen_overlay = None
         self.root_folder = root_folder
@@ -1165,6 +1167,17 @@ class MainWindow(QMainWindow):
             self.edit_panel.set_description_field_visible(
                 bool(get_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD))
             )
+
+        if (
+            UserSettingKey.FORCE_SRGB in changed_keys
+            or UserSettingKey.SCREEN_COLOR_PROFILE in changed_keys
+        ):
+            refresh_main_screen_color_space_cache()
+            self.grid.invalidate_all_pixmap_caches()
+            self.grid.on_scroll(self.grid.scrollbar.value())
+            if self._fullscreen_overlay is not None:
+                self._fullscreen_overlay._load_pixmap_at_current_index()
+                self._fullscreen_overlay.update()
 
         if (
             UserSettingKey.SHORTCUTS in changed_keys

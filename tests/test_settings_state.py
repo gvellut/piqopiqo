@@ -8,6 +8,7 @@ from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 import pytest
 
+from piqopiqo.color_management import ScreenColorProfileMode
 from piqopiqo.model import ExifField, StatusLabel
 from piqopiqo.settings_state import (
     RuntimeSettingKey,
@@ -52,6 +53,11 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_TIME_SHIFT_UNKNOWN_FOLDER_IGNORE",
         "PIQO_TIMESHIFT_CACHE_NUM",
         "PIQO_FLICKR_UPLOAD_MAX_WORKERS",
+        "PIQO_FORCE_SRGB",
+        "PIQO_SCREEN_COLOR_PROFILE",
+        "PIQO_COLOR_MANAGE_EMBEDDED_THUMBNAILS",
+        "PIQO_COLOR_MANAGE_HQ_THUMBNAILS",
+        "PIQO_PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE",
     ):
         monkeypatch.delenv(env_name, raising=False)
 
@@ -181,6 +187,56 @@ def test_show_description_field_default_and_roundtrip(isolated_settings):
 
     set_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD, True)
     assert get_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD) is True
+
+
+def test_color_profile_user_settings_defaults_and_roundtrip(isolated_settings):
+    assert get_user_setting(UserSettingKey.FORCE_SRGB) is False
+    assert (
+        get_user_setting(UserSettingKey.SCREEN_COLOR_PROFILE)
+        == ScreenColorProfileMode.FROM_MAIN_SCREEN
+    )
+
+    set_user_setting(UserSettingKey.FORCE_SRGB, True)
+    set_user_setting(UserSettingKey.SCREEN_COLOR_PROFILE, ScreenColorProfileMode.DISPLAY_P3)
+
+    assert get_user_setting(UserSettingKey.FORCE_SRGB) is True
+    assert (
+        get_user_setting(UserSettingKey.SCREEN_COLOR_PROFILE)
+        == ScreenColorProfileMode.DISPLAY_P3
+    )
+
+
+def test_screen_color_profile_env_override(isolated_settings, monkeypatch):
+    monkeypatch.setenv("PIQO_SCREEN_COLOR_PROFILE", "NO_CONVERSION")
+    init_qsettings_store(dyn=False)
+
+    assert (
+        get_user_setting(UserSettingKey.SCREEN_COLOR_PROFILE)
+        == ScreenColorProfileMode.NO_CONVERSION
+    )
+
+
+def test_color_management_runtime_settings_defaults_and_env_override(
+    isolated_settings, monkeypatch
+):
+    assert get_runtime_setting(RuntimeSettingKey.COLOR_MANAGE_EMBEDDED_THUMBNAILS) is True
+    assert get_runtime_setting(RuntimeSettingKey.COLOR_MANAGE_HQ_THUMBNAILS) is True
+    assert (
+        get_runtime_setting(RuntimeSettingKey.PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE)
+        is False
+    )
+
+    monkeypatch.setenv("PIQO_COLOR_MANAGE_EMBEDDED_THUMBNAILS", "false")
+    monkeypatch.setenv("PIQO_COLOR_MANAGE_HQ_THUMBNAILS", "0")
+    monkeypatch.setenv("PIQO_PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE", "true")
+    init_qsettings_store(dyn=False)
+
+    assert get_runtime_setting(RuntimeSettingKey.COLOR_MANAGE_EMBEDDED_THUMBNAILS) is False
+    assert get_runtime_setting(RuntimeSettingKey.COLOR_MANAGE_HQ_THUMBNAILS) is False
+    assert (
+        get_runtime_setting(RuntimeSettingKey.PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE)
+        is True
+    )
 
 
 def test_runtime_settings_are_memory_only(isolated_settings, monkeypatch):

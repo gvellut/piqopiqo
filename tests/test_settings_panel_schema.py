@@ -29,6 +29,7 @@ def test_interface_tab_layout_matches_expected_groups_and_fields():
     assert [group.title for group in interface_tab.groups] == [
         "Grid",
         "Fullscreen",
+        "Color",
         "Metadata Panel",
         "EXIF Panel",
     ]
@@ -40,8 +41,12 @@ def test_interface_tab_layout_matches_expected_groups_and_fields():
         UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE
     ]
     assert [field.key for field in interface_tab.groups[2].fields] == [
-        UserSettingKey.SHOW_DESCRIPTION_FIELD
+        UserSettingKey.FORCE_SRGB,
+        UserSettingKey.SCREEN_COLOR_PROFILE,
     ]
     assert [field.key for field in interface_tab.groups[3].fields] == [
+        UserSettingKey.SHOW_DESCRIPTION_FIELD
+    ]
+    assert [field.key for field in interface_tab.groups[4].fields] == [
         UserSettingKey.CUSTOM_EXIF_FIELDS
     ]

@@ -14,9 +14,7 @@ if sys.platform == "darwin":
 from PySide6.QtCore import QPointF, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
-    QColorSpace,
     QFont,
-    QImage,
     QKeyEvent,
     QMouseEvent,
     QPainter,
@@ -34,6 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.color_management import load_pixmap_with_color_management
 from piqopiqo.label_utils import get_label_color
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.orientation import apply_orientation_to_pixmap
@@ -399,149 +398,18 @@ class FullscreenOverlay(QWidget):
                 y = self.height() - self.info_panel.height() - margin_edge
             self.info_panel.move(margin_side, y)
 
-    # BEGIN Color profile
-    def _load_pixmap_with_color_profile_qt(self):
-        # 1. Load the image into a QImage instead of QPixmap
-        image = QImage(self.image_path)
-
-        # 2. Check if the image has an embedded color profile
-        color_space = image.colorSpace()
-
-        if color_space.isValid():
-            # seems to be false with my photos from Fujifilm camera
-            # TODO use pillow or pyobjc
-            # 3. Convert the image to standard sRGB
-            # (Monitors generally assume sRGB for raw pixel data)
-            image.convertToColorSpace(QColorSpace(QColorSpace.NamedColorSpace.SRgb))
-
-        # 4. Convert the processed QImage to a QPixmap for your GUI
-        raw_pixmap = QPixmap.fromImage(image)
-        return raw_pixmap
-
-    def _load_pixmap_with_color_space_debug(self):
-        # Load via QImage so debug color-space operations can run before QPixmap.
-        image = QImage(self.image_path)
-        if image.isNull():
-            return QPixmap()
-
-        # Hardcoded fullscreen color-space debug for visual testing.
-        #
-        # IMPORTANT:
-        # - `setColorSpace(...)` only tags metadata (usually no visible change)
-        # - `convertToColorSpace(...)` changes pixel values (visible change)
-        #
-        # Current test: assume source is sRGB if untagged, then convert to
-        # Linear sRGB to make the difference obvious on screen.
-        image.setColorSpace(QColorSpace(QColorSpace.NamedColorSpace.SRgb))
-        # image.convertToColorSpace(QColorSpace(QColorSpace.NamedColorSpace.DisplayP3))
-        logger.info(
-            "Fullscreen hardcoded debug color conversion applied for %s -> %s",
+    def _load_fullscreen_pixmap_with_color_management(self) -> QPixmap:
+        return load_pixmap_with_color_management(
             self.image_path,
-            image.colorSpace().description(),
+            force_srgb=bool(get_user_setting(UserSettingKey.FORCE_SRGB)),
+            screen_profile_mode=get_user_setting(UserSettingKey.SCREEN_COLOR_PROFILE),
+            allow_profile_extract_fallback=True,
+            prefer_pillow_extract=bool(
+                get_runtime_setting(
+                    RuntimeSettingKey.PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE
+                )
+            ),
         )
-
-        return QPixmap.fromImage(image)
-
-    def _get_monitor_icc_profile_macos(self):
-        """Returns the raw ICC profile bytes of the main macOS display."""
-        # 1. Get the screen (NSScreen)
-        # If you have multiple monitors, NSScreen.screens() returns a list.
-        # mainScreen() is the one with the menu bar.
-        ns_screen = AppKit.NSScreen.mainScreen()
-
-        # 2. Get the ColorSpace object from the hardware
-        ns_color_space = ns_screen.colorSpace()
-
-        # 3. Extract the ICC Data bytes
-        icc_data = ns_color_space.ICCProfileData()
-
-        if icc_data:
-            # Convert NSData to Python bytes
-            return icc_data.bytes().tobytes()
-        return None
-
-    def _load_color_managed_pixmap(self):
-        image = QImage(self.image_path)
-
-        # Step A: Tag as sRGB (The "Source")
-        # This tells Qt that the raw data in your JPEG is sRGB.
-        space = self.get_icc_from_macos()
-        image.setColorSpace(space)  # QColorSpace(QColorSpace.NamedColorSpace.SRgb))
-
-        # Step B: Get the hardware ICC profile from macOS
-        icc_bytes = self._get_monitor_icc_profile_macos()
-
-        if icc_bytes:
-            # Create a QColorSpace directly from the OS-provided ICC data
-            # This is exactly what Adobe Bridge does.
-            monitor_space = QColorSpace.fromIccProfile(icc_bytes)
-
-            if monitor_space.isValid():
-                # Step C: The Conversion Math
-                # Transform pixels from sRGB to your Asus's specific hardware space.
-                image.convertToColorSpace(monitor_space)
-                print(f"Hardware Profile Applied: {monitor_space.description()}")
-
-        return QPixmap.fromImage(image)
-
-    def get_icc_from_macos(self):
-
-        import Quartz
-
-        """Ask macOS to identify the color space (handles embedded and tagged)."""
-        url = Quartz.CFURLCreateWithFileSystemPath(
-            None, self.image_path, Quartz.kCFURLPOSIXPathStyle, False
-        )
-        source = Quartz.CGImageSourceCreateWithURL(url, None)
-        if not source:
-            return None
-
-        # 1. LIGHTWEIGHT CHECK: Get properties only (No CGImage creation yet)
-        props = Quartz.CGImageSourceCopyPropertiesAtIndex(source, 0, None)
-
-        # 3. Check for the EXIF sRGB tag (The fastest way to identify sRGB)
-        exif = props.get("{Exif}")
-        if exif and exif.get(Quartz.kCGImagePropertyExifColorSpace) == 1:
-            return QColorSpace(QColorSpace.NamedColorSpace.SRgb)
-
-        # 1. Ask the OS to create an image reference.
-        # This handles all the 'inferred' logic that Preview uses.
-        cg_image = Quartz.CGImageSourceCreateImageAtIndex(source, 0, None)
-        if not cg_image:
-            return None
-
-        # 2. Get the ColorSpace handle that the OS assigned to this image
-        cg_color_space = Quartz.CGImageGetColorSpace(cg_image)
-
-        # 3. Convert to NSColorSpace to extract raw ICC bytes
-        ns_color_space = AppKit.NSColorSpace.alloc().initWithCGColorSpace_(
-            cg_color_space
-        )
-
-        icc_data = ns_color_space.ICCProfileData()
-        if icc_data:
-            icc_bytes = icc_data.bytes().tobytes()
-            return QColorSpace.fromIccProfile(icc_bytes)
-        return None
-
-    def get_icc_with_pillow(self):
-        """
-        Extracts raw ICC profile bytes from an image using Pillow.
-        Returns bytes if found, otherwise None.
-        """
-        from PIL import Image
-
-        with Image.open(self.image_path) as img:
-            # Pillow stores the raw ICC profile in the 'info' dictionary
-            icc_profile = img.info.get("icc_profile")
-            if icc_profile:
-                # 3. Create the QColorSpace from the raw bytes Pillow found
-                color_space = QColorSpace.fromIccProfile(icc_profile)
-                return color_space
-
-        return None
-
-    # END color profile
 
     def _load_pixmap_at_current_index(self) -> bool:
         """Load the pixmap for the current index.
@@ -555,7 +423,7 @@ class FullscreenOverlay(QWidget):
             image_data = self.all_items[global_index]
             self.image_path = image_data.path
             if self.image_path:
-                raw_pixmap = self._load_color_managed_pixmap()
+                raw_pixmap = self._load_fullscreen_pixmap_with_color_management()
                 # raw_pixmap = QPixmap(self.image_path)
                 if raw_pixmap.isNull():
                     logger.warning(f"Failed to load image: {self.image_path}")

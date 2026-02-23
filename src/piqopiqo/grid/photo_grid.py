@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.cache_paths import get_thumb_dir_for_folder
+from piqopiqo.color_management import load_pixmap_with_color_management
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.orientation import apply_orientation_to_pixmap
 from piqopiqo.settings_state import (
@@ -626,18 +627,41 @@ class PhotoGrid(QWidget):
             item.hq_pixmap = None
             item.pixmap = None
 
+    def _load_thumbnail_cache_pixmap(
+        self,
+        path: Path,
+        *,
+        runtime_key: RuntimeSettingKey,
+    ) -> QPixmap:
+        if not bool(get_runtime_setting(runtime_key)):
+            return QPixmap(str(path))
+
+        return load_pixmap_with_color_management(
+            str(path),
+            force_srgb=bool(get_user_setting(UserSettingKey.FORCE_SRGB)),
+            screen_profile_mode=get_user_setting(UserSettingKey.SCREEN_COLOR_PROFILE),
+            allow_profile_extract_fallback=False,
+            prefer_pillow_extract=False,
+        )
+
     def _ensure_embedded_pixmap_loaded(self, item) -> None:
         if item is None or getattr(item, "embedded_pixmap", None) is not None:
             return
         embedded_path, _ = self._cache_paths_for_item(item)
         if embedded_path.exists():
-            item.embedded_pixmap = QPixmap(str(embedded_path))
+            item.embedded_pixmap = self._load_thumbnail_cache_pixmap(
+                embedded_path,
+                runtime_key=RuntimeSettingKey.COLOR_MANAGE_EMBEDDED_THUMBNAILS,
+            )
         else:
             base_name = os.path.splitext(os.path.basename(item.path))[0]
             thumb_dir = get_thumb_dir_for_folder(item.source_folder)
             legacy_path = Path(thumb_dir) / f"{base_name}_embedded.jpg"
             if legacy_path.exists():
-                item.embedded_pixmap = QPixmap(str(legacy_path))
+                item.embedded_pixmap = self._load_thumbnail_cache_pixmap(
+                    legacy_path,
+                    runtime_key=RuntimeSettingKey.COLOR_MANAGE_EMBEDDED_THUMBNAILS,
+                )
 
         if (
             getattr(item, "embedded_pixmap", None) is not None
@@ -650,13 +674,19 @@ class PhotoGrid(QWidget):
             return
         _, hq_path = self._cache_paths_for_item(item)
         if hq_path.exists():
-            item.hq_pixmap = QPixmap(str(hq_path))
+            item.hq_pixmap = self._load_thumbnail_cache_pixmap(
+                hq_path,
+                runtime_key=RuntimeSettingKey.COLOR_MANAGE_HQ_THUMBNAILS,
+            )
         else:
             base_name = os.path.splitext(os.path.basename(item.path))[0]
             thumb_dir = get_thumb_dir_for_folder(item.source_folder)
             legacy_path = Path(thumb_dir) / f"{base_name}_hq.jpg"
             if legacy_path.exists():
-                item.hq_pixmap = QPixmap(str(legacy_path))
+                item.hq_pixmap = self._load_thumbnail_cache_pixmap(
+                    legacy_path,
+                    runtime_key=RuntimeSettingKey.COLOR_MANAGE_HQ_THUMBNAILS,
+                )
 
         if (
             getattr(item, "hq_pixmap", None) is not None
@@ -788,6 +818,19 @@ class PhotoGrid(QWidget):
                 self._sync_item_state_from_cache(item)
                 self._ensure_display_pixmap_loaded(item, allow_hq=self._allow_hq_now())
                 cell.set_content(item, item.is_selected)
+
+    def invalidate_all_pixmap_caches(self) -> None:
+        """Clear all loaded source/display pixmaps so they reload with new settings."""
+        self._loaded_embedded_indices.clear()
+        self._loaded_hq_indices.clear()
+        for item in self.items_data:
+            item.embedded_pixmap = None
+            item.hq_pixmap = None
+            item.pixmap = None
+            if hasattr(item, "_pixmap_source"):
+                item._pixmap_source = None
+            if hasattr(item, "_pixmap_orientation"):
+                item._pixmap_orientation = None
 
     def on_cell_clicked(self, global_index, is_shift, is_ctrl):
         # Empty cell clicked - clear selection
