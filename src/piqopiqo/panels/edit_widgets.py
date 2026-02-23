@@ -307,7 +307,8 @@ class KeywordsEdit(QPlainTextEdit):
         height = (
             total_lines * line_height + margins.top() + margins.bottom() + frame + 4
         )
-        self.setFixedHeight(height)
+        if height != self.height():
+            self.setFixedHeight(height)
 
     def resizeEvent(self, event):
         """Recalculate height on resize."""

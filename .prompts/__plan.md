@@ -1,7 +1,7 @@
-- [Metadata panel moves if keyword has multiple lines](Z_Metadata_panel_moves_if_keyword_has_multiple_lin.md)
 - [Base data redirect to settings](Q_Base_data_redirect_to_settings.md)
 - [Model sync 2](M_Model_sync_2.md)
 - [Manual lens tool](P_Manual_lens.md)
+- [Shortcut local to screen](Aa_Shortcut_local_to_screen.md)
 ! [Fix date read delay if since:last](A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](B_Eject_SD_after_user_OK.md)
     !? [GUI lag](B.A_GUI_lag.md)
@@ -36,3 +36,4 @@
 ! [Formatting exif standard](R_Formatting_exif_standard.md)
 ! [refactor extract exif](Y_refactor_extract_exif.md)
 ! [Filter update delay hide descript metadata layout](X_Filter_update_delay_hide_descript_metadata_layou.md)
+! [Metadata panel moves if keyword has multiple lines](Z_Metadata_panel_moves_if_keyword_has_multiple_lin.md)

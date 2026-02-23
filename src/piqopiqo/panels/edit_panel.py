@@ -83,12 +83,15 @@ class EditPanel(QWidget):
 
         # Container widget
         container = QWidget()
-        container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        # Use a non-fixed vertical policy so keyword auto-height changes don't
+        # cause transient compressed relayout passes before the container catches up.
+        container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         self.layout = QGridLayout(container)
         self.layout.setContentsMargins(10, 10, 10, 10)
         self.layout.setSpacing(5)
         self.layout.setColumnStretch(0, 30)
         self.layout.setColumnStretch(1, 70)
+        self.layout.setAlignment(Qt.AlignTop)
 
         row = 0
 
@@ -153,7 +156,7 @@ class EditPanel(QWidget):
 
         # Keywords
         self.layout.addWidget(
-            QLabel(f"{FIELD_DISPLAY_LABELS[DBFields.KEYWORDS]}:"), row, 0
+            QLabel(f"{FIELD_DISPLAY_LABELS[DBFields.KEYWORDS]}:"), row, 0, Qt.AlignTop
         )
         self.keywords_edit = KeywordsEdit()
         self.keywords_edit.edit_finished.connect(
