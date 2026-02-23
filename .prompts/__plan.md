@@ -2,6 +2,8 @@
 - [Base data redirect to settings](Q_Base_data_redirect_to_settings.md)
 - [Model sync 2](M_Model_sync_2.md)
 - [fullscreen color](Ca_fullscreen_color.md)
+- [Specific macos](Da_Specific_macos.md)
+- [Handle color profile setting appkit](Ea_Handle_color_profile_setting_appkit.md)
 ! [Fix date read delay if since:last](A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](B_Eject_SD_after_user_OK.md)
     !? [GUI lag](B.A_GUI_lag.md)
