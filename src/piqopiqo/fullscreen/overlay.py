@@ -14,7 +14,9 @@ if sys.platform == "darwin":
 from PySide6.QtCore import QPointF, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
+    QColorSpace,
     QFont,
+    QImage,
     QKeyEvent,
     QMouseEvent,
     QPainter,
@@ -396,6 +398,41 @@ class FullscreenOverlay(QWidget):
                 y = self.height() - self.info_panel.height() - margin_edge
             self.info_panel.move(margin_side, y)
 
+    def _load_pixmap_with_color_profile_qt(self):
+        # 1. Load the image into a QImage instead of QPixmap
+        image = QImage(self.image_path)
+
+        # 2. Check if the image has an embedded color profile
+        color_space = image.colorSpace()
+
+        if color_space.isValid():
+            # 3. Convert the image to standard sRGB
+            # (Monitors generally assume sRGB for raw pixel data)
+            image.convertToColorSpace(QColorSpace.NamedColorSpace.SRgb)
+
+        # 4. Convert the processed QImage to a QPixmap for your GUI
+        raw_pixmap = QPixmap.fromImage(image)
+        return raw_pixmap
+
+    def _load_pixmap_force_srgb(self):
+        # 1. Load the raw image data into a QImage
+        image = QImage(self.image_path)
+
+        # 2. Check if Qt's JPEG loader successfully read a color profile.
+        # If not (as you've observed with isValid() == False), we will manually
+        # assign the profile we know it *should* have from Adobe Bridge/macOS.
+
+        # Forcefully assign the sRGB profile, as we confirmed the image is untagged sRGB.
+        # This step tells Qt "these pixels are intended to be viewed in sRGB space".
+        image.setColorSpace(QColorSpace(QColorSpace.NamedColorSpace.SRgb))
+
+        # 4. Convert the processed QImage into a QPixmap for display.
+        # QPixmap is primarily for display and doesn't inherently handle color profiles;
+        # the color correction has already been done on the QImage.
+        raw_pixmap = QPixmap.fromImage(image)
+
+        return raw_pixmap
+
     def _load_pixmap_at_current_index(self) -> bool:
         """Load the pixmap for the current index.
 
@@ -408,7 +445,8 @@ class FullscreenOverlay(QWidget):
             image_data = self.all_items[global_index]
             self.image_path = image_data.path
             if self.image_path:
-                raw_pixmap = QPixmap(self.image_path)
+                raw_pixmap = self._load_pixmap_force_srgb()
+                # raw_pixmap = QPixmap(self.image_path)
                 if raw_pixmap.isNull():
                     logger.warning(f"Failed to load image: {self.image_path}")
                     self._pixmap = QPixmap()
