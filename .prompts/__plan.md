@@ -1,4 +1,3 @@
-* [select all quite slow](Ba_select_all_quite_slow.md)
 - [Shortcut local to screen](Aa_Shortcut_local_to_screen.md)
 - [Manual lens tool](P_Manual_lens.md)
 - [Base data redirect to settings](Q_Base_data_redirect_to_settings.md)
@@ -38,3 +37,4 @@
 ! [refactor extract exif](Y_refactor_extract_exif.md)
 ! [Filter update delay hide descript metadata layout](X_Filter_update_delay_hide_descript_metadata_layou.md)
 ! [Metadata panel moves if keyword has multiple lines](Z_Metadata_panel_moves_if_keyword_has_multiple_lin.md)
+! [select all quite slow](Ba_select_all_quite_slow.md)

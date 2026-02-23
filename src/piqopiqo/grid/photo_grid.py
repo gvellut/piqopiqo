@@ -142,6 +142,19 @@ class PhotoGrid(QWidget):
                 result.append(item.path)
         return result
 
+    def refresh_visible_selection_only(self) -> None:
+        """Refresh only visible cell selection highlights."""
+        if not self.cells or not self.items_data:
+            return
+
+        start_idx = int(self.scrollbar.value()) * self.n_cols
+        for i, cell in enumerate(self.cells):
+            data_index = start_idx + i
+            if 0 <= data_index < len(self.items_data):
+                cell.set_selected_state(bool(self.items_data[data_index].is_selected))
+            else:
+                cell.set_selected_state(False)
+
     def select_paths(
         self,
         paths: list[str],

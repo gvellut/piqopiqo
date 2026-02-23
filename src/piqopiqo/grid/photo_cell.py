@@ -44,6 +44,12 @@ class PhotoCell(QFrame):
         self.is_selected = is_selected
         self.update()
 
+    def set_selected_state(self, is_selected: bool) -> None:
+        if self.is_selected == is_selected:
+            return
+        self.is_selected = is_selected
+        self.update()
+
     def set_layout_info(self, info: dict):
         self.layout_info = info
         self.update()

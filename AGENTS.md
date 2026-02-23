@@ -2,6 +2,8 @@
 
 Photo viewer / metadata viewer + editor built with Python 3 and PySide6 (Qt).
 
+It is similar in focus to Adobe Bridge (grid view, fullscreen, shortcuts) but tailored to a custom workflow (and with a limited set of views : only photo grid + fullscreen).
+
 ## Running the Application
 
 For testing that all the imports work and that the app initializes correctly. As well as testing that the changes are correct, using PyQtAuto if explicitly told by the user (use PIQO_INITIAL_RESOLUTION and PIQO_NUM_COLUMNS for setting suitable values)
@@ -98,7 +100,9 @@ src/piqopiqo/
     └── macos.py     # macOS utilities (resolution, move_to_trash)
 
 tests/
-├── test_edit_panel.py # Edit panel UI behavior (description field visibility)
+├── test_edit_panel.py # Edit panel UI behavior (description field visibility + pending selection summary)
+├── test_exif_panel.py # EXIF panel display formatting and pending selection summary
+├── test_photo_grid_selection_refresh.py # Visible-only grid selection highlight refresh path
 └── test_metadata_save_workers.py # QThreadPool drain helper shutdown semantics
 ```
 
@@ -319,6 +323,7 @@ Selection behavior:
 - Label shortcuts are view-scoped: grid and fullscreen install separate `QShortcut`s (not `Qt.ApplicationShortcut`). Fullscreen label shortcuts act on the current fullscreen image only; grid label undo/redo is disabled/ignored while fullscreen is active.
 - Fullscreen exit selection/visibility restoration is path-based and centralized in `MainWindow` (single-image loop vs selected-images loop, `FILTER_IN_FULLSCREEN`, and `ON_FULLSCREEN_EXIT_SELECTION_MODE` all converge there). Hidden/filtered-out loop members are not kept selected in the grid on exit.
 - Filter/Edit/EXIF panel interactions can hand focus back to the grid via `interaction_finished` signals (explicit interaction end); edit-panel focus restore uses explicit Enter/Escape completion, not passive focus-out saves between fields.
+- Large grid selections (for example `Cmd+A`) use a responsive-first panel update path in `MainWindow`: visible grid selection highlights refresh immediately without a full grid render, while Metadata/EXIF panel aggregation is deferred/coalesced with a short single-shot timer and panels show a temporary `N photos selected (updating...)` summary.
 - `EditPanel` metadata rows are top-anchored for layout stability: the form `QGridLayout` uses `Qt.AlignTop`, the scroll-area content container uses a non-fixed vertical size policy, and the `Keywords:` label is top-aligned so only the keyword editor row height change is visible when `KeywordsEdit` auto-height changes.
 - Filter panel controls still emit synchronously, but `MainWindow` queues filter application to the next event-loop turn (`QTimer.singleShot(0, ...)`) so checkbox/button/combo visual feedback appears before the model/grid refresh work.
 - `Edit in {External App}` now selects the newly duplicated files in the grid before launching the editor.

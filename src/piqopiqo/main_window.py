@@ -56,6 +56,9 @@ from .shortcuts import Shortcut, parse_shortcut
 
 logger = logging.getLogger(__name__)
 
+LARGE_SELECTION_PANEL_DEFER_THRESHOLD = 200
+SELECTION_PANEL_DEBOUNCE_MS = 120
+
 
 class MainWindow(QMainWindow):
     """Main application window."""
@@ -84,6 +87,16 @@ class MainWindow(QMainWindow):
         self._active_apply_gpx_worker = None
         self._active_flickr_upload_manager = None
         self._shutdown_started = False
+        self._selected_paths_cache: set[str] = set()
+        self._selected_count_cache = 0
+        self._selection_panel_refresh_serial = 0
+        self._selection_panel_refresh_scheduled_serial: int | None = None
+        self._selection_panel_refresh_in_progress = False
+        self._selection_panel_refresh_timer = QTimer(self)
+        self._selection_panel_refresh_timer.setSingleShot(True)
+        self._selection_panel_refresh_timer.timeout.connect(
+            self._flush_deferred_selection_panel_refresh
+        )
 
         # Create metadata database manager
         self.db_manager = MetadataDBManager()
@@ -322,7 +335,7 @@ class MainWindow(QMainWindow):
         # Emit selection changed and refresh grid
         selected_indices = set(range(len(photos)))
         self.grid.selection_changed.emit(selected_indices)
-        self.grid.on_scroll(self.grid.scrollbar.value())
+        self.grid.refresh_visible_selection_only()
 
     def _apply_label_to_grid_selection(self, label_name: str | None):
         """Apply a label to the current grid selection."""
@@ -568,6 +581,93 @@ class MainWindow(QMainWindow):
         self._last_visible_paths = list(visible_paths)
         self.media_manager.update_visible(self._last_visible_paths)
 
+    def _set_selected_cache_from_items(self, items: list[ImageItem]) -> None:
+        self._selected_paths_cache = {item.path for item in items}
+        self._selected_count_cache = len(items)
+
+    def _set_selected_cache_from_indices(self, selected_indices) -> int:
+        selected_paths: set[str] = set()
+        for index in selected_indices:
+            if 0 <= index < len(self.images_data):
+                selected_paths.add(self.images_data[index].path)
+        self._selected_paths_cache = selected_paths
+        self._selected_count_cache = len(selected_paths)
+        return self._selected_count_cache
+
+    def _cancel_deferred_selection_panel_refresh(self) -> None:
+        self._selection_panel_refresh_scheduled_serial = None
+        if self._selection_panel_refresh_timer.isActive():
+            self._selection_panel_refresh_timer.stop()
+
+    def _show_selection_panels_pending(self, count: int) -> None:
+        if self.edit_panel:
+            self.edit_panel.show_selection_pending(count)
+        self.exif_panel.show_selection_pending(count)
+
+    def _clear_selection_panels_pending(self) -> None:
+        if self.edit_panel:
+            self.edit_panel.clear_selection_pending()
+        self.exif_panel.clear_selection_pending()
+
+    def _schedule_deferred_selection_panel_refresh(self) -> None:
+        self._selection_panel_refresh_serial += 1
+        self._selection_panel_refresh_scheduled_serial = (
+            self._selection_panel_refresh_serial
+        )
+        self._selection_panel_refresh_timer.start(SELECTION_PANEL_DEBOUNCE_MS)
+
+    def _flush_deferred_selection_panel_refresh(self) -> None:
+        if self._selection_panel_refresh_scheduled_serial is None:
+            return
+        self._selection_panel_refresh_scheduled_serial = None
+        selected_items = self.photo_model.get_selected_photos()
+        self._set_selected_cache_from_items(selected_items)
+        self._update_panels_for_selection(selected_items)
+
+    def _should_defer_selection_panel_refresh(
+        self,
+        selected_count: int | None = None,
+        *,
+        include_active_timer: bool = True,
+    ) -> bool:
+        count = (
+            self._selected_count_cache
+            if selected_count is None
+            else int(selected_count)
+        )
+        if count > LARGE_SELECTION_PANEL_DEFER_THRESHOLD:
+            return True
+        return include_active_timer and self._selection_panel_refresh_timer.isActive()
+
+    def _apply_or_defer_panel_refresh(
+        self,
+        *,
+        selected_items: list[ImageItem] | None = None,
+        selected_count: int | None = None,
+        coalesce_with_active_timer: bool = False,
+    ) -> None:
+        count = len(selected_items) if selected_items is not None else selected_count
+        if count is None:
+            count = self._selected_count_cache
+
+        if count <= 0:
+            self._cancel_deferred_selection_panel_refresh()
+            self._update_panels_for_selection([])
+            return
+
+        if self._should_defer_selection_panel_refresh(
+            count,
+            include_active_timer=coalesce_with_active_timer,
+        ):
+            self._show_selection_panels_pending(int(count))
+            self._schedule_deferred_selection_panel_refresh()
+            return
+
+        self._cancel_deferred_selection_panel_refresh()
+        if selected_items is None:
+            selected_items = self._get_selected_items()
+        self._update_panels_for_selection(selected_items)
+
     def _on_editable_ready(self, file_path: str, metadata: dict):
         item = self._items_by_path.get(file_path)
         if item is None:
@@ -576,9 +676,14 @@ class MainWindow(QMainWindow):
         item.db_metadata = metadata
         self.grid.refresh_item(item._global_index)
 
-        selected_items = self._get_selected_items()
-        if self.edit_panel and item in selected_items:
-            self.edit_panel.update_for_selection(selected_items)
+        if self.edit_panel and file_path in self._selected_paths_cache:
+            if self._should_defer_selection_panel_refresh():
+                self._show_selection_panels_pending(self._selected_count_cache)
+                self._schedule_deferred_selection_panel_refresh()
+            else:
+                selected_items = self._get_selected_items()
+                if selected_items:
+                    self.edit_panel.update_for_selection(selected_items)
 
         needs_resort = self.photo_model.sort_order == SortOrder.TIME_TAKEN
         if self._current_filter is not None:
@@ -725,8 +830,18 @@ class MainWindow(QMainWindow):
 
         item.exif_data = fields
 
+        if file_path not in self._selected_paths_cache:
+            return
+        if self._selection_panel_refresh_in_progress:
+            return
+
+        if self._should_defer_selection_panel_refresh():
+            self._show_selection_panels_pending(self._selected_count_cache)
+            self._schedule_deferred_selection_panel_refresh()
+            return
+
         selected_items = self._get_selected_items()
-        if item in selected_items:
+        if selected_items:
             self.exif_panel.update_exif(selected_items)
 
     def _show_error_dialog(self):
@@ -740,7 +855,20 @@ class MainWindow(QMainWindow):
 
     def _get_selected_items(self) -> list[ImageItem]:
         """Get list of currently selected items."""
-        return [item for item in self.images_data if item.is_selected]
+        if not self._selected_paths_cache:
+            return []
+
+        selected_items = [
+            item
+            for item in self.images_data
+            if item.is_selected and item.path in self._selected_paths_cache
+        ]
+        if len(selected_items) == self._selected_count_cache:
+            return selected_items
+
+        rebuilt = [item for item in self.images_data if item.is_selected]
+        self._set_selected_cache_from_items(rebuilt)
+        return rebuilt
 
     def _ensure_db_metadata_ready(self, items: list[ImageItem]) -> bool:
         return self.db_manager.ensure_items_metadata_ready(items)
@@ -1328,33 +1456,45 @@ class MainWindow(QMainWindow):
         # Mark selection as changed for undo tracking
         self._selection_changed_since_edit = True
 
+        selected_count = self._set_selected_cache_from_indices(selected_indices)
+        if selected_count > LARGE_SELECTION_PANEL_DEFER_THRESHOLD:
+            self._apply_or_defer_panel_refresh(selected_count=selected_count)
+            return
+
         selected_items = [
             self.images_data[i]
-            for i in selected_indices
+            for i in sorted(selected_indices)
             if 0 <= i < len(self.images_data)
         ]
+        self._set_selected_cache_from_items(selected_items)
+        self._apply_or_defer_panel_refresh(selected_items=selected_items)
 
-        # Load db_metadata for selected items if not already loaded
-        for item in selected_items:
+    def _update_panels_for_selection(self, items: list[ImageItem]) -> None:
+        self._clear_selection_panels_pending()
+
+        # Load db_metadata for selected items if not already loaded.
+        for item in items:
             if item.db_metadata is None:
                 db = self.db_manager.get_db_for_image(item.path)
                 item.db_metadata = db.get_metadata(item.path)
 
-        self._update_panels_for_selection(selected_items)
+        self._selection_panel_refresh_in_progress = True
+        try:
+            if self.edit_panel:
+                self.edit_panel.update_for_selection(items)
 
-    def _update_panels_for_selection(self, items: list[ImageItem]) -> None:
-        if self.edit_panel:
-            self.edit_panel.update_for_selection(items)
-
-        self.media_manager.ensure_panel_fields_loaded_from_db(
-            [item.path for item in items]
-        )
-        self.exif_panel.update_exif(items)
+            self.media_manager.ensure_panel_fields_loaded_from_db(
+                [item.path for item in items]
+            )
+            self.exif_panel.update_exif(items)
+        finally:
+            self._selection_panel_refresh_in_progress = False
 
     def _reconcile_selection_and_panels(self) -> None:
         selected_items = self.photo_model.get_selected_photos()
         self._selection_changed_since_edit = True
-        self._update_panels_for_selection(selected_items)
+        self._set_selected_cache_from_items(selected_items)
+        self._apply_or_defer_panel_refresh(selected_items=selected_items)
 
     def request_thumb_handler(self, index):
         if 0 <= index < len(self.images_data):

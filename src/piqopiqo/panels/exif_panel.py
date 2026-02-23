@@ -9,6 +9,7 @@ import re
 from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import (
     QGridLayout,
+    QLabel,
     QScrollArea,
     QSizePolicy,
     QVBoxLayout,
@@ -146,6 +147,12 @@ class ExifPanel(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
+        self._status_label = QLabel("")
+        self._status_label.setContentsMargins(10, 5, 10, 5)
+        self._status_label.setStyleSheet("color: gray;")
+        self._status_label.hide()
+        main_layout.addWidget(self._status_label)
+
         # Create scroll area
         self._scroll_area = QScrollArea()
         self._scroll_area.setWidgetResizable(True)
@@ -213,8 +220,17 @@ class ExifPanel(QWidget):
             self.interaction_finished.emit()
         return super().eventFilter(watched, event)
 
+    def show_selection_pending(self, count: int) -> None:
+        noun = "photo" if count == 1 else "photos"
+        self._status_label.setText(f"{count} {noun} selected (updating...)")
+        self._status_label.show()
+
+    def clear_selection_pending(self) -> None:
+        self._status_label.hide()
+
     def update_exif(self, items: list[ImageItem]):
         """Update the panel with EXIF data from the given items."""
+        self.clear_selection_pending()
         if not items:
             # Clear all values if no items selected
             for value_label in self.value_labels:

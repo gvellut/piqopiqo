@@ -8,6 +8,8 @@ from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import QApplication
 import pytest
 
+from piqopiqo.metadata.db_fields import DBFields
+from piqopiqo.model import ImageItem
 from piqopiqo.panels.edit_panel import EditPanel
 from piqopiqo.settings_state import (
     UserSettingKey,
@@ -18,6 +20,19 @@ from piqopiqo.settings_state import (
 
 class _DummyDBManager:
     pass
+
+
+class _StubDB:
+    def has_metadata(self, _path: str) -> bool:
+        return True
+
+
+class _StubDBManager:
+    def __init__(self) -> None:
+        self.db = _StubDB()
+
+    def get_db_for_image(self, _path: str) -> _StubDB:
+        return self.db
 
 
 @pytest.fixture
@@ -150,3 +165,28 @@ def test_keywords_height_change_keeps_edit_panel_rows_stable(qapp):
     assert short_state["keyword_label_y"] == base["keyword_label_y"]
     assert long_state["keyword_label_h"] == base["keyword_label_h"]
     assert short_state["keyword_label_h"] == base["keyword_label_h"]
+
+
+def test_selection_pending_summary_disables_editors_then_clears_on_update(qapp):
+    init_qsettings_store(dyn=True)
+
+    panel = EditPanel(_StubDBManager())
+    panel.show_selection_pending(1234)
+
+    assert panel.reading_label.isHidden() is False
+    assert panel.reading_label.text() == "1234 photos selected (updating...)"
+    assert panel.title_edit.isEnabled() is False
+    assert panel.keywords_edit.isEnabled() is False
+
+    item = ImageItem(
+        path="/tmp/a.jpg",
+        name="a.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={DBFields.TITLE: "Test"},
+    )
+    panel.update_for_selection([item])
+
+    assert panel.reading_label.isHidden() is True
+    assert panel.title_edit.isEnabled() is True
+    assert panel.keywords_edit.isEnabled() is True

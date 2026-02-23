@@ -236,19 +236,32 @@ class EditPanel(QWidget):
             )
         return completed
 
+    def show_selection_pending(self, count: int) -> None:
+        self._current_items = []
+        self._is_multi_select = bool(count > 1)
+        self._has_missing_data = False
+        self._clear_fields()
+        self._set_editing_enabled(False)
+        noun = "photo" if count == 1 else "photos"
+        self.reading_label.setText(f"{count} {noun} selected (updating...)")
+        self.reading_label.show()
+
+    def clear_selection_pending(self) -> None:
+        self.reading_label.hide()
+
     def update_for_selection(self, items: list[ImageItem]):
         """Update the panel for a selection of items.
 
         Args:
             items: List of selected ImageItem objects.
         """
+        self.clear_selection_pending()
         self._current_items = items
         self._is_multi_select = len(items) > 1
 
         if not items:
             self._clear_fields()
             self._set_editing_enabled(False)
-            self.reading_label.hide()
             return
 
         # Check if any items are still missing DB data (EXIF not read yet)
