@@ -180,51 +180,36 @@ def run_combined_task(task: dict) -> dict:
                 exiftool_path=exiftool_path,
             )
 
-            want_editable_paths = [
-                f["file_path"] for f in files if bool(f.get("want_editable"))
+            metadata_index: dict[str, dict] = {}
+            need_editable_metadata = any(bool(f.get("want_editable")) for f in files)
+            need_panel_metadata = any(bool(f.get("want_panel")) for f in files)
+            metadata_paths = [
+                str(f["file_path"])
+                for f in files
+                if bool(f.get("want_editable")) or bool(f.get("want_panel"))
             ]
-            want_panel_paths = [
-                f["file_path"] for f in files if bool(f.get("want_panel"))
-            ]
-
-            editable_index: dict[str, dict] = {}
-            panel_index: dict[str, dict] = {}
-
-            if want_editable_paths:
-                mapping_params = ["-G", "-n", "-use", "MWG", *_build_mapping_tag_args()]
-                editable_list = helper.get_metadata(
-                    [str(p) for p in want_editable_paths], mapping_params
-                )
-                editable_index = _index_metadata_by_sourcefile(
-                    [str(p) for p in want_editable_paths], editable_list
-                )
-
-            if want_panel_paths:
-                panel_params = [
-                    "-G",
-                    "-n",
-                    "-use",
-                    "MWG",
-                    *_build_panel_tag_args(panel_field_keys),
-                ]
-                panel_list = helper.get_metadata(
-                    [str(p) for p in want_panel_paths], panel_params
-                )
-                panel_index = _index_metadata_by_sourcefile(
-                    [str(p) for p in want_panel_paths], panel_list
+            metadata_tag_args: list[str] = []
+            if need_editable_metadata:
+                metadata_tag_args.extend(_build_mapping_tag_args())
+            if need_panel_metadata:
+                metadata_tag_args.extend(_build_panel_tag_args(panel_field_keys))
+            if metadata_paths and metadata_tag_args:
+                metadata_params = ["-G", "-n", "-use", "MWG", *metadata_tag_args]
+                metadata_list = helper.get_metadata(metadata_paths, metadata_params)
+                metadata_index = _index_metadata_by_sourcefile(
+                    metadata_paths, metadata_list
                 )
 
             for file_entry in files:
                 file_path = str(file_entry["file_path"])
+                raw = metadata_index.get(file_path, {})
 
                 editable_meta: dict | None = None
                 if bool(file_entry.get("want_editable")):
-                    raw = editable_index.get(file_path, {})
                     editable_meta = extract_editable_metadata(raw) if raw else {}
 
                 panel_fields: dict[str, str | None] | None = None
                 if bool(file_entry.get("want_panel")):
-                    raw = panel_index.get(file_path, {})
                     panel_fields = {
                         key: _safe_str(raw.get(key)) for key in panel_field_keys
                     }

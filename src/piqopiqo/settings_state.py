@@ -469,6 +469,8 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
         env_parser=_parse_list_of_str,
     ),
     RuntimeSettingKey.EXIF_AUTO_FORMAT: SettingDef(default=True, read_type=bool),
+    # TODO instead of raw strings : set ref to function (or a constant that refs to
+    # function)
     RuntimeSettingKey.EXIF_FIELDS: SettingDef(
         default=[
             ExifField("EXIF:FocalLength", format="focal_mm"),

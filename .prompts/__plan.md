@@ -1,6 +1,7 @@
 - [Base data redirect to settings](Q_Base_data_redirect_to_settings.md)
 - [Model sync 2](M_Model_sync_2.md)
 - [Manual lens tool](P_Manual_lens.md)
+- [Filter update delay hide descript metadata layout](X_Filter_update_delay_hide_descript_metadata_layou.md)
 ! [Fix date read delay if since:last](A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](B_Eject_SD_after_user_OK.md)
     !? [GUI lag](B.A_GUI_lag.md)
@@ -33,3 +34,4 @@
     - [Grid refresh exit fullscreen](V_Grid_refresh_exit_fullscreen.md)
 ! [Sort order keep for folder or last](W_Sort_order_keep_for_folder_or_last.md)
 ! [Formatting exif standard](R_Formatting_exif_standard.md)
+! [refactor extract exif](Y_refactor_extract_exif.md)

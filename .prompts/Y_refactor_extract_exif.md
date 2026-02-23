@@ -1,0 +1,1 @@
+Why is the call the same (same parameters) ? + list and indexing. Refactor to make only one exif helper call.
