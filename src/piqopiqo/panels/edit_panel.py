@@ -20,6 +20,7 @@ from piqopiqo.metadata.db_fields import EDITABLE_FIELDS, FIELD_DISPLAY_LABELS, D
 from piqopiqo.metadata.metadata_db import MetadataDBManager
 from piqopiqo.metadata.save_workers import MetadataSaveWorker, drain_qthread_pool
 from piqopiqo.model import ImageItem
+from piqopiqo.settings_state import UserSettingKey, get_user_setting
 
 from .edit_widgets import (
     MULTIPLE_VALUES,
@@ -51,6 +52,9 @@ class EditPanel(QWidget):
         self._keyword_tree_manager = KeywordTreeManager()
 
         self._setup_ui()
+        self.set_description_field_visible(
+            bool(get_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD))
+        )
 
     def _setup_ui(self):
         """Create the panel UI."""
@@ -103,8 +107,10 @@ class EditPanel(QWidget):
         row += 1
 
         # Description
-        desc_label = QLabel(f"{FIELD_DISPLAY_LABELS[DBFields.DESCRIPTION]}:")
-        self.layout.addWidget(desc_label, row, 0, Qt.AlignTop)
+        self.description_label = QLabel(
+            f"{FIELD_DISPLAY_LABELS[DBFields.DESCRIPTION]}:"
+        )
+        self.layout.addWidget(self.description_label, row, 0, Qt.AlignTop)
         self.description_edit = DescriptionEdit()
         self.description_edit.edit_finished.connect(
             lambda: self._on_field_saved(DBFields.DESCRIPTION)
@@ -202,6 +208,15 @@ class EditPanel(QWidget):
             self.keyword_tree_btn,
         ):
             widget.setEnabled(enabled)
+
+    def set_description_field_visible(self, visible: bool) -> None:
+        visible = bool(visible)
+        if not visible and self.description_edit.hasFocus():
+            self.description_edit.clearFocus()
+            if self.title_edit.isEnabled() and not self.title_edit.isHidden():
+                self.title_edit.setFocus(Qt.FocusReason.OtherFocusReason)
+        self.description_label.setVisible(visible)
+        self.description_edit.setVisible(visible)
 
     def shutdown_background_saves(
         self, timeout_ms: int, *, clear_queued: bool = True

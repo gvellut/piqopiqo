@@ -78,7 +78,7 @@ SETTINGS_TABS: list[TabSpec] = [
         ],
     ),
     TabSpec(
-        title="Grid/Display",
+        title="Interface",
         groups=[
             GroupSpec(
                 title="Grid",
@@ -90,6 +90,11 @@ SETTINGS_TABS: list[TabSpec] = [
                         min_value=1,
                         max_value=50,
                     ),
+                ],
+            ),
+            GroupSpec(
+                title="Fullscreen",
+                fields=[
                     FieldSpec(
                         key=UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE,
                         label="Fullscreen Exit Behavior",
@@ -107,6 +112,21 @@ SETTINGS_TABS: list[TabSpec] = [
                             ),
                         ],
                     ),
+                ],
+            ),
+            GroupSpec(
+                title="Metadata Panel",
+                fields=[
+                    FieldSpec(
+                        key=UserSettingKey.SHOW_DESCRIPTION_FIELD,
+                        label="Show description field",
+                        editor=EditorKind.BOOL,
+                    ),
+                ],
+            ),
+            GroupSpec(
+                title="EXIF Panel",
+                fields=[
                     FieldSpec(
                         key=UserSettingKey.CUSTOM_EXIF_FIELDS,
                         label="Custom EXIF Fields",

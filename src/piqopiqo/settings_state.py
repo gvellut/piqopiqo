@@ -65,6 +65,7 @@ class UserSettingKey(StrEnum):
     CUSTOM_EXIF_FIELDS = "customExifFields"
     NUM_COLUMNS = "numColumns"
     ON_FULLSCREEN_EXIT_SELECTION_MODE = "onFullscreenExit"
+    SHOW_DESCRIPTION_FIELD = "showDescriptionField"
     STATUS_LABELS = "statusLabels"
     EXTERNAL_VIEWER = "externalViewer"
     EXTERNAL_EDITOR = "externalEditor"
@@ -348,6 +349,7 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         deserializer=_deserialize_on_fullscreen_exit_selection_mode,
         env_parser=_deserialize_on_fullscreen_exit_selection_mode,
     ),
+    UserSettingKey.SHOW_DESCRIPTION_FIELD: SettingDef(default=True, read_type=bool),
     UserSettingKey.STATUS_LABELS: SettingDef(
         default=[
             StatusLabel("Approved", "#FF0000", 1),

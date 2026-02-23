@@ -68,6 +68,9 @@ class MainWindow(QMainWindow):
         self.root_folder = root_folder
         self.source_folders = source_folders
         self._current_filter: FilterCriteria | None = None  # Current filter criteria
+        self._filter_apply_scheduled = False
+        self._pending_filter_criteria: FilterCriteria | None = None
+        self._pending_filter_snapshot: dict | None = None
 
         self._items_by_path: dict[str, ImageItem] = {}
         self._last_visible_paths: list[str] = []
@@ -858,6 +861,21 @@ class MainWindow(QMainWindow):
         """
         snapshot = self._capture_grid_viewport_snapshot()
         self._current_filter = criteria
+        self._pending_filter_criteria = criteria
+        self._pending_filter_snapshot = snapshot
+        if self._filter_apply_scheduled:
+            return
+        self._filter_apply_scheduled = True
+        QTimer.singleShot(0, self._apply_pending_filter_change)
+
+    def _apply_pending_filter_change(self) -> None:
+        self._filter_apply_scheduled = False
+        criteria = self._pending_filter_criteria
+        snapshot = self._pending_filter_snapshot
+        self._pending_filter_criteria = None
+        self._pending_filter_snapshot = None
+        if criteria is None or snapshot is None:
+            return
         self.photo_model.set_filter(criteria)
         self._restore_grid_viewport_after_filter_change(snapshot)
 
@@ -1027,6 +1045,14 @@ class MainWindow(QMainWindow):
             if self._fullscreen_overlay is not None:
                 self._fullscreen_overlay._update_color_swatch()
                 self._fullscreen_overlay.update()
+
+        if (
+            UserSettingKey.SHOW_DESCRIPTION_FIELD in changed_keys
+            and self.edit_panel is not None
+        ):
+            self.edit_panel.set_description_field_visible(
+                bool(get_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD))
+            )
 
         if (
             UserSettingKey.SHORTCUTS in changed_keys

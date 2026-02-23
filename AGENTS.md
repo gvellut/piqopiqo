@@ -98,6 +98,7 @@ src/piqopiqo/
     └── macos.py     # macOS utilities (resolution, move_to_trash)
 
 tests/
+├── test_edit_panel.py # Edit panel UI behavior (description field visibility)
 └── test_metadata_save_workers.py # QThreadPool drain helper shutdown semantics
 ```
 
@@ -148,6 +149,7 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - Resolution priority is: env var > persisted value (user settings only) > default
 - `UserSettingKey.FILTER_IN_FULLSCREEN` (default `False`) controls whether fullscreen immediately drops label-filtered-out images from the navigation loop after label shortcut changes
 - `UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE` (default : `KEEP_SELECTION`) controls whether exiting from fullscreen keeps all the images selected or just the last, if the fullscreen naviagation was started with multiple selected images (instead of a single image and a loop through all the current image list).
+- `UserSettingKey.SHOW_DESCRIPTION_FIELD` (default `True`) controls whether the Description editor row is shown in the Metadata panel (`EditPanel`); hiding it is UI-only and does not change DB/EXIF behavior.
 
 Useful env vars for agent testing:
 
@@ -183,6 +185,7 @@ EXIF fields are defined in `RuntimeSettingKey.EXIF_FIELDS` as a list of `ExifFie
 ## Edit Panel
 
 The edit panel supports editing metadata fields (title, description, keywords, coordinates, time taken).
+- The Description row visibility is configurable in `Settings > Interface > Metadata Panel > Show description field` (default enabled).
 - **Auto-save on focus out**: When user leaves a field to focus elsewhere, changes are automatically saved to DB
 - **Enter/Tab**: Saves the field and moves focus
 - **Escape**: Reverts changes and cancels edit
@@ -316,7 +319,9 @@ Selection behavior:
 - Label shortcuts are view-scoped: grid and fullscreen install separate `QShortcut`s (not `Qt.ApplicationShortcut`). Fullscreen label shortcuts act on the current fullscreen image only; grid label undo/redo is disabled/ignored while fullscreen is active.
 - Fullscreen exit selection/visibility restoration is path-based and centralized in `MainWindow` (single-image loop vs selected-images loop, `FILTER_IN_FULLSCREEN`, and `ON_FULLSCREEN_EXIT_SELECTION_MODE` all converge there). Hidden/filtered-out loop members are not kept selected in the grid on exit.
 - Filter/Edit/EXIF panel interactions can hand focus back to the grid via `interaction_finished` signals (explicit interaction end); edit-panel focus restore uses explicit Enter/Escape completion, not passive focus-out saves between fields.
+- Filter panel controls still emit synchronously, but `MainWindow` queues filter application to the next event-loop turn (`QTimer.singleShot(0, ...)`) so checkbox/button/combo visual feedback appears before the model/grid refresh work.
 - `Edit in {External App}` now selects the newly duplicated files in the grid before launching the editor.
+- Settings tab `Grid/Display` was renamed to `Interface`; its groups are split into `Grid`, `Fullscreen`, `Metadata Panel`, and `EXIF Panel`.
 - Settings dialog Enter handling is widget-scoped (no app-wide/global interception): `QLineEdit` and `QAbstractSpinBox` consume Enter to exit field focus, while focused Save consumes Enter to trigger `_on_save()`. Save remains non-default to avoid implicit submits from other controls.
 - Settings dialog initial focus is cleared on first show, so opening Settings does not auto-focus the first text field or Save button.
 - Settings dialog clears focus after tab switches (`QTabWidget.currentChanged`), preventing first-focusable controls (for example checkboxes) from getting blue focus highlight automatically.

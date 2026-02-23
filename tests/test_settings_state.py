@@ -173,6 +173,16 @@ def test_filter_in_fullscreen_default_and_roundtrip(isolated_settings):
     assert get_user_setting(UserSettingKey.FILTER_IN_FULLSCREEN) is True
 
 
+def test_show_description_field_default_and_roundtrip(isolated_settings):
+    assert get_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD) is True
+
+    set_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD, False)
+    assert get_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD) is False
+
+    set_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD, True)
+    assert get_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD) is True
+
+
 def test_runtime_settings_are_memory_only(isolated_settings, monkeypatch):
     monkeypatch.setenv("PIQO_FONT_SIZE", "19")
 
