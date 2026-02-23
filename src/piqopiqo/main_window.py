@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from functools import partial
 import logging
 import os
 import time
 
 from PySide6.QtCore import Qt, QThreadPool, QTimer
-from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -52,7 +51,6 @@ from .settings_state import (
     get_state,
     get_user_setting,
 )
-from .shortcuts import Shortcut, parse_shortcut
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +95,10 @@ class MainWindow(QMainWindow):
         self._selection_panel_refresh_timer.timeout.connect(
             self._flush_deferred_selection_panel_refresh
         )
+        self._fullscreen_menu_managed_actions: list[QAction] = []
+        self._fullscreen_menu_allowed_actions: set[QAction] = set()
+        self._fullscreen_menu_action_restore_state: dict[QAction, bool] = {}
+        self._fullscreen_menu_policy_active = False
 
         # Create metadata database manager
         self.db_manager = MetadataDBManager()
@@ -105,6 +107,7 @@ class MainWindow(QMainWindow):
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
+        self._grid_view_shortcut_scope = central_widget
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
@@ -122,6 +125,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self._main_splitter)
 
         self.grid = PhotoGrid()
+        self.grid.set_grid_view_shortcut_scope(self._grid_view_shortcut_scope)
         self._main_splitter.addWidget(self.grid)
 
         # Right side: vertical splitter with edit panel and EXIF panel
@@ -186,6 +190,7 @@ class MainWindow(QMainWindow):
         self.grid.request_fullscreen.connect(self._handle_fullscreen_overlay)
         self.grid.selection_changed.connect(self.on_selection_changed)
         self.grid.context_menu_requested.connect(self._show_context_menu)
+        self.grid.label_shortcut_requested.connect(self._apply_label_to_grid_selection)
 
         # Create photo list model
         self.photo_model = PhotoListModel(
@@ -220,9 +225,6 @@ class MainWindow(QMainWindow):
 
         # Set up keyboard shortcuts
         self._label_save_pool = QThreadPool()
-        self._shortcut_objects: list[QShortcut] = []
-        self._grid_label_shortcut_objects: list[QShortcut] = []
-        self._fullscreen_label_shortcut_objects: list[QShortcut] = []
         self._setup_shortcuts()
 
         # Undo state for label changes
@@ -244,98 +246,10 @@ class MainWindow(QMainWindow):
         return self.photo_model.all_photos
 
     def _setup_shortcuts(self):
-        """Set up keyboard shortcuts from user settings."""
-        self._clear_shortcut_bucket(self._shortcut_objects)
-        self._clear_shortcut_bucket(self._grid_label_shortcut_objects)
-        self._clear_shortcut_bucket(self._fullscreen_label_shortcut_objects)
-
-        shortcuts = get_user_setting(UserSettingKey.SHORTCUTS)
-
-        self._install_label_shortcuts(
-            self.grid,
-            self._grid_label_shortcut_objects,
-            self._apply_label_to_grid_selection,
-        )
+        """Refresh view-owned shortcuts from user settings."""
+        self.grid.refresh_shortcuts()
         if self._fullscreen_overlay is not None:
-            self._install_label_shortcuts(
-                self._fullscreen_overlay,
-                self._fullscreen_label_shortcut_objects,
-                self._apply_label_to_fullscreen_current,
-            )
-
-        # Select All shortcut
-        if Shortcut.SELECT_ALL in shortcuts:
-            sc = QShortcut(
-                parse_shortcut(shortcuts[Shortcut.SELECT_ALL]),
-                self,
-            )
-            sc.setContext(Qt.ApplicationShortcut)
-            sc.activated.connect(self._select_all_photos)
-            self._shortcut_objects.append(sc)
-
-    def _clear_shortcut_bucket(self, bucket: list[QShortcut]) -> None:
-        for sc in bucket:
-            try:
-                sc.setParent(None)
-                sc.deleteLater()
-            except RuntimeError:
-                # Parent widget may already be deleted (e.g. fullscreen overlay).
-                pass
-        bucket.clear()
-
-    def _iter_label_shortcut_bindings(self) -> list[tuple[str, str | None]]:
-        shortcuts = get_user_setting(UserSettingKey.SHORTCUTS)
-        status_labels = get_user_setting(UserSettingKey.STATUS_LABELS)
-        bindings: list[tuple[str, str | None]] = []
-
-        for i in range(1, 10):
-            shortcut_enum = Shortcut(f"LABEL_{i}")
-            if shortcut_enum not in shortcuts:
-                continue
-
-            label_name = None
-            for status_label in status_labels:
-                if status_label.index == i:
-                    label_name = status_label.name
-                    break
-            if label_name is None:
-                continue
-
-            bindings.append((shortcuts[shortcut_enum], label_name))
-
-        if Shortcut.LABEL_NONE in shortcuts:
-            bindings.append((shortcuts[Shortcut.LABEL_NONE], None))
-
-        return bindings
-
-    def _install_label_shortcuts(
-        self,
-        parent: QWidget,
-        bucket: list[QShortcut],
-        handler,
-    ) -> None:
-        for shortcut_str, label_name in self._iter_label_shortcut_bindings():
-            sc = QShortcut(parse_shortcut(shortcut_str), parent)
-            sc.setContext(Qt.WidgetWithChildrenShortcut)
-            sc.activated.connect(partial(handler, label_name))
-            bucket.append(sc)
-
-    def _select_all_photos(self):
-        """Select all visible photos (after filtering)."""
-        photos = self.photo_model.photos
-        if not photos:
-            return
-
-        for photo in photos:
-            photo.is_selected = True
-
-        # Update grid's selection anchor to the last selected item
-        self.grid._set_selection_anchor(len(photos) - 1)
-
-        # Emit selection changed and refresh grid
-        selected_indices = set(range(len(photos)))
-        self.grid.selection_changed.emit(selected_indices)
-        self.grid.refresh_visible_selection_only()
+            self._fullscreen_overlay.refresh_shortcuts()
 
     def _apply_label_to_grid_selection(self, label_name: str | None):
         """Apply a label to the current grid selection."""
@@ -366,10 +280,6 @@ class MainWindow(QMainWindow):
             record_undo=False,
             sync_source="apply_label_shortcut_fullscreen",
         )
-
-    def _apply_label(self, label_name: str | None):
-        """Backward-compatible grid label shortcut handler."""
-        self._apply_label_to_grid_selection(label_name)
 
     def _apply_label_to_items(
         self,
@@ -1058,6 +968,7 @@ class MainWindow(QMainWindow):
         quit_action.setShortcut("Ctrl+Q")
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
+        self._quit_action = quit_action
 
         # Edit menu
         edit_menu = menubar.addMenu("Edit")
@@ -1153,6 +1064,58 @@ class MainWindow(QMainWindow):
         about_action.setMenuRole(QAction.MenuRole.AboutRole)
         about_action.triggered.connect(self.on_about)
         help_menu.addAction(about_action)
+        self._initialize_fullscreen_menu_action_policy()
+
+    def _initialize_fullscreen_menu_action_policy(self) -> None:
+        self._fullscreen_menu_managed_actions = self._collect_menu_actions_for_policy()
+        self._fullscreen_menu_allowed_actions = {self._quit_action}
+        self._fullscreen_menu_action_restore_state.clear()
+        self._fullscreen_menu_policy_active = False
+
+    def _collect_menu_actions_for_policy(self) -> list[QAction]:
+        managed_actions: list[QAction] = []
+        seen_action_ids: set[int] = set()
+
+        def _add_action(action: QAction) -> None:
+            action_id = id(action)
+            if action_id in seen_action_ids:
+                return
+            seen_action_ids.add(action_id)
+            managed_actions.append(action)
+
+            submenu = action.menu()
+            if submenu is None:
+                return
+            for submenu_action in submenu.actions():
+                _add_action(submenu_action)
+
+        for top_level_action in self.menuBar().actions():
+            _add_action(top_level_action)
+
+        return managed_actions
+
+    def _set_fullscreen_menu_action_policy(self, enabled: bool) -> None:
+        if enabled:
+            if self._fullscreen_menu_policy_active:
+                return
+            self._fullscreen_menu_action_restore_state.clear()
+            for action in self._fullscreen_menu_managed_actions:
+                if action in self._fullscreen_menu_allowed_actions:
+                    continue
+                self._fullscreen_menu_action_restore_state[action] = action.isEnabled()
+                action.setEnabled(False)
+            self._fullscreen_menu_policy_active = True
+            return
+
+        if not self._fullscreen_menu_policy_active:
+            return
+        for action, was_enabled in self._fullscreen_menu_action_restore_state.items():
+            try:
+                action.setEnabled(was_enabled)
+            except RuntimeError:
+                continue
+        self._fullscreen_menu_action_restore_state.clear()
+        self._fullscreen_menu_policy_active = False
 
     def on_about(self):
         pass
@@ -1651,7 +1614,11 @@ class MainWindow(QMainWindow):
             self.images_data, visible_indices, start_index
         )
         overlay_ref = self._fullscreen_overlay
+        overlay_ref.label_shortcut_requested.connect(
+            self._apply_label_to_fullscreen_current
+        )
         self._setup_shortcuts()
+        self._set_fullscreen_menu_action_policy(True)
         self._refresh_undo_label_action_enabled_for_context()
 
         overlay_ref.index_changed.connect(self._on_fullscreen_index_changed)
@@ -1666,6 +1633,7 @@ class MainWindow(QMainWindow):
             self._fullscreen_overlay = None
             self._fullscreen_started_with_multi_selection = False
             self._setup_shortcuts()
+            self._set_fullscreen_menu_action_policy(False)
             self._refresh_undo_label_action_enabled_for_context()
 
             if self._pending_model_sync_after_fullscreen:

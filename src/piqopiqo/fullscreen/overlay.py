@@ -40,7 +40,12 @@ from piqopiqo.settings_state import (
     get_runtime_setting,
     get_user_setting,
 )
-from piqopiqo.shortcuts import Shortcut, match_shortcut_sequence, match_simple_shortcut
+from piqopiqo.shortcuts import (
+    Shortcut,
+    build_label_shortcut_bindings,
+    match_shortcut_sequence,
+    match_simple_shortcut,
+)
 
 from .info_panel import ZoomOverlayController
 from .pan import calculate_allowed_extra_from_current
@@ -59,6 +64,7 @@ class FullscreenOverlay(QWidget):
 
     # Signal to notify when the current index changes
     index_changed = Signal(int)
+    label_shortcut_requested = Signal(object)  # str | None
 
     def __init__(self, all_items: list, visible_indices: list, start_index: int):
         super().__init__()
@@ -95,6 +101,7 @@ class FullscreenOverlay(QWidget):
 
         # Device pixel ratio for this screen (will be set in show_on_screen)
         self._device_pixel_ratio = 1.0
+        self._label_shortcut_bindings: list[tuple[str, str | None]] = []
 
         # TODO initialize small image here : pass size of screen to do it
         # maintain the size outside ?
@@ -117,8 +124,17 @@ class FullscreenOverlay(QWidget):
         self.setStyleSheet(f"background-color: {bg_color};")
         self._background_color = QColor(bg_color)
 
+        self.refresh_shortcuts()
+
         # Register safety cleanup
         atexit.register(self.restore_macos_ui)
+
+    def refresh_shortcuts(self) -> None:
+        shortcuts = get_user_setting(UserSettingKey.SHORTCUTS)
+        status_labels = get_user_setting(UserSettingKey.STATUS_LABELS)
+        self._label_shortcut_bindings = build_label_shortcut_bindings(
+            shortcuts, status_labels
+        )
 
     def get_visible_paths(self) -> list[str]:
         paths: list[str] = []
@@ -792,6 +808,10 @@ class FullscreenOverlay(QWidget):
             # Reset zoom to base view
             self._zoom_to_base_view()
         else:
+            for shortcut_str, label_name in self._label_shortcut_bindings:
+                if match_shortcut_sequence(event, shortcut_str):
+                    self.label_shortcut_requested.emit(label_name)
+                    return
             super().keyPressEvent(event)
 
     def _screen_to_image_coords(self, screen_pos: QPointF) -> QPointF:

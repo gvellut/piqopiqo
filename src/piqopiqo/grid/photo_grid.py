@@ -9,11 +9,17 @@ from pathlib import Path
 import time
 
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QCursor, QFont, QFontMetrics, QPixmap
+from PySide6.QtGui import QCursor, QFont, QFontMetrics, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
+    QApplication,
+    QComboBox,
     QGridLayout,
     QHBoxLayout,
+    QLineEdit,
+    QPlainTextEdit,
     QScrollBar,
+    QTextEdit,
     QWidget,
 )
 
@@ -25,6 +31,11 @@ from piqopiqo.settings_state import (
     UserSettingKey,
     get_runtime_setting,
     get_user_setting,
+)
+from piqopiqo.shortcuts import (
+    Shortcut,
+    build_label_shortcut_bindings,
+    parse_shortcut,
 )
 
 from .photo_cell import PhotoCell
@@ -40,6 +51,7 @@ class PhotoGrid(QWidget):
     request_fullscreen = Signal(list)
     context_menu_requested = Signal(int, object)  # index, QPoint (global pos)
     visible_paths_changed = Signal(list)  # list[str] in display order
+    label_shortcut_requested = Signal(object)  # str | None
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -88,6 +100,141 @@ class PhotoGrid(QWidget):
         self._wheel_last_ts: float | None = None
         self._wheel_streak_dir = 0
         self._wheel_streak_count = 0
+
+        self._grid_view_shortcut_scope: QWidget | None = None
+        self._label_shortcut_objects: list[QShortcut] = []
+        self._shared_grid_view_shortcut_objects: list[QShortcut] = []
+        self._shared_shortcuts_focus_connected = False
+
+    def set_grid_view_shortcut_scope(self, widget: QWidget) -> None:
+        self._grid_view_shortcut_scope = widget
+        if not self._shared_shortcuts_focus_connected:
+            app = QApplication.instance()
+            if app is not None:
+                app.focusChanged.connect(self._on_application_focus_changed)
+                self._shared_shortcuts_focus_connected = True
+        self.refresh_shortcuts()
+
+    def refresh_shortcuts(self) -> None:
+        self._clear_shortcut_bucket(self._label_shortcut_objects)
+        self._clear_shortcut_bucket(self._shared_grid_view_shortcut_objects)
+
+        shortcuts = get_user_setting(UserSettingKey.SHORTCUTS)
+        status_labels = get_user_setting(UserSettingKey.STATUS_LABELS)
+
+        # Grid label shortcuts are local to the grid widget only.
+        for shortcut_str, label_name in build_label_shortcut_bindings(
+            shortcuts, status_labels
+        ):
+            sc = QShortcut(parse_shortcut(shortcut_str), self)
+            sc.setContext(Qt.WidgetWithChildrenShortcut)
+            sc.activated.connect(
+                lambda label_name=label_name: self.label_shortcut_requested.emit(
+                    label_name
+                )
+            )
+            self._label_shortcut_objects.append(sc)
+
+        scope = self._grid_view_shortcut_scope
+        if scope is None:
+            return
+
+        # Shared grid-view scope shortcuts should work across grid + side panels.
+        select_all_shortcut = (
+            shortcuts.get(Shortcut.SELECT_ALL)
+            or shortcuts.get(Shortcut.SELECT_ALL.value)
+            or shortcuts.get(Shortcut.SELECT_ALL.name)
+        )
+        if select_all_shortcut:
+            sc_select_all = QShortcut(parse_shortcut(select_all_shortcut), scope)
+            sc_select_all.setContext(Qt.WidgetWithChildrenShortcut)
+            sc_select_all.activated.connect(self._activate_select_all_shortcut)
+            self._shared_grid_view_shortcut_objects.append(sc_select_all)
+
+        sc_fullscreen = QShortcut(QKeySequence("Space"), scope)
+        sc_fullscreen.setContext(Qt.WidgetWithChildrenShortcut)
+        sc_fullscreen.activated.connect(self._activate_fullscreen_shortcut)
+        self._shared_grid_view_shortcut_objects.append(sc_fullscreen)
+        self._update_shared_grid_view_shortcut_enabled_state()
+
+    def _clear_shortcut_bucket(self, bucket: list[QShortcut]) -> None:
+        for shortcut in bucket:
+            try:
+                shortcut.setParent(None)
+                shortcut.deleteLater()
+            except RuntimeError:
+                pass
+        bucket.clear()
+
+    def _activate_select_all_shortcut(self) -> None:
+        if not self._shared_grid_view_shortcuts_allowed():
+            return
+        self.select_all_visible()
+
+    def _activate_fullscreen_shortcut(self) -> None:
+        if not self._shared_grid_view_shortcuts_allowed():
+            return
+        self._request_fullscreen_from_current_selection()
+
+    def _request_fullscreen_from_current_selection(self) -> None:
+        selected_indices = [
+            i
+            for i, item in enumerate(self.items_data)
+            if getattr(item, "is_selected", False)
+        ]
+        if not selected_indices:
+            return
+        self.request_fullscreen.emit(selected_indices)
+
+    def _on_application_focus_changed(self, _old, _new) -> None:
+        self._update_shared_grid_view_shortcut_enabled_state()
+
+    def _update_shared_grid_view_shortcut_enabled_state(self) -> None:
+        enabled = self._shared_grid_view_shortcuts_allowed()
+        for shortcut in self._shared_grid_view_shortcut_objects:
+            shortcut.setEnabled(enabled)
+
+    def _shared_grid_view_shortcuts_allowed(self) -> bool:
+        scope = self._grid_view_shortcut_scope
+        if scope is None:
+            return False
+        app = QApplication.instance()
+        if app is None:
+            return False
+        focus_widget = app.focusWidget()
+        if focus_widget is None:
+            return False
+        if not self._widget_is_within_scope(focus_widget, scope):
+            return False
+        return not self._is_text_input_widget(focus_widget)
+
+    def _widget_is_within_scope(self, widget: QWidget, scope: QWidget) -> bool:
+        current: QWidget | None = widget
+        while current is not None:
+            if current is scope:
+                return True
+            current = current.parentWidget()
+        return False
+
+    def _is_text_input_widget(self, widget: QWidget) -> bool:
+        if isinstance(
+            widget,
+            (QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox),
+        ):
+            return True
+        return isinstance(widget, QComboBox) and widget.isEditable()
+
+    def select_all_visible(self) -> None:
+        """Select all currently visible items in the grid."""
+        if not self.items_data:
+            return
+
+        for item in self.items_data:
+            item.is_selected = True
+
+        self._set_selection_anchor(len(self.items_data) - 1)
+        self.selection_changed.emit(set(range(len(self.items_data))))
+        self.refresh_visible_selection_only()
 
     def set_data(self, items):
         previous_anchor_path = self._last_selected_path
@@ -760,11 +907,6 @@ class PhotoGrid(QWidget):
 
         if not selected_indices:
             super().keyPressEvent(event)
-            return
-
-        # Handle fullscreen request first, as it applies to both single and multi-select
-        if key == Qt.Key_Space:
-            self.request_fullscreen.emit(selected_indices)
             return
 
         # Handle navigation

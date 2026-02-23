@@ -32,7 +32,7 @@ src/piqopiqo/
 ├── settings_state.py # QSettings-backed state + settings registries/accessors
 
 ├── photo_model.py   # PhotoListModel: filtering, sorting, selection, add/remove photos
-├── shortcuts.py     # Keyboard shortcut matching utilities
+├── shortcuts.py     # Keyboard shortcut utilities + view-scope shortcut registries
 ├── model.py         # Data models (ImageItem, FilterCriteria, StatusLabel, ExifField)
 ├── external_apps.py # External application integration (file manager, viewer, editor)
 ├── utils.py         # Logging setup and utilities
@@ -102,6 +102,7 @@ src/piqopiqo/
 tests/
 ├── test_edit_panel.py # Edit panel UI behavior (description field visibility + pending selection summary)
 ├── test_exif_panel.py # EXIF panel display formatting and pending selection summary
+├── test_photo_grid_shortcuts.py # Grid view-scoped shortcut ownership + text-input guard behavior
 ├── test_photo_grid_selection_refresh.py # Visible-only grid selection highlight refresh path
 └── test_metadata_save_workers.py # QThreadPool drain helper shutdown semantics
 ```
@@ -320,7 +321,9 @@ Selection behavior:
 - Album add uses grouped `photosets.editPhotos` semantics (existing album photos + uploaded photo IDs).
 - Flickr upload progress dialog keeps one running step label (`Step: ...`) above the progress bar, merges Add-to-album sub-status into that label, resizes height to fit currently visible content on every state change, and hides step/progress UI when finished so only the completion summary remains.
 - Model/filter/sort synchronization after metadata writes is centralized in `MainWindow.sync_model_after_metadata_update(...)`. Any new feature/tool that mutates metadata DB fields must call this method with the changed fields so grid filtering, sort order, selection panels, and fullscreen loop state stay consistent.
-- Label shortcuts are view-scoped: grid and fullscreen install separate `QShortcut`s (not `Qt.ApplicationShortcut`). Fullscreen label shortcuts act on the current fullscreen image only; grid label undo/redo is disabled/ignored while fullscreen is active.
+- Custom shortcuts are view-scoped and not handled in `MainWindow`: `PhotoGrid` owns grid label shortcuts plus shared grid-view `Space`/`Select All` shortcuts, while `FullscreenOverlay` owns fullscreen label shortcuts and zoom/navigation keys. Fullscreen label shortcuts act on the current fullscreen image only; grid label undo/redo is disabled/ignored while fullscreen is active.
+- Grid shared-view shortcuts (`Space`, `Select All`) are attached to the central grid+panels scope so they still work after non-text panel interactions, but editable text widgets win focus (search/metadata fields keep normal typing + `Cmd+A` text selection).
+- When fullscreen opens, `MainWindow` disables all menu actions (and their menu shortcuts) except Quit; this prevents `Cmd+O`, `Cmd+,`, and future menu shortcuts from acting on the hidden grid view.
 - Fullscreen exit selection/visibility restoration is path-based and centralized in `MainWindow` (single-image loop vs selected-images loop, `FILTER_IN_FULLSCREEN`, and `ON_FULLSCREEN_EXIT_SELECTION_MODE` all converge there). Hidden/filtered-out loop members are not kept selected in the grid on exit.
 - Filter/Edit/EXIF panel interactions can hand focus back to the grid via `interaction_finished` signals (explicit interaction end); edit-panel focus restore uses explicit Enter/Escape completion, not passive focus-out saves between fields.
 - Large grid selections (for example `Cmd+A`) use a responsive-first panel update path in `MainWindow`: visible grid selection highlights refresh immediately without a full grid render, while Metadata/EXIF panel aggregation is deferred/coalesced with a short single-shot timer and panels show a temporary `N photos selected (updating...)` summary.
