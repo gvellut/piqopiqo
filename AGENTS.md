@@ -73,10 +73,12 @@ src/piqopiqo/
 │   ├── dialog.py
 │   ├── schema.py
 │   ├── editors.py
+│   ├── manual_lenses_editor.py
 │   ├── status_labels_editor.py
 │   └── shortcuts_editor.py
 |-- tools
     ├── copy_sd.py       # Copy-from-SD workflow (dialogs, scanning, copy worker)
+    ├── manual_lens.py   # Dialog + launcher for applying manual lens presets to selected/visible photos
     ├── save_exif.py    # Dialog + launcher for saving metadata to EXIF
     ├── flickr_upload/   # Flickr auth + upload workflows (filtered scope only)
     │   ├── constants.py      # Flickr workflow constants (token file name, stages, retries)
@@ -122,6 +124,7 @@ tests/
 - **Auto-refresh**: Folder changes (add/remove/modify) handled automatically via watchfiles
 - **Image rotation**: Image menu with Rotate Left/Right (Ctrl+[/]) to rotate photos
 - **Save EXIF**: Tools menu to write DB metadata back to image files using exiftool
+- **Set Lens Info**: Tools menu workflow to apply a configured lens preset to selected photos (or all visible photos when nothing is selected)
 - **Regenerate EXIF**: Tools/context menu to re-read EXIF into the Metadata DB
 - **External apps**: Open photos in external viewer/editor (configurable via PIQO_EXTERNAL_VIEWER/EDITOR)
 - **Reveal in Finder**: Context menu to show selected files in the system file manager
@@ -158,6 +161,7 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - `UserSettingKey.FORCE_SRGB` (default `False`) skips image-profile extraction and tags fullscreen/grid images as sRGB before optional screen conversion.
 - `UserSettingKey.SCREEN_COLOR_PROFILE` (default `FROM_MAIN_SCREEN`) controls the display conversion target (`From main screen`, `sRGB`, `Display P3`, `Bt2020`, `No conversion`) used by fullscreen and color-managed thumbnails.
 - `UserSettingKey.SHOW_DESCRIPTION_FIELD` (default `True`) controls whether the Description editor row is shown in the Metadata panel (`EditPanel`); hiding it is UI-only and does not change DB/EXIF behavior.
+- `UserSettingKey.MANUAL_LENSES` (default `[]`) stores lens presets used by `Tools > Set Lens Info ...`.
 
 Useful env vars for agent testing:
 
@@ -226,6 +230,12 @@ Defined in `db_fields.py`:
 | TIME_TAKEN | EXIF:DateTimeOriginal | EXIF:DateTimeOriginal |
 | LABEL | XMP:Label | XMP:Label |
 | ORIENTATION | EXIF:Orientation | EXIF:Orientation |
+
+Manual lens override fields are hidden DB columns (created lazily on first use of `Set Lens Info`) and are write-only to EXIF/Flickr temp EXIF:
+- `manual_lens_make` -> `lensmake`
+- `manual_lens_model` -> `lensmodel`
+- `manual_focal_length` -> `focallength`, `lens`, `LensInfo`
+- `manual_focal_length_35mm` -> `FocalLengthIn35mmFormat`
 
 ### Version
 
@@ -298,6 +308,11 @@ Selection behavior:
 - Low res thumnbails means: The thumbnail JPEGs embedded inside the EXIF
 - Settings > External/Workflow uses app-path selectors. On macOS, Browse starts in `/Applications` when empty (or in the parent folder of the currently configured `.app`) and uses an application file picker so `.app` bundles are selectable.
 - Folder DB schema includes `folder_metadata(data, value)` for per-folder workflow values; GPX uses keys `TIME_SHIFT` and `GPX_PATH`.
+- `Set Lens Info` scope is selected photos; when selection is empty it applies to all currently visible photos.
+- `Set Lens Info` lens picker never remembers the last chosen lens: dialog opens with a placeholder, no preset selected, and `OK` disabled until the user picks one.
+- `Set Lens Info` includes `Clear lens info` in the picker to clear hidden manual lens DB fields (`manual_lens_make`, `manual_lens_model`, `manual_focal_length`, `manual_focal_length_35mm`) for target images.
+- Manual lens presets are edited in `Settings > External/Tools > Manual Lens`; each preset requires non-empty make/model and valid numeric focal/focal-35mm (supports `.` or `,` input).
+- Manual lens focal values are normalized to `.` decimal separator when writing EXIF/Flickr temp EXIF (`focallength`, `lens`, `LensInfo`, `FocalLengthIn35mmFormat`).
 - GPX workflows are DB-first: "Update images" mode label is kept for compatibility, but normal processing updates SQLite metadata and KML outputs; it does not write EXIF.
 - Apply GPX scope ignores grid selection/filter and always processes all photos in all loaded source folders.
 - Empty time shift means "not set"; Apply GPX shows an empty field and treats it as `0` during processing.
@@ -384,6 +399,6 @@ Do not use .. for relative imports (in parent folder). Use the fully qualified n
 
 After completing a feature, update this file AGENTS.md with the updated project structure. Also add considerations for reference for future work.
 
-## Do not read
+## Do not read any file in .prompts folder or subfolder
 
-Do not read any file from the .prompts folder or .prompts_archive except explicitly told so in the prompt.
+Do not read any file from the .prompts folder or any subfolder except explicitly told so in the prompt.

@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication
 import pytest
 
 from piqopiqo.color_management import ScreenColorProfileMode
-from piqopiqo.model import ExifField, StatusLabel
+from piqopiqo.model import ExifField, ManualLensPreset, StatusLabel
 from piqopiqo.settings_state import (
     RuntimeSettingKey,
     SettingsPanelSaveMode,
@@ -127,6 +127,27 @@ def test_json_roundtrip_for_complex_user_settings(isolated_settings):
     assert roundtrip_custom_fields == ["File:FileSize", "EXIF:ISO"]
 
 
+def test_manual_lenses_roundtrip(isolated_settings):
+    presets = [
+        ManualLensPreset(
+            lens_make="Samyang",
+            lens_model="Samyang 12mm f/2.0 NCS CS",
+            focal_length="12",
+            focal_length_35mm="18",
+        ),
+        ManualLensPreset(
+            lens_make="Sigma",
+            lens_model="Sigma 18-35mm F1.8 DC HSM | Art",
+            focal_length="24,5",
+            focal_length_35mm="36",
+        ),
+    ]
+
+    set_user_setting(UserSettingKey.MANUAL_LENSES, presets)
+
+    assert get_user_setting(UserSettingKey.MANUAL_LENSES) == presets
+
+
 def test_env_override_takes_priority_over_persisted_values(
     isolated_settings, monkeypatch
 ):
@@ -197,7 +218,10 @@ def test_color_profile_user_settings_defaults_and_roundtrip(isolated_settings):
     )
 
     set_user_setting(UserSettingKey.FORCE_SRGB, True)
-    set_user_setting(UserSettingKey.SCREEN_COLOR_PROFILE, ScreenColorProfileMode.DISPLAY_P3)
+    set_user_setting(
+        UserSettingKey.SCREEN_COLOR_PROFILE,
+        ScreenColorProfileMode.DISPLAY_P3,
+    )
 
     assert get_user_setting(UserSettingKey.FORCE_SRGB) is True
     assert (
@@ -219,7 +243,9 @@ def test_screen_color_profile_env_override(isolated_settings, monkeypatch):
 def test_color_management_runtime_settings_defaults_and_env_override(
     isolated_settings, monkeypatch
 ):
-    assert get_runtime_setting(RuntimeSettingKey.COLOR_MANAGE_EMBEDDED_THUMBNAILS) is True
+    assert (
+        get_runtime_setting(RuntimeSettingKey.COLOR_MANAGE_EMBEDDED_THUMBNAILS) is True
+    )
     assert get_runtime_setting(RuntimeSettingKey.COLOR_MANAGE_HQ_THUMBNAILS) is True
     assert (
         get_runtime_setting(RuntimeSettingKey.PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE)
@@ -231,7 +257,9 @@ def test_color_management_runtime_settings_defaults_and_env_override(
     monkeypatch.setenv("PIQO_PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE", "true")
     init_qsettings_store(dyn=False)
 
-    assert get_runtime_setting(RuntimeSettingKey.COLOR_MANAGE_EMBEDDED_THUMBNAILS) is False
+    assert (
+        get_runtime_setting(RuntimeSettingKey.COLOR_MANAGE_EMBEDDED_THUMBNAILS) is False
+    )
     assert get_runtime_setting(RuntimeSettingKey.COLOR_MANAGE_HQ_THUMBNAILS) is False
     assert (
         get_runtime_setting(RuntimeSettingKey.PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE)

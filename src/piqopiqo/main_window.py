@@ -1051,6 +1051,12 @@ class MainWindow(QMainWindow):
 
         tools_menu.addSeparator()
 
+        manual_lens_action = QAction("Set Lens Info ...", self)
+        manual_lens_action.triggered.connect(self._on_set_lens_info)
+        tools_menu.addAction(manual_lens_action)
+
+        tools_menu.addSeparator()
+
         upload_flickr_action = QAction("Upload to Flickr...", self)
         upload_flickr_action.triggered.connect(self._on_upload_to_flickr)
         tools_menu.addAction(upload_flickr_action)
@@ -1200,6 +1206,11 @@ class MainWindow(QMainWindow):
         from .tools.gpx2exif.actions import launch_apply_gpx
 
         launch_apply_gpx(self)
+
+    def _on_set_lens_info(self):
+        from .tools.manual_lens import launch_manual_lens
+
+        launch_manual_lens(self)
 
     def _on_upload_to_flickr(self):
         manager = self._active_flickr_upload_manager

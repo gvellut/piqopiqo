@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .manual_lenses_editor import ManualLensesEditor
 from .schema import ChoiceOption, EditorKind
 from .shortcuts_editor import ShortcutsEditor
 from .status_labels_editor import StatusLabelsEditor
@@ -304,6 +305,26 @@ class ShortcutsEditorAdapter(BaseEditor):
         return self._editor.get_value()
 
 
+class ManualLensesEditorAdapter(BaseEditor):
+    def __init__(self):
+        super().__init__()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self._editor = ManualLensesEditor()
+        self._editor.value_changed.connect(self.value_changed)
+        layout.addWidget(self._editor)
+
+    def set_value(self, value):
+        self._editor.set_value(value)
+
+    def get_value(self):
+        return self._editor.get_value()
+
+    def is_valid(self) -> bool:
+        return self._editor.is_valid()
+
+
 def build_editor(kind: EditorKind, **kwargs) -> BaseEditor:
     if kind == EditorKind.TEXT:
         return TextEditor()
@@ -328,5 +349,7 @@ def build_editor(kind: EditorKind, **kwargs) -> BaseEditor:
         return StatusLabelsEditorAdapter()
     if kind == EditorKind.SHORTCUTS:
         return ShortcutsEditorAdapter()
+    if kind == EditorKind.MANUAL_LENSES:
+        return ManualLensesEditorAdapter()
 
     raise ValueError(f"Unsupported editor kind: {kind}")

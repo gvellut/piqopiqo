@@ -34,6 +34,14 @@ class ExifField:
     format: str | None = None
 
 
+@define(frozen=True)
+class ManualLensPreset:
+    lens_make: str
+    lens_model: str
+    focal_length: str
+    focal_length_35mm: str
+
+
 @define
 class FilterCriteria:
     """Filter criteria for the photo model.

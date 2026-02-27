@@ -1,4 +1,3 @@
-- [Manual lens tool](J_tasks/P_Manual_lens.md)
 - [Base data redirect to settings](J_tasks/Q_Base_data_redirect_to_settings.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
 - [fullscreen color](Ba_tasks/Ca_fullscreen_color.md)
@@ -42,3 +41,5 @@
 ! [Shortcut local to screen](Q_tasks/Aa_Shortcut_local_to_screen.md)
 ! [Handle color profile setting appkit](Ba_tasks/Ea_Handle_color_profile_setting_appkit.md)
     ? [Save icc thumbnails + assume default sRGB](Ba_tasks/Ea.A_Save_icc_thumbnails_assume_default_sRGB.md)
+! [Manual lens tool](J_tasks/P_Manual_lens.md)
+    !? [Add clear set exact tags](J_tasks/P.A_Add_clear_set_exact_tags.md)

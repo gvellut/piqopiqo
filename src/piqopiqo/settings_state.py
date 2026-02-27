@@ -16,7 +16,12 @@ from attrs import define
 from PySide6.QtCore import QByteArray, QSettings
 
 from .color_management import ScreenColorProfileMode
-from .model import ExifField, OnFullscreenExitMultipleSelected, StatusLabel
+from .model import (
+    ExifField,
+    ManualLensPreset,
+    OnFullscreenExitMultipleSelected,
+    StatusLabel,
+)
 from .shortcuts import Shortcut
 
 logger = logging.getLogger(__name__)
@@ -84,6 +89,7 @@ class UserSettingKey(StrEnum):
     GCP_SA_KEY_PATH = "gcpSaKeyPath"
     FLICKR_API_KEY = "flickrApiKey"
     FLICKR_API_SECRET = "flickrApiSecret"
+    MANUAL_LENSES = "manualLenses"
 
 
 class RuntimeSettingKey(StrEnum):
@@ -201,6 +207,39 @@ def _deserialize_status_labels(data: Any) -> list[StatusLabel]:
                 name=str(row.get("name", "")).strip(),
                 color=str(row.get("color", "")).strip(),
                 index=int(row.get("index", 0)),
+            )
+        )
+    return out
+
+
+def _serialize_manual_lenses(value: list[ManualLensPreset]) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    for preset in value:
+        out.append(
+            {
+                "lens_make": str(preset.lens_make).strip(),
+                "lens_model": str(preset.lens_model).strip(),
+                "focal_length": str(preset.focal_length).strip(),
+                "focal_length_35mm": str(preset.focal_length_35mm).strip(),
+            }
+        )
+    return out
+
+
+def _deserialize_manual_lenses(data: Any) -> list[ManualLensPreset]:
+    if not isinstance(data, list):
+        raise ValueError("Expected a list for manual lenses")
+
+    out: list[ManualLensPreset] = []
+    for row in data:
+        if not isinstance(row, dict):
+            continue
+        out.append(
+            ManualLensPreset(
+                lens_make=str(row.get("lens_make", "")).strip(),
+                lens_model=str(row.get("lens_model", "")).strip(),
+                focal_length=str(row.get("focal_length", "")).strip(),
+                focal_length_35mm=str(row.get("focal_length_35mm", "")).strip(),
             )
         )
     return out
@@ -443,6 +482,14 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
     UserSettingKey.GCP_SA_KEY_PATH: SettingDef(default="", read_type=str),
     UserSettingKey.FLICKR_API_KEY: SettingDef(default="", read_type=str),
     UserSettingKey.FLICKR_API_SECRET: SettingDef(default="", read_type=str),
+    UserSettingKey.MANUAL_LENSES: SettingDef(
+        default=[],
+        read_type=str,
+        json_storage=True,
+        serializer=_serialize_manual_lenses,
+        deserializer=_deserialize_manual_lenses,
+        env_parser=lambda raw: _deserialize_manual_lenses(_parse_json(raw)),
+    ),
 }
 
 # read_type is to deserialize from an env var

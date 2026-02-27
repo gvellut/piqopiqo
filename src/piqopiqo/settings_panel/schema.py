@@ -22,6 +22,7 @@ class EditorKind(Enum):
     LIST_TEXT = auto()
     STATUS_LABELS = auto()
     SHORTCUTS = auto()
+    MANUAL_LENSES = auto()
 
 
 @define(frozen=True)
@@ -284,6 +285,16 @@ SETTINGS_TABS: list[TabSpec] = [
                         key=UserSettingKey.FLICKR_API_SECRET,
                         label="Flickr API secret",
                         editor=EditorKind.TEXT,
+                    ),
+                ],
+            ),
+            GroupSpec(
+                title="Manual Lens",
+                fields=[
+                    FieldSpec(
+                        key=UserSettingKey.MANUAL_LENSES,
+                        label="Lens presets",
+                        editor=EditorKind.MANUAL_LENSES,
                     ),
                 ],
             ),

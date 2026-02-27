@@ -10,6 +10,42 @@ from piqopiqo.metadata.db_fields import DB_TO_EXIF_WRITE_MAPPING, DBFields
 from piqopiqo.settings_state import APP_NAME
 
 
+def _normalize_decimal_text(value: object) -> str | None:
+    text = str(value).strip()
+    if not text:
+        return None
+    normalized = text.replace(",", ".")
+    try:
+        float(normalized)
+    except ValueError:
+        return None
+    return normalized
+
+
+def _apply_manual_lens_tags(db_metadata: dict, tags: dict[str, object]) -> None:
+    lens_make = str(db_metadata.get(DBFields.MANUAL_LENS_MAKE) or "").strip()
+    if lens_make:
+        tags["lensmake"] = lens_make
+
+    lens_model = str(db_metadata.get(DBFields.MANUAL_LENS_MODEL) or "").strip()
+    if lens_model:
+        tags["lensmodel"] = lens_model
+
+    focal_length = _normalize_decimal_text(
+        db_metadata.get(DBFields.MANUAL_FOCAL_LENGTH)
+    )
+    if focal_length is not None:
+        tags["focallength"] = focal_length
+        tags["lens"] = f"{focal_length} mm"
+        tags["LensInfo"] = f"{focal_length}mm f/?"
+
+    focal_length_35mm = _normalize_decimal_text(
+        db_metadata.get(DBFields.MANUAL_FOCAL_LENGTH_35MM)
+    )
+    if focal_length_35mm is not None:
+        tags["FocalLengthIn35mmFormat"] = focal_length_35mm
+
+
 def build_exif_tags(db_metadata: dict) -> dict:
     """Build EXIF tags dict from DB metadata using the write mapping."""
 
@@ -62,6 +98,8 @@ def build_exif_tags(db_metadata: dict) -> dict:
                 tags[tag] = value
         else:
             tags[exif_config] = value
+
+    _apply_manual_lens_tags(db_metadata, tags)
 
     now = datetime.now().strftime("%Y:%m:%d %H:%M:%S")
     software_agent = f"{APP_NAME} v{piqopiqo_version}"

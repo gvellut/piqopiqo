@@ -14,8 +14,19 @@ class DBFields:
     TIME_TAKEN = "time_taken"
     LABEL = "label"
     ORIENTATION = "orientation"
+    MANUAL_LENS_MAKE = "manual_lens_make"
+    MANUAL_LENS_MODEL = "manual_lens_model"
+    MANUAL_FOCAL_LENGTH = "manual_focal_length"
+    MANUAL_FOCAL_LENGTH_35MM = "manual_focal_length_35mm"
     CREATED_AT = "created_at"
     UPDATED_AT = "updated_at"
+
+    MANUAL_LENS_FIELDS = (
+        MANUAL_LENS_MAKE,
+        MANUAL_LENS_MODEL,
+        MANUAL_FOCAL_LENGTH,
+        MANUAL_FOCAL_LENGTH_35MM,
+    )
 
 
 # Maps DB field -> list of EXIF fields to try (in order of preference)
@@ -31,6 +42,7 @@ EXIF_TO_DB_MAPPING = {
     DBFields.LABEL: ["XMP:Label"],
     DBFields.ORIENTATION: ["EXIF:Orientation"],
 }
+# Lens info fields are set in code: since some transformation is performed
 
 # Maps DB field -> EXIF tag(s) for writing
 # Uses MWG composite tags where available to write to multiple locations

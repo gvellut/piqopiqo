@@ -236,6 +236,13 @@ class MetadataDB:
     );
     """
 
+    _MANUAL_LENS_COLUMN_TYPES = {
+        DBFields.MANUAL_LENS_MAKE: "TEXT",
+        DBFields.MANUAL_LENS_MODEL: "TEXT",
+        DBFields.MANUAL_FOCAL_LENGTH: "TEXT",
+        DBFields.MANUAL_FOCAL_LENGTH_35MM: "TEXT",
+    }
+
     def __init__(self, folder_path: str):
         """Initialize the database manager for a folder.
 
@@ -297,6 +304,32 @@ class MetadataDB:
                         (new_val, row["id"]),
                     )
             connection.commit()
+
+    def _get_photo_metadata_columns(self, connection: sqlite3.Connection) -> set[str]:
+        cursor = connection.execute("PRAGMA table_info(photo_metadata)")
+        return {str(row["name"]) for row in cursor.fetchall()}
+
+    def _ensure_manual_lens_columns(self, connection: sqlite3.Connection) -> None:
+        columns = self._get_photo_metadata_columns(connection)
+        missing = [
+            (column_name, column_type)
+            for column_name, column_type in self._MANUAL_LENS_COLUMN_TYPES.items()
+            if column_name not in columns
+        ]
+        if not missing:
+            return
+
+        for column_name, column_type in missing:
+            logger.info("Migrating database: adding %s column", column_name)
+            connection.execute(
+                f"ALTER TABLE photo_metadata ADD COLUMN {column_name} {column_type}"
+            )
+        connection.commit()
+
+    def ensure_manual_lens_columns(self) -> None:
+        """Create hidden manual lens columns lazily when first needed."""
+        conn = self._ensure_db()
+        self._ensure_manual_lens_columns(conn)
 
     def _get_connection(self, create: bool) -> sqlite3.Connection | None:
         """Get a connection bound to the current thread.
@@ -361,6 +394,8 @@ class MetadataDB:
         if row is None:
             return None
 
+        row_keys = set(row.keys())
+
         # Parse time_taken string to datetime object
         time_taken_raw = row[DBFields.TIME_TAKEN]
         if isinstance(time_taken_raw, str) and time_taken_raw:
@@ -383,6 +418,26 @@ class MetadataDB:
             DBFields.TIME_TAKEN: time_taken_val,
             DBFields.LABEL: row[DBFields.LABEL],
             DBFields.ORIENTATION: row[DBFields.ORIENTATION],
+            DBFields.MANUAL_LENS_MAKE: (
+                row[DBFields.MANUAL_LENS_MAKE]
+                if DBFields.MANUAL_LENS_MAKE in row_keys
+                else None
+            ),
+            DBFields.MANUAL_LENS_MODEL: (
+                row[DBFields.MANUAL_LENS_MODEL]
+                if DBFields.MANUAL_LENS_MODEL in row_keys
+                else None
+            ),
+            DBFields.MANUAL_FOCAL_LENGTH: (
+                row[DBFields.MANUAL_FOCAL_LENGTH]
+                if DBFields.MANUAL_FOCAL_LENGTH in row_keys
+                else None
+            ),
+            DBFields.MANUAL_FOCAL_LENGTH_35MM: (
+                row[DBFields.MANUAL_FOCAL_LENGTH_35MM]
+                if DBFields.MANUAL_FOCAL_LENGTH_35MM in row_keys
+                else None
+            ),
         }
 
     def save_metadata(self, file_path: str, data: dict) -> None:
@@ -397,16 +452,24 @@ class MetadataDB:
         conn = self._ensure_db()
         now = datetime.now().isoformat()
         file_name = os.path.basename(file_path)
+        data_to_save = data.copy()
 
         # Convert datetime to ISO string for storage
-        time_taken = data.get(DBFields.TIME_TAKEN)
+        time_taken = data_to_save.get(DBFields.TIME_TAKEN)
         if isinstance(time_taken, datetime):
-            data = data.copy()
-            data[DBFields.TIME_TAKEN] = time_taken.strftime("%Y-%m-%d %H:%M:%S")
+            data_to_save[DBFields.TIME_TAKEN] = time_taken.strftime("%Y-%m-%d %H:%M:%S")
+
+        if any(field in data_to_save for field in DBFields.MANUAL_LENS_FIELDS):
+            self._ensure_manual_lens_columns(conn)
+
+        columns = self._get_photo_metadata_columns(conn)
+        has_manual_lens_columns = all(
+            field in columns for field in DBFields.MANUAL_LENS_FIELDS
+        )
 
         # Check if entry exists
         cursor = conn.execute(
-            "SELECT id FROM photo_metadata WHERE file_path = ?", (file_path,)
+            "SELECT * FROM photo_metadata WHERE file_path = ?", (file_path,)
         )
         existing = cursor.fetchone()
 
@@ -427,14 +490,14 @@ class MetadataDB:
                 WHERE file_path = ?
                 """,
                 (
-                    data.get(DBFields.TITLE),
-                    data.get(DBFields.DESCRIPTION),
-                    data.get(DBFields.LATITUDE),
-                    data.get(DBFields.LONGITUDE),
-                    data.get(DBFields.KEYWORDS),
-                    data.get(DBFields.TIME_TAKEN),
-                    data.get(DBFields.LABEL),
-                    data.get(DBFields.ORIENTATION),
+                    data_to_save.get(DBFields.TITLE),
+                    data_to_save.get(DBFields.DESCRIPTION),
+                    data_to_save.get(DBFields.LATITUDE),
+                    data_to_save.get(DBFields.LONGITUDE),
+                    data_to_save.get(DBFields.KEYWORDS),
+                    data_to_save.get(DBFields.TIME_TAKEN),
+                    data_to_save.get(DBFields.LABEL),
+                    data_to_save.get(DBFields.ORIENTATION),
                     now,
                     file_path,
                 ),
@@ -451,17 +514,41 @@ class MetadataDB:
                 (
                     file_path,
                     file_name,
-                    data.get(DBFields.TITLE),
-                    data.get(DBFields.DESCRIPTION),
-                    data.get(DBFields.LATITUDE),
-                    data.get(DBFields.LONGITUDE),
-                    data.get(DBFields.KEYWORDS),
-                    data.get(DBFields.TIME_TAKEN),
-                    data.get(DBFields.LABEL),
-                    data.get(DBFields.ORIENTATION),
+                    data_to_save.get(DBFields.TITLE),
+                    data_to_save.get(DBFields.DESCRIPTION),
+                    data_to_save.get(DBFields.LATITUDE),
+                    data_to_save.get(DBFields.LONGITUDE),
+                    data_to_save.get(DBFields.KEYWORDS),
+                    data_to_save.get(DBFields.TIME_TAKEN),
+                    data_to_save.get(DBFields.LABEL),
+                    data_to_save.get(DBFields.ORIENTATION),
                     now,
                     now,
                 ),
+            )
+
+        if has_manual_lens_columns:
+            existing_keys = set(existing.keys()) if existing is not None else set()
+            manual_values = []
+            for field in DBFields.MANUAL_LENS_FIELDS:
+                if field in data_to_save:
+                    manual_values.append(data_to_save.get(field))
+                elif field in existing_keys:
+                    manual_values.append(existing[field])
+                else:
+                    manual_values.append(None)
+
+            conn.execute(
+                f"""
+                UPDATE photo_metadata SET
+                    {DBFields.MANUAL_LENS_MAKE} = ?,
+                    {DBFields.MANUAL_LENS_MODEL} = ?,
+                    {DBFields.MANUAL_FOCAL_LENGTH} = ?,
+                    {DBFields.MANUAL_FOCAL_LENGTH_35MM} = ?,
+                    updated_at = ?
+                WHERE file_path = ?
+                """,
+                (*manual_values, now, file_path),
             )
 
         conn.commit()

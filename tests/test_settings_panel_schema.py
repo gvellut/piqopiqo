@@ -50,3 +50,12 @@ def test_interface_tab_layout_matches_expected_groups_and_fields():
     assert [field.key for field in interface_tab.groups[4].fields] == [
         UserSettingKey.CUSTOM_EXIF_FIELDS
     ]
+
+
+def test_external_tools_tab_contains_manual_lens_group():
+    external_tab = next(tab for tab in SETTINGS_TABS if tab.title == "External/Tools")
+    group_by_title = {group.title: group for group in external_tab.groups}
+    assert "Manual Lens" in group_by_title
+    assert [field.key for field in group_by_title["Manual Lens"].fields] == [
+        UserSettingKey.MANUAL_LENSES
+    ]
