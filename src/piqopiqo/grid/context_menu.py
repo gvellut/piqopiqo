@@ -13,7 +13,7 @@ from send2trash import send2trash
 
 from piqopiqo.external_apps import open_in_external_app, reveal_in_file_manager
 from piqopiqo.model import ImageItem
-from piqopiqo.settings_state import UserSettingKey, get_user_setting
+from piqopiqo.ssf.settings_state import UserSettingKey, get_user_setting
 
 if TYPE_CHECKING:
     from piqopiqo.main_window import MainWindow

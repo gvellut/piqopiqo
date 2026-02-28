@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 
 from piqopiqo.components.ellided_label import EllidedLabel
 from piqopiqo.model import ExifField, ImageItem
-from piqopiqo.settings_state import (
+from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
     get_effective_exif_panel_fields,
     get_runtime_setting,

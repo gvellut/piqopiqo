@@ -10,7 +10,7 @@ from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import QDialog, QMessageBox
 
 from piqopiqo.metadata.db_fields import DBFields
-from piqopiqo.settings_state import (
+from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
     StateKey,
     UserSettingKey,

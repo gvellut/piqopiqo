@@ -9,7 +9,7 @@ from pathlib import Path
 
 from attrs import define, field
 
-from piqopiqo.settings_state import (
+from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
     get_runtime_setting,
     get_support_dir,

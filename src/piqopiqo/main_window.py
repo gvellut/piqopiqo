@@ -42,7 +42,7 @@ from .orientation import rotate_orientation_left, rotate_orientation_right
 from .panels import EditPanel, ExifPanel, FilterPanel
 from .photo_model import PhotoListModel, SortOrder
 from .settings_panel import SettingsDialog
-from .settings_state import (
+from .ssf.settings_state import (
     APP_NAME,
     RuntimeSettingKey,
     StateKey,

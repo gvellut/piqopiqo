@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from piqopiqo.settings_state import UserSettingKey, get_user_setting
+from piqopiqo.ssf.settings_state import UserSettingKey, get_user_setting
 
 
 def get_label_color(label: str) -> str | None:

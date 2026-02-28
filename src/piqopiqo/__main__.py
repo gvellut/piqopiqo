@@ -19,7 +19,7 @@ except ImportError:
 from .cache_paths import set_cache_base_dir
 from .folder_scan import scan_folder
 from .main_window import MainWindow
-from .settings_state import (
+from .ssf.settings_state import (
     APP_NAME,
     ORG_DOMAIN,
     ORG_NAME,

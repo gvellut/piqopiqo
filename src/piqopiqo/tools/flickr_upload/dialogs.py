@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.cache_paths import get_flickr_cache_dir, get_flickr_token_file_path
-from piqopiqo.settings_state import (
+from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
     UserSettingKey,
     get_runtime_setting,

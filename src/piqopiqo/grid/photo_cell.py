@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QFrame, QSizePolicy
 
 from piqopiqo.label_utils import get_label_color
 from piqopiqo.metadata.db_fields import DBFields
-from piqopiqo.settings_state import RuntimeSettingKey, get_runtime_setting
+from piqopiqo.ssf.settings_state import RuntimeSettingKey, get_runtime_setting
 
 
 class PhotoCell(QFrame):

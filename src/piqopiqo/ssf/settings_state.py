@@ -15,14 +15,14 @@ from typing import Any
 from attrs import define
 from PySide6.QtCore import QByteArray, QSettings
 
-from .color_management import ScreenColorProfileMode
-from .model import (
+from ..color_management import ScreenColorProfileMode
+from ..model import (
     ExifField,
     ManualLensPreset,
     OnFullscreenExitMultipleSelected,
     StatusLabel,
 )
-from .shortcuts import Shortcut
+from ..shortcuts import Shortcut
 
 logger = logging.getLogger(__name__)
 

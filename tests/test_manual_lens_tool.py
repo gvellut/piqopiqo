@@ -11,7 +11,7 @@ from piqopiqo.cache_paths import set_cache_base_dir
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBManager
 from piqopiqo.model import ImageItem, ManualLensPreset
-from piqopiqo.settings_state import (
+from piqopiqo.ssf.settings_state import (
     UserSettingKey,
     init_qsettings_store,
     set_user_setting,

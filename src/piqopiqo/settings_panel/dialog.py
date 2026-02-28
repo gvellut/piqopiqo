@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from piqopiqo.settings_state import (
+from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
     SettingsPanelSaveMode,
     UserSettingKey,

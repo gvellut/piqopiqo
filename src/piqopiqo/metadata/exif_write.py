@@ -7,7 +7,7 @@ from datetime import datetime
 from piqopiqo import __version__ as piqopiqo_version
 from piqopiqo.keyword_utils import parse_keywords
 from piqopiqo.metadata.db_fields import DB_TO_EXIF_WRITE_MAPPING, DBFields
-from piqopiqo.settings_state import APP_NAME
+from piqopiqo.ssf.settings_state import APP_NAME
 
 
 def _normalize_decimal_text(value: object) -> str | None:

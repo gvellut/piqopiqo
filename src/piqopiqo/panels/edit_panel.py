@@ -20,7 +20,7 @@ from piqopiqo.metadata.db_fields import EDITABLE_FIELDS, FIELD_DISPLAY_LABELS, D
 from piqopiqo.metadata.metadata_db import MetadataDBManager
 from piqopiqo.metadata.save_workers import MetadataSaveWorker, drain_qthread_pool
 from piqopiqo.model import ImageItem
-from piqopiqo.settings_state import UserSettingKey, get_user_setting
+from piqopiqo.ssf.settings_state import UserSettingKey, get_user_setting
 
 from .edit_widgets import (
     MULTIPLE_VALUES,

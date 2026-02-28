@@ -14,7 +14,7 @@ import flickrapi
 
 from piqopiqo import __version__ as piqopiqo_version
 from piqopiqo.cache_paths import get_flickr_cache_dir, get_flickr_token_file_path
-from piqopiqo.settings_state import APP_NAME
+from piqopiqo.ssf.settings_state import APP_NAME
 
 from .constants import FLICKR_REQUIRED_PERMS, FLICKR_TOKEN_DB_FILENAME
 

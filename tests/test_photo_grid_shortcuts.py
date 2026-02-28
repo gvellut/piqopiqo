@@ -10,7 +10,7 @@ import pytest
 
 from piqopiqo.grid.photo_grid import PhotoGrid
 from piqopiqo.model import ImageItem
-from piqopiqo.settings_state import init_qsettings_store
+from piqopiqo.ssf.settings_state import init_qsettings_store
 
 
 @pytest.fixture

@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..settings_state import UserSettingKey, get_user_setting
+from ..ssf.settings_state import UserSettingKey, get_user_setting
 
 logger = logging.getLogger(__name__)
 
@@ -761,7 +761,7 @@ def launch_copy_sd(parent=None):
         )
         return
 
-    from ..settings_state import StateKey, get_state
+    from ..ssf.settings_state import StateKey, get_state
 
     state = get_state()
     name = state.get(StateKey.COPY_SD_NAME_SUFFIX)

@@ -8,7 +8,7 @@ from attrs import define
 
 from piqopiqo.color_management import ScreenColorProfileMode
 from piqopiqo.model import OnFullscreenExitMultipleSelected
-from piqopiqo.settings_state import UserSettingKey
+from piqopiqo.ssf.settings_state import UserSettingKey
 
 
 class EditorKind(Enum):

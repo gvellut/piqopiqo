@@ -11,7 +11,7 @@ import pytest
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.model import ImageItem
 from piqopiqo.panels.edit_panel import EditPanel
-from piqopiqo.settings_state import (
+from piqopiqo.ssf.settings_state import (
     UserSettingKey,
     init_qsettings_store,
     set_user_setting,

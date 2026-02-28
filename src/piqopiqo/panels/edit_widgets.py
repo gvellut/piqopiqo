@@ -15,7 +15,7 @@ from piqopiqo.metadata.metadata_db import (
     validate_latitude,
     validate_longitude,
 )
-from piqopiqo.settings_state import RuntimeSettingKey, get_runtime_setting
+from piqopiqo.ssf.settings_state import RuntimeSettingKey, get_runtime_setting
 
 # Placeholder for multiple values
 MULTIPLE_VALUES = "<Multiple Values>"

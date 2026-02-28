@@ -10,7 +10,7 @@ import pytest
 
 from piqopiqo.color_management import ScreenColorProfileMode
 from piqopiqo.model import ExifField, ManualLensPreset, StatusLabel
-from piqopiqo.settings_state import (
+from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
     SettingsPanelSaveMode,
     StateKey,

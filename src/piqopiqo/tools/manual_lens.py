@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.save_workers import MetadataSaveWorker
 from piqopiqo.model import ManualLensPreset
-from piqopiqo.settings_state import UserSettingKey, get_user_setting
+from piqopiqo.ssf.settings_state import UserSettingKey, get_user_setting
 
 if TYPE_CHECKING:
     from piqopiqo.main_window import MainWindow

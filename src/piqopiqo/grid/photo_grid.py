@@ -27,7 +27,7 @@ from piqopiqo.cache_paths import get_thumb_dir_for_folder
 from piqopiqo.color_management import load_pixmap_with_color_management
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.orientation import apply_orientation_to_pixmap
-from piqopiqo.settings_state import (
+from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
     UserSettingKey,
     get_runtime_setting,

@@ -10,7 +10,7 @@ import pytest
 
 from piqopiqo.color_management import ScreenColorProfileMode
 from piqopiqo.settings_panel.dialog import SettingsDialog
-from piqopiqo.settings_state import (
+from piqopiqo.ssf.settings_state import (
     UserSettingKey,
     get_user_setting,
     init_qsettings_store,

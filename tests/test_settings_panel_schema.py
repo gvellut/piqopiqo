@@ -1,7 +1,7 @@
 """Tests for settings panel descriptors."""
 
 from piqopiqo.settings_panel.schema import SETTINGS_TABS, iter_all_field_specs
-from piqopiqo.settings_state import UserSettingKey
+from piqopiqo.ssf.settings_state import UserSettingKey
 
 
 def test_every_user_setting_is_present_in_schema():

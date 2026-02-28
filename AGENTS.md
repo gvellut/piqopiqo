@@ -30,8 +30,8 @@ src/piqopiqo/
 ├── folder_scan.py   # Folder scan (initial image list)
 ├── folder_watcher.py # watchfiles-based folder watcher (auto add/remove/modify)
 ├── main_window.py   # Main application window
-├── settings_state.py # QSettings-backed state + settings registries/accessors
-
+├── ssf
+    ├── settings_state.py # QSettings-backed state + settings registries/accessors
 ├── photo_model.py   # PhotoListModel: filtering, sorting, selection, add/remove photos
 ├── shortcuts.py     # Keyboard shortcut utilities + view-scope shortcut registries
 ├── model.py         # Data models (ImageItem, FilterCriteria, StatusLabel, ExifField)

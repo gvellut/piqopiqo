@@ -19,7 +19,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 
 from piqopiqo.cache_paths import ensure_thumb_dir
 from piqopiqo.metadata.metadata_db import MetadataDBManager
-from piqopiqo.settings_state import (
+from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
     UserSettingKey,
     get_effective_exif_panel_field_keys,

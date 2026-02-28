@@ -1,4 +1,6 @@
 Mandatory settings : cache dir (for thumbnails + db) and exiftool path. 
+src/piqopiqo/ssf/settings_state.py
+
 Make it generic : add a new structure to list the the mandatory settings + ref to function to check validity and return a default value (if the original value was empty / None) to present to the user as a possiblity on its machine => ie so one click to accept the proposed settings. If the original setting value was not valid / or empty : the dialog must come up and the settings set explicitly by the user.
 Indicate the type of the setings  (dir, path, other value like text : similar to / can reuse structures in schema in src/piqopiqo/settings_panel/schema.py) => used to generate the dialog to set those mandatory settings at launch
 
@@ -6,27 +8,26 @@ Currently, only one dir (that can be created by Piqopiqo ; but if it does not ex
 For those settings : Need to check at startup : the config paths are valid (exists) and not None (the value set as the default value in User Settings in src/piqopiqo/settings_state.py)
 
 If some mandatory settings not there, you will need to display a dialog that allows to set the settings (that presents only those with missing values, including with determined defaults if empty). For example, if path : can have a Browse button to navigate. If not empty but the value is invalid.
+Add some text indicated what this dialog is for.
 If it is a directory that can be created : indicate underline the text field with the path that it will be created (so the user does not have to create it himself).
-If the value is not empty : this must be the value in the text field. Add a line underneath that will show the determined default value + button : Set to recommended. So the user still has its value to edit if needed.
-If empty : the text field is filled with the determined default value already amd the there is no line underneath.
-Fill the paths with the default values that were determined or empty if no default value.
+If the value is not empty : this must be the value in the text field. Add a line underneath that will show the determined default value + button : Set to auto. So the user still has its value to edit if needed.
+If empty : the text field is filled with the determined default value already amd the line underneath says "Auto value"
+Fill the text fields / or other items (but with the current mandatory settings : will be text fields with a browse button) with the default values that were determined or empty if no default value.
 
-Buttons OK / Cancel. 
-On Cancel, quit the application (mandatory settings invalud). 
-On OK : check the settings if they are valid now. If not : show the dialog again with an error message. If some settings are valid for that second time : do not show them in the dialog. If valid : save in QSettings and launch the real Main Window.
+Buttons Save / Cancel. 
+On Cancel, quit the application (mandatory settings invalid). 
+On Save : check the settings if they are valid now. If valid : save in QSettings. Do this for every setting before showing the dialog again. If one setting is not valid : show the dialog again with an error message. If some settings were valid after last time : do not show them in the dialog for that second time. If all mandatory settings valid : launch the real Main Window.
 
-If exiftool paht is None : 
-Check in PATH if exiftool is there +  get the absolute path
+If exiftool path is None / Empty : 
+Check in PATH if exiftool is there : use shutil.which to get the absolute path (not just the name)
 on macos : check also
-"/opt/homebrew/bin/exiftool" if there
+"/opt/homebrew/bin/exiftool" is there the use that as the recommanded value
+to check validity of the value use os.access(path, os.F_OK | os.X_OK):
 
 cache :
 Application Support / cache (on macos)
 (application support dir for any platforms) / cache
-=> creatable if does not exist
-
-For the cache dir : if the proposed default does not exist : can be created by piqopiqo on user confirmation
-
+=> creatable by Piqopiqo if does not exist, on user confirmation of the dialog
 
 
  UserSettingKey.CACHE_BASE_DIR: SettingDef(

@@ -7,7 +7,7 @@ import pytest
 
 from piqopiqo.model import ExifField, ImageItem
 from piqopiqo.panels.exif_panel import ExifPanel, format_exif_display_value
-from piqopiqo.settings_state import (
+from piqopiqo.ssf.settings_state import (
     UserSettingKey,
     init_qsettings_store,
     set_user_setting,
