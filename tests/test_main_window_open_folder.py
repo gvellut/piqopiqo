@@ -38,14 +38,34 @@ class _FakeEnsureVisibleWindow:
 class _FakeGridSetData:
     def __init__(self):
         self.calls: list[tuple[list[object], bool]] = []
+        self.items_data: list[object] = []
 
     def set_data(self, items, *, fast_first_paint: bool = False):
+        self.items_data = list(items)
         self.calls.append((list(items), fast_first_paint))
 
 
-class _FakePhotoModelForModelChange:
+class _FakeGridReselection(_FakeGridSetData):
     def __init__(self):
-        self.photos = ["a", "b"]
+        super().__init__()
+        self.select_calls: list[tuple[list[str], str | None]] = []
+
+    def select_paths(self, paths, *, anchor_path=None):
+        selected = set(paths)
+        for item in self.items_data:
+            item.is_selected = item.path in selected
+        self.select_calls.append((list(paths), anchor_path))
+
+
+class _Item:
+    def __init__(self, path: str, *, selected: bool = False):
+        self.path = path
+        self.is_selected = selected
+
+
+class _FakePhotoModelForModelChange:
+    def __init__(self, photos=None):
+        self.photos = photos if photos is not None else ["a", "b"]
 
 
 class _FakeModelChangedWindow:
@@ -53,6 +73,7 @@ class _FakeModelChangedWindow:
         self.grid = _FakeGridSetData()
         self.photo_model = _FakePhotoModelForModelChange()
         self._next_model_change_fast_first_paint = True
+        self._pending_metadata_reselection_context = None
         self._last_model_change_grid_ms = None
         self.events: list[str] = []
 
@@ -61,6 +82,48 @@ class _FakeModelChangedWindow:
 
     def _reconcile_selection_and_panels(self):
         self.events.append("panels")
+
+
+class _FakeModelChangedWindowReselection:
+    def __init__(self, photos: list[_Item], pending_context: dict | None):
+        self.grid = _FakeGridReselection()
+        self.photo_model = _FakePhotoModelForModelChange(photos)
+        self._next_model_change_fast_first_paint = False
+        self._pending_metadata_reselection_context = pending_context
+        self._last_model_change_grid_ms = None
+        self.events: list[str] = []
+        self.visible_paths: list[str] = []
+
+    @property
+    def images_data(self):
+        return self.photo_model.photos
+
+    def _update_status_bar_count(self):
+        self.events.append("status")
+
+    def _reconcile_selection_and_panels(self):
+        self.events.append("panels")
+
+    def _ensure_grid_path_visible(self, path: str | None) -> bool:
+        if path is None:
+            return False
+        self.visible_paths.append(path)
+        return True
+
+    def _pick_metadata_reselection_path(
+        self,
+        old_photo_list_paths: list[str],
+        new_photo_list_paths: list[str],
+        base_path: str | None,
+    ) -> str | None:
+        return MainWindow._pick_metadata_reselection_path(
+            old_photo_list_paths,
+            new_photo_list_paths,
+            base_path,
+        )
+
+    def _apply_pending_metadata_reselection(self, context: dict) -> None:
+        MainWindow._apply_pending_metadata_reselection(self, context)
 
 
 def test_on_open_clears_filters_before_loading_folder(monkeypatch):
@@ -110,3 +173,65 @@ def test_on_model_changed_forwards_fast_first_paint_and_resets_flag():
     assert fake_window._next_model_change_fast_first_paint is False
     assert isinstance(fake_window._last_model_change_grid_ms, float)
     assert fake_window.events == ["status", "panels"]
+
+
+def test_pick_reselection_path_prefers_next_after_base():
+    old_paths = ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"]
+    new_paths = ["/a.jpg", "/d.jpg"]
+
+    assert (
+        MainWindow._pick_metadata_reselection_path(old_paths, new_paths, "/b.jpg")
+        == "/d.jpg"
+    )
+
+
+def test_pick_reselection_path_falls_back_to_previous_when_no_next():
+    old_paths = ["/a.jpg", "/b.jpg", "/c.jpg"]
+    new_paths = ["/a.jpg"]
+
+    assert (
+        MainWindow._pick_metadata_reselection_path(old_paths, new_paths, "/b.jpg")
+        == "/a.jpg"
+    )
+
+
+def test_pick_reselection_path_returns_none_when_no_visible_items():
+    old_paths = ["/a.jpg", "/b.jpg"]
+    new_paths: list[str] = []
+
+    assert (
+        MainWindow._pick_metadata_reselection_path(old_paths, new_paths, "/a.jpg")
+        is None
+    )
+
+
+def test_on_model_changed_auto_reselects_when_selection_disappears_after_metadata_sync():
+    photos = [_Item("/a.jpg"), _Item("/d.jpg")]
+    pending_context = {
+        "old_photo_list_paths": ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],
+        "selected_paths": ["/b.jpg"],
+        "base_path": "/b.jpg",
+    }
+    fake_window = _FakeModelChangedWindowReselection(photos, pending_context)
+
+    MainWindow._on_model_changed(fake_window)
+
+    assert fake_window.grid.select_calls == [(["/d.jpg"], "/d.jpg")]
+    assert fake_window.visible_paths == ["/d.jpg"]
+    assert fake_window._pending_metadata_reselection_context is None
+
+
+def test_on_model_changed_keeps_selection_when_any_selected_item_survives():
+    photos = [_Item("/a.jpg", selected=True), _Item("/d.jpg", selected=False)]
+    pending_context = {
+        "old_photo_list_paths": ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],
+        "selected_paths": ["/a.jpg", "/b.jpg"],
+        "base_path": "/b.jpg",
+    }
+    fake_window = _FakeModelChangedWindowReselection(photos, pending_context)
+
+    MainWindow._on_model_changed(fake_window)
+
+    assert fake_window.grid.select_calls == []
+    assert fake_window.visible_paths == []
+    assert fake_window._pending_metadata_reselection_context is None

@@ -83,6 +83,7 @@ class MainWindow(QMainWindow):
         self._pending_scheduled_sync_fields: set[str] = set()
         self._pending_model_sync_after_fullscreen = False
         self._pending_model_sync_fields: set[str] = set()
+        self._pending_metadata_reselection_context: dict | None = None
         self._fullscreen_started_with_multi_selection = False
         self._folder_watcher: FolderWatcher | None = None
         self._watcher_suppressed: dict[str, float] = {}
@@ -677,6 +678,10 @@ class MainWindow(QMainWindow):
             old_loop_paths = self._fullscreen_overlay.get_visible_paths()
             old_current_path = self._fullscreen_overlay.get_current_path()
 
+        self._pending_metadata_reselection_context = (
+            self._capture_metadata_reselection_context()
+        )
+
         logger.debug(
             "Refreshing model after metadata update from %s: %s",
             source,
@@ -689,6 +694,83 @@ class MainWindow(QMainWindow):
                 old_loop_paths,
                 old_current_path,
             )
+
+    def _capture_metadata_reselection_context(self) -> dict | None:
+        old_photo_list_paths = [item.path for item in self.images_data]
+        if not old_photo_list_paths:
+            return None
+
+        selected_paths = [item.path for item in self.images_data if item.is_selected]
+        if not selected_paths:
+            return None
+
+        anchor_index = self.grid._choose_anchor_from_current_selection()
+        base_path = None
+        if 0 <= anchor_index < len(old_photo_list_paths):
+            candidate = old_photo_list_paths[anchor_index]
+            if candidate in selected_paths:
+                base_path = candidate
+        if base_path is None:
+            base_path = selected_paths[-1]
+
+        return {
+            "old_photo_list_paths": old_photo_list_paths,
+            "selected_paths": selected_paths,
+            "base_path": base_path,
+        }
+
+    @staticmethod
+    def _pick_metadata_reselection_path(
+        old_photo_list_paths: list[str],
+        new_photo_list_paths: list[str],
+        base_path: str | None,
+    ) -> str | None:
+        if not old_photo_list_paths or not new_photo_list_paths:
+            return None
+        if base_path not in old_photo_list_paths:
+            return None
+
+        valid_paths = set(new_photo_list_paths)
+        base_index = old_photo_list_paths.index(base_path)
+
+        for i in range(base_index + 1, len(old_photo_list_paths)):
+            path = old_photo_list_paths[i]
+            if path in valid_paths:
+                return path
+
+        for i in range(base_index - 1, -1, -1):
+            path = old_photo_list_paths[i]
+            if path in valid_paths:
+                return path
+
+        return None
+
+    def _apply_pending_metadata_reselection(self, context: dict) -> None:
+        selected_before = context.get("selected_paths")
+        if not isinstance(selected_before, list) or not selected_before:
+            return
+
+        current_selected_paths = [item.path for item in self.images_data if item.is_selected]
+        if current_selected_paths:
+            return
+
+        old_photo_list_paths = context.get("old_photo_list_paths")
+        base_path = context.get("base_path")
+        if not isinstance(old_photo_list_paths, list):
+            return
+        if not isinstance(base_path, str) or not base_path:
+            return
+
+        replacement_path = self._pick_metadata_reselection_path(
+            old_photo_list_paths,
+            [item.path for item in self.images_data],
+            base_path,
+        )
+        if replacement_path is None:
+            return
+
+        self.grid.select_paths([replacement_path], anchor_path=replacement_path)
+        self._ensure_grid_path_visible(replacement_path)
 
     def _pick_next_path_in_loop(
         self,
@@ -1747,6 +1829,10 @@ class MainWindow(QMainWindow):
             self.photo_model.photos,
             fast_first_paint=self._next_model_change_fast_first_paint,
         )
+        reselection_context = self._pending_metadata_reselection_context
+        self._pending_metadata_reselection_context = None
+        if reselection_context is not None:
+            self._apply_pending_metadata_reselection(reselection_context)
         self._next_model_change_fast_first_paint = False
         after_grid = time.perf_counter()
 
