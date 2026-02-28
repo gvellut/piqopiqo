@@ -255,11 +255,12 @@ def run_combined_task(task: dict) -> dict:
 def generate_hq_thumbnail(source: str, dest_path: str, max_dim: int) -> bool:
     try:
         img = Image.open(source)
+        icc = img.info.get("icc_profile")
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
         img.thumbnail((max_dim, max_dim))
         Path(dest_path).parent.mkdir(parents=True, exist_ok=True)
-        img.save(dest_path, "JPEG", quality=80)
+        img.save(dest_path, "JPEG", quality=80, icc_profile=icc)
         return True
     except Exception:
         return False

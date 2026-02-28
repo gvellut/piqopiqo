@@ -1,1 +1,0 @@
-When saving the HQ thumbnail : save the color profile (so can be read later in the grid)
