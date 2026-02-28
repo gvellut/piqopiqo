@@ -1,0 +1,1 @@
+When a folder is chosen with Open Folder (on Open button) : the filters must all be cleared first. Then the new folder is processed.

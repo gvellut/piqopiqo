@@ -16,14 +16,15 @@ from typing import Any
 from attrs import define
 from PySide6.QtCore import QByteArray, QSettings
 
-from ..color_management import ScreenColorProfileMode
-from ..model import (
+from piqopiqo.color_management import ScreenColorProfileMode
+from piqopiqo.model import (
     ExifField,
     ManualLensPreset,
     OnFullscreenExitMultipleSelected,
     StatusLabel,
 )
-from ..shortcuts import Shortcut
+from piqopiqo.photo_model import SortOrder
+from piqopiqo.shortcuts import Shortcut
 
 logger = logging.getLogger(__name__)
 
@@ -420,23 +421,23 @@ def _parse_enum(env_value: str, enum_type: type[StrEnum], fallback: StrEnum) -> 
 
 
 _STATE_REGISTRY: dict[StateKey, StateDef] = {
-    StateKey.LAST_FOLDER: StateDef(StateGroup.APP_STATE, str, None),
-    StateKey.LAST_GPX_FOLDER: StateDef(StateGroup.APP_STATE, str, ""),
-    StateKey.SORT_ORDER: StateDef(StateGroup.APP_STATE, str, "FILE_NAME"),
+    StateKey.LAST_FOLDER: StateDef(StateGroup.APP_STATE, str),
+    StateKey.LAST_GPX_FOLDER: StateDef(StateGroup.APP_STATE, str),
+    StateKey.SORT_ORDER: StateDef(StateGroup.APP_STATE, str, SortOrder.FILE_NAME.name),
     StateKey.COPY_SD_EJECT: StateDef(StateGroup.APP_STATE, bool, True),
-    StateKey.COPY_SD_NAME_SUFFIX: StateDef(StateGroup.APP_STATE, str, ""),
-    StateKey.COPY_SD_DATE_SPEC: StateDef(StateGroup.APP_STATE, str, "since:last"),
+    StateKey.COPY_SD_NAME_SUFFIX: StateDef(StateGroup.APP_STATE, str),
+    StateKey.COPY_SD_DATE_SPEC: StateDef(StateGroup.APP_STATE, str),
     StateKey.LAST_TIMESHIFT_BY_FOLDERS: StateDef(
         StateGroup.APP_STATE,
         str,
         {},
         json_storage=True,
     ),
-    StateKey.LAST_TIMESHIFT: StateDef(StateGroup.APP_STATE, str, None),
-    StateKey.WINDOW_GEOMETRY: StateDef(StateGroup.QT, QByteArray, None),
-    StateKey.WINDOW_STATE: StateDef(StateGroup.QT, QByteArray, None),
-    StateKey.MAIN_SPLITTER: StateDef(StateGroup.QT, QByteArray, None),
-    StateKey.RIGHT_SPLITTER: StateDef(StateGroup.QT, QByteArray, None),
+    StateKey.LAST_TIMESHIFT: StateDef(StateGroup.APP_STATE, str),
+    StateKey.WINDOW_GEOMETRY: StateDef(StateGroup.QT, QByteArray),
+    StateKey.WINDOW_STATE: StateDef(StateGroup.QT, QByteArray),
+    StateKey.MAIN_SPLITTER: StateDef(StateGroup.QT, QByteArray),
+    StateKey.RIGHT_SPLITTER: StateDef(StateGroup.QT, QByteArray),
 }
 
 

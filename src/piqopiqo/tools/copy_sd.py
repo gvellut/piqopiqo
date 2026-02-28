@@ -764,8 +764,8 @@ def launch_copy_sd(parent=None):
     from ..ssf.settings_state import StateKey, get_state
 
     state = get_state()
-    name = state.get(StateKey.COPY_SD_NAME_SUFFIX)
-    date_spec = state.get(StateKey.COPY_SD_DATE_SPEC)
+    name = state.get(StateKey.COPY_SD_NAME_SUFFIX) or ""
+    date_spec = state.get(StateKey.COPY_SD_DATE_SPEC) or ""
 
     while True:
         dialog = CopySdInputDialog(
