@@ -196,12 +196,10 @@ def _extract_ticket_rows(response: dict) -> list[dict]:
 def _get_uploaded_photos_indirect(
     flickr,
     number: int,
-    since_time: datetime | int | float | None,
+    upload_ts: int,
     margin_s: int = 10,
 ) -> tuple[list[dict], bool]:
-    date_s = None
-    if since_time is not None:
-        date_s = _to_int_timestamp(since_time) - int(margin_s)
+    date_s = upload_ts - int(margin_s)
 
     photos_uploaded: list[dict] = []
     page = 1
@@ -216,6 +214,7 @@ def _get_uploaded_photos_indirect(
             "extras": "date_taken,tags",
         }
         if date_s is not None:
+            # we restrict the time so photos uploaded before are not taken into account
             kwargs["min_upload_date"] = date_s
 
         page_response = flickr.photos.search(**kwargs)
@@ -254,6 +253,9 @@ def _reupload_photos_without_tags(
     exiftool_path: str,
 ) -> list[dict]:
     """Re-upload photos whose tags are unexpectedly empty after async upload."""
+    # TODO always reupload the incomplete images : known which index they are => file
+    # path (done here actually)
+    # this is for me : always add tags but more direct
     failures: list[dict] = []
     ordered_entries = sorted(upload_entries, key=lambda row: int(row["order"]))
 
@@ -335,7 +337,7 @@ def run_resolve_tickets_task(task: dict) -> dict:
     api_key = str(task["api_key"])
     api_secret = str(task["api_secret"])
     token_cache_dir = str(task["token_cache_dir"])
-    now_ts = int(task["now_ts"])
+    upload_ts = int(task["upload_ts"])
     upload_entries = list(task.get("upload_entries") or [])
     exiftool_path = str(task.get("exiftool_path") or "")
 
@@ -431,6 +433,11 @@ def run_resolve_tickets_task(task: dict) -> dict:
             "failures": [],
         }
 
+    # Flickr upload bug : some photos do not complete ever no matter how long you wait
+    # but they are correctly uploaded (but are missing keywords and GPS from EXIF tags
+    # so will need to replace)
+    # also happens in sync : they timeout. With async: the upload is fine but the ticket
+    # stays incomplete
     incomplete = [
         row for row in sorted_statuses if row.status == TicketStatus.INCOMPLETE
     ]
@@ -438,7 +445,7 @@ def run_resolve_tickets_task(task: dict) -> dict:
         uploaded, not_found = _get_uploaded_photos_indirect(
             flickr,
             len(upload_entries),
-            now_ts,
+            upload_ts,
         )
         if not_found:
             return {

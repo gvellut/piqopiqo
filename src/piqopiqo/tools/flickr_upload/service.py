@@ -48,6 +48,8 @@ def format_flickr_tags_from_db_keywords(db_keywords: str | None) -> str | None:
 def generate_timestamps(now_ts: int, num_photos: int) -> list[int]:
     """Generate stable upload timestamps to preserve visible ordering on Flickr."""
     count = max(0, int(num_photos))
+    # so not in the future (Flickr error) : but not too much in the past to prevent
+    # 2 uploads from having same time (if the other upload was manual for ex)
     base = int(now_ts) - 2 * count
     return [base + i for i in range(count)]
 

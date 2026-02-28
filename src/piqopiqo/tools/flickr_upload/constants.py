@@ -16,6 +16,7 @@ CHECK_TICKETS_SLEEP_S = 3
 MAX_NUM_CHECKS = 10
 
 STAGE_UPLOAD = "Upload"
+STAGE_CHECK_UPLOAD_STATUS = "Check upload status"
 STAGE_RESET_DATE = "Reset date"
 STAGE_MAKE_PUBLIC = "Make public"
 STAGE_ALBUM_CHECK = "Album check"

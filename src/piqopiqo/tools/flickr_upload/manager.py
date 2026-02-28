@@ -15,6 +15,7 @@ from PySide6.QtCore import QObject, Signal
 from .albums import FlickrAlbumPlan
 from .constants import (
     STAGE_ADD_TO_ALBUM,
+    STAGE_CHECK_UPLOAD_STATUS,
     STAGE_MAKE_PUBLIC,
     STAGE_RESET_DATE,
     STAGE_UPLOAD,
@@ -122,11 +123,14 @@ class FlickrUploadManager(QObject):
                 if not items:
                     return
 
-                photo_pairs = self._run_upload_stage(items, result)
+                # start time
+                upload_ts = int(datetime.now().timestamp())
+
+                photo_pairs = self._run_upload_stage(upload_ts, items, result)
                 if result.cancelled or result.fatal_error or not photo_pairs:
                     return
 
-                self._run_reset_date_stage(photo_pairs, result)
+                self._run_reset_date_stage(upload_ts, photo_pairs, result)
                 if result.cancelled:
                     return
 
@@ -151,6 +155,7 @@ class FlickrUploadManager(QObject):
 
     def _run_upload_stage(
         self,
+        upload_ts: int,
         items: list[dict],
         result: FlickrUploadResult,
     ) -> list[dict]:
@@ -198,12 +203,13 @@ class FlickrUploadManager(QObject):
 
         resolve_payload = self._build_worker_payload(
             {
-                "now_ts": int(datetime.now().timestamp()),
+                "upload_ts": upload_ts,
                 "upload_entries": upload_successes,
                 "exiftool_path": self._exiftool_path,
             }
         )
 
+        self.stage_changed.emit(STAGE_CHECK_UPLOAD_STATUS)
         resolve = run_resolve_tickets_task(resolve_payload)
         for failure in resolve.get("failures", []):
             result.failures.append(
@@ -241,6 +247,7 @@ class FlickrUploadManager(QObject):
 
     def _run_reset_date_stage(
         self,
+        upload_ts: int,
         photo_pairs: list[dict],
         result: FlickrUploadResult,
     ) -> None:
@@ -248,8 +255,7 @@ class FlickrUploadManager(QObject):
         total = len(photo_pairs)
         self.progress.emit(0, total)
 
-        now_ts = int(datetime.now().timestamp())
-        timestamps = generate_timestamps(now_ts, total)
+        timestamps = generate_timestamps(upload_ts, total)
         payloads = [
             self._build_worker_payload(
                 {

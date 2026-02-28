@@ -1,4 +1,3 @@
-* [Make non text field non editable](Ma_tasks/Ma_Make_non_text_field_non_editable.md)
 - [Base data redirect to settings](J_tasks/Q_Base_data_redirect_to_settings.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
 - [Specific macos](Ba_tasks/Da_Specific_macos.md)
@@ -51,3 +50,4 @@
 ! [Clear filters on open folder](Ja_tasks/Ja_Clear_filters_on_open_folder.md)
 ! [Unnessary drop and reload of HQ thumbnail](Ka_tasks/Ka_Unnessary_drop_and_reload_of_HQ_thumbnail.md)
 ! [Timer error on fullscreen exit](La_tasks/La_Timer_error_on_fullscreen_exit.md)
+! [Make non text field non editable](Ma_tasks/Ma_Make_non_text_field_non_editable.md)
