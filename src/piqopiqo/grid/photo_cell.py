@@ -103,22 +103,25 @@ class PhotoCell(QFrame):
 
             # Image Rect
             img_rect = rect.adjusted(pad, pad, -pad, -(pad + meta_h))
+            square_size = max(0, min(img_rect.width(), img_rect.height()))
+            square_rect = QRect(0, 0, square_size, square_size)
+            square_rect.moveCenter(img_rect.center())
 
             if state == 0:
-                painter.fillRect(img_rect, QColor("black"))
+                painter.fillRect(square_rect, QColor("black"))
             else:
                 if pixmap:
                     # Orientation is already applied in item.pixmap by the grid.
-                    # Always scale to fit the image area (up or down) while
-                    # preserving aspect ratio, then keep centered.
-                    if img_rect.width() > 0 and img_rect.height() > 0:
+                    # Always scale to fit a centered square area (up or down)
+                    # while preserving aspect ratio, then keep centered.
+                    if square_rect.width() > 0 and square_rect.height() > 0:
                         scaled = pixmap.scaled(
-                            img_rect.size(),
+                            square_rect.size(),
                             Qt.KeepAspectRatio,
                             Qt.SmoothTransformation,
                         )
                         pixmap_rect = scaled.rect()
-                        pixmap_rect.moveCenter(img_rect.center())
+                        pixmap_rect.moveCenter(square_rect.center())
                         painter.drawPixmap(pixmap_rect, scaled)
 
             # Draw label swatch (top-right corner of image area)
@@ -130,8 +133,8 @@ class PhotoCell(QFrame):
                         swatch_size = 16
                         swatch_margin = 4
                         swatch_rect = QRect(
-                            img_rect.right() - swatch_size - swatch_margin,
-                            img_rect.top() + swatch_margin,
+                            square_rect.right() - swatch_size - swatch_margin,
+                            square_rect.top() + swatch_margin,
                             swatch_size,
                             swatch_size,
                         )

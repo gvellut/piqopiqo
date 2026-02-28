@@ -51,3 +51,4 @@
 ! [Unnessary drop and reload of HQ thumbnail](Ka_tasks/Ka_Unnessary_drop_and_reload_of_HQ_thumbnail.md)
 ! [Timer error on fullscreen exit](La_tasks/La_Timer_error_on_fullscreen_exit.md)
 ! [Make non text field non editable](Ma_tasks/Ma_Make_non_text_field_non_editable.md)
+! [Constrain photo in square](Na_tasks/Na_Constrain_photo_in_square.md)
