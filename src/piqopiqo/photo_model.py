@@ -249,15 +249,52 @@ class PhotoListModel(QObject):
 
     # --- Filtering ---
 
-    def set_filter(self, criteria: FilterCriteria | None):
+    @staticmethod
+    def normalize_filter_criteria(
+        criteria: FilterCriteria | None,
+    ) -> FilterCriteria | None:
+        """Normalize a filter criteria object.
+
+        Returns None when the criteria is effectively empty.
+        """
+        if criteria is None:
+            return None
+
+        folder = criteria.folder
+        if folder == "":
+            folder = None
+
+        labels = {label for label in criteria.labels if label}
+        include_no_label = bool(criteria.include_no_label)
+        search_text = (criteria.search_text or "").strip()
+
+        if folder is None and not labels and not include_no_label and not search_text:
+            return None
+
+        return FilterCriteria(
+            folder=folder,
+            labels=labels,
+            include_no_label=include_no_label,
+            search_text=search_text,
+        )
+
+    def set_filter(self, criteria: FilterCriteria | None) -> bool:
         """Set the filter criteria.
 
         Args:
             criteria: Filter criteria, or None for no filter.
+
+        Returns:
+            True when the active filter changed and photos_changed was emitted.
         """
-        self._filter = criteria
+        normalized = self.normalize_filter_criteria(criteria)
+        if normalized == self._filter:
+            return False
+
+        self._filter = normalized
         self._apply_filter_and_sort()
         self.photos_changed.emit()
+        return True
 
     def _passes_filter(self, photo: ImageItem) -> bool:
         """Check if a photo passes the current filter."""

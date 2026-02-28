@@ -88,6 +88,7 @@ def regenerate_selected_thumbnails(window: MainWindow, photos: list[ImageItem]) 
     paths = [p.path for p in photos]
     for photo in photos:
         photo.state = 0
+        photo._cache_state_dirty = True
         photo.embedded_pixmap = None
         photo.hq_pixmap = None
         photo.pixmap = None

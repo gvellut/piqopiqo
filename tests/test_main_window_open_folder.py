@@ -35,6 +35,34 @@ class _FakeEnsureVisibleWindow:
         self.grid = _FakeGridEnsureVisible()
 
 
+class _FakeGridSetData:
+    def __init__(self):
+        self.calls: list[tuple[list[object], bool]] = []
+
+    def set_data(self, items, *, fast_first_paint: bool = False):
+        self.calls.append((list(items), fast_first_paint))
+
+
+class _FakePhotoModelForModelChange:
+    def __init__(self):
+        self.photos = ["a", "b"]
+
+
+class _FakeModelChangedWindow:
+    def __init__(self):
+        self.grid = _FakeGridSetData()
+        self.photo_model = _FakePhotoModelForModelChange()
+        self._next_model_change_fast_first_paint = True
+        self._last_model_change_grid_ms = None
+        self.events: list[str] = []
+
+    def _update_status_bar_count(self):
+        self.events.append("status")
+
+    def _reconcile_selection_and_panels(self):
+        self.events.append("panels")
+
+
 def test_on_open_clears_filters_before_loading_folder(monkeypatch):
     fake_window = _FakeMainWindow()
     monkeypatch.setattr(
@@ -71,3 +99,14 @@ def test_ensure_grid_path_visible_returns_false_for_missing_path():
 
     assert MainWindow._ensure_grid_path_visible(fake_window, "/missing.jpg") is False
     assert fake_window.grid.calls == []
+
+
+def test_on_model_changed_forwards_fast_first_paint_and_resets_flag():
+    fake_window = _FakeModelChangedWindow()
+
+    MainWindow._on_model_changed(fake_window)
+
+    assert fake_window.grid.calls == [(["a", "b"], True)]
+    assert fake_window._next_model_change_fast_first_paint is False
+    assert isinstance(fake_window._last_model_change_grid_ms, float)
+    assert fake_window.events == ["status", "panels"]

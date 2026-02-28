@@ -79,3 +79,29 @@ def test_refresh_resorts_after_time_taken_change():
     model.refresh_after_metadata_update()
 
     assert [item.path for item in model.photos] == ["/photos/b.jpg", "/photos/a.jpg"]
+
+
+def test_set_filter_normalizes_empty_criteria_and_skips_unchanged_updates():
+    model = PhotoListModel(MetadataDBManager())
+    model.set_photos([_item("/photos/a.jpg", label="Approved")], ["/photos"])
+
+    emitted: list[int] = []
+    model.photos_changed.connect(lambda: emitted.append(1))
+
+    changed = model.set_filter(FilterCriteria())
+    assert changed is False
+    assert model._filter is None
+    assert emitted == []
+
+    changed = model.set_filter(FilterCriteria(search_text="   "))
+    assert changed is False
+    assert model._filter is None
+    assert emitted == []
+
+    changed = model.set_filter(FilterCriteria(labels={"Approved"}))
+    assert changed is True
+    assert emitted == [1]
+
+    changed = model.set_filter(FilterCriteria(labels={"Approved"}))
+    assert changed is False
+    assert emitted == [1]

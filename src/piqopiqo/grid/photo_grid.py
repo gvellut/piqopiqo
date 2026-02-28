@@ -93,6 +93,7 @@ class PhotoGrid(QWidget):
         self._loaded_hq_indices: set[int] = set()
         self._loaded_embedded_indices: set[int] = set()
         self._hq_display_enabled = True
+        self._fast_first_paint_active = False
         self._suppress_scroll_navigation_activity = False
 
         self._hq_idle_timer = QTimer(self)
@@ -238,7 +239,11 @@ class PhotoGrid(QWidget):
         self.selection_changed.emit(set(range(len(self.items_data))))
         self.refresh_visible_selection_only()
 
-    def set_data(self, items):
+    def set_data(self, items, *, fast_first_paint: bool = False):
+        perf_enabled = logger.isEnabledFor(logging.DEBUG)
+        if perf_enabled:
+            started = time.perf_counter()
+
         previous_anchor_path = self._last_selected_path
         # Inject index for click handling (preserve selection state)
         for i, item in enumerate(items):
@@ -264,8 +269,22 @@ class PhotoGrid(QWidget):
         else:
             self._set_selection_anchor(-1)
 
-        self._recalculate_scrollbar()
-        self._render_current_view()
+        if fast_first_paint:
+            self._begin_fast_first_paint()
+
+        rendered_via_scroll = self._recalculate_scrollbar()
+        if not rendered_via_scroll:
+            self._render_current_view()
+
+        if perf_enabled:
+            elapsed_ms = (time.perf_counter() - started) * 1000.0
+            logger.debug(
+                "Grid set_data completed: items=%d fast_first=%s rendered_via_scroll=%s total=%.1fms",
+                len(items),
+                fast_first_paint,
+                rendered_via_scroll,
+                elapsed_ms,
+            )
 
     def get_index_for_path(self, path: str) -> int | None:
         for i, item in enumerate(self.items_data):
@@ -394,8 +413,9 @@ class PhotoGrid(QWidget):
                 self.cells.append(cell)
 
         # Force data refresh
-        self._recalculate_scrollbar()
-        self._render_current_view()
+        rendered_via_scroll = self._recalculate_scrollbar()
+        if not rendered_via_scroll:
+            self._render_current_view()
 
     def _calculate_metadata_height(self) -> int:
         """Calculate the height needed for metadata display."""
@@ -468,20 +488,28 @@ class PhotoGrid(QWidget):
         if visible_rows != self.n_rows:
             self._rebuild_grid(visible_rows, cols)
         else:
-            self._recalculate_scrollbar()
+            rendered_via_scroll = self._recalculate_scrollbar()
             # Just refresh content in case data range changed due to scroll limit
-            # changes
-            self._render_current_view()
+            # changes.
+            if not rendered_via_scroll:
+                self._render_current_view()
 
         super().resizeEvent(event)
 
-    def _recalculate_scrollbar(self):
+    def _recalculate_scrollbar(self) -> bool:
+        """Recalculate scrollbar limits.
+
+        Returns:
+            True when setRange clamped the current value and triggered a render via
+            valueChanged/on_scroll.
+        """
         total_items = len(self.items_data)
         if self.n_cols == 0:
-            return
+            return False
         total_data_rows = math.ceil(total_items / self.n_cols)
 
         max_scroll = max(0, total_data_rows - self.n_rows)
+        previous_value = int(self.scrollbar.value())
 
         self._suppress_scroll_navigation_activity = True
         try:
@@ -496,10 +524,12 @@ class PhotoGrid(QWidget):
         else:
             self.scrollbar.show()
 
+        return int(self.scrollbar.value()) != previous_value
+
     def on_scroll(self, value):
         if not self._suppress_scroll_navigation_activity:
             self._mark_navigation_activity()
-        elif not self._is_lowres_only_mode():
+        elif not self._is_lowres_only_mode() and not self._fast_first_paint_active:
             # Programmatic scroll changes (filter/sort restore, range clamping)
             # should not trigger temporary HQ->embedded demotion.
             self._hq_display_enabled = True
@@ -516,7 +546,26 @@ class PhotoGrid(QWidget):
     def _allow_hq_now(self) -> bool:
         if self._is_lowres_only_mode():
             return False
+        if self._fast_first_paint_active:
+            return False
         return (not self._is_hq_delay_enabled()) or self._hq_display_enabled
+
+    def _begin_fast_first_paint(self) -> None:
+        """Render the next update quickly with embedded thumbs, then upgrade to HQ."""
+        if self._is_lowres_only_mode():
+            self._fast_first_paint_active = False
+            self._hq_display_enabled = False
+            return
+
+        delay_ms = int(get_runtime_setting(RuntimeSettingKey.GRID_HQ_THUMB_LOAD_DELAY_MS))
+        if delay_ms <= 0:
+            self._fast_first_paint_active = False
+            self._hq_display_enabled = True
+            return
+
+        self._fast_first_paint_active = True
+        self._hq_display_enabled = False
+        self._hq_idle_timer.start(delay_ms)
 
     def _restart_hq_idle_timer(self) -> None:
         delay_ms = int(
@@ -528,6 +577,7 @@ class PhotoGrid(QWidget):
         self._hq_idle_timer.start(delay_ms)
 
     def _mark_navigation_activity(self) -> None:
+        self._fast_first_paint_active = False
         if not self._is_hq_delay_enabled():
             self._hq_display_enabled = True
             return
@@ -535,6 +585,7 @@ class PhotoGrid(QWidget):
         self._restart_hq_idle_timer()
 
     def _on_hq_idle_timeout(self) -> None:
+        self._fast_first_paint_active = False
         self._hq_display_enabled = True
         self._render(int(self.scrollbar.value()), allow_hq=True)
 
@@ -542,6 +593,10 @@ class PhotoGrid(QWidget):
         self._render(int(self.scrollbar.value()), allow_hq=self._allow_hq_now())
 
     def _render(self, start_row: int, *, allow_hq: bool) -> None:
+        perf_enabled = logger.isEnabledFor(logging.DEBUG)
+        if perf_enabled:
+            started = time.perf_counter()
+
         start_data_index = start_row * self.n_cols
         buffer_start_idx, buffer_end_idx = self._buffer_index_range(start_row)
         visible_end_idx = min(
@@ -553,10 +608,14 @@ class PhotoGrid(QWidget):
             item = self.items_data[idx]
             self._sync_item_state_from_cache(item)
             buffered_paths.append(item.path)
+        if perf_enabled:
+            after_sync = time.perf_counter()
 
         if allow_hq:
             self._ensure_hq_pixmaps_loaded_in_range(buffer_start_idx, start_data_index)
             self._ensure_hq_pixmaps_loaded_in_range(visible_end_idx, buffer_end_idx)
+        if perf_enabled:
+            after_preload = time.perf_counter()
 
         for i, cell in enumerate(self.cells):
             data_index = start_data_index + i
@@ -576,14 +635,35 @@ class PhotoGrid(QWidget):
                 cell.set_content(None, False)
                 # Ensure complete cells are displayed even if empty
                 cell.show()
+        if perf_enabled:
+            after_paint = time.perf_counter()
 
         self._evict_hq_pixmaps_outside(buffer_start_idx, buffer_end_idx)
         emb_start, emb_end = self._embedded_buffer_index_range(start_row)
         self._evict_embedded_pixmaps_outside(emb_start, emb_end)
+        if perf_enabled:
+            after_evict = time.perf_counter()
 
         if buffered_paths != self._last_visible_paths:
             self._last_visible_paths = buffered_paths
             self.visible_paths_changed.emit(buffered_paths)
+        if perf_enabled:
+            after_visible_emit = time.perf_counter()
+            logger.debug(
+                "Grid render timings: row=%d allow_hq=%s visible=%d buffer=%d "
+                "sync=%.1fms preload=%.1fms paint=%.1fms evict=%.1fms "
+                "visible_emit=%.1fms total=%.1fms",
+                start_row,
+                allow_hq,
+                max(0, visible_end_idx - start_data_index),
+                max(0, buffer_end_idx - buffer_start_idx),
+                (after_sync - started) * 1000.0,
+                (after_preload - after_sync) * 1000.0,
+                (after_paint - after_preload) * 1000.0,
+                (after_evict - after_paint) * 1000.0,
+                (after_visible_emit - after_evict) * 1000.0,
+                (after_visible_emit - started) * 1000.0,
+            )
 
     def _buffer_index_range(self, start_row: int) -> tuple[int, int]:
         """Return [start, end) data-index range to keep HQ pixmaps for."""
@@ -614,6 +694,8 @@ class PhotoGrid(QWidget):
         """Best-effort sync of item.state from disk caches (for restarts)."""
         if item is None:
             return
+        if not bool(getattr(item, "_cache_state_dirty", True)):
+            return
 
         embedded_path, hq_path = self._cache_paths_for_item(item)
         base_name = os.path.splitext(os.path.basename(item.path))[0]
@@ -636,6 +718,7 @@ class PhotoGrid(QWidget):
             item.embedded_pixmap = None
             item.hq_pixmap = None
             item.pixmap = None
+        item._cache_state_dirty = False
 
     def _load_thumbnail_cache_pixmap(
         self,

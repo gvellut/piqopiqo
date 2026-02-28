@@ -73,6 +73,9 @@ class ImageItem:
     # Built from embedded_pixmap or hq_pixmap with orientation applied.
     pixmap: QPixmap | None = None
     state: int = 0
+    # Runtime-only hint for grid cache-state probing.
+    # True means disk cache existence should be re-checked once.
+    _cache_state_dirty: bool = True
     _global_index: int = -1
     exif_data: dict | None = None
     db_metadata: dict | None = None  # Cached DB metadata for editable fields

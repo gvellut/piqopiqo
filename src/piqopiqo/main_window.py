@@ -74,6 +74,8 @@ class MainWindow(QMainWindow):
         self._filter_apply_scheduled = False
         self._pending_filter_criteria: FilterCriteria | None = None
         self._pending_filter_snapshot: dict | None = None
+        self._next_model_change_fast_first_paint = False
+        self._last_model_change_grid_ms: float | None = None
 
         self._items_by_path: dict[str, ImageItem] = {}
         self._last_visible_paths: list[str] = []
@@ -900,9 +902,13 @@ class MainWindow(QMainWindow):
         Args:
             criteria: Filter criteria to apply.
         """
+        normalized = self.photo_model.normalize_filter_criteria(criteria)
+        if normalized == self._current_filter:
+            return
+
         snapshot = self._capture_grid_viewport_snapshot()
-        self._current_filter = criteria
-        self._pending_filter_criteria = criteria
+        self._current_filter = normalized
+        self._pending_filter_criteria = normalized
         self._pending_filter_snapshot = snapshot
         if self._filter_apply_scheduled:
             return
@@ -915,28 +921,42 @@ class MainWindow(QMainWindow):
         snapshot = self._pending_filter_snapshot
         self._pending_filter_criteria = None
         self._pending_filter_snapshot = None
-        if criteria is None or snapshot is None:
+        if snapshot is None:
             return
         started = time.perf_counter()
         total_before = len(self.photo_model.all_photos)
 
-        self.photo_model.set_filter(criteria)
+        self._next_model_change_fast_first_paint = True
+        changed = self.photo_model.set_filter(criteria)
         after_filter = time.perf_counter()
+        if not changed:
+            self._next_model_change_fast_first_paint = False
 
-        self._restore_grid_viewport_after_filter_change(snapshot)
+        if changed:
+            self._restore_grid_viewport_after_filter_change(snapshot)
         after_restore = time.perf_counter()
+
+        criteria_folder = criteria.folder if criteria is not None else None
+        criteria_labels = sorted(criteria.labels) if criteria is not None else []
+        criteria_no_label = (
+            criteria.include_no_label if criteria is not None else False
+        )
+        criteria_search = criteria.search_text if criteria is not None else ""
+        grid_ms = self._last_model_change_grid_ms if changed else 0.0
 
         logger.debug(
             "Deferred filter apply completed: "
             "folder=%r labels=%s include_no_label=%s search=%r "
-            "result=%d/%d model=%.1fms restore=%.1fms total=%.1fms",
-            criteria.folder,
-            sorted(criteria.labels),
-            criteria.include_no_label,
-            criteria.search_text,
+            "result=%d/%d changed=%s model=%.1fms grid=%.1fms restore=%.1fms total=%.1fms",
+            criteria_folder,
+            criteria_labels,
+            criteria_no_label,
+            criteria_search,
             len(self.photo_model.photos),
             total_before,
+            changed,
             (after_filter - started) * 1000.0,
+            grid_ms,
             (after_restore - after_filter) * 1000.0,
             (after_restore - started) * 1000.0,
         )
@@ -1396,6 +1416,7 @@ class MainWindow(QMainWindow):
                 continue
 
             item.state = 0
+            item._cache_state_dirty = True
             item.embedded_pixmap = None
             item.hq_pixmap = None
             item.pixmap = None
@@ -1415,6 +1436,7 @@ class MainWindow(QMainWindow):
         # Reset all image states to trigger re-generation
         for item in items:
             item.state = 0
+            item._cache_state_dirty = True
             item.embedded_pixmap = None
             item.hq_pixmap = None
             item.pixmap = None
@@ -1449,6 +1471,7 @@ class MainWindow(QMainWindow):
         state = 1 if thumb_type == "embedded" else 2
 
         item.state = max(int(getattr(item, "state", 0)), state)
+        item._cache_state_dirty = False
         has_hq_pixmap = getattr(item, "hq_pixmap", None) is not None
 
         if thumb_type == "embedded":
@@ -1719,9 +1742,28 @@ class MainWindow(QMainWindow):
 
     def _on_model_changed(self):
         """Handle model data change - refresh grid."""
-        self.grid.set_data(self.photo_model.photos)
+        started = time.perf_counter()
+        self.grid.set_data(
+            self.photo_model.photos,
+            fast_first_paint=self._next_model_change_fast_first_paint,
+        )
+        self._next_model_change_fast_first_paint = False
+        after_grid = time.perf_counter()
+
         self._update_status_bar_count()
+        after_status = time.perf_counter()
+
         self._reconcile_selection_and_panels()
+        after_panels = time.perf_counter()
+
+        self._last_model_change_grid_ms = (after_grid - started) * 1000.0
+        logger.debug(
+            "Model changed refresh timings: grid=%.1fms status=%.1fms panels=%.1fms total=%.1fms",
+            (after_grid - started) * 1000.0,
+            (after_status - after_grid) * 1000.0,
+            (after_panels - after_status) * 1000.0,
+            (after_panels - started) * 1000.0,
+        )
 
     def _on_photo_added(self, file_path: str, index: int):
         """Handle photo added to model."""
