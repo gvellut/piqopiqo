@@ -161,6 +161,11 @@ SETTINGS_TABS: list[TabSpec] = [
                         label="Show description field",
                         editor=EditorKind.BOOL,
                     ),
+                    FieldSpec(
+                        key=UserSettingKey.PROTECT_NON_TEXT_METADATA,
+                        label="Protect non-text metadata fields",
+                        editor=EditorKind.BOOL,
+                    ),
                 ],
             ),
             GroupSpec(

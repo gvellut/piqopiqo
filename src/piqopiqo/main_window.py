@@ -1176,6 +1176,14 @@ class MainWindow(QMainWindow):
             )
 
         if (
+            UserSettingKey.PROTECT_NON_TEXT_METADATA in changed_keys
+            and self.edit_panel is not None
+        ):
+            self.edit_panel.set_non_text_metadata_protection(
+                bool(get_user_setting(UserSettingKey.PROTECT_NON_TEXT_METADATA))
+            )
+
+        if (
             UserSettingKey.FORCE_SRGB in changed_keys
             or UserSettingKey.SCREEN_COLOR_PROFILE in changed_keys
         ):

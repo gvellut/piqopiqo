@@ -77,6 +77,7 @@ class UserSettingKey(StrEnum):
     FORCE_SRGB = "forceSrgb"
     SCREEN_COLOR_PROFILE = "screenColorProfile"
     SHOW_DESCRIPTION_FIELD = "showDescriptionField"
+    PROTECT_NON_TEXT_METADATA = "protectNonTextMetadata"
     STATUS_LABELS = "statusLabels"
     EXTERNAL_VIEWER = "externalViewer"
     EXTERNAL_EDITOR = "externalEditor"
@@ -488,6 +489,10 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         ),
     ),
     UserSettingKey.SHOW_DESCRIPTION_FIELD: SettingDef(default=True, read_type=bool),
+    UserSettingKey.PROTECT_NON_TEXT_METADATA: SettingDef(
+        default=True,
+        read_type=bool,
+    ),
     UserSettingKey.STATUS_LABELS: SettingDef(
         default=[
             StatusLabel("Approved", "#FF0000", 1),

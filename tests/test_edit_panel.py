@@ -201,3 +201,82 @@ def test_selection_pending_summary_disables_editors_then_clears_on_update(qapp):
     assert panel.reading_label.isHidden() is True
     assert panel.title_edit.isEnabled() is True
     assert panel.keywords_edit.isEnabled() is True
+
+
+def test_non_text_protection_read_only_toggle(qapp):
+    init_qsettings_store(dyn=True)
+    set_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD, True)
+    set_user_setting(UserSettingKey.PROTECT_NON_TEXT_METADATA, True)
+
+    panel = EditPanel(_StubDBManager())
+    item = ImageItem(
+        path="/tmp/protected.jpg",
+        name="protected.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={DBFields.TITLE: "Test"},
+    )
+    panel.update_for_selection([item])
+
+    assert panel.title_edit.isReadOnly() is False
+    assert panel.description_edit.isReadOnly() is False
+    assert panel.keywords_edit.isReadOnly() is False
+    assert panel.time_edit.isReadOnly() is True
+    assert panel.lat_edit.isReadOnly() is True
+    assert panel.lon_edit.isReadOnly() is True
+    assert panel.time_edit.toolTip() == "Protected field. Change in Settings Panel"
+    assert panel.lat_edit.toolTip() == "Protected field. Change in Settings Panel"
+    assert panel.lon_edit.toolTip() == "Protected field. Change in Settings Panel"
+    assert panel.title_edit.toolTip() == ""
+    assert panel.description_edit.toolTip() == ""
+    assert panel.keywords_edit.toolTip() == ""
+    assert panel.keyword_tree_btn.isEnabled() is True
+
+    panel.set_non_text_metadata_protection(False)
+
+    assert panel.title_edit.isReadOnly() is False
+    assert panel.description_edit.isReadOnly() is False
+    assert panel.keywords_edit.isReadOnly() is False
+    assert panel.time_edit.isReadOnly() is False
+    assert panel.lat_edit.isReadOnly() is False
+    assert panel.lon_edit.isReadOnly() is False
+    assert panel.time_edit.toolTip() == ""
+    assert panel.lat_edit.toolTip() == ""
+    assert panel.lon_edit.toolTip() == ""
+    assert panel.keyword_tree_btn.isEnabled() is True
+
+
+def test_non_text_protection_blocks_gui_save_for_locked_fields(qapp, monkeypatch):
+    init_qsettings_store(dyn=True)
+    set_user_setting(UserSettingKey.PROTECT_NON_TEXT_METADATA, True)
+
+    panel = EditPanel(_StubDBManager())
+    item = ImageItem(
+        path="/tmp/save-guard.jpg",
+        name="save-guard.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={DBFields.TITLE: "Before"},
+    )
+    panel.update_for_selection([item])
+
+    saved_fields: list[str] = []
+    emitted: list[str] = []
+    monkeypatch.setattr(
+        panel,
+        "_save_field_for_item",
+        lambda _item, field_name, _value: saved_fields.append(field_name),
+    )
+    panel.metadata_saved.connect(emitted.append)
+
+    panel.lat_edit.set_value(48.8566)
+    panel._on_field_saved(DBFields.LATITUDE)
+
+    assert saved_fields == []
+    assert emitted == []
+
+    panel.title_edit.set_value("After")
+    panel._on_field_saved(DBFields.TITLE)
+
+    assert saved_fields == [DBFields.TITLE]
+    assert emitted == [DBFields.TITLE]

@@ -45,7 +45,8 @@ def test_interface_tab_layout_matches_expected_groups_and_fields():
         UserSettingKey.SCREEN_COLOR_PROFILE,
     ]
     assert [field.key for field in interface_tab.groups[3].fields] == [
-        UserSettingKey.SHOW_DESCRIPTION_FIELD
+        UserSettingKey.SHOW_DESCRIPTION_FIELD,
+        UserSettingKey.PROTECT_NON_TEXT_METADATA,
     ]
     assert [field.key for field in interface_tab.groups[4].fields] == [
         UserSettingKey.CUSTOM_EXIF_FIELDS

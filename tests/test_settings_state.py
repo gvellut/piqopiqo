@@ -65,6 +65,7 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_TIME_SHIFT_UNKNOWN_FOLDER_IGNORE",
         "PIQO_TIMESHIFT_CACHE_NUM",
         "PIQO_FLICKR_UPLOAD_MAX_WORKERS",
+        "PIQO_PROTECT_NON_TEXT_METADATA",
         "PIQO_FORCE_SRGB",
         "PIQO_SCREEN_COLOR_PROFILE",
         "PIQO_COLOR_MANAGE_EMBEDDED_THUMBNAILS",
@@ -221,6 +222,16 @@ def test_show_description_field_default_and_roundtrip(isolated_settings):
 
     set_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD, True)
     assert get_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD) is True
+
+
+def test_protect_non_text_metadata_default_and_roundtrip(isolated_settings):
+    assert get_user_setting(UserSettingKey.PROTECT_NON_TEXT_METADATA) is True
+
+    set_user_setting(UserSettingKey.PROTECT_NON_TEXT_METADATA, False)
+    assert get_user_setting(UserSettingKey.PROTECT_NON_TEXT_METADATA) is False
+
+    set_user_setting(UserSettingKey.PROTECT_NON_TEXT_METADATA, True)
+    assert get_user_setting(UserSettingKey.PROTECT_NON_TEXT_METADATA) is True
 
 
 def test_color_profile_user_settings_defaults_and_roundtrip(isolated_settings):

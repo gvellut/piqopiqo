@@ -1,3 +1,4 @@
+* [Make non text field non editable](Ma_tasks/Ma_Make_non_text_field_non_editable.md)
 - [Base data redirect to settings](J_tasks/Q_Base_data_redirect_to_settings.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
 - [Specific macos](Ba_tasks/Da_Specific_macos.md)

@@ -34,6 +34,14 @@ from .keyword.keyword_tree import KeywordTreeManager
 
 logger = logging.getLogger(__name__)
 
+# Keep this list centralized so GUI editability policy is easy to update.
+GUI_EDITABLE_METADATA_FIELDS_WHEN_PROTECTED = (
+    DBFields.TITLE,
+    DBFields.DESCRIPTION,
+    DBFields.KEYWORDS,
+)
+PROTECTED_FIELD_TOOLTIP = "Protected field. Change in Settings Panel"
+
 
 class EditPanel(QWidget):
     """Panel for editing photo metadata."""
@@ -50,10 +58,14 @@ class EditPanel(QWidget):
         self._has_missing_data = False
         self._db_writer_pool = QThreadPool()
         self._keyword_tree_manager = KeywordTreeManager()
+        self._protect_non_text_metadata = True
 
         self._setup_ui()
         self.set_description_field_visible(
             bool(get_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD))
+        )
+        self.set_non_text_metadata_protection(
+            bool(get_user_setting(UserSettingKey.PROTECT_NON_TEXT_METADATA))
         )
 
     def _setup_ui(self):
@@ -181,6 +193,15 @@ class EditPanel(QWidget):
         self.layout.addWidget(self.lon_edit, row, 1)
         row += 1
 
+        self._field_edit_widgets = {
+            DBFields.TITLE: self.title_edit,
+            DBFields.DESCRIPTION: self.description_edit,
+            DBFields.LATITUDE: self.lat_edit,
+            DBFields.LONGITUDE: self.lon_edit,
+            DBFields.KEYWORDS: self.keywords_edit,
+            DBFields.TIME_TAKEN: self.time_edit,
+        }
+
         scroll_area.setWidget(container)
         main_layout.addWidget(scroll_area)
 
@@ -192,16 +213,10 @@ class EditPanel(QWidget):
         main_layout.addWidget(self.reading_label)
 
     def _set_editing_enabled(self, enabled: bool) -> None:
-        for widget in (
-            self.title_edit,
-            self.description_edit,
-            self.lat_edit,
-            self.lon_edit,
-            self.keywords_edit,
-            self.time_edit,
-            self.keyword_tree_btn,
-        ):
+        for widget in self._field_edit_widgets.values():
             widget.setEnabled(enabled)
+        self.keyword_tree_btn.setEnabled(enabled)
+        self._apply_metadata_read_only_state()
 
     def set_description_field_visible(self, visible: bool) -> None:
         visible = bool(visible)
@@ -211,6 +226,26 @@ class EditPanel(QWidget):
                 self.title_edit.setFocus(Qt.FocusReason.OtherFocusReason)
         self.description_label.setVisible(visible)
         self.description_edit.setVisible(visible)
+
+    def set_non_text_metadata_protection(self, enabled: bool) -> None:
+        self._protect_non_text_metadata = bool(enabled)
+        self._apply_metadata_read_only_state()
+
+    def _is_field_gui_editable(self, field_name: str) -> bool:
+        if field_name not in self._field_edit_widgets:
+            return True
+        if not self._protect_non_text_metadata:
+            return True
+        return field_name in GUI_EDITABLE_METADATA_FIELDS_WHEN_PROTECTED
+
+    def _apply_metadata_read_only_state(self) -> None:
+        for field_name, widget in self._field_edit_widgets.items():
+            is_editable = self._is_field_gui_editable(field_name)
+            widget.setReadOnly(not is_editable)
+            if is_editable:
+                widget.setToolTip("")
+            else:
+                widget.setToolTip(PROTECTED_FIELD_TOOLTIP)
 
     def shutdown_background_saves(
         self, timeout_ms: int, *, clear_queued: bool = True
@@ -365,6 +400,8 @@ class EditPanel(QWidget):
     def _on_field_saved(self, field_name: str):
         """Handle field save event."""
         if not self._current_items:
+            return
+        if not self._is_field_gui_editable(field_name):
             return
 
         # Get the new value
