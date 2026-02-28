@@ -638,7 +638,10 @@ class PhotoGrid(QWidget):
         if perf_enabled:
             after_paint = time.perf_counter()
 
-        self._evict_hq_pixmaps_outside(buffer_start_idx, buffer_end_idx)
+        # During fast-first filter repaint, keep existing HQ pixmaps in memory so
+        # viewport restore does not cause a temporary HQ->embedded->HQ flash.
+        if not (self._fast_first_paint_active and not allow_hq):
+            self._evict_hq_pixmaps_outside(buffer_start_idx, buffer_end_idx)
         emb_start, emb_end = self._embedded_buffer_index_range(start_row)
         self._evict_embedded_pixmaps_outside(emb_start, emb_end)
         if perf_enabled:

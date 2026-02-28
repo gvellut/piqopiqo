@@ -1,5 +1,3 @@
-* [Check filter delay](Ja_tasks/Oa_Check_filter_delay.md)
-    *? [Return of the unecessary drop and reload of HQ thumbnails](Ja_tasks/Oa.A_Return_of_the_unecessary_drop_and_reload_of_HQ_t.md)
 - [Base data redirect to settings](J_tasks/Q_Base_data_redirect_to_settings.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
 - [Specific macos](Ba_tasks/Da_Specific_macos.md)
@@ -54,3 +52,5 @@
 ! [Timer error on fullscreen exit](Ja_tasks/La_Timer_error_on_fullscreen_exit.md)
 ! [Make non text field non editable](Ja_tasks/Ma_Make_non_text_field_non_editable.md)
 ! [Constrain photo in square](Ja_tasks/Na_Constrain_photo_in_square.md)
+! [Check filter delay](Ja_tasks/Oa_Check_filter_delay.md)
+    !? [Return of the unecessary drop and reload of HQ thumbnails](Ja_tasks/Oa.A_Return_of_the_unecessary_drop_and_reload_of_HQ_t.md)

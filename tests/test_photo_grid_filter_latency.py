@@ -126,3 +126,30 @@ def test_sync_item_state_skips_disk_probe_when_cache_state_not_dirty(qapp, monke
     grid._sync_item_state_from_cache(item)
     assert calls["count"] > 0
     assert item._cache_state_dirty is False
+
+
+def test_fast_first_render_skips_hq_eviction_to_avoid_hq_flash(qapp, monkeypatch):
+    init_qsettings_store(dyn=True)
+    grid = PhotoGrid()
+    grid._rebuild_grid(1, 1)
+    grid.set_data([_item(f"/tmp/{i}.jpg", state=2) for i in range(6)])
+
+    monkeypatch.setattr(grid, "_sync_item_state_from_cache", lambda _item: None)
+    monkeypatch.setattr(
+        grid, "_ensure_display_pixmap_loaded", lambda _item, *, allow_hq: None
+    )
+
+    hq_evict_calls = {"count": 0}
+
+    def _record_hq_evict(_start: int, _end: int) -> None:
+        hq_evict_calls["count"] += 1
+
+    monkeypatch.setattr(grid, "_evict_hq_pixmaps_outside", _record_hq_evict)
+
+    grid._fast_first_paint_active = True
+    grid._render(0, allow_hq=False)
+    assert hq_evict_calls["count"] == 0
+
+    grid._fast_first_paint_active = False
+    grid._render(0, allow_hq=False)
+    assert hq_evict_calls["count"] == 1
