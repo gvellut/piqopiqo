@@ -24,7 +24,6 @@ from PySide6.QtGui import (
     QTransform,
 )
 from PySide6.QtWidgets import (
-    QApplication,
     QFrame,
     QLabel,
     QSizePolicy,
@@ -36,17 +35,17 @@ from piqopiqo.color_management import load_pixmap_with_color_management
 from piqopiqo.label_utils import get_label_color
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.orientation import apply_orientation_to_pixmap
-from piqopiqo.ssf.settings_state import (
-    RuntimeSettingKey,
-    UserSettingKey,
-    get_runtime_setting,
-    get_user_setting,
-)
 from piqopiqo.shortcuts import (
     Shortcut,
     build_label_shortcut_bindings,
     match_shortcut_sequence,
     match_simple_shortcut,
+)
+from piqopiqo.ssf.settings_state import (
+    RuntimeSettingKey,
+    UserSettingKey,
+    get_runtime_setting,
+    get_user_setting,
 )
 
 from .info_panel import ZoomOverlayController

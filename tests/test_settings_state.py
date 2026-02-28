@@ -9,9 +9,10 @@ from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 import pytest
 
-import piqopiqo.ssf.settings_state as settings_state
 from piqopiqo.color_management import ScreenColorProfileMode
 from piqopiqo.model import ExifField, ManualLensPreset, StatusLabel
+from piqopiqo.shortcuts import Shortcut
+import piqopiqo.ssf.settings_state as settings_state
 from piqopiqo.ssf.settings_state import (
     MandatorySettingInputKind,
     RuntimeSettingKey,
@@ -34,7 +35,6 @@ from piqopiqo.ssf.settings_state import (
     set_user_setting,
     validate_mandatory_setting_value,
 )
-from piqopiqo.shortcuts import Shortcut
 
 
 @pytest.fixture
@@ -428,9 +428,8 @@ def test_evaluate_pending_mandatory_settings_reports_missing_cache_auto_value(
     assert UserSettingKey.CACHE_BASE_DIR in by_key
     assert UserSettingKey.EXIFTOOL_PATH in by_key
     assert by_key[UserSettingKey.CACHE_BASE_DIR].is_empty is True
-    assert (
-        by_key[UserSettingKey.CACHE_BASE_DIR].auto_value
-        == str(get_cache_base_dir_candidate())
+    assert by_key[UserSettingKey.CACHE_BASE_DIR].auto_value == str(
+        get_cache_base_dir_candidate()
     )
     assert by_key[UserSettingKey.EXIFTOOL_PATH].is_empty is True
 

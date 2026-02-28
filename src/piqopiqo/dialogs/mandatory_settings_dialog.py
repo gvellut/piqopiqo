@@ -162,7 +162,9 @@ class MandatorySettingsDialog(QDialog):
 
             set_auto_btn = QPushButton("Set to auto", hint_row)
             set_auto_btn.clicked.connect(
-                lambda _checked=False, value=pending.auto_value: line_edit.setText(value)
+                lambda _checked=False, value=pending.auto_value: line_edit.setText(
+                    value
+                )
             )
             hint_layout.addWidget(set_auto_btn)
             layout.addWidget(hint_row)
@@ -224,6 +226,5 @@ class MandatorySettingsDialog(QDialog):
 
         escaped_path = html.escape(path)
         note.setText(
-            "This directory will be created on save if missing: "
-            f"<u>{escaped_path}</u>"
+            f"This directory will be created on save if missing: <u>{escaped_path}</u>"
         )

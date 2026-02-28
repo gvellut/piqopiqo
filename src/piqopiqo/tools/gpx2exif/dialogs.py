@@ -156,8 +156,7 @@ class ExtractGpsTimeShiftProgressDialog(QDialog):
         self.status_label.setText("Extraction done.")
         self.result_label.setStyleSheet("")
         self.result_label.setText(
-            f"Extracted clock: {extracted_clock}\n"
-            f"Computed time shift: {time_shift}"
+            f"Extracted clock: {extracted_clock}\nComputed time shift: {time_shift}"
         )
         self.result_label.show()
         self.cancel_btn.hide()

@@ -272,10 +272,7 @@ class SettingsDialog(QDialog):
                 if not normalized_path.lower().endswith(".app") or not os.path.isdir(
                     path
                 ):
-                    return (
-                        "Application path must be an existing .app bundle.\n"
-                        f"{value}"
-                    )
+                    return f"Application path must be an existing .app bundle.\n{value}"
             elif not os.path.exists(path):
                 return f"The path does not exist:\n{value}"
         return None

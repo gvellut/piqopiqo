@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QPushButton
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QDialogButtonBox,
+    QLabel,
+    QPushButton,
+)
 import pytest
 
 from piqopiqo.dialogs.mandatory_settings_dialog import MandatorySettingsDialog
@@ -94,7 +100,9 @@ def test_save_cancel_buttons_and_values_roundtrip(qapp):
     )
 
     save_dialog = MandatorySettingsDialog([pending])
-    save_dialog._line_edits[UserSettingKey.EXIFTOOL_PATH].setText("  /custom/exiftool  ")
+    save_dialog._line_edits[UserSettingKey.EXIFTOOL_PATH].setText(
+        "  /custom/exiftool  "
+    )
     assert save_dialog.values()[UserSettingKey.EXIFTOOL_PATH] == "/custom/exiftool"
     button_box = save_dialog.findChild(QDialogButtonBox)
     assert button_box is not None

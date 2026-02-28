@@ -10,8 +10,8 @@ import re
 from xml.etree import ElementTree
 
 from attrs import define
+import fastkml
 import gpxpy
-import simplekml
 
 from .constants import KML_THUMBNAIL_SIZE
 
@@ -201,10 +201,8 @@ def _kml_description(image_path: str, kml_thumbnail_size: int) -> str:
     image_name = os.path.basename(image_path)
     src = _file_uri(image_path)
     return (
-        "<![CDATA[\n"
         f"{image_name}<br/><br/>\n"
         f'<img src="{src}" width="{int(kml_thumbnail_size)}" />\n'
-        "]]>"
     )
 
 
@@ -217,15 +215,41 @@ def write_kml(
     path = Path(kml_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    kml = simplekml.Kml()
-    style = simplekml.Style()
-    style.balloonstyle.text = "$[description]"
+    kml = fastkml.kml.KML()
+    style_id = "photo-balloon-style"
+    style = fastkml.styles.Style(
+        id=style_id,
+        styles=[fastkml.styles.BalloonStyle(text="$[description]")],
+    )
+    document = fastkml.containers.Document(name="Photos", styles=[style])
+
     for (lat, lon), image_path in positions:
         title = _kml_title(image_path)
         desc = _kml_description(image_path, kml_thumbnail_size)
-        point = kml.newpoint(name=title, description=desc, coords=[(lon, lat)])
-        point.style = style
-    kml.save(str(path))
+        point = fastkml.features.Placemark(
+            name=title,
+            description=desc,
+            kml_geometry=fastkml.geometry.Point(
+                kml_coordinates=fastkml.geometry.Coordinates(coords=[(lon, lat)])
+            ),
+            style_url=fastkml.styles.StyleUrl(url=f"#{style_id}"),
+        )
+        document.append(point)
+
+    kml.append(document)
+    root = kml.etree_element()
+    description_tag = "{http://www.opengis.net/kml/2.2}description"
+    for node in root.findall(f".//{description_tag}"):
+        if node.text and hasattr(fastkml.config.etree, "CDATA"):
+            node.text = fastkml.config.etree.CDATA(node.text)
+
+    xml_bytes = fastkml.config.etree.tostring(
+        root,
+        pretty_print=True,
+        xml_declaration=True,
+        encoding="UTF-8",
+    )
+    path.write_bytes(xml_bytes)
 
 
 def to_relative_folder(root_folder: str, source_folder: str) -> str:

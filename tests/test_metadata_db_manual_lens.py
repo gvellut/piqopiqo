@@ -82,4 +82,3 @@ def test_manual_lens_values_are_preserved_on_partial_updates(tmp_path) -> None:
     assert meta[DBFields.MANUAL_FOCAL_LENGTH_35MM] == "36"
 
     db.close()
-

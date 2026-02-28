@@ -113,8 +113,7 @@ def test_extract_time_shift_progress_success_shows_clock_and_shift_lines(qapp):
     assert dialog.result_shift == "-1m4s"
     assert dialog.result_label.isHidden() is False
     assert dialog.result_label.text() == (
-        "Extracted clock: 12:34:56\n"
-        "Computed time shift: -1m4s"
+        "Extracted clock: 12:34:56\nComputed time shift: -1m4s"
     )
     assert dialog.progress_bar.minimum() == 0
     assert dialog.progress_bar.maximum() == 1

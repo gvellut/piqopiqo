@@ -10,8 +10,8 @@ from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 import pytest
 
 from piqopiqo.color_management import ScreenColorProfileMode
-from piqopiqo.ssf import settings_state
 from piqopiqo.settings_panel.dialog import SettingsDialog
+from piqopiqo.ssf import settings_state
 from piqopiqo.ssf.settings_state import (
     MandatorySettingInputKind,
     MandatorySettingSpec,
@@ -163,7 +163,9 @@ def test_mandatory_hint_clears_when_user_edits_field(qapp, monkeypatch):
     )
 
     dialog._on_save()
-    assert any("Suggested auto value:" in label.text() for label in editor.findChildren(QLabel))
+    assert any(
+        "Suggested auto value:" in label.text() for label in editor.findChildren(QLabel)
+    )
 
     editor.set_value("/some/edit")
     dialog._on_field_changed(UserSettingKey.CACHE_BASE_DIR)

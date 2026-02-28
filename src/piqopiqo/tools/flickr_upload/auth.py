@@ -53,7 +53,6 @@ def create_flickr_client(
         timeout=timeout_s,
     )
 
-    v = _random_suffix(5)
     flickr.flickr_oauth.session.headers.update(
         {"User-Agent": f"{APP_NAME} v{piqopiqo_version}"}
     )

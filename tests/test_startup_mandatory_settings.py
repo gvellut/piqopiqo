@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QDialog
 
-import piqopiqo.startup_mandatory_settings as startup_mandatory_settings
 from piqopiqo.ssf.settings_state import (
     MandatorySettingInputKind,
     MandatorySettingSpec,
     PendingMandatorySetting,
     UserSettingKey,
 )
+import piqopiqo.startup_mandatory_settings as startup_mandatory_settings
 
 
 def _pending(

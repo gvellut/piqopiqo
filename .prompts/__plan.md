@@ -46,3 +46,4 @@
 ! [Check at first launch](Ba_tasks/Fa_Check_at_first_launch.md)
     !? [Validate in settings panel](Ba_tasks/Fa.A_Validate_in_settings_panel.md)
 ! [Extracted time shift result](Ba_tasks/Ga_Extracted_time_shift_result.md)
+! [Replace simplekml](Ba_tasks/Ha_Replace_simplekml.md)
