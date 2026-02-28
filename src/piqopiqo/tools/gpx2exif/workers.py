@@ -12,7 +12,7 @@ from .service import apply_gpx_to_folders
 
 
 class ExtractGpsTimeShiftWorkerSignals(QObject):
-    finished = Signal(str)  # extracted shift
+    finished = Signal(str, str)  # extracted clock, extracted shift
     error = Signal(str)
 
 
@@ -41,7 +41,7 @@ class ExtractGpsTimeShiftWorker(QRunnable):
             return
 
         try:
-            shift = extract_time_shift_from_photo(
+            extracted_clock, shift = extract_time_shift_from_photo(
                 photo_path=self._photo_path,
                 exif_time=self._exif_time,
                 gcp_project=self._gcp_project,
@@ -53,7 +53,7 @@ class ExtractGpsTimeShiftWorker(QRunnable):
             return
 
         if not self._cancel_requested.is_set():
-            self.signals.finished.emit(shift)
+            self.signals.finished.emit(extracted_clock, shift)
 
 
 class ApplyGpxWorkerSignals(QObject):

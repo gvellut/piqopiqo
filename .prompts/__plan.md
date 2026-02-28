@@ -45,3 +45,4 @@
     !? [Add clear set exact tags](J_tasks/P.A_Add_clear_set_exact_tags.md)
 ! [Check at first launch](Ba_tasks/Fa_Check_at_first_launch.md)
     !? [Validate in settings panel](Ba_tasks/Fa.A_Validate_in_settings_panel.md)
+! [Extracted time shift result](Ba_tasks/Ga_Extracted_time_shift_result.md)

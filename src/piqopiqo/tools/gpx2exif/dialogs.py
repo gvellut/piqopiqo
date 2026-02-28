@@ -149,13 +149,16 @@ class ExtractGpsTimeShiftProgressDialog(QDialog):
 
         QThreadPool.globalInstance().start(worker)
 
-    def _on_success(self, time_shift: str) -> None:
+    def _on_success(self, extracted_clock: str, time_shift: str) -> None:
         self._result_shift = time_shift
         self.progress_bar.setRange(0, 1)
         self.progress_bar.setValue(1)
-        self.status_label.setText("Computed time shift:")
+        self.status_label.setText("Extraction done.")
         self.result_label.setStyleSheet("")
-        self.result_label.setText(time_shift)
+        self.result_label.setText(
+            f"Extracted clock: {extracted_clock}\n"
+            f"Computed time shift: {time_shift}"
+        )
         self.result_label.show()
         self.cancel_btn.hide()
         self.ok_btn.setEnabled(True)

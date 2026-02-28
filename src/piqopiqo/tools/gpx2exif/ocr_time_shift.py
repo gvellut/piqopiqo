@@ -63,8 +63,8 @@ def extract_time_shift_from_photo(
     exif_time: datetime,
     gcp_project: str,
     gcp_sa_key_path: str,
-) -> str:
-    """Extract clock time from a photo and return canonical shift text."""
+) -> tuple[str, str]:
+    """Extract clock time from a photo and return clock text + canonical shift."""
     if exif_time.tzinfo is None:
         exif_utc = exif_time.replace(tzinfo=UTC)
     else:
@@ -74,4 +74,4 @@ def extract_time_shift_from_photo(
     clock_text = _extract_clock_time_with_vision(photo_path)
     clock_utc = _find_most_likely_datetime(exif_utc, clock_text)
     delta = clock_utc - exif_utc
-    return format_time_shift(delta)
+    return clock_text, format_time_shift(delta)

@@ -5,7 +5,10 @@ from __future__ import annotations
 from PySide6.QtWidgets import QApplication
 import pytest
 
-from piqopiqo.tools.gpx2exif.dialogs import ApplyGpxDialog
+from piqopiqo.tools.gpx2exif.dialogs import (
+    ApplyGpxDialog,
+    ExtractGpsTimeShiftProgressDialog,
+)
 
 
 @pytest.fixture
@@ -99,3 +102,20 @@ def test_apply_gpx_dialog_prefills_initial_gpx_path(qapp, tmp_path):
 
     path, _mode, _shifts = dialog.get_values()
     assert path == str(gpx_path)
+
+
+def test_extract_time_shift_progress_success_shows_clock_and_shift_lines(qapp):
+    dialog = ExtractGpsTimeShiftProgressDialog()
+
+    dialog._on_success("12:34:56", "-1m4s")
+
+    assert dialog.status_label.text() == "Extraction done."
+    assert dialog.result_shift == "-1m4s"
+    assert dialog.result_label.isHidden() is False
+    assert dialog.result_label.text() == (
+        "Extracted clock: 12:34:56\n"
+        "Computed time shift: -1m4s"
+    )
+    assert dialog.progress_bar.minimum() == 0
+    assert dialog.progress_bar.maximum() == 1
+    assert dialog.progress_bar.value() == 1
