@@ -32,6 +32,7 @@ from .ssf.settings_state import (
     init_qsettings_store,
     set_state_value,
 )
+from .startup_mandatory_settings import ensure_mandatory_settings_configured
 from .utils import setup_logging
 
 
@@ -111,16 +112,13 @@ def cli(folder, dyn):
     # Initialize state/settings store (uses QSettings with org/app set above)
     init_qsettings_store(dyn=dyn)
 
+    if not ensure_mandatory_settings_configured():
+        logger.info("Startup canceled: required settings were not confirmed.")
+        sys.exit(1)
+
     # Resolve cache base path in parent process and propagate to cache helpers.
     cache_base = get_user_setting(UserSettingKey.CACHE_BASE_DIR)
-    try:
-        cache_path = set_cache_base_dir(cache_base or None)
-    except OSError:
-        logger.warning(
-            "Cannot use configured cache base dir %r, fallback to default",
-            cache_base,
-        )
-        cache_path = set_cache_base_dir(None)
+    cache_path = set_cache_base_dir(cache_base or None)
 
     if bool(get_runtime_setting(RuntimeSettingKey.CLEAR_CACHE_ON_START)):
         if cache_path.exists():

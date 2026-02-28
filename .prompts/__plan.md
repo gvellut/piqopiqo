@@ -1,4 +1,5 @@
 * [Check at first launch](Ba_tasks/Fa_Check_at_first_launch.md)
+    ? [Validate in settings panel](Ba_tasks/Fa.A_Validate_in_settings_panel.md)
 - [Base data redirect to settings](J_tasks/Q_Base_data_redirect_to_settings.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
 - [Specific macos](Ba_tasks/Da_Specific_macos.md)

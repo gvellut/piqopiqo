@@ -2,27 +2,37 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import uuid
 
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 import pytest
 
+import piqopiqo.ssf.settings_state as settings_state
 from piqopiqo.color_management import ScreenColorProfileMode
 from piqopiqo.model import ExifField, ManualLensPreset, StatusLabel
 from piqopiqo.ssf.settings_state import (
+    MandatorySettingInputKind,
     RuntimeSettingKey,
     SettingsPanelSaveMode,
     StateKey,
     UserSettingKey,
     _deserialize_exif_fields,
+    _resolve_default_cache_base_dir,
+    _resolve_default_exiftool_path,
+    evaluate_pending_mandatory_settings,
+    get_cache_base_dir_candidate,
     get_effective_exif_panel_fields,
+    get_mandatory_setting_spec,
+    get_mandatory_setting_specs,
     get_runtime_setting,
     get_state_value,
     get_user_setting,
     init_qsettings_store,
     set_state_value,
     set_user_setting,
+    validate_mandatory_setting_value,
 )
 from piqopiqo.shortcuts import Shortcut
 
@@ -45,6 +55,8 @@ def isolated_settings(qcore_app, monkeypatch):
 
     # Clear any stale env that can override values.
     for env_name in (
+        "PIQO_CACHE_BASE_DIR",
+        "PIQO_EXIFTOOL_PATH",
         "PIQO_NUM_COLUMNS",
         "PIQO_SETTINGS_PANEL_SAVE_MODE",
         "PIQO_FONT_SIZE",
@@ -341,3 +353,102 @@ def test_effective_exif_panel_fields_merge_custom_fields_dedupes(isolated_settin
     ]
     assert keys[6:] == ["File:FileSize", "EXIF:LensModel"]
     assert all(field.format is None for field in fields[6:])
+
+
+def test_mandatory_setting_registry_contains_cache_and_exiftool():
+    specs = get_mandatory_setting_specs()
+    assert [spec.key for spec in specs] == [
+        UserSettingKey.CACHE_BASE_DIR,
+        UserSettingKey.EXIFTOOL_PATH,
+    ]
+    assert specs[0].input_kind == MandatorySettingInputKind.DIRECTORY
+    assert specs[1].input_kind == MandatorySettingInputKind.EXECUTABLE_PATH
+
+
+def test_validate_mandatory_exiftool_path_uses_executable_check(monkeypatch):
+    spec = get_mandatory_setting_spec(UserSettingKey.EXIFTOOL_PATH)
+    assert spec is not None
+
+    monkeypatch.setattr(
+        settings_state.os,
+        "access",
+        lambda path, mode: path == "/opt/tools/exiftool",
+    )
+
+    assert validate_mandatory_setting_value(spec, "/opt/tools/exiftool") is True
+    assert validate_mandatory_setting_value(spec, "/opt/tools/missing") is False
+    assert validate_mandatory_setting_value(spec, "") is False
+
+
+def test_resolve_default_exiftool_path_prefers_homebrew_on_macos(monkeypatch):
+    monkeypatch.setattr(settings_state.sys, "platform", "darwin", raising=False)
+    monkeypatch.setattr(
+        settings_state.shutil,
+        "which",
+        lambda _name: "/usr/local/bin/exiftool",
+    )
+    monkeypatch.setattr(
+        settings_state,
+        "_validate_executable_path",
+        lambda path: path in {"/opt/homebrew/bin/exiftool", "/usr/local/bin/exiftool"},
+    )
+
+    assert _resolve_default_exiftool_path() == "/opt/homebrew/bin/exiftool"
+
+
+def test_resolve_default_exiftool_path_falls_back_to_which(monkeypatch):
+    monkeypatch.setattr(settings_state.sys, "platform", "linux", raising=False)
+    monkeypatch.setattr(
+        settings_state.shutil,
+        "which",
+        lambda _name: "/usr/bin/exiftool",
+    )
+    monkeypatch.setattr(
+        settings_state,
+        "_validate_executable_path",
+        lambda path: path == "/usr/bin/exiftool",
+    )
+
+    assert _resolve_default_exiftool_path() == str(Path("/usr/bin/exiftool").resolve())
+
+
+def test_resolve_default_cache_base_dir_matches_candidate():
+    assert _resolve_default_cache_base_dir() == str(get_cache_base_dir_candidate())
+
+
+def test_evaluate_pending_mandatory_settings_reports_missing_cache_auto_value(
+    isolated_settings,
+):
+    set_user_setting(UserSettingKey.CACHE_BASE_DIR, "")
+    set_user_setting(UserSettingKey.EXIFTOOL_PATH, "")
+
+    pending = evaluate_pending_mandatory_settings()
+    by_key = {item.spec.key: item for item in pending}
+
+    assert UserSettingKey.CACHE_BASE_DIR in by_key
+    assert UserSettingKey.EXIFTOOL_PATH in by_key
+    assert by_key[UserSettingKey.CACHE_BASE_DIR].is_empty is True
+    assert (
+        by_key[UserSettingKey.CACHE_BASE_DIR].auto_value
+        == str(get_cache_base_dir_candidate())
+    )
+    assert by_key[UserSettingKey.EXIFTOOL_PATH].is_empty is True
+
+
+def test_evaluate_pending_mandatory_settings_uses_env_override(
+    isolated_settings,
+    monkeypatch,
+    tmp_path,
+):
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    exiftool_path = tmp_path / "exiftool"
+    exiftool_path.write_text("#!/bin/sh\n")
+    exiftool_path.chmod(0o755)
+
+    set_user_setting(UserSettingKey.CACHE_BASE_DIR, str(cache_dir))
+    set_user_setting(UserSettingKey.EXIFTOOL_PATH, "/definitely/invalid")
+    monkeypatch.setenv("PIQO_EXIFTOOL_PATH", str(exiftool_path))
+
+    pending_keys = {item.spec.key for item in evaluate_pending_mandatory_settings()}
+    assert UserSettingKey.EXIFTOOL_PATH not in pending_keys
