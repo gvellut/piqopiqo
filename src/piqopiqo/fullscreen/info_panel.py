@@ -106,11 +106,17 @@ class ZoomOverlayController:
         self._update_overlay_position = update_overlay_position
 
         self._visible = False
+        self._is_shutdown = False
 
-        # Auto-hide timer
-        self._timer = QTimer()
+        # Auto-hide timer parented to the overlay widget so it is cleaned up with it.
+        self._timer = QTimer(self._overlay)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._on_timer_expired)
+        self._overlay.destroyed.connect(self._on_overlay_destroyed)
+
+    def _on_overlay_destroyed(self, *_args) -> None:
+        """Qt callback when the overlay widget is being destroyed."""
+        self.shutdown()
 
     def on_zoom_state_changed(
         self,
@@ -125,6 +131,9 @@ class ZoomOverlayController:
             zoom_state: The new zoom state
             zoom_direction: The direction of the zoom change
         """
+        if self._is_shutdown:
+            return
+
         # When returning to base view, IMMEDIATELY hide the overlay
         # This prevents the "100% lingering" issue when unzooming quickly
         if zoom_state == ZoomState.BASE_VIEW:
@@ -157,14 +166,21 @@ class ZoomOverlayController:
 
     def _show_overlay(self, zoom_state: ZoomState) -> None:
         """Show the overlay with the given zoom percentage."""
+        if self._is_shutdown:
+            return
+
         percentage = ZOOM_STATE_PERCENTAGES.get(zoom_state)
         if percentage is None:
             return
 
-        self._overlay.setText(f"{percentage}%")
-        self._overlay.adjustSize()
-        self._update_overlay_position()
-        self._overlay.show()
+        try:
+            self._overlay.setText(f"{percentage}%")
+            self._overlay.adjustSize()
+            self._update_overlay_position()
+            self._overlay.show()
+        except RuntimeError:
+            self.shutdown()
+            return
         self._visible = True
 
         # Start/restart the auto-hide timer
@@ -172,18 +188,50 @@ class ZoomOverlayController:
 
     def _hide_immediately(self) -> None:
         """Hide the overlay immediately and cancel any pending timer."""
+        if self._is_shutdown:
+            return
+
         self._timer.stop()
-        self._overlay.hide()
+        try:
+            self._overlay.hide()
+        except RuntimeError:
+            self.shutdown()
+            return
         self._visible = False
 
     def _on_timer_expired(self) -> None:
         """Called when the auto-hide timer expires."""
-        self._overlay.hide()
+        if self._is_shutdown:
+            return
+
+        try:
+            self._overlay.hide()
+        except RuntimeError:
+            self.shutdown()
+            return
         self._visible = False
 
     def hide(self) -> None:
         """Public method to hide the overlay immediately."""
         self._hide_immediately()
+
+    def shutdown(self) -> None:
+        """Stop timer activity and detach this controller from Qt callbacks."""
+        if self._is_shutdown:
+            return
+
+        self._is_shutdown = True
+        self._visible = False
+
+        try:
+            self._timer.stop()
+        except RuntimeError:
+            pass
+
+        try:
+            self._timer.timeout.disconnect(self._on_timer_expired)
+        except (RuntimeError, TypeError):
+            pass
 
     @property
     def is_visible(self) -> bool:

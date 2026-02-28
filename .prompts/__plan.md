@@ -49,3 +49,4 @@
 ! [Save GPX last folder](Ba_tasks/Ia_Save_GPX_last_folder.md)
 ! [Clear filters on open folder](Ja_tasks/Ja_Clear_filters_on_open_folder.md)
 ! [Unnessary drop and reload of HQ thumbnail](Ka_tasks/Ka_Unnessary_drop_and_reload_of_HQ_thumbnail.md)
+! [Timer error on fullscreen exit](La_tasks/La_Timer_error_on_fullscreen_exit.md)

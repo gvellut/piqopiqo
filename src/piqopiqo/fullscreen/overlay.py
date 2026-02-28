@@ -678,6 +678,8 @@ class FullscreenOverlay(QWidget):
 
     def closeEvent(self, event):
         """Handle window closing."""
+        self._pan_cursor_timer.stop()
+        self._zoom_overlay_controller.shutdown()
         self._pixmap = None  # Free full-resolution image memory immediately
         self.restore_macos_ui()  # Restore UI when closed
         super().closeEvent(event)
