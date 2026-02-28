@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import html
 import os
 import sys
 
@@ -12,11 +13,13 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
     QSizePolicy,
     QSpinBox,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -37,6 +40,12 @@ class BaseEditor(QWidget):
 
     def is_valid(self) -> bool:
         return True
+
+    def show_error_hint(self, message: str, *, auto_value: str | None = None) -> None:
+        return
+
+    def clear_error_hint(self) -> None:
+        return
 
 
 class TextEditor(BaseEditor):
@@ -131,14 +140,20 @@ class PathEditor(BaseEditor):
         self._is_file = is_file
         self._browse_title = browse_title
         self._start_dir_resolver = start_dir_resolver
+        self._auto_value: str | None = None
 
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(4)
         self.setSizePolicy(
             QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Preferred,
         )
+
+        input_row = QWidget(self)
+        input_layout = QHBoxLayout(input_row)
+        input_layout.setContentsMargins(0, 0, 0, 0)
+        input_layout.setSpacing(8)
 
         self._line_edit = QLineEdit()
         self._line_edit.editingFinished.connect(self.value_changed)
@@ -146,8 +161,8 @@ class PathEditor(BaseEditor):
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Fixed,
         )
-        layout.addWidget(self._line_edit)
-        layout.setStretch(0, 1)
+        input_layout.addWidget(self._line_edit)
+        input_layout.setStretch(0, 1)
 
         browse_btn = QPushButton("Browse")
         browse_btn.clicked.connect(self._browse)
@@ -155,7 +170,30 @@ class PathEditor(BaseEditor):
             QSizePolicy.Policy.Fixed,
             QSizePolicy.Policy.Fixed,
         )
-        layout.addWidget(browse_btn)
+        input_layout.addWidget(browse_btn)
+        layout.addWidget(input_row)
+
+        self._error_label = QLabel(self)
+        self._error_label.setWordWrap(True)
+        self._error_label.setStyleSheet("color: #b00020;")
+        self._error_label.hide()
+        layout.addWidget(self._error_label)
+
+        self._auto_row = QWidget(self)
+        auto_layout = QHBoxLayout(self._auto_row)
+        auto_layout.setContentsMargins(0, 0, 0, 0)
+        auto_layout.setSpacing(8)
+
+        self._auto_label = QLabel(self._auto_row)
+        self._auto_label.setWordWrap(True)
+        auto_layout.addWidget(self._auto_label, 1)
+
+        self._set_auto_btn = QPushButton("Set to auto", self._auto_row)
+        self._set_auto_btn.clicked.connect(self._apply_auto_value)
+        auto_layout.addWidget(self._set_auto_btn)
+
+        self._auto_row.hide()
+        layout.addWidget(self._auto_row)
 
     def _browse(self):
         current = self._line_edit.text().strip()
@@ -183,10 +221,39 @@ class PathEditor(BaseEditor):
     def get_value(self):
         return self._line_edit.text().strip()
 
+    def show_error_hint(self, message: str, *, auto_value: str | None = None) -> None:
+        self._error_label.setText(str(message).strip())
+        self._error_label.setVisible(bool(str(message).strip()))
+
+        self._auto_value = str(auto_value).strip() if auto_value else None
+        if self._auto_value:
+            escaped = html.escape(self._auto_value)
+            self._auto_label.setText(f"Suggested auto value: <u>{escaped}</u>")
+            self._set_auto_btn.setVisible(True)
+            self._auto_row.show()
+            return
+
+        self._auto_label.setText("Auto value: not available")
+        self._set_auto_btn.setVisible(False)
+        self._auto_row.show()
+
+    def clear_error_hint(self) -> None:
+        self._auto_value = None
+        self._error_label.clear()
+        self._error_label.hide()
+        self._auto_label.clear()
+        self._auto_row.hide()
+
     def _get_start_dir(self, current: str) -> str:
         if self._start_dir_resolver is not None:
             return self._start_dir_resolver(current)
         return current or ""
+
+    def _apply_auto_value(self) -> None:
+        if not self._auto_value:
+            return
+        self._line_edit.setText(self._auto_value)
+        self.value_changed.emit()
 
 
 def _resolve_app_path_start_dir(current: str) -> str:

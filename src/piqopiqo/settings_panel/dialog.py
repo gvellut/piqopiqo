@@ -21,12 +21,15 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.ssf.settings_state import (
+    MandatorySettingInputKind,
     RuntimeSettingKey,
     SettingsPanelSaveMode,
     UserSettingKey,
+    get_mandatory_setting_spec,
     get_runtime_setting,
     get_user_setting,
     set_user_setting,
+    validate_mandatory_setting_value,
 )
 
 from .editors import BaseEditor, build_editor
@@ -99,7 +102,9 @@ class SettingsDialog(QDialog):
                             partial(self._autosave_field, field.key)
                         )
                     else:
-                        editor.value_changed.connect(self._on_field_changed)
+                        editor.value_changed.connect(
+                            partial(self._on_field_changed, field.key)
+                        )
 
                 tab_layout.addWidget(group_box)
 
@@ -177,14 +182,16 @@ class SettingsDialog(QDialog):
             for key, editor in self._editors.items():
                 value = get_user_setting(key)
                 editor.set_value(value)
+                editor.clear_error_hint()
                 self._initial_values[key] = value
         finally:
             self._loading = False
         self._update_save_enabled()
 
-    def _on_field_changed(self):
+    def _on_field_changed(self, key: UserSettingKey):
         if self._loading:
             return
+        self._editors[key].clear_error_hint()
         self._dirty = self._compute_dirty()
         self._update_save_enabled()
 
@@ -235,27 +242,28 @@ class SettingsDialog(QDialog):
                 return True
         return False
 
-    def _validate_field(self, key: UserSettingKey, value: object) -> bool:
+    def _validate_field(self, key: UserSettingKey, value: object) -> str | None:
+        mandatory_spec = get_mandatory_setting_spec(key)
+        if mandatory_spec is not None:
+            if validate_mandatory_setting_value(mandatory_spec, value):
+                return None
+
+            if mandatory_spec.input_kind == MandatorySettingInputKind.DIRECTORY:
+                return f"{mandatory_spec.label} must be an existing directory."
+            if mandatory_spec.input_kind == MandatorySettingInputKind.EXECUTABLE_PATH:
+                return f"{mandatory_spec.label} must be an existing executable file."
+            return f"{mandatory_spec.label} is required."
+
         field = self._fields[key]
         if field.editor == EditorKind.PATH_DIR:
             if value and not os.path.isdir(str(value)):
-                QMessageBox.warning(
-                    self,
-                    "Invalid Directory",
-                    f"The directory does not exist:\n{value}",
-                )
-                return False
+                return f"The directory does not exist:\n{value}"
         if field.editor == EditorKind.PATH_FILE:
             if value and not os.path.isfile(str(value)):
-                QMessageBox.warning(
-                    self,
-                    "Invalid File",
-                    f"The file does not exist:\n{value}",
-                )
-                return False
+                return f"The file does not exist:\n{value}"
         if field.editor == EditorKind.PATH_APP:
             if not value:
-                return True
+                return None
             path = str(value).strip()
             normalized_path = path
             if normalized_path != os.sep:
@@ -264,31 +272,35 @@ class SettingsDialog(QDialog):
                 if not normalized_path.lower().endswith(".app") or not os.path.isdir(
                     path
                 ):
-                    QMessageBox.warning(
-                        self,
-                        "Invalid Application",
-                        f"Application path must be an existing .app bundle.\n{value}",
+                    return (
+                        "Application path must be an existing .app bundle.\n"
+                        f"{value}"
                     )
-                    return False
             elif not os.path.exists(path):
-                QMessageBox.warning(
-                    self,
-                    "Invalid Application",
-                    f"The path does not exist:\n{value}",
-                )
-                return False
-        return True
+                return f"The path does not exist:\n{value}"
+        return None
 
     def _autosave_field(self, key: UserSettingKey):
         if self._loading:
             return
 
         editor = self._editors[key]
+        editor.clear_error_hint()
         if not editor.is_valid():
             return
 
         value = editor.get_value()
-        if not self._validate_field(key, value):
+        validation_error = self._validate_field(key, value)
+        if validation_error is not None:
+            field = self._fields[key]
+            title = "Invalid Setting"
+            if field.editor == EditorKind.PATH_DIR:
+                title = "Invalid Directory"
+            elif field.editor == EditorKind.PATH_FILE:
+                title = "Invalid File"
+            elif field.editor == EditorKind.PATH_APP:
+                title = "Invalid Application"
+            QMessageBox.warning(self, title, validation_error)
             editor.set_value(self._initial_values.get(key))
             return
 
@@ -302,6 +314,10 @@ class SettingsDialog(QDialog):
 
     def _on_save(self):
         changed: dict[UserSettingKey, object] = {}
+        errors: list[str] = []
+
+        for editor in self._editors.values():
+            editor.clear_error_hint()
 
         for key, editor in self._editors.items():
             value = editor.get_value()
@@ -309,9 +325,16 @@ class SettingsDialog(QDialog):
                 continue
             if not editor.is_valid():
                 return
-            if not self._validate_field(key, value):
-                return
+            validation_error = self._validate_field(key, value)
+            if validation_error is not None:
+                errors.append(validation_error)
+                self._show_mandatory_field_error_hint(key, validation_error)
+                continue
             changed[key] = value
+
+        if errors:
+            QMessageBox.warning(self, "Invalid Settings", "\n\n".join(errors))
+            return
 
         for key, value in changed.items():
             set_user_setting(key, value)
@@ -321,6 +344,24 @@ class SettingsDialog(QDialog):
 
         self._dirty = False
         self.accept()
+
+    def _show_mandatory_field_error_hint(
+        self,
+        key: UserSettingKey,
+        message: str,
+    ) -> None:
+        spec = get_mandatory_setting_spec(key)
+        if spec is None:
+            return
+
+        auto_value = None
+        if spec.default_resolver is not None:
+            resolved = spec.default_resolver()
+            if resolved is not None:
+                resolved_text = str(resolved).strip()
+                auto_value = resolved_text or None
+
+        self._editors[key].show_error_hint(message, auto_value=auto_value)
 
     def _on_cancel(self):
         if self._dirty:
