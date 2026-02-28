@@ -1,7 +1,7 @@
+- [Check at first launch](Ba_tasks/Fa_Check_at_first_launch.md)
 - [Base data redirect to settings](J_tasks/Q_Base_data_redirect_to_settings.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
 - [Specific macos](Ba_tasks/Da_Specific_macos.md)
-- [Overhaul db saves thumb gen](Fa_tasks/Fa_Overhaul_db_saves_thumb_gen.md)
 ! [Fix date read delay if since:last](A_tasks/A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](A_tasks/B_Eject_SD_after_user_OK.md)
     !? [GUI lag](A_tasks/B.A_GUI_lag.md)

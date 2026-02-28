@@ -225,8 +225,9 @@ class MainWindow(QMainWindow):
         if self._last_visible_paths:
             self.media_manager.update_visible(self._last_visible_paths)
 
+        self._background_db_save_pool = QThreadPool()
+
         # Set up keyboard shortcuts
-        self._label_save_pool = QThreadPool()
         self._setup_shortcuts()
 
         # Undo state for label changes
@@ -334,7 +335,7 @@ class MainWindow(QMainWindow):
             # Save to DB in background
             db = self.db_manager.get_db_for_image(item.path)
             worker = MetadataSaveWorker(db, item.path, item.db_metadata.copy())
-            self._label_save_pool.start(worker)
+            self._background_db_save_pool.start(worker)
 
             # Refresh grid cell immediately
             self.grid.refresh_item(item._global_index)
@@ -390,7 +391,7 @@ class MainWindow(QMainWindow):
             # Save to DB in background
             db = self.db_manager.get_db_for_image(item.path)
             worker = MetadataSaveWorker(db, item.path, item.db_metadata.copy())
-            self._label_save_pool.start(worker)
+            self._background_db_save_pool.start(worker)
 
             # Refresh grid cell immediately
             self.grid.refresh_item(item._global_index)
@@ -437,7 +438,7 @@ class MainWindow(QMainWindow):
                 # Save to DB in background
                 db = self.db_manager.get_db_for_image(item.path)
                 worker = MetadataSaveWorker(db, item.path, item.db_metadata.copy())
-                self._label_save_pool.start(worker)
+                self._background_db_save_pool.start(worker)
 
                 # Refresh grid cell immediately
                 self.grid.refresh_item(item._global_index)
@@ -1830,7 +1831,7 @@ class MainWindow(QMainWindow):
         timeout_ms = int(max(0.0, timeout_s) * 1000)
 
         label_pool_completed = drain_qthread_pool(
-            self._label_save_pool,
+            self._background_db_save_pool,
             timeout_ms,
             clear_queued=True,
         )

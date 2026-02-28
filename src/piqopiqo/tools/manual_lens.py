@@ -148,7 +148,7 @@ def _save_manual_lens_for_item(
 ) -> None:
     db = window.db_manager.get_db_for_image(file_path)
     worker = MetadataSaveWorker(db, file_path, metadata.copy())
-    window._label_save_pool.start(worker)
+    window._background_db_save_pool.start(worker)
 
 
 def launch_manual_lens(window: MainWindow) -> None:

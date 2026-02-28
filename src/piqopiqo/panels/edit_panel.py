@@ -95,10 +95,20 @@ class EditPanel(QWidget):
 
         row = 0
 
-        # Title
-        self.layout.addWidget(
-            QLabel(f"{FIELD_DISPLAY_LABELS[DBFields.TITLE]}:"), row, 0
+        # Time taken
+        self.layout.addWidget(QLabel(FIELD_DISPLAY_LABELS[DBFields.TIME_TAKEN]), row, 0)
+        self.time_edit = TimeEdit()
+        self.time_edit.edit_finished.connect(
+            lambda: self._on_field_saved(DBFields.TIME_TAKEN)
         )
+        self.time_edit.edit_finished_explicit.connect(self.interaction_finished.emit)
+        self.time_edit.edit_cancelled.connect(self._on_edit_cancelled)
+        self.time_edit.edit_cancelled.connect(self.interaction_finished.emit)
+        self.layout.addWidget(self.time_edit, row, 1)
+        row += 1
+
+        # Title
+        self.layout.addWidget(QLabel(FIELD_DISPLAY_LABELS[DBFields.TITLE]), row, 0)
         self.title_edit = TitleEdit()
         self.title_edit.edit_finished.connect(
             lambda: self._on_field_saved(DBFields.TITLE)
@@ -110,9 +120,7 @@ class EditPanel(QWidget):
         row += 1
 
         # Description
-        self.description_label = QLabel(
-            f"{FIELD_DISPLAY_LABELS[DBFields.DESCRIPTION]}:"
-        )
+        self.description_label = QLabel(FIELD_DISPLAY_LABELS[DBFields.DESCRIPTION])
         self.layout.addWidget(self.description_label, row, 0, Qt.AlignTop)
         self.description_edit = DescriptionEdit()
         self.description_edit.edit_finished.connect(
@@ -124,34 +132,6 @@ class EditPanel(QWidget):
         self.description_edit.edit_cancelled.connect(self._on_edit_cancelled)
         self.description_edit.edit_cancelled.connect(self.interaction_finished.emit)
         self.layout.addWidget(self.description_edit, row, 1)
-        row += 1
-
-        # Latitude
-        self.layout.addWidget(
-            QLabel(f"{FIELD_DISPLAY_LABELS[DBFields.LATITUDE]}:"), row, 0
-        )
-        self.lat_edit = CoordinateEdit(is_latitude=True)
-        self.lat_edit.edit_finished.connect(
-            lambda: self._on_field_saved(DBFields.LATITUDE)
-        )
-        self.lat_edit.edit_finished_explicit.connect(self.interaction_finished.emit)
-        self.lat_edit.edit_cancelled.connect(self._on_edit_cancelled)
-        self.lat_edit.edit_cancelled.connect(self.interaction_finished.emit)
-        self.layout.addWidget(self.lat_edit, row, 1)
-        row += 1
-
-        # Longitude
-        self.layout.addWidget(
-            QLabel(f"{FIELD_DISPLAY_LABELS[DBFields.LONGITUDE]}:"), row, 0
-        )
-        self.lon_edit = CoordinateEdit(is_latitude=False)
-        self.lon_edit.edit_finished.connect(
-            lambda: self._on_field_saved(DBFields.LONGITUDE)
-        )
-        self.lon_edit.edit_finished_explicit.connect(self.interaction_finished.emit)
-        self.lon_edit.edit_cancelled.connect(self._on_edit_cancelled)
-        self.lon_edit.edit_cancelled.connect(self.interaction_finished.emit)
-        self.layout.addWidget(self.lon_edit, row, 1)
         row += 1
 
         # Keywords
@@ -177,18 +157,29 @@ class EditPanel(QWidget):
         self.layout.addWidget(self.keyword_tree_btn, row, 1)
         row += 1
 
-        # Time taken
-        self.layout.addWidget(
-            QLabel(f"{FIELD_DISPLAY_LABELS[DBFields.TIME_TAKEN]}:"), row, 0
+        # Latitude
+        self.layout.addWidget(QLabel(FIELD_DISPLAY_LABELS[DBFields.LATITUDE]), row, 0)
+        self.lat_edit = CoordinateEdit(is_latitude=True)
+        self.lat_edit.edit_finished.connect(
+            lambda: self._on_field_saved(DBFields.LATITUDE)
         )
-        self.time_edit = TimeEdit()
-        self.time_edit.edit_finished.connect(
-            lambda: self._on_field_saved(DBFields.TIME_TAKEN)
+        self.lat_edit.edit_finished_explicit.connect(self.interaction_finished.emit)
+        self.lat_edit.edit_cancelled.connect(self._on_edit_cancelled)
+        self.lat_edit.edit_cancelled.connect(self.interaction_finished.emit)
+        self.layout.addWidget(self.lat_edit, row, 1)
+        row += 1
+
+        # Longitude
+        self.layout.addWidget(QLabel(FIELD_DISPLAY_LABELS[DBFields.LONGITUDE]), row, 0)
+        self.lon_edit = CoordinateEdit(is_latitude=False)
+        self.lon_edit.edit_finished.connect(
+            lambda: self._on_field_saved(DBFields.LONGITUDE)
         )
-        self.time_edit.edit_finished_explicit.connect(self.interaction_finished.emit)
-        self.time_edit.edit_cancelled.connect(self._on_edit_cancelled)
-        self.time_edit.edit_cancelled.connect(self.interaction_finished.emit)
-        self.layout.addWidget(self.time_edit, row, 1)
+        self.lon_edit.edit_finished_explicit.connect(self.interaction_finished.emit)
+        self.lon_edit.edit_cancelled.connect(self._on_edit_cancelled)
+        self.lon_edit.edit_cancelled.connect(self.interaction_finished.emit)
+        self.layout.addWidget(self.lon_edit, row, 1)
+        row += 1
 
         scroll_area.setWidget(container)
         main_layout.addWidget(scroll_area)

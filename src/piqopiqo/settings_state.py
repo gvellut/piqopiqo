@@ -386,13 +386,13 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         # this is my default.
         # FIXME add a check at laucnh : it must be valid. If not : ask to reset to
         # default or enter new path
-        default="/Volumes/CrucialX8/projects/piqopiqo/cache",
+        default=None,
         read_type=str,
     ),
-    # TODO default : depends on the platform. This is the default for macos
+    # FIXME default : depends on the platform. This is the default for macos
     # + check at launch that it exists (thumbnails lowres + metadata depend on it)
     UserSettingKey.EXIFTOOL_PATH: SettingDef(
-        default="/opt/homebrew/bin/exiftool",
+        default=None,
         read_type=str,
     ),
     # for now : just a list of exiffields : no fomatting or change of label beyond
