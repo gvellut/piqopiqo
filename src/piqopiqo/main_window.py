@@ -1236,7 +1236,15 @@ class MainWindow(QMainWindow):
             QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.ReadOnly,
         )
         if folder:
+            self._clear_filters_before_folder_load()
             self._load_folder(folder)
+
+    def _clear_filters_before_folder_load(self) -> None:
+        """Clear active filters before loading a new folder via Open Folder."""
+        self.filter_panel.clear_filter()
+        if self._filter_apply_scheduled:
+            # Ensure the filter reset is applied before the new folder scan starts.
+            self._apply_pending_filter_change()
 
     def _load_folder(self, folder: str):
         """Load images from a folder and update the UI."""
