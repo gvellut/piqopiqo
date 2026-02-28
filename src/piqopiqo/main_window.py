@@ -799,7 +799,7 @@ class MainWindow(QMainWindow):
         index = self.grid.get_index_for_path(path)
         if index is None:
             return False
-        self.grid._ensure_visible(index)
+        self.grid._ensure_visible(index, navigation_activity=False)
         return True
 
     def _pick_filter_fallback_target_path(
@@ -1441,9 +1441,17 @@ class MainWindow(QMainWindow):
         state = 1 if thumb_type == "embedded" else 2
 
         item.state = max(int(getattr(item, "state", 0)), state)
+        has_hq_pixmap = getattr(item, "hq_pixmap", None) is not None
+
         if thumb_type == "embedded":
             item.embedded_pixmap = None
+            # Keep current HQ display to avoid HQ->embedded flicker while delayed-HQ
+            # mode is active during filter/sort viewport restore or navigation.
+            if has_hq_pixmap:
+                return
         else:
+            if has_hq_pixmap:
+                return
             item.hq_pixmap = None
         item.pixmap = None
         self.grid.refresh_item(item._global_index)

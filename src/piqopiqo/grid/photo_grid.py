@@ -93,6 +93,7 @@ class PhotoGrid(QWidget):
         self._loaded_hq_indices: set[int] = set()
         self._loaded_embedded_indices: set[int] = set()
         self._hq_display_enabled = True
+        self._suppress_scroll_navigation_activity = False
 
         self._hq_idle_timer = QTimer(self)
         self._hq_idle_timer.setSingleShot(True)
@@ -482,8 +483,12 @@ class PhotoGrid(QWidget):
 
         max_scroll = max(0, total_data_rows - self.n_rows)
 
-        self.scrollbar.setRange(0, max_scroll)
-        self.scrollbar.setPageStep(self.n_rows)
+        self._suppress_scroll_navigation_activity = True
+        try:
+            self.scrollbar.setRange(0, max_scroll)
+            self.scrollbar.setPageStep(self.n_rows)
+        finally:
+            self._suppress_scroll_navigation_activity = False
 
         # Visibility logic
         if total_data_rows <= self.n_rows:
@@ -492,7 +497,12 @@ class PhotoGrid(QWidget):
             self.scrollbar.show()
 
     def on_scroll(self, value):
-        self._mark_navigation_activity()
+        if not self._suppress_scroll_navigation_activity:
+            self._mark_navigation_activity()
+        elif not self._is_lowres_only_mode():
+            # Programmatic scroll changes (filter/sort restore, range clamping)
+            # should not trigger temporary HQ->embedded demotion.
+            self._hq_display_enabled = True
         self._render(int(value), allow_hq=self._allow_hq_now())
 
     def _is_lowres_only_mode(self) -> bool:
@@ -1001,7 +1011,17 @@ class PhotoGrid(QWidget):
             self.on_cell_clicked(new_index, False, False)
             self._ensure_visible(new_index)
 
-    def _ensure_visible(self, index):
+    def _set_scrollbar_value(self, value: int, *, navigation_activity: bool = True) -> None:
+        if navigation_activity:
+            self.scrollbar.setValue(value)
+            return
+        self._suppress_scroll_navigation_activity = True
+        try:
+            self.scrollbar.setValue(value)
+        finally:
+            self._suppress_scroll_navigation_activity = False
+
+    def _ensure_visible(self, index, *, navigation_activity: bool = True):
         """Scrolls the grid if the index is out of view."""
         # Calculate the row this item belongs to
         target_row = index // self.n_cols
@@ -1012,9 +1032,11 @@ class PhotoGrid(QWidget):
 
         if target_row < current_top_row:
             # Item is above view -> Scroll Up to make it the top row
-            self.scrollbar.setValue(target_row)
+            self._set_scrollbar_value(
+                target_row, navigation_activity=navigation_activity
+            )
         elif target_row > current_bottom_row:
             # Item is below view -> Scroll Down to make it the bottom row
             # Logic: New Top = Target Row - (Visible Rows - 1)
             new_top = target_row - self.n_rows + 1
-            self.scrollbar.setValue(new_top)
+            self._set_scrollbar_value(new_top, navigation_activity=navigation_activity)
