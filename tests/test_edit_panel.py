@@ -76,7 +76,9 @@ def test_keywords_height_change_keeps_edit_panel_rows_stable(qapp):
     panel.show()
     qapp.processEvents()
 
-    keyword_label_item = panel.layout.itemAtPosition(4, 0)
+    keywords_edit_index = panel.layout.indexOf(panel.keywords_edit)
+    keyword_row, _, _, _ = panel.layout.getItemPosition(keywords_edit_index)
+    keyword_label_item = panel.layout.itemAtPosition(keyword_row, 0)
     assert keyword_label_item is not None
     keyword_label = keyword_label_item.widget()
     assert keyword_label is not None
@@ -147,19 +149,28 @@ def test_keywords_height_change_keeps_edit_panel_rows_stable(qapp):
     assert long_state["keywords_h"] > base["keywords_h"]
     assert short_state["keywords_h"] == base["keywords_h"]
 
-    for key in ("title_y", "description_y", "lat_y", "lon_y"):
-        assert long_state[key] == base[key]
-        assert short_state[key] == base[key]
-
     assert long_state["keywords_y"] == base["keywords_y"]
     assert short_state["keywords_y"] == base["keywords_y"]
 
     keyword_height_delta = long_state["keywords_h"] - base["keywords_h"]
     assert keyword_height_delta > 0
-    assert long_state["keyword_tree_y"] - base["keyword_tree_y"] == keyword_height_delta
-    assert long_state["time_y"] - base["time_y"] == keyword_height_delta
-    assert short_state["keyword_tree_y"] == base["keyword_tree_y"]
-    assert short_state["time_y"] == base["time_y"]
+
+    for key in (
+        "time_y",
+        "title_y",
+        "description_y",
+        "keyword_tree_y",
+        "lat_y",
+        "lon_y",
+    ):
+        if base[key] < base["keywords_y"]:
+            assert long_state[key] == base[key]
+            assert short_state[key] == base[key]
+            continue
+
+        assert base[key] > base["keywords_y"]
+        assert long_state[key] - base[key] == keyword_height_delta
+        assert short_state[key] == base[key]
 
     assert long_state["keyword_label_y"] == base["keyword_label_y"]
     assert short_state["keyword_label_y"] == base["keyword_label_y"]

@@ -78,7 +78,7 @@ class _WindowStub:
         )
         self.images_data = list(visible_items)
         self.status_bar = _StatusBar()
-        self._label_save_pool = _ImmediatePool()
+        self._background_db_save_pool = _ImmediatePool()
         self.synced: list[tuple[set[str], str]] = []
 
     def sync_model_after_metadata_update(
@@ -274,13 +274,7 @@ def test_launch_manual_lens_clear_option_clears_all_manual_lens_fields(
 
     manual_lens.launch_manual_lens(window)
 
-    assert "The following tags will be cleared" in confirm_texts[0]
-    assert "- lensmake" in confirm_texts[0]
-    assert "- lensmodel" in confirm_texts[0]
-    assert "- focallength" in confirm_texts[0]
-    assert "- lens" in confirm_texts[0]
-    assert "- LensInfo" in confirm_texts[0]
-    assert "- FocalLengthIn35mmFormat" in confirm_texts[0]
+    assert "The lens information will be cleared" in confirm_texts[0]
     assert item.db_metadata[DBFields.MANUAL_LENS_MAKE] is None
     assert item.db_metadata[DBFields.MANUAL_LENS_MODEL] is None
     assert item.db_metadata[DBFields.MANUAL_FOCAL_LENGTH] is None
