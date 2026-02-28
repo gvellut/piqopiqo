@@ -244,10 +244,16 @@ def launch_apply_gpx(window: MainWindow) -> None:
     from .workers import ApplyGpxWorker
 
     source_folders = list(window.photo_model.source_folders)
+    state = get_state()
+    last_gpx_folder = str(state.get(StateKey.LAST_GPX_FOLDER) or "").strip()
     initial_gpx_path = _get_first_folder_gpx_path(window, source_folders)
     initial_time_shifts, previous_time_shift_folders = (
         _resolve_apply_gpx_initial_time_shifts(window)
     )
+
+    def on_browse_selected_folder(folder: str) -> None:
+        state.set(StateKey.LAST_GPX_FOLDER, str(folder).strip())
+
     input_dialog = ApplyGpxDialog(
         root_folder=window.root_folder,
         source_folders=source_folders,
@@ -255,6 +261,8 @@ def launch_apply_gpx(window: MainWindow) -> None:
         previous_time_shift_folders=previous_time_shift_folders,
         initial_gpx_path=initial_gpx_path,
         kml_folder=str(get_user_setting(UserSettingKey.GPX_KML_FOLDER) or ""),
+        last_gpx_folder=last_gpx_folder,
+        on_browse_selected_folder=on_browse_selected_folder,
         parent=window,
     )
     if input_dialog.exec() != QDialog.DialogCode.Accepted:

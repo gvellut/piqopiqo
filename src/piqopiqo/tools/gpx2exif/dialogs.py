@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import Enum, auto
 import os
 
@@ -197,6 +198,8 @@ class ApplyGpxDialog(QDialog):
         previous_time_shift_folders: set[str],
         initial_gpx_path: str,
         kml_folder: str,
+        last_gpx_folder: str = "",
+        on_browse_selected_folder: Callable[[str], None] | None = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -210,6 +213,8 @@ class ApplyGpxDialog(QDialog):
         self._previous_time_shift_folders = previous_time_shift_folders
         self._time_shift_edits: dict[str, _TimeShiftEdit] = {}
         self._previous_labels: dict[str, QLabel] = {}
+        self._last_gpx_folder = str(last_gpx_folder).strip()
+        self._on_browse_selected_folder = on_browse_selected_folder
 
         layout = QVBoxLayout(self)
 
@@ -294,15 +299,36 @@ class ApplyGpxDialog(QDialog):
         super().showEvent(event)
         self.setFixedSize(self.size())
 
+    def _resolve_browse_start_dir(self) -> str:
+        current_value = self.gpx_path_edit.text().strip()
+        if current_value:
+            return self._resolve_browse_folder(current_value)
+        return self._resolve_browse_folder(self._last_gpx_folder)
+
+    def _resolve_browse_folder(self, value: str) -> str:
+        path = str(value).strip()
+        if not path:
+            return ""
+        expanded = os.path.expanduser(path)
+        if os.path.isdir(expanded):
+            return expanded
+        parent = os.path.dirname(expanded)
+        if parent and os.path.isdir(parent):
+            return parent
+        return ""
+
     def _browse_gpx(self) -> None:
+        start_dir = self._resolve_browse_start_dir()
         value, _ = QFileDialog.getOpenFileName(
             self,
             "Select GPX file",
-            self.gpx_path_edit.text().strip(),
+            start_dir,
             "GPX Files (*.gpx);;All Files (*)",
         )
         if value:
             self.gpx_path_edit.setText(value)
+            if self._on_browse_selected_folder is not None:
+                self._on_browse_selected_folder(self._resolve_browse_folder(value))
 
     def _update_ok_enabled(self) -> None:
         path = self.gpx_path_edit.text().strip()

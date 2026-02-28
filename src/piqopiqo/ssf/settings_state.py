@@ -53,6 +53,7 @@ class SettingsGroup(StrEnum):
 class StateKey(StrEnum):
     # AppState group
     LAST_FOLDER = "lastFolder"
+    LAST_GPX_FOLDER = "lastGpxFolder"
     SORT_ORDER = "sortOrder"
     COPY_SD_EJECT = "copySDEject"
     COPY_SD_NAME_SUFFIX = "copySdNameSuffix"
@@ -420,6 +421,7 @@ def _parse_enum(env_value: str, enum_type: type[StrEnum], fallback: StrEnum) -> 
 
 _STATE_REGISTRY: dict[StateKey, StateDef] = {
     StateKey.LAST_FOLDER: StateDef(StateGroup.APP_STATE, str, None),
+    StateKey.LAST_GPX_FOLDER: StateDef(StateGroup.APP_STATE, str, ""),
     StateKey.SORT_ORDER: StateDef(StateGroup.APP_STATE, str, "FILE_NAME"),
     StateKey.COPY_SD_EJECT: StateDef(StateGroup.APP_STATE, bool, True),
     StateKey.COPY_SD_NAME_SUFFIX: StateDef(StateGroup.APP_STATE, str, ""),

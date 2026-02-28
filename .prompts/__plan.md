@@ -46,3 +46,4 @@
     !? [Validate in settings panel](Ba_tasks/Fa.A_Validate_in_settings_panel.md)
 ! [Extracted time shift result](Ba_tasks/Ga_Extracted_time_shift_result.md)
 ! [Replace simplekml](Ba_tasks/Ha_Replace_simplekml.md)
+! [Save GPX last folder](Ba_tasks/Ia_Save_GPX_last_folder.md)
