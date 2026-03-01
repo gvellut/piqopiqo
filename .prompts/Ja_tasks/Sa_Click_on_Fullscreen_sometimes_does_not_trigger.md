@@ -1,0 +1,2 @@
+In fullscreen make the zoom gesture (simple click up of the mouse : to move from base view to 100% or back from any zoom to base view) not as difficult to trigger : There is a combination with panning (if moving while pressed). But it happens often that a click up with no movement (it seems) does not trigger. Add logging to understand if the click is not taken into account because it was seen as a pan. However the pan mouse cursor does not show so not sure.
+Check the code to understand.
