@@ -31,6 +31,7 @@ class Shortcut(UpperStrEnum):
     LABEL_9 = auto(), "Label 9"
     LABEL_NONE = auto(), "No label"
     SELECT_ALL = auto(), "Select all"
+    COLLAPSE_TO_LAST_SELECTED = auto(), "Keep last selected (grid)"
 
     def __new__(cls, name, label):
         obj = str.__new__(cls, name)
@@ -60,6 +61,7 @@ LABEL_SHORTCUTS: tuple[Shortcut, ...] = (
 GRID_VIEW_CONFIGURABLE_SHORTCUTS: tuple[Shortcut, ...] = (
     *LABEL_SHORTCUTS,
     Shortcut.SELECT_ALL,
+    Shortcut.COLLAPSE_TO_LAST_SELECTED,
 )
 
 FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS: tuple[Shortcut, ...] = (

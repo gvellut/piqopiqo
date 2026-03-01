@@ -24,11 +24,14 @@ def test_shortcut_labels_are_human_readable():
     assert Shortcut.LABEL_1.label == "Label 1"
     assert Shortcut.LABEL_NONE.label == "No label"
     assert Shortcut.SELECT_ALL.label == "Select all"
+    assert Shortcut.COLLAPSE_TO_LAST_SELECTED.label == "Keep last selected (grid)"
 
 
 def test_configurable_shortcut_view_registries_cover_all_shortcuts():
     assert Shortcut.SELECT_ALL in GRID_VIEW_CONFIGURABLE_SHORTCUTS
     assert Shortcut.SELECT_ALL not in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
+    assert Shortcut.COLLAPSE_TO_LAST_SELECTED in GRID_VIEW_CONFIGURABLE_SHORTCUTS
+    assert Shortcut.COLLAPSE_TO_LAST_SELECTED not in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
 
     assert Shortcut.ZOOM_IN in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
     assert Shortcut.ZOOM_IN not in GRID_VIEW_CONFIGURABLE_SHORTCUTS

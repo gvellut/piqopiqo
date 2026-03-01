@@ -525,6 +525,7 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
             Shortcut.LABEL_9: "9",
             Shortcut.LABEL_NONE: "`",
             Shortcut.SELECT_ALL: "ctrl+a",
+            Shortcut.COLLAPSE_TO_LAST_SELECTED: "Esc",
         },
         read_type=str,
         json_storage=True,

@@ -30,6 +30,7 @@ from piqopiqo.orientation import apply_orientation_to_pixmap
 from piqopiqo.shortcuts import (
     Shortcut,
     build_label_shortcut_bindings,
+    match_shortcut_sequence,
     parse_shortcut,
 )
 from piqopiqo.ssf.settings_state import (
@@ -226,6 +227,17 @@ class PhotoGrid(QWidget):
         ):
             return True
         return isinstance(widget, QComboBox) and widget.isEditable()
+
+    def _lookup_configured_shortcut(self, shortcut_key: Shortcut) -> str | None:
+        shortcuts = get_user_setting(UserSettingKey.SHORTCUTS)
+        for candidate in (shortcut_key, shortcut_key.value, shortcut_key.name):
+            value = shortcuts.get(candidate)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+        return None
 
     def select_all_visible(self) -> None:
         """Select all currently visible items in the grid."""
@@ -1050,10 +1062,20 @@ class PhotoGrid(QWidget):
 
         # Handle navigation
         if len(selected_indices) > 1:
-            # Multi-selection: collapse and move
+            # Multi-selection: anchor-based actions
             anchor_index = self._choose_anchor_from_current_selection()
             if anchor_index == -1:
                 anchor_index = selected_indices[-1]
+
+            collapse_shortcut = self._lookup_configured_shortcut(
+                Shortcut.COLLAPSE_TO_LAST_SELECTED
+            )
+            if collapse_shortcut and match_shortcut_sequence(event, collapse_shortcut):
+                self.on_cell_clicked(anchor_index, False, False)
+                event.accept()
+                return
+
+            # Multi-selection: collapse and move
             if key == Qt.Key_Left:
                 new_index = anchor_index - 1
             elif key == Qt.Key_Right:

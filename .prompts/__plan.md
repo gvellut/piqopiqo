@@ -56,3 +56,5 @@
 ! [Check filter delay](Ja_tasks/Oa_Check_filter_delay.md)
     !? [Return of the unecessary drop and reload of HQ thumbnails](Ja_tasks/Oa.A_Return_of_the_unecessary_drop_and_reload_of_HQ_t.md)
 ! [Grid select next if filtered out](Ja_tasks/Pa_Grid_select_next_if_filtered_out.md)
+! [Prescaled down image in fullscreen](Ja_tasks/Qa_Prescaled_down_image_in_fullscreen.md)
+! [Esc select last in grid](Ja_tasks/Ra_Esc_select_last_in_grid.md)
