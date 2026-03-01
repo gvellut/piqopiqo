@@ -1,3 +1,4 @@
+- [Prescaled down image in fullscreen](Ja_tasks/Qa_Prescaled_down_image_in_fullscreen.md)
 - [Base data redirect to settings](J_tasks/Q_Base_data_redirect_to_settings.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
 - [Specific macos](Ba_tasks/Da_Specific_macos.md)
