@@ -24,6 +24,10 @@ Unless PRE_100P is True : then load the 2 (scaled down and 100%) at the same tim
 Depending on the value of the setting.
 The scaled down use the width / height of the rendering buffer (like what is done now for the base view ; the QPainter does it).
 
+The 2 options below must use color management for their pixmap : adapt load_pixmap_with_color_management so it works with those methods (refactor where needed)
+
+Also beware : when the fullscreen is initialized : the size of the overlay (full screen buffer) is not now (self.rect() is basic 640 x 480 : you would have to use the platform.get_screen_true_resolution(current_screen) OR wait for the paint event to know the true size of the full screen render buffer)
+
 QT_SMOOTH : 
 
 something like that :
