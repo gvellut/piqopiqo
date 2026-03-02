@@ -63,6 +63,7 @@ class ShortcutsEditor(QWidget):
                 (
                     Shortcut.SELECT_ALL,
                     Shortcut.COLLAPSE_TO_LAST_SELECTED,
+                    Shortcut.TOGGLE_RIGHT_SIDEBAR,
                 ),
             ),
             (

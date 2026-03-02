@@ -126,6 +126,29 @@ class _FakeModelChangedWindowReselection:
         MainWindow._apply_pending_metadata_reselection(self, context)
 
 
+class _FakeSplitterCollapse:
+    def __init__(self, sizes: list[int]):
+        self._sizes = list(sizes)
+        self.set_sizes_calls: list[list[int]] = []
+
+    def count(self) -> int:
+        return 2
+
+    def sizes(self) -> list[int]:
+        return list(self._sizes)
+
+    def setSizes(self, sizes: list[int]) -> None:
+        self._sizes = list(sizes)
+        self.set_sizes_calls.append(list(sizes))
+
+
+class _FakeSidebarCollapseWindow:
+    def __init__(self, sizes: list[int], restore_size: int | None = None):
+        self._main_splitter = _FakeSplitterCollapse(sizes)
+        self._right_sidebar_collapsed = False
+        self._right_sidebar_restore_size = restore_size
+
+
 def test_on_open_clears_filters_before_loading_folder(monkeypatch):
     fake_window = _FakeMainWindow()
     monkeypatch.setattr(
@@ -235,3 +258,32 @@ def test_on_model_changed_keeps_selection_when_any_selected_item_survives():
     assert fake_window.grid.select_calls == []
     assert fake_window.visible_paths == []
     assert fake_window._pending_metadata_reselection_context is None
+
+
+def test_toggle_right_sidebar_collapses_and_stores_restore_size():
+    fake_window = _FakeSidebarCollapseWindow([800, 200], restore_size=None)
+
+    MainWindow._toggle_right_sidebar_collapsed(fake_window)
+
+    assert fake_window._right_sidebar_collapsed is True
+    assert fake_window._right_sidebar_restore_size == 200
+    assert fake_window._main_splitter.set_sizes_calls == [[1000, 0]]
+
+
+def test_toggle_right_sidebar_restores_previous_size_on_second_press():
+    fake_window = _FakeSidebarCollapseWindow([1000, 0], restore_size=240)
+    fake_window._right_sidebar_collapsed = True
+
+    MainWindow._toggle_right_sidebar_collapsed(fake_window)
+
+    assert fake_window._right_sidebar_collapsed is False
+    assert fake_window._main_splitter.set_sizes_calls == [[760, 240]]
+
+
+def test_toggle_right_sidebar_restores_from_manual_collapsed_state():
+    fake_window = _FakeSidebarCollapseWindow([1000, 0], restore_size=180)
+
+    MainWindow._toggle_right_sidebar_collapsed(fake_window)
+
+    assert fake_window._right_sidebar_collapsed is False
+    assert fake_window._main_splitter.set_sizes_calls == [[820, 180]]

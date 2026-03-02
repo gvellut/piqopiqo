@@ -34,6 +34,7 @@ def test_shortcut_labels_are_human_readable():
     assert Shortcut.FILTER_FOCUS_SEARCH.label == "Focus search"
     assert Shortcut.SELECT_ALL.label == "Select all"
     assert Shortcut.COLLAPSE_TO_LAST_SELECTED.label == "Keep last selected (grid)"
+    assert Shortcut.TOGGLE_RIGHT_SIDEBAR.label == "Toggle right sidebar"
 
 
 def test_configurable_shortcut_view_registries_cover_all_shortcuts():
@@ -41,6 +42,8 @@ def test_configurable_shortcut_view_registries_cover_all_shortcuts():
     assert Shortcut.SELECT_ALL not in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
     assert Shortcut.COLLAPSE_TO_LAST_SELECTED in GRID_VIEW_CONFIGURABLE_SHORTCUTS
     assert Shortcut.COLLAPSE_TO_LAST_SELECTED not in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
+    assert Shortcut.TOGGLE_RIGHT_SIDEBAR in GRID_VIEW_CONFIGURABLE_SHORTCUTS
+    assert Shortcut.TOGGLE_RIGHT_SIDEBAR not in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
 
     assert Shortcut.ZOOM_IN in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
     assert Shortcut.ZOOM_IN not in GRID_VIEW_CONFIGURABLE_SHORTCUTS

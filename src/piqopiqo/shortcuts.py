@@ -47,6 +47,7 @@ class Shortcut(UpperStrEnum):
     FILTER_FOCUS_SEARCH = auto(), "Focus search"
     SELECT_ALL = auto(), "Select all"
     COLLAPSE_TO_LAST_SELECTED = auto(), "Keep last selected (grid)"
+    TOGGLE_RIGHT_SIDEBAR = auto(), "Toggle right sidebar"
 
     def __new__(cls, name, label):
         obj = str.__new__(cls, name)
@@ -96,6 +97,7 @@ GRID_VIEW_CONFIGURABLE_SHORTCUTS: tuple[Shortcut, ...] = (
     Shortcut.FILTER_FOCUS_SEARCH,
     Shortcut.SELECT_ALL,
     Shortcut.COLLAPSE_TO_LAST_SELECTED,
+    Shortcut.TOGGLE_RIGHT_SIDEBAR,
 )
 
 FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS: tuple[Shortcut, ...] = (

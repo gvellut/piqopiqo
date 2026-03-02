@@ -12,6 +12,7 @@ from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
+    QHBoxLayout,
     QMainWindow,
     QMessageBox,
     QSplitter,
@@ -24,6 +25,7 @@ from .background.media_man import MediaManager
 from .cache_paths import set_cache_base_dir
 from .color_management import refresh_main_screen_color_space_cache
 from .components.status_bar import LoadingStatusBar
+from .components.column_number_selector import ColumnNumberSelector
 from .dialogs.error_list_dialog import ErrorListDialog
 from .folder_scan import scan_folder
 from .folder_watcher import FolderWatcher
@@ -105,6 +107,8 @@ class MainWindow(QMainWindow):
         self._fullscreen_menu_allowed_actions: set[QAction] = set()
         self._fullscreen_menu_action_restore_state: dict[QAction, bool] = {}
         self._fullscreen_menu_policy_active = False
+        self._right_sidebar_collapsed = False
+        self._right_sidebar_restore_size: int | None = None
 
         # Create metadata database manager
         self.db_manager = MetadataDBManager()
@@ -134,7 +138,14 @@ class MainWindow(QMainWindow):
         self.grid.set_grid_view_shortcut_scope(self._grid_view_shortcut_scope)
         self._main_splitter.addWidget(self.grid)
 
-        # Right side: vertical splitter with edit panel and EXIF panel
+        # Right side: panels + fixed-height column selector footer.
+        self._right_sidebar_container = QWidget()
+        self._right_sidebar_container.setMinimumWidth(0)
+        right_sidebar_layout = QVBoxLayout(self._right_sidebar_container)
+        right_sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        right_sidebar_layout.setSpacing(0)
+
+        # Right side panels: vertical splitter with edit panel and EXIF panel
         self._right_splitter = None
         if get_runtime_setting(RuntimeSettingKey.SHOW_EDIT_PANEL):
             self._right_splitter = QSplitter(Qt.Vertical)
@@ -155,15 +166,47 @@ class MainWindow(QMainWindow):
 
             # Split evenly between edit and exif panels
             self._right_splitter.setSizes([200, 200])
-
-            self._main_splitter.addWidget(self._right_splitter)
+            right_panels_widget = self._right_splitter
         else:
             self.edit_panel = None
             self.exif_panel = ExifPanel()
             self.exif_panel.interaction_finished.connect(
                 self._schedule_grid_focus_restore
             )
-            self._main_splitter.addWidget(self.exif_panel)
+            right_panels_widget = self.exif_panel
+
+        right_sidebar_layout.addWidget(right_panels_widget, 1)
+
+        self.column_selector_row = QWidget(self._right_sidebar_container)
+        self.column_selector_row.setObjectName("column_selector_row")
+        self.column_selector_row.setFixedHeight(30)
+        self.column_selector_row.setMinimumWidth(0)
+        selector_row_layout = QHBoxLayout(self.column_selector_row)
+        selector_row_layout.setContentsMargins(
+            max(0, int(get_runtime_setting(RuntimeSettingKey.STATUS_BAR_SIDE_PADDING))),
+            4,
+            0,
+            4,
+        )
+        selector_row_layout.setSpacing(0)
+        self.column_selector = ColumnNumberSelector(self.column_selector_row)
+        self.column_selector.decrement_requested.connect(
+            self._on_column_selector_decrement
+        )
+        self.column_selector.increment_requested.connect(
+            self._on_column_selector_increment
+        )
+        selector_row_layout.addWidget(
+            self.column_selector,
+            0,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+        )
+        selector_row_layout.addStretch(1)
+        right_sidebar_layout.addWidget(self.column_selector_row, 0)
+
+        self._main_splitter.addWidget(self._right_sidebar_container)
+        self._main_splitter.setCollapsible(1, True)
+        self._main_splitter.splitterMoved.connect(self._on_main_splitter_moved)
 
         self._main_splitter.setSizes([int(self.width() * 0.8), int(self.width() * 0.2)])
 
@@ -179,13 +222,7 @@ class MainWindow(QMainWindow):
 
         # Status bar (standard QMainWindow status bar)
         self.status_bar = LoadingStatusBar()
-        self.status_bar.show_errors_requested.connect(self._show_error_dialog)
-        self.status_bar.decrement_columns_requested.connect(
-            self._on_status_bar_decrement_columns
-        )
-        self.status_bar.increment_columns_requested.connect(
-            self._on_status_bar_increment_columns
-        )
+        self.status_bar.error_btn.clicked.connect(self._show_error_dialog)
         self.setStatusBar(self.status_bar)
 
         # Unified background manager (multiprocessing)
@@ -217,6 +254,9 @@ class MainWindow(QMainWindow):
         )
         self.grid.focus_filter_search_shortcut_requested.connect(
             self._on_focus_filter_search_shortcut_requested
+        )
+        self.grid.toggle_sidebar_shortcut_requested.connect(
+            self._toggle_right_sidebar_collapsed
         )
 
         # Create photo list model
@@ -1326,15 +1366,56 @@ class MainWindow(QMainWindow):
         min_cols, max_cols = self._get_grid_num_column_bounds()
         columns = self._clamp_grid_num_columns(value)
         self.grid.set_num_columns(columns)
-        self.status_bar.set_column_count(columns, min_cols, max_cols)
+        self.column_selector.set_value(columns, min_cols, max_cols)
         if persist:
             set_user_setting(UserSettingKey.NUM_COLUMNS, columns)
 
-    def _on_status_bar_decrement_columns(self) -> None:
+    def _on_column_selector_decrement(self) -> None:
         self._apply_grid_num_columns(self.grid.n_cols - 1, persist=True)
 
-    def _on_status_bar_increment_columns(self) -> None:
+    def _on_column_selector_increment(self) -> None:
         self._apply_grid_num_columns(self.grid.n_cols + 1, persist=True)
+
+    def _on_main_splitter_moved(self, _pos: int, _index: int) -> None:
+        if self._main_splitter.count() < 2:
+            return
+        sizes = self._main_splitter.sizes()
+        if len(sizes) < 2:
+            return
+        right_size = int(sizes[1])
+        if right_size > 0:
+            self._right_sidebar_restore_size = right_size
+            self._right_sidebar_collapsed = False
+
+    def _toggle_right_sidebar_collapsed(self) -> None:
+        if self._main_splitter.count() < 2:
+            return
+
+        sizes = self._main_splitter.sizes()
+        if len(sizes) < 2:
+            return
+
+        grid_size = max(0, int(sizes[0]))
+        right_size = max(0, int(sizes[1]))
+        total = grid_size + right_size
+        if total <= 0:
+            return
+
+        if right_size > 0:
+            self._right_sidebar_restore_size = right_size
+
+        if right_size > 0 and not self._right_sidebar_collapsed:
+            self._right_sidebar_collapsed = True
+            self._main_splitter.setSizes([total, 0])
+            return
+
+        restore_size = self._right_sidebar_restore_size
+        if restore_size is None:
+            restore_size = max(120, int(total * 0.2))
+        restore_size = max(1, min(int(restore_size), total))
+
+        self._right_sidebar_collapsed = False
+        self._main_splitter.setSizes([max(0, total - restore_size), restore_size])
 
     def _apply_settings_changes(self, changed_keys: set[UserSettingKey]) -> None:
         if not changed_keys:

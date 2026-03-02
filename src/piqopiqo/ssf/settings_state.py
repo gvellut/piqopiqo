@@ -533,6 +533,7 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
             Shortcut.FILTER_FOCUS_SEARCH: "Ctrl+F",
             Shortcut.SELECT_ALL: "ctrl+a",
             Shortcut.COLLAPSE_TO_LAST_SELECTED: "Esc",
+            Shortcut.TOGGLE_RIGHT_SIDEBAR: "Ctrl+]",
         },
         read_type=str,
         json_storage=True,

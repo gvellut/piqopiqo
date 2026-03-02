@@ -162,11 +162,13 @@ def test_filter_shortcut_activation_respects_shared_scope_focus_guard(qapp):
     captured_all: list[bool] = []
     captured_clear: list[bool] = []
     captured_search: list[bool] = []
+    captured_toggle: list[bool] = []
     grid.filter_label_shortcut_requested.connect(captured_labels.append)
     grid.folder_filter_cycle_requested.connect(captured_cycles.append)
     grid.folder_filter_all_requested.connect(lambda: captured_all.append(True))
     grid.clear_filter_shortcut_requested.connect(lambda: captured_clear.append(True))
     grid.focus_filter_search_shortcut_requested.connect(lambda: captured_search.append(True))
+    grid.toggle_sidebar_shortcut_requested.connect(lambda: captured_toggle.append(True))
 
     panel_button.setFocus()
     qapp.processEvents()
@@ -178,12 +180,14 @@ def test_filter_shortcut_activation_respects_shared_scope_focus_guard(qapp):
     grid._activate_folder_filter_all_shortcut()
     grid._activate_clear_filter_shortcut()
     grid._activate_focus_filter_search_shortcut()
+    grid._activate_toggle_sidebar_shortcut()
 
     assert captured_labels == ["Approved", None]
     assert captured_cycles == [1, -1]
     assert captured_all == [True]
     assert captured_clear == [True]
     assert captured_search == [True]
+    assert captured_toggle == [True]
 
     search_field.setFocus()
     qapp.processEvents()
@@ -193,9 +197,11 @@ def test_filter_shortcut_activation_respects_shared_scope_focus_guard(qapp):
     grid._activate_folder_filter_all_shortcut()
     grid._activate_clear_filter_shortcut()
     grid._activate_focus_filter_search_shortcut()
+    grid._activate_toggle_sidebar_shortcut()
 
     assert captured_labels == ["Approved", None]
     assert captured_cycles == [1, -1]
     assert captured_all == [True]
     assert captured_clear == [True]
     assert captured_search == [True]
+    assert captured_toggle == [True]

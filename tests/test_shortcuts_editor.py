@@ -89,6 +89,7 @@ def test_shortcuts_editor_uses_sectioned_two_column_layout(qapp):
     assert grid_shortcuts == [
         Shortcut.SELECT_ALL.label,
         Shortcut.COLLAPSE_TO_LAST_SELECTED.label,
+        Shortcut.TOGGLE_RIGHT_SIDEBAR.label,
     ]
     assert fullscreen_shortcuts == [
         Shortcut.ZOOM_IN.label,

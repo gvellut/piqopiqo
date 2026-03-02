@@ -60,6 +60,7 @@ class PhotoGrid(QWidget):
     folder_filter_all_requested = Signal()
     clear_filter_shortcut_requested = Signal()
     focus_filter_search_shortcut_requested = Signal()
+    toggle_sidebar_shortcut_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -238,6 +239,21 @@ class PhotoGrid(QWidget):
             )
             self._shared_grid_view_shortcut_objects.append(sc_focus_search)
 
+        toggle_sidebar_shortcut = (
+            shortcuts.get(Shortcut.TOGGLE_RIGHT_SIDEBAR)
+            or shortcuts.get(Shortcut.TOGGLE_RIGHT_SIDEBAR.value)
+            or shortcuts.get(Shortcut.TOGGLE_RIGHT_SIDEBAR.name)
+        )
+        if toggle_sidebar_shortcut:
+            sc_toggle_sidebar = QShortcut(
+                parse_shortcut(toggle_sidebar_shortcut), scope
+            )
+            sc_toggle_sidebar.setContext(Qt.WidgetWithChildrenShortcut)
+            sc_toggle_sidebar.activated.connect(
+                self._activate_toggle_sidebar_shortcut
+            )
+            self._shared_grid_view_shortcut_objects.append(sc_toggle_sidebar)
+
         sc_fullscreen = QShortcut(QKeySequence("Space"), scope)
         sc_fullscreen.setContext(Qt.WidgetWithChildrenShortcut)
         sc_fullscreen.activated.connect(self._activate_fullscreen_shortcut)
@@ -287,6 +303,11 @@ class PhotoGrid(QWidget):
         if not self._shared_grid_view_shortcuts_allowed():
             return
         self.focus_filter_search_shortcut_requested.emit()
+
+    def _activate_toggle_sidebar_shortcut(self) -> None:
+        if not self._shared_grid_view_shortcuts_allowed():
+            return
+        self.toggle_sidebar_shortcut_requested.emit()
 
     def _request_fullscreen_from_current_selection(self) -> None:
         selected_indices = [

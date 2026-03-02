@@ -162,6 +162,7 @@ def test_shortcuts_defaults_include_filter_shortcuts(isolated_settings):
     assert shortcuts[Shortcut.FILTER_FOLDER_PREV] == "Alt+-"
     assert shortcuts[Shortcut.FILTER_CLEAR_ALL] == "Alt+\\"
     assert shortcuts[Shortcut.FILTER_FOCUS_SEARCH] == "Ctrl+F"
+    assert shortcuts[Shortcut.TOGGLE_RIGHT_SIDEBAR] == "Ctrl+]"
 
 
 def test_manual_lenses_roundtrip(isolated_settings):
