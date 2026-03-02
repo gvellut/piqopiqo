@@ -1,4 +1,6 @@
 * [Change column size from grid](Ta_tasks/Xa_Change_column_size_from_grid.md)
+    !? [Icons cut label not vertically centered](Ta_tasks/Xa.A_Icons_cut_label_not_vertically_centered.md)
+    *? [Put column changer in the side bar](Ta_tasks/Xa.A.A_Put_column_changer_in_the_side_bar.md)
 - [Status screen + About](Ta_tasks/Wa_Status_screen_About.md)
 - [Base data redirect to settings](J_tasks/Q_Base_data_redirect_to_settings.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)

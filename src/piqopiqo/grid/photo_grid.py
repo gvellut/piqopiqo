@@ -68,7 +68,7 @@ class PhotoGrid(QWidget):
 
         self.setFocusPolicy(Qt.StrongFocus)
 
-        self.n_cols = int(get_user_setting(UserSettingKey.NUM_COLUMNS))
+        self.n_cols = self._clamp_num_columns(get_user_setting(UserSettingKey.NUM_COLUMNS))
         self.n_rows = 1
         self.items_data = []
         self._last_selected_index = -1
@@ -504,11 +504,43 @@ class PhotoGrid(QWidget):
         selected = [i for i, item in enumerate(self.items_data) if item.is_selected]
         return selected[-1] if selected else -1
 
+    def _column_bounds(self) -> tuple[int, int]:
+        min_cols = max(
+            1,
+            int(get_runtime_setting(RuntimeSettingKey.GRID_NUM_COLUMNS_MIN)),
+        )
+        max_cols = max(
+            1,
+            int(get_runtime_setting(RuntimeSettingKey.GRID_NUM_COLUMNS_MAX)),
+        )
+        if max_cols < min_cols:
+            max_cols = min_cols
+        return min_cols, max_cols
+
+    def _clamp_num_columns(self, num_columns: object) -> int:
+        min_cols, max_cols = self._column_bounds()
+        try:
+            requested = int(num_columns)
+        except (TypeError, ValueError):
+            requested = min_cols
+        return max(min_cols, min(requested, max_cols))
+
     def set_num_columns(self, num_columns: int) -> None:
-        cols = max(1, int(num_columns))
+        cols = self._clamp_num_columns(num_columns)
         if cols == self.n_cols:
             return
-        self._rebuild_grid(self.n_rows, cols)
+
+        preserve_path = None
+        visible_paths = self.get_viewport_visible_paths()
+        if visible_paths:
+            preserve_path = visible_paths[0]
+
+        self._apply_layout_for_geometry(cols)
+
+        if preserve_path is not None:
+            index = self.get_index_for_path(preserve_path)
+            if index is not None:
+                self._ensure_visible(index, navigation_activity=False)
 
     def _rebuild_grid(self, rows, cols):
         """Recreate the grid widgets only if dimensions changed."""
@@ -555,65 +587,73 @@ class PhotoGrid(QWidget):
         )
         return num_lines * line_height + top_padding
 
-    def resizeEvent(self, event):
-        # Width available for the grid (Total width - Scrollbar width)
+    def _calculate_layout_for_geometry(
+        self,
+        width: int,
+        height: int,
+        cols: int,
+    ) -> tuple[dict[str, float | int], int]:
         sb_width = self.scrollbar.width() if self.scrollbar.isVisible() else 0
-        panel_w = event.size().width() - sb_width
-        panel_h = event.size().height()
+        panel_w = max(1, int(width) - int(sb_width))
+        panel_h = max(1, int(height))
 
-        cols = max(1, int(self.n_cols))
-        pad = int(get_runtime_setting(RuntimeSettingKey.PADDING))
+        cols = max(1, int(cols))
+        pad = max(0, int(get_runtime_setting(RuntimeSettingKey.PADDING)))
 
-        # Horizontal Calculation
         total_h_pad = (cols + 1) * pad
-        avail_w = panel_w - total_h_pad
-        # Avoid division by zero
-        if cols == 0:
-            cols = 1
+        avail_w = max(1.0, float(panel_w - total_h_pad))
         img_box_side = avail_w / cols
 
-        # Vertical Calculation - dynamic based on configured fields
         meta_h = self._calculate_metadata_height()
-        row_base_h = pad + img_box_side + meta_h + pad
+        row_base_h = max(1.0, float(pad + img_box_side + meta_h + pad))
 
-        # Vertical Stretching (Fit to View)
-        if row_base_h < 1:
-            row_base_h = 1
-
-        visible_rows = int(panel_h / row_base_h)
-        if visible_rows < 1:
-            visible_rows = 1
-
+        visible_rows = max(1, int(panel_h / row_base_h))
         used_h = visible_rows * row_base_h
         remaining = panel_h - used_h
+        extra_per_row = remaining / visible_rows if visible_rows > 0 else 0.0
 
-        if visible_rows > 0:
-            extra_per_row = remaining / visible_rows
-        else:
-            extra_per_row = 0
-
-        # Store calculated layout info for Cells
-        self.layout_info = {
+        layout_info = {
             "img_rect_w": img_box_side,
             "img_rect_h": img_box_side + extra_per_row,
             "meta_h": meta_h,
             "pad": pad,
         }
+        return layout_info, visible_rows
 
-        # Apply layout info to existing cells immediately (for smoother resize)
+    def _apply_layout_for_geometry(
+        self,
+        cols: int,
+        *,
+        width: int | None = None,
+        height: int | None = None,
+    ) -> None:
+        target_cols = self._clamp_num_columns(cols)
+        target_w = self.width() if width is None else int(width)
+        target_h = self.height() if height is None else int(height)
+        layout_info, visible_rows = self._calculate_layout_for_geometry(
+            target_w,
+            target_h,
+            target_cols,
+        )
+
+        self.layout_info = layout_info
         for cell in self.cells:
             cell.set_layout_info(self.layout_info)
 
-        # Check if we need to restructure the grid widgets
-        if visible_rows != self.n_rows:
-            self._rebuild_grid(visible_rows, cols)
-        else:
-            rendered_via_scroll = self._recalculate_scrollbar()
-            # Just refresh content in case data range changed due to scroll limit
-            # changes.
-            if not rendered_via_scroll:
-                self._render_current_view()
+        if visible_rows != self.n_rows or target_cols != self.n_cols:
+            self._rebuild_grid(visible_rows, target_cols)
+            return
 
+        rendered_via_scroll = self._recalculate_scrollbar()
+        if not rendered_via_scroll:
+            self._render_current_view()
+
+    def resizeEvent(self, event):
+        self._apply_layout_for_geometry(
+            self.n_cols,
+            width=event.size().width(),
+            height=event.size().height(),
+        )
         super().resizeEvent(event)
 
     def _recalculate_scrollbar(self) -> bool:

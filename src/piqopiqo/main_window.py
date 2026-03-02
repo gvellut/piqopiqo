@@ -51,6 +51,7 @@ from .ssf.settings_state import (
     get_runtime_setting,
     get_state,
     get_user_setting,
+    set_user_setting,
 )
 
 logger = logging.getLogger(__name__)
@@ -179,6 +180,12 @@ class MainWindow(QMainWindow):
         # Status bar (standard QMainWindow status bar)
         self.status_bar = LoadingStatusBar()
         self.status_bar.show_errors_requested.connect(self._show_error_dialog)
+        self.status_bar.decrement_columns_requested.connect(
+            self._on_status_bar_decrement_columns
+        )
+        self.status_bar.increment_columns_requested.connect(
+            self._on_status_bar_increment_columns
+        )
         self.setStatusBar(self.status_bar)
 
         # Unified background manager (multiprocessing)
@@ -230,10 +237,14 @@ class MainWindow(QMainWindow):
         # Set up filter panel with folders
         self.filter_panel.set_folders(source_folders)
 
+        self._apply_grid_num_columns(
+            get_user_setting(UserSettingKey.NUM_COLUMNS),
+            persist=False,
+        )
         self.grid.set_data(self.photo_model.photos)
 
         # Update status bar
-        self.status_bar.set_photo_count(len(self.photo_model.all_photos))
+        self._update_status_bar_count()
 
         # Start background loading (EXIF + thumbs)
         self.media_manager.reset_for_folder(
@@ -1290,12 +1301,50 @@ class MainWindow(QMainWindow):
         )
         self._apply_settings_changes({resolved_key})
 
+    def _get_grid_num_column_bounds(self) -> tuple[int, int]:
+        min_cols = max(
+            1,
+            int(get_runtime_setting(RuntimeSettingKey.GRID_NUM_COLUMNS_MIN)),
+        )
+        max_cols = max(
+            1,
+            int(get_runtime_setting(RuntimeSettingKey.GRID_NUM_COLUMNS_MAX)),
+        )
+        if max_cols < min_cols:
+            max_cols = min_cols
+        return min_cols, max_cols
+
+    def _clamp_grid_num_columns(self, value: object) -> int:
+        min_cols, max_cols = self._get_grid_num_column_bounds()
+        try:
+            requested = int(value)
+        except (TypeError, ValueError):
+            requested = min_cols
+        return max(min_cols, min(requested, max_cols))
+
+    def _apply_grid_num_columns(self, value: object, *, persist: bool) -> None:
+        min_cols, max_cols = self._get_grid_num_column_bounds()
+        columns = self._clamp_grid_num_columns(value)
+        self.grid.set_num_columns(columns)
+        self.status_bar.set_column_count(columns, min_cols, max_cols)
+        if persist:
+            set_user_setting(UserSettingKey.NUM_COLUMNS, columns)
+
+    def _on_status_bar_decrement_columns(self) -> None:
+        self._apply_grid_num_columns(self.grid.n_cols - 1, persist=True)
+
+    def _on_status_bar_increment_columns(self) -> None:
+        self._apply_grid_num_columns(self.grid.n_cols + 1, persist=True)
+
     def _apply_settings_changes(self, changed_keys: set[UserSettingKey]) -> None:
         if not changed_keys:
             return
 
         if UserSettingKey.NUM_COLUMNS in changed_keys:
-            self.grid.set_num_columns(int(get_user_setting(UserSettingKey.NUM_COLUMNS)))
+            self._apply_grid_num_columns(
+                get_user_setting(UserSettingKey.NUM_COLUMNS),
+                persist=False,
+            )
 
         if UserSettingKey.CUSTOM_EXIF_FIELDS in changed_keys:
             self.media_manager.refresh_exif_field_keys(
@@ -1439,7 +1488,7 @@ class MainWindow(QMainWindow):
         self.grid.set_data(self.photo_model.photos)
 
         # Update status bar
-        self.status_bar.set_photo_count(len(self.photo_model.all_photos))
+        self._update_status_bar_count()
 
         # Start background loading (EXIF + thumbs)
         self.media_manager.reset_for_folder(
@@ -1623,6 +1672,7 @@ class MainWindow(QMainWindow):
         self._selection_changed_since_edit = True
 
         selected_count = self._set_selected_cache_from_indices(selected_indices)
+        self._update_status_bar_count()
         if selected_count > LARGE_SELECTION_PANEL_DEFER_THRESHOLD:
             self._apply_or_defer_panel_refresh(selected_count=selected_count)
             return
@@ -1660,6 +1710,7 @@ class MainWindow(QMainWindow):
         selected_items = self.photo_model.get_selected_photos()
         self._selection_changed_since_edit = True
         self._set_selected_cache_from_items(selected_items)
+        self._update_status_bar_count()
         self._apply_or_defer_panel_refresh(selected_items=selected_items)
 
     def request_thumb_handler(self, index):
@@ -1914,7 +1965,6 @@ class MainWindow(QMainWindow):
         self.grid.set_data(self.photo_model.photos)
         if index >= 0:
             self.grid._ensure_visible(index)
-        self._update_status_bar_count()
         self._reconcile_selection_and_panels()
 
     def _on_photo_removed(self, file_path: str, _former_index: int):
@@ -1924,17 +1974,17 @@ class MainWindow(QMainWindow):
         self.filter_panel.set_folders(self.photo_model.source_folders)
 
         self.grid.set_data(self.photo_model.photos)
-        self._update_status_bar_count()
         self._reconcile_selection_and_panels()
 
     def _update_status_bar_count(self):
         """Update status bar photo count."""
         total = len(self.photo_model.all_photos)
         filtered = len(self.photo_model.photos)
+        selected = len(self.photo_model.get_selected_photos())
         if total == filtered:
-            self.status_bar.set_photo_count(total)
+            self.status_bar.set_photo_count(total, selected=selected)
         else:
-            self.status_bar.set_photo_count(total, filtered)
+            self.status_bar.set_photo_count(total, filtered, selected=selected)
 
     # --- Sort order ---
 

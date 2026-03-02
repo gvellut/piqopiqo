@@ -58,6 +58,9 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_CACHE_BASE_DIR",
         "PIQO_EXIFTOOL_PATH",
         "PIQO_NUM_COLUMNS",
+        "PIQO_GRID_NUM_COLUMNS_MIN",
+        "PIQO_GRID_NUM_COLUMNS_MAX",
+        "PIQO_STATUS_BAR_SIDE_PADDING",
         "PIQO_SETTINGS_PANEL_SAVE_MODE",
         "PIQO_FONT_SIZE",
         "PIQO_GPX_IGNORE_OFFSET",
@@ -190,6 +193,23 @@ def test_env_override_takes_priority_over_persisted_values(
 
     monkeypatch.setenv("PIQO_NUM_COLUMNS", "7")
     assert get_user_setting(UserSettingKey.NUM_COLUMNS) == 7
+
+
+def test_grid_column_runtime_bounds_and_status_bar_padding_defaults_and_env_override(
+    isolated_settings, monkeypatch
+):
+    assert get_runtime_setting(RuntimeSettingKey.GRID_NUM_COLUMNS_MIN) == 3
+    assert get_runtime_setting(RuntimeSettingKey.GRID_NUM_COLUMNS_MAX) == 10
+    assert get_runtime_setting(RuntimeSettingKey.STATUS_BAR_SIDE_PADDING) == 10
+
+    monkeypatch.setenv("PIQO_GRID_NUM_COLUMNS_MIN", "4")
+    monkeypatch.setenv("PIQO_GRID_NUM_COLUMNS_MAX", "12")
+    monkeypatch.setenv("PIQO_STATUS_BAR_SIDE_PADDING", "16")
+    init_qsettings_store(dyn=False)
+
+    assert get_runtime_setting(RuntimeSettingKey.GRID_NUM_COLUMNS_MIN) == 4
+    assert get_runtime_setting(RuntimeSettingKey.GRID_NUM_COLUMNS_MAX) == 12
+    assert get_runtime_setting(RuntimeSettingKey.STATUS_BAR_SIDE_PADDING) == 16
 
 
 def test_gpx_settings_defaults_and_env_override(isolated_settings, monkeypatch):

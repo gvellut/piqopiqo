@@ -83,18 +83,6 @@ SETTINGS_TABS: list[TabSpec] = [
         title="Interface",
         groups=[
             GroupSpec(
-                title="Grid",
-                fields=[
-                    FieldSpec(
-                        key=UserSettingKey.NUM_COLUMNS,
-                        label="Number of Columns",
-                        editor=EditorKind.NUMBER,
-                        min_value=1,
-                        max_value=50,
-                    ),
-                ],
-            ),
-            GroupSpec(
                 title="Fullscreen",
                 fields=[
                     FieldSpec(

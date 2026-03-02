@@ -153,3 +153,40 @@ def test_fast_first_render_skips_hq_eviction_to_avoid_hq_flash(qapp, monkeypatch
     grid._fast_first_paint_active = False
     grid._render(0, allow_hq=False)
     assert hq_evict_calls["count"] == 1
+
+
+def test_set_num_columns_recomputes_rows_without_waiting_for_resize(qapp, monkeypatch):
+    init_qsettings_store(dyn=True)
+    grid = PhotoGrid()
+    grid.resize(900, 700)
+    grid.show()
+    qapp.processEvents()
+    grid.set_data([_item(f"/tmp/{i}.jpg") for i in range(200)])
+    qapp.processEvents()
+
+    grid.set_num_columns(10)
+    qapp.processEvents()
+    rows_after_change = grid.n_rows
+
+    grid.resize(901, 700)
+    qapp.processEvents()
+    grid.resize(900, 700)
+    qapp.processEvents()
+
+    assert grid.n_rows == rows_after_change
+
+
+def test_num_columns_is_clamped_to_runtime_bounds(qapp, monkeypatch):
+    monkeypatch.setenv("PIQO_GRID_NUM_COLUMNS_MIN", "3")
+    monkeypatch.setenv("PIQO_GRID_NUM_COLUMNS_MAX", "10")
+    monkeypatch.setenv("PIQO_NUM_COLUMNS", "2")
+    init_qsettings_store(dyn=True)
+
+    grid = PhotoGrid()
+    assert grid.n_cols == 3
+
+    grid.set_num_columns(99)
+    assert grid.n_cols == 10
+
+    grid.set_num_columns(-5)
+    assert grid.n_cols == 3

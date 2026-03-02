@@ -1,4 +1,7 @@
-Also screen to see the current folders and cache location by folder + way to clear the thumbnail cache of a folder or all + reload Metadata from exif (warning)
+Add  popup panel to see the current folder, list all the folders in the current folder that are considered (coherent with the folder filter for ex ie those with a photo in them) and cache location by folder (inside the cache directory)
+in File > Property
+
+- way to clear the thumbnail cache of a folder or for all + reload Metadata from exif (warning) for a folder or for all 
 + see number of photos statistics
 Go to folder button
 

@@ -116,7 +116,10 @@ class RuntimeSettingKey(StrEnum):
     GRID_EMBEDDED_BUFFER_ROWS = "gridEmbeddedBufferRows"
     GRID_HQ_THUMB_DELAY_ENABLED = "gridHqThumbDelayEnabled"
     GRID_HQ_THUMB_LOAD_DELAY_MS = "gridHqThumbLoadDelayMs"
+    GRID_NUM_COLUMNS_MIN = "gridNumColumnsMin"
+    GRID_NUM_COLUMNS_MAX = "gridNumColumnsMax"
     GRID_LOWRES_ONLY = "gridLowresOnly"
+    STATUS_BAR_SIDE_PADDING = "statusBarSidePadding"
     COLOR_MANAGE_EMBEDDED_THUMBNAILS = "colorManageEmbeddedThumbnails"
     COLOR_MANAGE_HQ_THUMBNAILS = "colorManageHqThumbnails"
     PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE = "pillowForExtractImageColorProfile"
@@ -601,7 +604,10 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.GRID_HQ_THUMB_LOAD_DELAY_MS: SettingDef(
         default=100, read_type=int
     ),
+    RuntimeSettingKey.GRID_NUM_COLUMNS_MIN: SettingDef(default=3, read_type=int),
+    RuntimeSettingKey.GRID_NUM_COLUMNS_MAX: SettingDef(default=10, read_type=int),
     RuntimeSettingKey.GRID_LOWRES_ONLY: SettingDef(default=False, read_type=bool),
+    RuntimeSettingKey.STATUS_BAR_SIDE_PADDING: SettingDef(default=10, read_type=int),
     RuntimeSettingKey.COLOR_MANAGE_EMBEDDED_THUMBNAILS: SettingDef(
         default=True,
         read_type=bool,

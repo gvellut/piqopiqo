@@ -6,7 +6,8 @@ from piqopiqo.ssf.settings_state import UserSettingKey
 
 def test_every_user_setting_is_present_in_schema():
     schema_keys = {field.key for field in iter_all_field_specs()}
-    assert schema_keys == set(UserSettingKey)
+    hidden_keys = {UserSettingKey.NUM_COLUMNS}
+    assert schema_keys == (set(UserSettingKey) - hidden_keys)
 
 
 def test_schema_field_keys_are_unique():
@@ -27,7 +28,6 @@ def test_interface_tab_layout_matches_expected_groups_and_fields():
     interface_tab = next(tab for tab in SETTINGS_TABS if tab.title == "Interface")
 
     assert [group.title for group in interface_tab.groups] == [
-        "Grid",
         "Fullscreen",
         "Color",
         "Metadata Panel",
@@ -35,20 +35,17 @@ def test_interface_tab_layout_matches_expected_groups_and_fields():
     ]
 
     assert [field.key for field in interface_tab.groups[0].fields] == [
-        UserSettingKey.NUM_COLUMNS
-    ]
-    assert [field.key for field in interface_tab.groups[1].fields] == [
         UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE
     ]
-    assert [field.key for field in interface_tab.groups[2].fields] == [
+    assert [field.key for field in interface_tab.groups[1].fields] == [
         UserSettingKey.FORCE_SRGB,
         UserSettingKey.SCREEN_COLOR_PROFILE,
     ]
-    assert [field.key for field in interface_tab.groups[3].fields] == [
+    assert [field.key for field in interface_tab.groups[2].fields] == [
         UserSettingKey.SHOW_DESCRIPTION_FIELD,
         UserSettingKey.PROTECT_NON_TEXT_METADATA,
     ]
-    assert [field.key for field in interface_tab.groups[4].fields] == [
+    assert [field.key for field in interface_tab.groups[3].fields] == [
         UserSettingKey.CUSTOM_EXIF_FIELDS
     ]
 
