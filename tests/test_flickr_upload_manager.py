@@ -6,12 +6,7 @@ from PySide6.QtWidgets import QApplication
 import pytest
 
 from piqopiqo.tools.flickr_upload.albums import FlickrAlbumPlan
-from piqopiqo.tools.flickr_upload.constants import (
-    STAGE_ADD_TO_ALBUM,
-    STAGE_MAKE_PUBLIC,
-    STAGE_RESET_DATE,
-    STAGE_UPLOAD,
-)
+from piqopiqo.tools.flickr_upload.constants import FlickrStage
 from piqopiqo.tools.flickr_upload.manager import FlickrUploadManager
 
 
@@ -49,14 +44,14 @@ def test_manager_stage_sequence_success(qapp, monkeypatch) -> None:  # noqa: ARG
 
     def _fake_pool(_func, payloads, *, stage, progress_total, result):
         assert progress_total == len(payloads)
-        if stage == STAGE_UPLOAD:
+        if stage == FlickrStage.STAGE_UPLOAD.label:
             return [
                 {"ok": True, "file_path": "/a.jpg", "order": 0, "ticket_id": "t1"},
                 {"ok": True, "file_path": "/b.jpg", "order": 1, "ticket_id": "t2"},
             ]
-        if stage == STAGE_RESET_DATE:
+        if stage == FlickrStage.STAGE_RESET_DATE.label:
             return [{"ok": True}, {"ok": True}]
-        if stage == STAGE_MAKE_PUBLIC:
+        if stage == FlickrStage.STAGE_MAKE_PUBLIC.label:
             return [{"ok": True}, {"ok": True}]
         raise AssertionError(stage)
 
@@ -68,7 +63,11 @@ def test_manager_stage_sequence_success(qapp, monkeypatch) -> None:  # noqa: ARG
 
     manager._run(items)
 
-    assert stages == [STAGE_UPLOAD, STAGE_RESET_DATE, STAGE_MAKE_PUBLIC]
+    assert stages == [
+        FlickrStage.STAGE_UPLOAD.label,
+        FlickrStage.STAGE_RESET_DATE.label,
+        FlickrStage.STAGE_MAKE_PUBLIC.label,
+    ]
     assert len(finished) == 1
     result = finished[0]
     assert result.fatal_error == ""
@@ -92,7 +91,7 @@ def test_manager_continues_and_aggregates_failures(qapp, monkeypatch) -> None:  
     manager.finished.connect(finished.append)
 
     def _fake_pool(_func, payloads, *, stage, progress_total, result):  # noqa: ARG001
-        if stage == STAGE_UPLOAD:
+        if stage == FlickrStage.STAGE_UPLOAD.label:
             return [
                 {"ok": True, "file_path": "/a.jpg", "order": 0, "ticket_id": "t1"},
                 {
@@ -102,9 +101,9 @@ def test_manager_continues_and_aggregates_failures(qapp, monkeypatch) -> None:  
                     "error": "upload boom",
                 },
             ]
-        if stage == STAGE_RESET_DATE:
+        if stage == FlickrStage.STAGE_RESET_DATE.label:
             return [{"ok": False, "file_path": "/a.jpg", "error": "set date boom"}]
-        if stage == STAGE_MAKE_PUBLIC:
+        if stage == FlickrStage.STAGE_MAKE_PUBLIC.label:
             return [{"ok": True, "file_path": "/a.jpg"}]
         raise AssertionError(stage)
 
@@ -116,7 +115,7 @@ def test_manager_continues_and_aggregates_failures(qapp, monkeypatch) -> None:  
             "photo_ids": ["p1"],
             "failures": [
                 {
-                    "stage": STAGE_UPLOAD,
+                    "stage": FlickrStage.STAGE_UPLOAD.label,
                     "file_path": "/a.jpg",
                     "error": "tag mismatch, replaced",
                 }
@@ -126,7 +125,11 @@ def test_manager_continues_and_aggregates_failures(qapp, monkeypatch) -> None:  
 
     manager._run(items)
 
-    assert stages == [STAGE_UPLOAD, STAGE_RESET_DATE, STAGE_MAKE_PUBLIC]
+    assert stages == [
+        FlickrStage.STAGE_UPLOAD.label,
+        FlickrStage.STAGE_RESET_DATE.label,
+        FlickrStage.STAGE_MAKE_PUBLIC.label,
+    ]
     assert len(finished) == 1
     result = finished[0]
     assert result.fatal_error == ""
@@ -157,7 +160,7 @@ def test_manager_cancellation_short_circuit(qapp, monkeypatch) -> None:  # noqa:
 
     manager._run(items)
 
-    assert stages == [STAGE_UPLOAD]
+    assert stages == [FlickrStage.STAGE_UPLOAD.label]
     assert len(finished) == 1
     result = finished[0]
     assert result.cancelled is True
@@ -189,14 +192,14 @@ def test_manager_album_stage_create_then_add(qapp, monkeypatch) -> None:  # noqa
     manager.finished.connect(finished.append)
 
     def _fake_pool(_func, payloads, *, stage, progress_total, result):  # noqa: ARG001
-        if stage == STAGE_UPLOAD:
+        if stage == FlickrStage.STAGE_UPLOAD.label:
             return [
                 {"ok": True, "file_path": "/a.jpg", "order": 0, "ticket_id": "t1"},
                 {"ok": True, "file_path": "/b.jpg", "order": 1, "ticket_id": "t2"},
             ]
-        if stage == STAGE_RESET_DATE:
+        if stage == FlickrStage.STAGE_RESET_DATE.label:
             return [{"ok": True}, {"ok": True}]
-        if stage == STAGE_MAKE_PUBLIC:
+        if stage == FlickrStage.STAGE_MAKE_PUBLIC.label:
             return [{"ok": True}, {"ok": True}]
         raise AssertionError(stage)
 
@@ -225,10 +228,11 @@ def test_manager_album_stage_create_then_add(qapp, monkeypatch) -> None:  # noqa
     manager._run(items)
 
     assert stages == [
-        STAGE_UPLOAD,
-        STAGE_RESET_DATE,
-        STAGE_MAKE_PUBLIC,
-        STAGE_ADD_TO_ALBUM,
+        FlickrStage.STAGE_UPLOAD.label,
+        FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label,
+        FlickrStage.STAGE_RESET_DATE.label,
+        FlickrStage.STAGE_MAKE_PUBLIC.label,
+        FlickrStage.STAGE_ADD_TO_ALBUM.label,
     ]
     assert saved_album_ids == ["72177720331888267"]
     assert len(finished) == 1
@@ -258,11 +262,11 @@ def test_manager_album_stage_add_failure_is_reported(qapp, monkeypatch) -> None:
     manager.finished.connect(finished.append)
 
     def _fake_pool(_func, payloads, *, stage, progress_total, result):  # noqa: ARG001
-        if stage == STAGE_UPLOAD:
+        if stage == FlickrStage.STAGE_UPLOAD.label:
             return [{"ok": True, "file_path": "/a.jpg", "order": 0, "ticket_id": "t1"}]
-        if stage == STAGE_RESET_DATE:
+        if stage == FlickrStage.STAGE_RESET_DATE.label:
             return [{"ok": True}]
-        if stage == STAGE_MAKE_PUBLIC:
+        if stage == FlickrStage.STAGE_MAKE_PUBLIC.label:
             return [{"ok": True}]
         raise AssertionError(stage)
 
@@ -283,6 +287,7 @@ def test_manager_album_stage_add_failure_is_reported(qapp, monkeypatch) -> None:
     assert result.album_id == "72177720331888267"
     assert result.album_added_count == 0
     assert any(
-        failure.stage == STAGE_ADD_TO_ALBUM and "Album update failed" in failure.message
+        failure.stage == FlickrStage.STAGE_ADD_TO_ALBUM.label
+        and "Album update failed" in failure.message
         for failure in result.failures
     )

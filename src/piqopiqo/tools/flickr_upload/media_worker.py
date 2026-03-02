@@ -26,11 +26,8 @@ from .constants import (
     CHECK_TICKETS_SLEEP_S,
     MAX_NUM_CHECKS,
     QUICK_TIMEOUT_S,
-    STAGE_ADD_TO_ALBUM,
-    STAGE_MAKE_PUBLIC,
-    STAGE_RESET_DATE,
-    STAGE_UPLOAD,
     UPLOAD_TIMEOUT_S,
+    FlickrStage,
 )
 from .service import (
     TicketStatus,
@@ -163,7 +160,7 @@ def run_upload_task(task: dict) -> dict:
 
         return {
             "ok": True,
-            "stage": STAGE_UPLOAD,
+            "stage": FlickrStage.STAGE_UPLOAD.label,
             "file_path": file_path,
             "order": order,
             "ticket_id": str(ticket_id),
@@ -173,7 +170,7 @@ def run_upload_task(task: dict) -> dict:
     except Exception as ex:
         return {
             "ok": False,
-            "stage": STAGE_UPLOAD,
+            "stage": FlickrStage.STAGE_UPLOAD.label,
             "file_path": file_path,
             "order": order,
             "error": str(ex),
@@ -275,7 +272,7 @@ def _reupload_photos_without_tags(
         if not remote_photo_id:
             failures.append(
                 {
-                    "stage": STAGE_UPLOAD,
+                    "stage": FlickrStage.STAGE_UPLOAD.label,
                     "file_path": str(local.get("file_path", "")),
                     "error": "Missing photo id while retrying tag reupload.",
                 }
@@ -317,7 +314,7 @@ def _reupload_photos_without_tags(
         except Exception as ex:
             failures.append(
                 {
-                    "stage": STAGE_UPLOAD,
+                    "stage": FlickrStage.STAGE_UPLOAD.label,
                     "file_path": str(local.get("file_path", "")),
                     "error": f"Reupload failed: {ex}",
                 }
@@ -512,14 +509,14 @@ def run_set_date_task(task: dict) -> dict:
         retry(API_RETRIES, _set_dates_call)
         return {
             "ok": True,
-            "stage": STAGE_RESET_DATE,
+            "stage": FlickrStage.STAGE_RESET_DATE.label,
             "photo_id": photo_id,
             "file_path": file_path,
         }
     except Exception as ex:
         return {
             "ok": False,
-            "stage": STAGE_RESET_DATE,
+            "stage": FlickrStage.STAGE_RESET_DATE.label,
             "photo_id": photo_id,
             "file_path": file_path,
             "error": str(ex),
@@ -554,14 +551,14 @@ def run_set_public_task(task: dict) -> dict:
         retry(API_RETRIES, _set_public_call)
         return {
             "ok": True,
-            "stage": STAGE_MAKE_PUBLIC,
+            "stage": FlickrStage.STAGE_MAKE_PUBLIC.label,
             "photo_id": photo_id,
             "file_path": file_path,
         }
     except Exception as ex:
         return {
             "ok": False,
-            "stage": STAGE_MAKE_PUBLIC,
+            "stage": FlickrStage.STAGE_MAKE_PUBLIC.label,
             "photo_id": photo_id,
             "file_path": file_path,
             "error": str(ex),
@@ -705,7 +702,7 @@ def run_create_album_task(task: dict) -> dict:
         user_nsid = str(photoset.get("owner") or "").strip()
         return {
             "ok": True,
-            "stage": STAGE_ADD_TO_ALBUM,
+            "stage": FlickrStage.STAGE_ADD_TO_ALBUM.label,
             "album_id": album_id,
             "album_title": resolved_title,
             "user_nsid": user_nsid,
@@ -714,7 +711,7 @@ def run_create_album_task(task: dict) -> dict:
     except Exception as ex:
         return {
             "ok": False,
-            "stage": STAGE_ADD_TO_ALBUM,
+            "stage": FlickrStage.STAGE_ADD_TO_ALBUM.label,
             "error": str(ex),
         }
 
@@ -743,14 +740,14 @@ def run_add_to_album_task(task: dict) -> dict:
         _add_to_album_group(flickr, album_id, photo_ids)
         return {
             "ok": True,
-            "stage": STAGE_ADD_TO_ALBUM,
+            "stage": FlickrStage.STAGE_ADD_TO_ALBUM.label,
             "album_id": album_id,
             "added_count": len(photo_ids),
         }
     except Exception as ex:
         return {
             "ok": False,
-            "stage": STAGE_ADD_TO_ALBUM,
+            "stage": FlickrStage.STAGE_ADD_TO_ALBUM.label,
             "album_id": album_id,
             "error": str(ex),
         }

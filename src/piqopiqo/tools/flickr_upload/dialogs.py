@@ -31,10 +31,8 @@ from .albums import FlickrAlbumPlan, fetch_album_info
 from .auth import create_flickr_client, token_file_exists
 from .constants import (
     FOLDER_STATE_LAST_FLICKR_ALBUM_ID,
-    STAGE_ADD_TO_ALBUM,
-    STAGE_ALBUM_CHECK,
-    STAGE_UPLOAD,
     TOKEN_VALIDATION_ERROR_TEXT,
+    FlickrStage,
 )
 from .manager import FlickrUploadManager, FlickrUploadResult
 from .workers import (
@@ -338,7 +336,10 @@ class FlickrUploadProgressDialog(QDialog):
 
     def _update_stage_label(self) -> None:
         stage_text = self._current_stage.strip() or "-"
-        if stage_text == STAGE_ADD_TO_ALBUM and self._album_action_text:
+        if (
+            stage_text == FlickrStage.STAGE_ADD_TO_ALBUM.label
+            and self._album_action_text
+        ):
             stage_text = f"{stage_text} - {self._album_action_text}"
         self.stage_label.setText(stage_text)
 
@@ -370,7 +371,7 @@ class FlickrUploadProgressDialog(QDialog):
             self.reject()
             return
 
-        self._current_stage = STAGE_ALBUM_CHECK
+        self._current_stage = FlickrStage.STAGE_ALBUM_CHECK.label
         self._album_action_text = ""
         self._update_stage_label()
         self.progress_bar.setRange(0, 0)
@@ -412,7 +413,7 @@ class FlickrUploadProgressDialog(QDialog):
         self.progress_bar.setRange(0, max(1, len(self._upload_items)))
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("0/%v")
-        self._current_stage = STAGE_UPLOAD
+        self._current_stage = FlickrStage.STAGE_UPLOAD.label
         self._album_action_text = ""
         self._update_stage_label()
         self._sync_height_to_content()
@@ -461,7 +462,7 @@ class FlickrUploadProgressDialog(QDialog):
         if self._finished:
             return
         self._current_stage = str(stage or "").strip() or "-"
-        if stage != STAGE_ADD_TO_ALBUM:
+        if stage != FlickrStage.STAGE_ADD_TO_ALBUM.label:
             self._album_action_text = ""
         self._update_stage_label()
         self.album_action_label.clear()
@@ -488,7 +489,7 @@ class FlickrUploadProgressDialog(QDialog):
         if self._finished:
             return
         text = str(message or "").strip()
-        if self._current_stage != STAGE_ADD_TO_ALBUM:
+        if self._current_stage != FlickrStage.STAGE_ADD_TO_ALBUM.label:
             return
         self._album_action_text = text
         self._update_stage_label()

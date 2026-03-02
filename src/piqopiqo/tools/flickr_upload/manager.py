@@ -13,13 +13,7 @@ from attrs import define, field
 from PySide6.QtCore import QObject, Signal
 
 from .albums import FlickrAlbumPlan
-from .constants import (
-    STAGE_ADD_TO_ALBUM,
-    STAGE_CHECK_UPLOAD_STATUS,
-    STAGE_MAKE_PUBLIC,
-    STAGE_RESET_DATE,
-    STAGE_UPLOAD,
-)
+from .constants import FlickrStage
 from .media_worker import (
     run_add_to_album_task,
     run_create_album_task,
@@ -159,7 +153,7 @@ class FlickrUploadManager(QObject):
         items: list[dict],
         result: FlickrUploadResult,
     ) -> list[dict]:
-        self.stage_changed.emit(STAGE_UPLOAD)
+        self.stage_changed.emit(FlickrStage.STAGE_UPLOAD.label)
         self.progress.emit(0, len(items))
 
         payloads = [
@@ -177,7 +171,7 @@ class FlickrUploadManager(QObject):
         upload_results = self._run_parallel_pool(
             run_upload_task,
             payloads,
-            stage=STAGE_UPLOAD,
+            stage=FlickrStage.STAGE_UPLOAD.label,
             progress_total=len(items),
             result=result,
         )
@@ -192,7 +186,7 @@ class FlickrUploadManager(QObject):
             result.failures.append(
                 FlickrUploadPhotoFailure(
                     file_path=str(row.get("file_path", "")),
-                    stage=STAGE_UPLOAD,
+                    stage=FlickrStage.STAGE_UPLOAD.label,
                     message=str(row.get("error", "Upload failed")),
                 )
             )
@@ -209,13 +203,13 @@ class FlickrUploadManager(QObject):
             }
         )
 
-        self.stage_changed.emit(STAGE_CHECK_UPLOAD_STATUS)
+        self.stage_changed.emit(FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label)
         resolve = run_resolve_tickets_task(resolve_payload)
         for failure in resolve.get("failures", []):
             result.failures.append(
                 FlickrUploadPhotoFailure(
                     file_path=str(failure.get("file_path", "")),
-                    stage=str(failure.get("stage", STAGE_UPLOAD)),
+                    stage=str(failure.get("stage", FlickrStage.STAGE_UPLOAD.label)),
                     message=str(failure.get("error", "Upload verification warning")),
                 )
             )
@@ -251,7 +245,7 @@ class FlickrUploadManager(QObject):
         photo_pairs: list[dict],
         result: FlickrUploadResult,
     ) -> None:
-        self.stage_changed.emit(STAGE_RESET_DATE)
+        self.stage_changed.emit(FlickrStage.STAGE_RESET_DATE.label)
         total = len(photo_pairs)
         self.progress.emit(0, total)
 
@@ -270,7 +264,7 @@ class FlickrUploadManager(QObject):
         stage_results = self._run_parallel_pool(
             run_set_date_task,
             payloads,
-            stage=STAGE_RESET_DATE,
+            stage=FlickrStage.STAGE_RESET_DATE.label,
             progress_total=total,
             result=result,
         )
@@ -286,7 +280,7 @@ class FlickrUploadManager(QObject):
             result.failures.append(
                 FlickrUploadPhotoFailure(
                     file_path=str(row.get("file_path", "")),
-                    stage=STAGE_RESET_DATE,
+                    stage=FlickrStage.STAGE_RESET_DATE.label,
                     message=str(row.get("error", "Failed to reset upload date")),
                 )
             )
@@ -298,7 +292,7 @@ class FlickrUploadManager(QObject):
         photo_pairs: list[dict],
         result: FlickrUploadResult,
     ) -> None:
-        self.stage_changed.emit(STAGE_MAKE_PUBLIC)
+        self.stage_changed.emit(FlickrStage.STAGE_MAKE_PUBLIC.label)
         total = len(photo_pairs)
         self.progress.emit(0, total)
 
@@ -315,7 +309,7 @@ class FlickrUploadManager(QObject):
         stage_results = self._run_parallel_pool(
             run_set_public_task,
             payloads,
-            stage=STAGE_MAKE_PUBLIC,
+            stage=FlickrStage.STAGE_MAKE_PUBLIC.label,
             progress_total=total,
             result=result,
         )
@@ -331,7 +325,7 @@ class FlickrUploadManager(QObject):
             result.failures.append(
                 FlickrUploadPhotoFailure(
                     file_path=str(row.get("file_path", "")),
-                    stage=STAGE_MAKE_PUBLIC,
+                    stage=FlickrStage.STAGE_MAKE_PUBLIC.label,
                     message=str(row.get("error", "Failed to make photo public")),
                 )
             )
@@ -347,7 +341,7 @@ class FlickrUploadManager(QObject):
         if not plan.has_input():
             return
 
-        self.stage_changed.emit(STAGE_ADD_TO_ALBUM)
+        self.stage_changed.emit(FlickrStage.STAGE_ADD_TO_ALBUM.label)
         self.progress.emit(0, 0)
 
         album_id = plan.album_id
@@ -362,7 +356,7 @@ class FlickrUploadManager(QObject):
                 result.failures.append(
                     FlickrUploadPhotoFailure(
                         file_path="",
-                        stage=STAGE_ADD_TO_ALBUM,
+                        stage=FlickrStage.STAGE_ADD_TO_ALBUM.label,
                         message="No uploaded photo available to create album.",
                     )
                 )
@@ -380,7 +374,7 @@ class FlickrUploadManager(QObject):
                 result.failures.append(
                     FlickrUploadPhotoFailure(
                         file_path="",
-                        stage=STAGE_ADD_TO_ALBUM,
+                        stage=FlickrStage.STAGE_ADD_TO_ALBUM.label,
                         message=str(create_row.get("error", "Failed to create album")),
                     )
                 )
@@ -391,7 +385,7 @@ class FlickrUploadManager(QObject):
                 result.failures.append(
                     FlickrUploadPhotoFailure(
                         file_path="",
-                        stage=STAGE_ADD_TO_ALBUM,
+                        stage=FlickrStage.STAGE_ADD_TO_ALBUM.label,
                         message=(
                             "Album creation succeeded but no album id was returned."
                         ),
@@ -415,7 +409,7 @@ class FlickrUploadManager(QObject):
                     result.failures.append(
                         FlickrUploadPhotoFailure(
                             file_path="",
-                            stage=STAGE_ADD_TO_ALBUM,
+                            stage=FlickrStage.STAGE_ADD_TO_ALBUM.label,
                             message=(
                                 "Album created but failed to persist album id to "
                                 f"folder metadata: {ex}"
@@ -447,14 +441,14 @@ class FlickrUploadManager(QObject):
             result.failures.append(
                 FlickrUploadPhotoFailure(
                     file_path="",
-                    stage=STAGE_ADD_TO_ALBUM,
+                    stage=FlickrStage.STAGE_ADD_TO_ALBUM.label,
                     message=str(add_row.get("error", "Failed to add photos to album")),
                 )
             )
             return
 
         result.album_added_count = int(add_row.get("added_count") or len(photo_pairs))
-        self.status.emit(STAGE_ADD_TO_ALBUM)
+        self.status.emit(FlickrStage.STAGE_ADD_TO_ALBUM.label)
 
     def _run_parallel_pool(
         self,

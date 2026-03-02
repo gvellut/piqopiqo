@@ -6,11 +6,7 @@ from PySide6.QtWidgets import QApplication
 import pytest
 
 from piqopiqo.tools.flickr_upload.albums import FlickrAlbumPlan
-from piqopiqo.tools.flickr_upload.constants import (
-    STAGE_ADD_TO_ALBUM,
-    STAGE_RESET_DATE,
-    STAGE_UPLOAD,
-)
+from piqopiqo.tools.flickr_upload.constants import FlickrStage
 from piqopiqo.tools.flickr_upload.dialogs import (
     FlickrPreflightDialog,
     FlickrUploadProgressDialog,
@@ -114,20 +110,20 @@ def _mk_upload_dialog() -> FlickrUploadProgressDialog:
 def test_upload_progress_shows_single_running_step_line(qapp) -> None:  # noqa: ARG001
     dialog = _mk_upload_dialog()
 
-    dialog._on_stage_changed(STAGE_UPLOAD)
-    assert STAGE_UPLOAD in dialog.stage_label.text()
+    dialog._on_stage_changed(FlickrStage.STAGE_UPLOAD.label)
+    assert FlickrStage.STAGE_UPLOAD.label in dialog.stage_label.text()
 
-    dialog._on_stage_changed(STAGE_RESET_DATE)
-    assert STAGE_RESET_DATE in dialog.stage_label.text()
+    dialog._on_stage_changed(FlickrStage.STAGE_RESET_DATE.label)
+    assert FlickrStage.STAGE_RESET_DATE.label in dialog.stage_label.text()
 
-    dialog._on_status(STAGE_UPLOAD)
-    assert STAGE_RESET_DATE in dialog.stage_label.text()
+    dialog._on_status(FlickrStage.STAGE_UPLOAD.label)
+    assert FlickrStage.STAGE_RESET_DATE.label in dialog.stage_label.text()
     assert dialog.album_action_label.isHidden() is True
 
 
 def test_upload_progress_add_to_album_uses_merged_step_text(qapp) -> None:  # noqa: ARG001
     dialog = _mk_upload_dialog()
-    dialog._on_stage_changed(STAGE_ADD_TO_ALBUM)
+    dialog._on_stage_changed(FlickrStage.STAGE_ADD_TO_ALBUM.label)
 
     dialog._on_album_status("Creating album 'Trip'...")
     assert "Add to album - Creating album 'Trip'" in dialog.stage_label.text()
@@ -142,7 +138,7 @@ def test_upload_progress_completion_hides_running_widgets_and_shows_summary(  # 
     qapp,
 ) -> None:
     dialog = _mk_upload_dialog()
-    dialog._on_stage_changed(STAGE_UPLOAD)
+    dialog._on_stage_changed(FlickrStage.STAGE_UPLOAD.label)
 
     dialog._on_finished(
         FlickrUploadResult(
@@ -173,7 +169,7 @@ def test_upload_progress_height_tracks_content_changes(qapp) -> None:
     failures = [
         FlickrUploadPhotoFailure(
             file_path="/a.jpg",
-            stage=STAGE_ADD_TO_ALBUM,
+            stage=FlickrStage.STAGE_ADD_TO_ALBUM.label,
             message="Album operation failed",
         )
         for _ in range(6)

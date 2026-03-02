@@ -102,7 +102,7 @@ def test_sort_order_state_default_and_roundtrip(isolated_settings):
 def test_gpx_timeshift_state_defaults(isolated_settings):
     assert get_state_value(StateKey.LAST_TIMESHIFT) is None
     assert get_state_value(StateKey.LAST_TIMESHIFT_BY_FOLDERS) == {}
-    assert get_state_value(StateKey.LAST_GPX_FOLDER) == ""
+    assert get_state_value(StateKey.LAST_GPX_FOLDER) is None
 
 
 def test_gpx_timeshift_state_ordered_json_roundtrip(isolated_settings):
