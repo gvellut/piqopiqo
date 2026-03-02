@@ -56,7 +56,7 @@ def test_empty_value_prefills_auto_value_and_shows_auto_label(qapp):
 
     line_edit = dialog._line_edits[UserSettingKey.CACHE_BASE_DIR]
     assert line_edit.text() == "/tmp/piqopiqo-cache"
-    assert any("Auto value:" in lbl.text() for lbl in dialog.findChildren(QLabel))
+    assert any("Auto value" in lbl.text() for lbl in dialog.findChildren(QLabel))
 
 
 def test_invalid_non_empty_value_keeps_user_value_and_set_to_auto(qapp):

@@ -112,6 +112,9 @@ def test_upload_progress_shows_single_running_step_line(qapp) -> None:  # noqa: 
 
     dialog._on_stage_changed(FlickrStage.STAGE_UPLOAD.label)
     assert FlickrStage.STAGE_UPLOAD.label in dialog.stage_label.text()
+    dialog._on_progress(1, 2)
+    assert dialog.progress_text_label.text() == "1/2"
+    assert dialog.progress_text_label.isHidden() is False
 
     dialog._on_stage_changed(FlickrStage.STAGE_RESET_DATE.label)
     assert FlickrStage.STAGE_RESET_DATE.label in dialog.stage_label.text()
@@ -119,6 +122,16 @@ def test_upload_progress_shows_single_running_step_line(qapp) -> None:  # noqa: 
     dialog._on_status(FlickrStage.STAGE_UPLOAD.label)
     assert FlickrStage.STAGE_RESET_DATE.label in dialog.stage_label.text()
     assert dialog.album_action_label.isHidden() is True
+
+    dialog._on_stage_changed(FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label)
+    assert dialog.progress_bar.minimum() == 0
+    assert dialog.progress_bar.maximum() == 0
+    assert dialog.progress_text_label.isHidden() is True
+
+    dialog._on_status("Check 2/10")
+    assert (
+        "Check upload status - Check 2/10" in dialog.stage_label.text()
+    )
 
 
 def test_upload_progress_add_to_album_uses_merged_step_text(qapp) -> None:  # noqa: ARG001
@@ -151,6 +164,7 @@ def test_upload_progress_completion_hides_running_widgets_and_shows_summary(  # 
 
     assert dialog.stage_label.isHidden() is True
     assert dialog.progress_bar.isHidden() is True
+    assert dialog.progress_text_label.isHidden() is True
     assert dialog.status_label.isHidden() is False
     assert dialog.details.isHidden() is False
     assert dialog.ok_btn.isHidden() is False

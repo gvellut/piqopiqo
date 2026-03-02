@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QApplication
 import pytest
 
 from piqopiqo.tools.flickr_upload.albums import FlickrAlbumPlan
-from piqopiqo.tools.flickr_upload.constants import FlickrStage
+from piqopiqo.tools.flickr_upload.constants import MAX_NUM_CHECKS, FlickrStage
 from piqopiqo.tools.flickr_upload.manager import FlickrUploadManager
 
 
@@ -37,9 +37,11 @@ def test_manager_stage_sequence_success(qapp, monkeypatch) -> None:  # noqa: ARG
     ]
 
     stages: list[str] = []
+    statuses: list[str] = []
     finished = []
 
     manager.stage_changed.connect(stages.append)
+    manager.status.connect(statuses.append)
     manager.finished.connect(finished.append)
 
     def _fake_pool(_func, payloads, *, stage, progress_total, result):
@@ -56,18 +58,29 @@ def test_manager_stage_sequence_success(qapp, monkeypatch) -> None:  # noqa: ARG
         raise AssertionError(stage)
 
     monkeypatch.setattr(manager, "_run_parallel_pool", _fake_pool)
+
+    def _fake_resolve(_payload, check_progress_callback=None):
+        if check_progress_callback is not None:
+            check_progress_callback(1, MAX_NUM_CHECKS)
+            check_progress_callback(2, MAX_NUM_CHECKS)
+        return {"ok": True, "photo_ids": ["p1", "p2"], "failures": []}
+
     monkeypatch.setattr(
         "piqopiqo.tools.flickr_upload.manager.run_resolve_tickets_task",
-        lambda _payload: {"ok": True, "photo_ids": ["p1", "p2"], "failures": []},
+        _fake_resolve,
     )
 
     manager._run(items)
 
     assert stages == [
         FlickrStage.STAGE_UPLOAD.label,
+        FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label,
         FlickrStage.STAGE_RESET_DATE.label,
         FlickrStage.STAGE_MAKE_PUBLIC.label,
     ]
+    assert f"Check 0/{MAX_NUM_CHECKS}" in statuses
+    assert f"Check 1/{MAX_NUM_CHECKS}" in statuses
+    assert f"Check 2/{MAX_NUM_CHECKS}" in statuses
     assert len(finished) == 1
     result = finished[0]
     assert result.fatal_error == ""
@@ -110,7 +123,7 @@ def test_manager_continues_and_aggregates_failures(qapp, monkeypatch) -> None:  
     monkeypatch.setattr(manager, "_run_parallel_pool", _fake_pool)
     monkeypatch.setattr(
         "piqopiqo.tools.flickr_upload.manager.run_resolve_tickets_task",
-        lambda _payload: {
+        lambda _payload, check_progress_callback=None: {
             "ok": True,
             "photo_ids": ["p1"],
             "failures": [
@@ -127,6 +140,7 @@ def test_manager_continues_and_aggregates_failures(qapp, monkeypatch) -> None:  
 
     assert stages == [
         FlickrStage.STAGE_UPLOAD.label,
+        FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label,
         FlickrStage.STAGE_RESET_DATE.label,
         FlickrStage.STAGE_MAKE_PUBLIC.label,
     ]
@@ -206,7 +220,11 @@ def test_manager_album_stage_create_then_add(qapp, monkeypatch) -> None:  # noqa
     monkeypatch.setattr(manager, "_run_parallel_pool", _fake_pool)
     monkeypatch.setattr(
         "piqopiqo.tools.flickr_upload.manager.run_resolve_tickets_task",
-        lambda _payload: {"ok": True, "photo_ids": ["p1", "p2"], "failures": []},
+        lambda _payload, check_progress_callback=None: {
+            "ok": True,
+            "photo_ids": ["p1", "p2"],
+            "failures": [],
+        },
     )
     monkeypatch.setattr(
         "piqopiqo.tools.flickr_upload.manager.run_create_album_task",
@@ -273,7 +291,11 @@ def test_manager_album_stage_add_failure_is_reported(qapp, monkeypatch) -> None:
     monkeypatch.setattr(manager, "_run_parallel_pool", _fake_pool)
     monkeypatch.setattr(
         "piqopiqo.tools.flickr_upload.manager.run_resolve_tickets_task",
-        lambda _payload: {"ok": True, "photo_ids": ["p1"], "failures": []},
+        lambda _payload, check_progress_callback=None: {
+            "ok": True,
+            "photo_ids": ["p1"],
+            "failures": [],
+        },
     )
     monkeypatch.setattr(
         "piqopiqo.tools.flickr_upload.manager.run_add_to_album_task",

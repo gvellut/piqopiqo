@@ -12,6 +12,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import time
+from collections.abc import Callable
 from typing import Any
 
 from attrs import define
@@ -329,7 +330,10 @@ def _reupload_photos_without_tags(
     return failures
 
 
-def run_resolve_tickets_task(task: dict) -> dict:
+def run_resolve_tickets_task(
+    task: dict,
+    check_progress_callback: Callable[[int, int], None] | None = None,
+) -> dict:
     """Resolve upload tickets and return ordered Flickr photo ids."""
     api_key = str(task["api_key"])
     api_secret = str(task["api_secret"])
@@ -367,6 +371,8 @@ def run_resolve_tickets_task(task: dict) -> dict:
         }
 
     checks = 0
+    if check_progress_callback is not None:
+        check_progress_callback(0, MAX_NUM_CHECKS)
     while True:
         to_check = [
             k
@@ -377,6 +383,9 @@ def run_resolve_tickets_task(task: dict) -> dict:
             break
 
         response = flickr.photos.upload.checkTickets(tickets=",".join(to_check))
+        checks += 1
+        if check_progress_callback is not None:
+            check_progress_callback(min(checks, MAX_NUM_CHECKS), MAX_NUM_CHECKS)
         rows = _extract_ticket_rows(response)
 
         incomplete_found = False
@@ -409,7 +418,6 @@ def run_resolve_tickets_task(task: dict) -> dict:
                 )
 
         if incomplete_found:
-            checks += 1
             if checks >= MAX_NUM_CHECKS:
                 break
             time.sleep(CHECK_TICKETS_SLEEP_S)

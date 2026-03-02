@@ -27,7 +27,7 @@ class FlickrStage(Enum):
     STAGE_ADD_TO_ALBUM = auto(), "Add to album"
 
     def __new__(cls, name, label):
-        obj = str.__new__(cls, name)
+        obj = object.__new__(cls)
 
         obj._value_ = name
         return obj

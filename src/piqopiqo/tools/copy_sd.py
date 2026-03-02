@@ -110,6 +110,35 @@ def is_since(date_s):
     return date_s.startswith(PREFIX_SINCE)
 
 
+def _get_since_last_folder_dates(volume: PhotoVolume) -> list[str]:
+    folder_for_sd = volume.name
+    return find_date_folders(
+        get_user_setting(UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER),
+        subfolder=folder_for_sd,
+    )
+
+
+def _get_since_last_copied_date_label(volume: PhotoVolume) -> str | None:
+    dirs = _get_since_last_folder_dates(volume)
+    if not dirs:
+        return None
+    date_token = str(dirs[0])[:8]
+    try:
+        return datetime.strptime(date_token, DATE_FMT).date().isoformat()
+    except ValueError:
+        return date_token or None
+
+
+def _build_no_images_message(date_spec: str, volume: PhotoVolume) -> str:
+    spec = str(date_spec).strip().lower()
+    if spec == "since:last":
+        last_date = _get_since_last_copied_date_label(volume)
+        if last_date:
+            return f"No new photo found since last copied date {last_date}."
+        return "No photo found and no previous copied date exists for this volume."
+    return "No image found for the selected date(s)."
+
+
 def to_dates(date_s, volume: PhotoVolume):
     if date_s == "TD":
         return datetime.now().date()
@@ -140,11 +169,7 @@ def to_dates(date_s, volume: PhotoVolume):
     if is_since(date_s):
         date_s = date_s[len(PREFIX_SINCE) :]
         if date_s == "last":
-            folder_for_sd = volume.name
-            dirs = find_date_folders(
-                get_user_setting(UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER),
-                subfolder=folder_for_sd,
-            )
+            dirs = _get_since_last_folder_dates(volume)
             if dirs:
                 # replace with last folder in order
                 date_s = dirs[0]
@@ -502,8 +527,13 @@ class CopySdProgressDialog(QDialog):
         self._worker = CopySdWorker(volume, dates, output_folder_base)
         self._finished = False
         self._error_count = 0
+        self._started = False
 
         layout = QVBoxLayout(self)
+
+        self.stage_label = QLabel("Stage: Copy")
+        self.stage_label.setWordWrap(True)
+        layout.addWidget(self.stage_label)
 
         self.status_label = QLabel("Preparing copy...")
         self.status_label.setWordWrap(True)
@@ -513,6 +543,10 @@ class CopySdProgressDialog(QDialog):
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setRange(0, 0)
         layout.addWidget(self.progress_bar)
+
+        self.progress_text_label = QLabel("")
+        self.progress_text_label.setWordWrap(True)
+        layout.addWidget(self.progress_text_label)
 
         self.error_label = QLabel()
         self.error_label.setStyleSheet("color: red;")
@@ -546,7 +580,19 @@ class CopySdProgressDialog(QDialog):
         self._eject_done.connect(self._on_eject_done)
 
     def start(self):
+        if self._started:
+            return
+        self._started = True
         QThreadPool.globalInstance().start(self._worker)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.start()
+
+    def _set_progress_counter(self, completed: int, total: int):
+        self.progress_text_label.setText(
+            f"{max(0, int(completed))}/{max(0, int(total))}"
+        )
 
     def _on_status(self, message: str):
         self.status_label.setText(message)
@@ -556,18 +602,22 @@ class CopySdProgressDialog(QDialog):
             self.progress_bar.setRange(0, 1)
             self.progress_bar.setValue(0)
             self.progress_bar.setFormat("0/0")
+            self._set_progress_counter(0, 0)
             return
         self.progress_bar.setRange(0, total)
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat(f"0/{total}")
+        self._set_progress_counter(0, total)
 
     def _on_progress(self, completed: int, total: int):
         if total <= 0:
             self.progress_bar.setValue(0)
             self.progress_bar.setFormat("0/0")
+            self._set_progress_counter(0, 0)
             return
         self.progress_bar.setValue(completed)
         self.progress_bar.setFormat(f"{completed}/{total}")
+        self._set_progress_counter(completed, total)
 
     def _on_error(self, message: str):
         self._error_count += 1
@@ -585,8 +635,10 @@ class CopySdProgressDialog(QDialog):
             status = f"Copy complete. {copied} file(s) copied."
         if error_count:
             status += f" {error_count} error(s)."
+        self.stage_label.setText("Stage: Completed")
         self.status_label.setText(status)
         self.progress_bar.setValue(min(copied, total) if total else 0)
+        self._set_progress_counter(min(copied, total) if total else 0, total)
         self.cancel_btn.setEnabled(False)
         self.ok_btn.setEnabled(True)
         self.ok_btn.setDefault(True)
@@ -709,7 +761,12 @@ def _resolve_dates_with_progress(parent, date_spec: str, volume: PhotoVolume):
     wait_dialog.setWindowTitle("Copy from SD")
     wait_dialog.setModal(True)
     layout = QVBoxLayout(wait_dialog)
-    layout.addWidget(QLabel(f"Scanning {volume.name} for dates..."))
+    date_spec_text = str(date_spec).strip()
+    if date_spec_text.lower() == "since:last":
+        checking_text = f"Checking dates (since:last) on {volume.name}..."
+    else:
+        checking_text = f"Checking dates on {volume.name}..."
+    layout.addWidget(QLabel(checking_text))
     progress = QProgressBar()
     progress.setRange(0, 0)  # indeterminate
     layout.addWidget(progress)
@@ -793,7 +850,7 @@ def launch_copy_sd(parent=None):
             QMessageBox.information(
                 parent,
                 "Copy from SD",
-                "No image found: Is the SD card inserted and mounted?",
+                _build_no_images_message(date_spec, volume),
             )
             continue
 
@@ -814,7 +871,6 @@ def launch_copy_sd(parent=None):
     progress_dialog = CopySdProgressDialog(
         volume, dates, output_folder_base, should_eject=should_eject, parent=parent
     )
-    progress_dialog.start()
     progress_dialog.exec()
 
     # Save user choices for next session

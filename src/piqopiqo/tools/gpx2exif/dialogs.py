@@ -376,7 +376,7 @@ class ApplyGpxProgressDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Apply GPX")
         self.setModal(True)
-        self.setMinimumSize(620, 300)
+        self.setMinimumWidth(620)
 
         self._kml_paths: list[str] = []
 
@@ -386,8 +386,9 @@ class ApplyGpxProgressDialog(QDialog):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        self.folder_label = QLabel("Folder: -")
+        self.folder_label = QLabel("")
         self.folder_label.setWordWrap(True)
+        self.folder_label.hide()
         layout.addWidget(self.folder_label)
 
         self.progress_bar = QProgressBar()
@@ -418,10 +419,27 @@ class ApplyGpxProgressDialog(QDialog):
         button_row.addWidget(self.ok_btn)
 
         layout.addLayout(button_row)
-        self.setFixedSize(620, 300)
+        self._sync_height_to_content()
+
+    def _sync_height_to_content(self) -> None:
+        layout = self.layout()
+        if layout is not None:
+            layout.activate()
+        self.adjustSize()
+        target_height = self.sizeHint().height()
+        if target_height > 0:
+            self.setFixedHeight(target_height)
 
     def set_folder(self, relative_folder: str) -> None:
-        self.folder_label.setText(f"Folder: {relative_folder}")
+        text = str(relative_folder).strip()
+        if not text:
+            self.folder_label.clear()
+            self.folder_label.hide()
+            self._sync_height_to_content()
+            return
+        self.folder_label.setText(f"Folder: {text}")
+        self.folder_label.show()
+        self._sync_height_to_content()
 
     def set_progress(self, completed: int, total: int) -> None:
         self.progress_bar.setRange(0, max(0, int(total)))
@@ -456,6 +474,7 @@ class ApplyGpxProgressDialog(QDialog):
 
         self.ok_btn.setEnabled(True)
         self.ok_btn.setFocus()
+        self._sync_height_to_content()
 
     def show_error(self, message: str) -> None:
         self.cancel_btn.setEnabled(False)
@@ -464,6 +483,7 @@ class ApplyGpxProgressDialog(QDialog):
         self.details_text.show()
         self.ok_btn.setEnabled(True)
         self.ok_btn.setFocus()
+        self._sync_height_to_content()
 
     def _on_cancel(self) -> None:
         self.cancel_requested.emit()

@@ -2,20 +2,23 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
 
-from PySide6.QtWidgets import QDialog
+from PySide6.QtWidgets import QDialog, QMessageBox
 
 from piqopiqo.cache_paths import set_cache_base_dir
+from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBManager
 from piqopiqo.ssf.settings_state import StateKey
 import piqopiqo.tools.gpx2exif.actions as gpx_actions
-import piqopiqo.tools.gpx2exif.dialogs as gpx_dialogs
 from piqopiqo.tools.gpx2exif.actions import (
     _get_first_folder_gpx_path,
     _set_gpx_path_for_folders,
+    launch_clear_gps,
 )
 from piqopiqo.tools.gpx2exif.constants import FOLDER_STATE_LAST_GPX_PATH
+import piqopiqo.tools.gpx2exif.dialogs as gpx_dialogs
 
 
 def test_set_gpx_path_for_folders_writes_trimmed_value(tmp_path) -> None:
@@ -141,3 +144,82 @@ def test_launch_apply_gpx_passes_last_folder_and_persists_browse_selection(
 
     assert captured_last_folder == ["/tmp/last-gpx-folder"]
     assert state_set_calls == [(StateKey.LAST_GPX_FOLDER, "/tmp/chosen")]
+
+
+def test_launch_clear_gpx_clears_lat_lon_and_syncs_model(monkeypatch, tmp_path) -> None:
+    set_cache_base_dir(tmp_path / "cache")
+
+    photos_root = tmp_path / "photos"
+    folder = photos_root / "a"
+    folder.mkdir(parents=True, exist_ok=True)
+
+    file_a = str(folder / "a.jpg")
+    file_b = str(folder / "b.jpg")
+
+    dbm = MetadataDBManager()
+    db = dbm.get_db_for_folder(str(folder))
+
+    metadata_a = {
+        DBFields.TITLE: "A",
+        DBFields.LATITUDE: 48.1,
+        DBFields.LONGITUDE: 2.3,
+        DBFields.TIME_TAKEN: datetime(2026, 2, 1, 12, 0, 0),
+    }
+    metadata_b = {
+        DBFields.TITLE: "B",
+        DBFields.LATITUDE: 49.1,
+        DBFields.LONGITUDE: 3.3,
+        DBFields.TIME_TAKEN: datetime(2026, 2, 2, 12, 0, 0),
+    }
+    db.save_metadata(file_a, metadata_a)
+    db.save_metadata(file_b, metadata_b)
+
+    sync_calls: list[tuple[set[str], str]] = []
+
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
+    )
+
+    item_a = SimpleNamespace(path=file_a, db_metadata=metadata_a.copy())
+    item_b = SimpleNamespace(path=file_b, db_metadata=None)
+    window = SimpleNamespace(
+        root_folder=str(photos_root),
+        photo_model=SimpleNamespace(
+            source_folders=[str(folder)],
+            all_photos=[item_a, item_b],
+        ),
+        _active_apply_gpx_worker=None,
+        db_manager=dbm,
+        sync_model_after_metadata_update=lambda fields, source: sync_calls.append(
+            (set(fields), source)
+        ),
+    )
+
+    launch_clear_gps(window)
+
+    meta_a = db.get_metadata(file_a)
+    meta_b = db.get_metadata(file_b)
+    assert meta_a is not None
+    assert meta_b is not None
+
+    assert meta_a[DBFields.LATITUDE] is None
+    assert meta_a[DBFields.LONGITUDE] is None
+    assert meta_b[DBFields.LATITUDE] is None
+    assert meta_b[DBFields.LONGITUDE] is None
+
+    assert meta_a[DBFields.TIME_TAKEN] == datetime(2026, 2, 1, 12, 0, 0)
+    assert meta_b[DBFields.TIME_TAKEN] == datetime(2026, 2, 2, 12, 0, 0)
+
+    assert item_a.db_metadata[DBFields.LATITUDE] is None
+    assert item_a.db_metadata[DBFields.LONGITUDE] is None
+    assert item_b.db_metadata is not None
+    assert item_b.db_metadata[DBFields.LATITUDE] is None
+    assert item_b.db_metadata[DBFields.LONGITUDE] is None
+
+    assert sync_calls == [
+        ({DBFields.LATITUDE, DBFields.LONGITUDE}, "clear_gpx"),
+    ]
+
+    dbm.close_all()

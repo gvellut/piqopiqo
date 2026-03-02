@@ -324,3 +324,57 @@ def launch_apply_gpx(window: MainWindow) -> None:
 
     QThreadPool.globalInstance().start(worker)
     progress_dialog.exec()
+
+
+def launch_clear_gps(window: MainWindow) -> None:
+    if not window.root_folder or not window.photo_model.source_folders:
+        return
+    if window._active_apply_gpx_worker is not None:
+        QMessageBox.information(
+            window,
+            "Clear GPS",
+            "An Apply GPX operation is already running.",
+        )
+        return
+
+    items = list(window.photo_model.all_photos)
+    if not items:
+        return
+
+    reply = QMessageBox.question(
+        window,
+        "Clear GPS",
+        (
+            f"Clear GPS coordinates (latitude/longitude) for {len(items)} loaded "
+            "photo(s)?\n\nThis only updates the metadata database."
+        ),
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        QMessageBox.StandardButton.No,
+    )
+    if reply != QMessageBox.StandardButton.Yes:
+        return
+
+    updated_count = 0
+    for item in items:
+        db = window.db_manager.get_db_for_image(item.path)
+        metadata = item.db_metadata
+        if metadata is None:
+            metadata = db.get_metadata(item.path)
+        if metadata is None:
+            continue
+
+        updated_metadata = metadata.copy()
+        updated_metadata[DBFields.LATITUDE] = None
+        updated_metadata[DBFields.LONGITUDE] = None
+        db.save_metadata(item.path, updated_metadata)
+
+        item.db_metadata = updated_metadata.copy()
+        updated_count += 1
+
+    if updated_count <= 0:
+        return
+
+    window.sync_model_after_metadata_update(
+        {DBFields.LATITUDE, DBFields.LONGITUDE},
+        source="clear_gps",
+    )

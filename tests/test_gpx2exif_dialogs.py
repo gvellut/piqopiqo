@@ -7,8 +7,10 @@ import pytest
 
 from piqopiqo.tools.gpx2exif.dialogs import (
     ApplyGpxDialog,
+    ApplyGpxProgressDialog,
     ExtractGpsTimeShiftProgressDialog,
 )
+from piqopiqo.tools.gpx2exif.service import ApplyGpxResult
 
 
 @pytest.fixture
@@ -262,3 +264,36 @@ def test_extract_time_shift_progress_success_shows_clock_and_shift_lines(qapp):
     assert dialog.progress_bar.minimum() == 0
     assert dialog.progress_bar.maximum() == 1
     assert dialog.progress_bar.value() == 1
+
+
+def test_apply_gpx_progress_folder_label_hidden_until_first_folder(qapp):
+    dialog = ApplyGpxProgressDialog(total=2)
+
+    assert dialog.folder_label.isHidden() is True
+
+    dialog.set_folder("a/b")
+    assert dialog.folder_label.isHidden() is False
+    assert dialog.folder_label.text() == "Folder: a/b"
+
+
+def test_apply_gpx_progress_dialog_initially_compact_and_expands_on_details(qapp):
+    dialog = ApplyGpxProgressDialog(total=1)
+    dialog.show()
+    qapp.processEvents()
+
+    initial_height = dialog.height()
+    assert initial_height < 300
+    assert dialog.minimumHeight() == dialog.maximumHeight() == initial_height
+
+    dialog.finish(
+        ApplyGpxResult(
+            processed=1,
+            kml_paths=["/tmp/out.kml"],
+            errors=["Some folder failed"],
+        )
+    )
+    qapp.processEvents()
+
+    final_height = dialog.height()
+    assert dialog.minimumHeight() == dialog.maximumHeight() == final_height
+    assert final_height > initial_height

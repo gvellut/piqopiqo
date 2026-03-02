@@ -60,3 +60,4 @@
 ! [Esc select last in grid](Ja_tasks/Ra_Esc_select_last_in_grid.md)
 ! [Click on Fullscreen sometimes does not trigger](Ja_tasks/Sa_Click_on_Fullscreen_sometimes_does_not_trigger.md)
 ! [Fix too big dialogs](Ta_tasks/Ta_Fix_too_big_dialogs.md)
+! [Small tool change](Ta_tasks/Ua_Small_tool_change.md)

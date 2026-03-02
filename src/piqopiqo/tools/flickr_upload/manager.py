@@ -13,7 +13,7 @@ from attrs import define, field
 from PySide6.QtCore import QObject, Signal
 
 from .albums import FlickrAlbumPlan
-from .constants import FlickrStage
+from .constants import MAX_NUM_CHECKS, FlickrStage
 from .media_worker import (
     run_add_to_album_task,
     run_create_album_task,
@@ -204,7 +204,18 @@ class FlickrUploadManager(QObject):
         )
 
         self.stage_changed.emit(FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label)
-        resolve = run_resolve_tickets_task(resolve_payload)
+        self.progress.emit(0, 0)
+        self.status.emit(f"Check 0/{MAX_NUM_CHECKS}")
+
+        def _on_check_progress(check_num: int, check_total: int) -> None:
+            self.progress.emit(0, 0)
+            self.status.emit(f"Check {int(check_num)}/{int(check_total)}")
+
+        resolve = run_resolve_tickets_task(
+            resolve_payload,
+            check_progress_callback=_on_check_progress,
+        )
+        self.status.emit("")
         for failure in resolve.get("failures", []):
             result.failures.append(
                 FlickrUploadPhotoFailure(

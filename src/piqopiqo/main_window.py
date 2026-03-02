@@ -750,7 +750,9 @@ class MainWindow(QMainWindow):
         if not isinstance(selected_before, list) or not selected_before:
             return
 
-        current_selected_paths = [item.path for item in self.images_data if item.is_selected]
+        current_selected_paths = [
+            item.path for item in self.images_data if item.is_selected
+        ]
         if current_selected_paths:
             return
 
@@ -1020,9 +1022,7 @@ class MainWindow(QMainWindow):
 
         criteria_folder = criteria.folder if criteria is not None else None
         criteria_labels = sorted(criteria.labels) if criteria is not None else []
-        criteria_no_label = (
-            criteria.include_no_label if criteria is not None else False
-        )
+        criteria_no_label = criteria.include_no_label if criteria is not None else False
         criteria_search = criteria.search_text if criteria is not None else ""
         grid_ms = self._last_model_change_grid_ms if changed else 0.0
 
@@ -1151,6 +1151,10 @@ class MainWindow(QMainWindow):
         apply_gpx_action = QAction("Apply GPX...", self)
         apply_gpx_action.triggered.connect(self._on_apply_gpx)
         tools_menu.addAction(apply_gpx_action)
+
+        clear_gpx_action = QAction("Clear GPS...", self)
+        clear_gpx_action.triggered.connect(self._on_clear_gps)
+        tools_menu.addAction(clear_gpx_action)
 
         tools_menu.addSeparator()
 
@@ -1317,6 +1321,11 @@ class MainWindow(QMainWindow):
         from .tools.gpx2exif.actions import launch_apply_gpx
 
         launch_apply_gpx(self)
+
+    def _on_clear_gps(self):
+        from .tools.gpx2exif.actions import launch_clear_gps
+
+        launch_clear_gps(self)
 
     def _on_set_lens_info(self):
         from .tools.manual_lens import launch_manual_lens

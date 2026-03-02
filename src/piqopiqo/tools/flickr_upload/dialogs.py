@@ -284,8 +284,10 @@ class FlickrUploadProgressDialog(QDialog):
         self._token_worker: FlickrTokenValidationWorker | None = None
         self._album_worker: FlickrAlbumCheckWorker | None = None
         self._finished = False
+        self._started = False
         self._current_stage = "Validating Flickr token..."
         self._album_action_text = ""
+        self._check_status_text = ""
 
         self.invalid_token = False
         self.result: FlickrUploadResult | None = None
@@ -306,6 +308,11 @@ class FlickrUploadProgressDialog(QDialog):
         self.progress_bar = QProgressBar(self)
         self.progress_bar.setRange(0, 0)
         layout.addWidget(self.progress_bar)
+
+        self.progress_text_label = QLabel("")
+        self.progress_text_label.setWordWrap(True)
+        self.progress_text_label.hide()
+        layout.addWidget(self.progress_text_label)
 
         self.album_action_label = QLabel("")
         self.album_action_label.setWordWrap(True)
@@ -336,7 +343,9 @@ class FlickrUploadProgressDialog(QDialog):
 
     def _update_stage_label(self) -> None:
         stage_text = self._current_stage.strip() or "-"
-        if (
+        if stage_text == FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label and self._check_status_text:
+            stage_text = f"{stage_text} - {self._check_status_text}"
+        elif (
             stage_text == FlickrStage.STAGE_ADD_TO_ALBUM.label
             and self._album_action_text
         ):
@@ -353,6 +362,9 @@ class FlickrUploadProgressDialog(QDialog):
             self.setFixedHeight(target_height)
 
     def start(self) -> None:
+        if self._started:
+            return
+        self._started = True
         worker = FlickrTokenValidationWorker(
             api_key=self._api_key,
             api_secret=self._api_secret,
@@ -362,6 +374,10 @@ class FlickrUploadProgressDialog(QDialog):
         worker.signals.cancelled.connect(self._on_validation_cancelled)
         worker.signals.error.connect(self._on_validation_error)
         QThreadPool.globalInstance().start(worker)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.start()
 
     def _on_token_validated(self, valid: bool) -> None:
         if not valid:
@@ -373,9 +389,12 @@ class FlickrUploadProgressDialog(QDialog):
 
         self._current_stage = FlickrStage.STAGE_ALBUM_CHECK.label
         self._album_action_text = ""
+        self._check_status_text = ""
         self._update_stage_label()
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setFormat("")
+        self.progress_text_label.clear()
+        self.progress_text_label.hide()
         self._sync_height_to_content()
 
         album_text = self._album_text.strip()
@@ -410,11 +429,15 @@ class FlickrUploadProgressDialog(QDialog):
         self._start_upload_manager(plan)
 
     def _start_upload_manager(self, album_plan: FlickrAlbumPlan) -> None:
-        self.progress_bar.setRange(0, max(1, len(self._upload_items)))
+        total_items = max(1, len(self._upload_items))
+        self.progress_bar.setRange(0, total_items)
         self.progress_bar.setValue(0)
-        self.progress_bar.setFormat("0/%v")
+        self.progress_bar.setFormat(f"0/{total_items}")
+        self.progress_text_label.setText(f"0/{total_items}")
+        self.progress_text_label.show()
         self._current_stage = FlickrStage.STAGE_UPLOAD.label
         self._album_action_text = ""
+        self._check_status_text = ""
         self._update_stage_label()
         self._sync_height_to_content()
 
@@ -464,7 +487,16 @@ class FlickrUploadProgressDialog(QDialog):
         self._current_stage = str(stage or "").strip() or "-"
         if stage != FlickrStage.STAGE_ADD_TO_ALBUM.label:
             self._album_action_text = ""
+        if stage != FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label:
+            self._check_status_text = ""
         self._update_stage_label()
+
+        if stage == FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label:
+            self.progress_bar.setRange(0, 0)
+            self.progress_bar.setFormat("")
+            self.progress_text_label.clear()
+            self.progress_text_label.hide()
+
         self.album_action_label.clear()
         self.album_action_label.hide()
         self._sync_height_to_content()
@@ -475,15 +507,22 @@ class FlickrUploadProgressDialog(QDialog):
         if int(total) <= 0:
             self.progress_bar.setRange(0, 0)
             self.progress_bar.setFormat("")
+            self.progress_text_label.clear()
+            self.progress_text_label.hide()
             return
         self.progress_bar.setRange(0, int(total))
         self.progress_bar.setValue(max(0, int(completed)))
         self.progress_bar.setFormat(f"{completed}/{total}")
+        self.progress_text_label.setText(f"{completed}/{total}")
+        self.progress_text_label.show()
 
-    def _on_status(self, _message: str) -> None:
-        # Keep running-step text driven by stage_changed only to avoid stale
-        # previous-stage status updates overriding the current step label.
-        return
+    def _on_status(self, message: str) -> None:
+        if self._finished:
+            return
+        if self._current_stage != FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label:
+            return
+        self._check_status_text = str(message or "").strip()
+        self._update_stage_label()
 
     def _on_album_status(self, message: str) -> None:
         if self._finished:
@@ -517,6 +556,7 @@ class FlickrUploadProgressDialog(QDialog):
         self.cancel_btn.setEnabled(False)
         self.stage_label.hide()
         self.progress_bar.hide()
+        self.progress_text_label.hide()
         self.album_action_label.clear()
         self.album_action_label.hide()
         self.status_label.show()
@@ -797,7 +837,6 @@ def launch_flickr_upload(parent: MainWindow) -> None:
 
         upload_dialog.manager_started.connect(_on_manager_started)
         upload_dialog.manager_finished.connect(_on_manager_finished)
-        upload_dialog.start()
         upload_dialog.exec()
 
         if upload_dialog.invalid_token:
