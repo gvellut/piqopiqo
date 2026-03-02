@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import TYPE_CHECKING
 
@@ -38,12 +39,16 @@ from .manager import FlickrUploadManager, FlickrUploadResult
 from .workers import (
     FlickrAlbumCheckWorker,
     FlickrLoginWorker,
+    FlickrMetadataPrecheckWorker,
     FlickrTokenValidationWorker,
 )
 
 if TYPE_CHECKING:
     from piqopiqo.main_window import MainWindow
     from piqopiqo.model import ImageItem
+
+
+logger = logging.getLogger(__name__)
 
 
 class FlickrPreflightDialog(QDialog):
@@ -343,7 +348,10 @@ class FlickrUploadProgressDialog(QDialog):
 
     def _update_stage_label(self) -> None:
         stage_text = self._current_stage.strip() or "-"
-        if stage_text == FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label and self._check_status_text:
+        if (
+            stage_text == FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label
+            and self._check_status_text
+        ):
             stage_text = f"{stage_text} - {self._check_status_text}"
         elif (
             stage_text == FlickrStage.STAGE_ADD_TO_ALBUM.label
@@ -634,24 +642,44 @@ class FlickrUploadProgressDialog(QDialog):
         super().closeEvent(event)
 
 
-def _build_upload_items(
-    parent: MainWindow,
-    visible_items: list[ImageItem],
-) -> list[dict]:
-    upload_items: list[dict] = []
+def _build_upload_scope_items(visible_items: list[ImageItem]) -> list[dict]:
+    """Build a deterministic upload scope snapshot from the current visible list."""
+    scope_items: list[dict] = []
 
     for order, item in enumerate(visible_items):
         metadata = item.db_metadata
+        scope_items.append(
+            {
+                "file_path": item.path,
+                "order": order,
+                "db_metadata": metadata.copy() if isinstance(metadata, dict) else None,
+            }
+        )
+
+    return scope_items
+
+
+def _build_upload_items(
+    parent: MainWindow,
+    upload_scope_items: list[dict],
+) -> list[dict]:
+    upload_items: list[dict] = []
+
+    for entry in upload_scope_items:
+        file_path = str(entry.get("file_path") or "")
+        if not file_path:
+            continue
+
+        order = int(entry.get("order", len(upload_items)))
+        metadata = entry.get("db_metadata")
         if metadata is None:
-            metadata = parent.db_manager.get_db_for_image(item.path).get_metadata(
-                item.path
+            metadata = parent.db_manager.get_db_for_image(file_path).get_metadata(
+                file_path
             )
-            if metadata is not None:
-                item.db_metadata = metadata.copy()
 
         upload_items.append(
             {
-                "file_path": item.path,
+                "file_path": file_path,
                 "order": order,
                 "db_metadata": metadata.copy() if isinstance(metadata, dict) else None,
             }
@@ -716,37 +744,37 @@ def _resolve_prefill_album_plan(
     )
 
 
-def launch_flickr_upload(parent: MainWindow) -> None:
-    """Launch Flickr upload flow from MainWindow."""
-    api_key = str(get_user_setting(UserSettingKey.FLICKR_API_KEY) or "").strip()
-    api_secret = str(get_user_setting(UserSettingKey.FLICKR_API_SECRET) or "").strip()
+def _show_missing_required_metadata_dialog(
+    parent: MainWindow,
+    missing_paths: list[str],
+) -> None:
+    missing_count = len(missing_paths)
+    QMessageBox.warning(
+        parent,
+        "Upload to Flickr",
+        "Upload rejected: Title or keywords are missing for "
+        f"{missing_count} photo(s).\n\n"
+        "Selection has been updated to those photos so you can fix them quickly.",
+    )
 
-    if not api_key or not api_secret:
-        dialog = QMessageBox(parent)
-        dialog.setIcon(QMessageBox.Icon.Warning)
-        dialog.setWindowTitle("Upload to Flickr")
-        dialog.setText(
-            "Flickr API key and Flickr API secret are empty.\n"
-            "Set them in Settings > External/Workflow > Flickr."
-        )
-        go_to_settings_btn = dialog.addButton(
-            "Go to settings", QMessageBox.ButtonRole.AcceptRole
-        )
-        dialog.addButton(QMessageBox.StandardButton.Cancel)
-        dialog.exec()
-        if dialog.clickedButton() == go_to_settings_btn:
-            parent.open_settings(tab_title="External/Workflow")
+    if not missing_paths:
         return
 
-    visible_items = list(parent.images_data)
-    if not visible_items:
-        QMessageBox.warning(
-            parent,
-            "Upload to Flickr",
-            "No visible photos to upload.",
-        )
-        return
+    anchor_path = missing_paths[0]
+    parent.select_paths_in_grid(
+        missing_paths,
+        anchor_path=anchor_path,
+        reveal_path=anchor_path,
+    )
 
+
+def _launch_flickr_upload_flow(
+    parent: MainWindow,
+    *,
+    api_key: str,
+    api_secret: str,
+    upload_scope_items: list[dict],
+) -> None:
     source_folders = list(parent.photo_model.source_folders)
     token_path = str(get_flickr_token_file_path())
 
@@ -770,7 +798,7 @@ def launch_flickr_upload(parent: MainWindow) -> None:
                 cached_album_from_folder_data = cached_album_plan is not None
 
         preflight = FlickrPreflightDialog(
-            visible_count=len(visible_items),
+            visible_count=len(upload_scope_items),
             token_file_path=token_path,
             token_exists=token_exists,
             album_text=session_album_text,
@@ -804,7 +832,7 @@ def launch_flickr_upload(parent: MainWindow) -> None:
 
         # Upload flow
         session_album_error = ""
-        upload_items = _build_upload_items(parent, visible_items)
+        upload_items = _build_upload_items(parent, upload_scope_items)
         exiftool_path = str(get_user_setting(UserSettingKey.EXIFTOOL_PATH) or "")
 
         cached_plan_for_upload = None
@@ -857,3 +885,108 @@ def launch_flickr_upload(parent: MainWindow) -> None:
             parent._active_flickr_upload_manager = None
 
         return
+
+
+def launch_flickr_upload(parent: MainWindow) -> None:
+    """Launch Flickr upload flow from MainWindow."""
+    api_key = str(get_user_setting(UserSettingKey.FLICKR_API_KEY) or "").strip()
+    api_secret = str(get_user_setting(UserSettingKey.FLICKR_API_SECRET) or "").strip()
+
+    if not api_key or not api_secret:
+        dialog = QMessageBox(parent)
+        dialog.setIcon(QMessageBox.Icon.Warning)
+        dialog.setWindowTitle("Upload to Flickr")
+        dialog.setText(
+            "Flickr API key and Flickr API secret are empty.\n"
+            "Set them in Settings > External/Workflow > Flickr."
+        )
+        go_to_settings_btn = dialog.addButton(
+            "Go to settings", QMessageBox.ButtonRole.AcceptRole
+        )
+        dialog.addButton(QMessageBox.StandardButton.Cancel)
+        dialog.exec()
+        if dialog.clickedButton() == go_to_settings_btn:
+            parent.open_settings(tab_title="External/Workflow")
+        return
+
+    visible_items = list(parent.images_data)
+    if not visible_items:
+        QMessageBox.warning(
+            parent,
+            "Upload to Flickr",
+            "No visible photos to upload.",
+        )
+        return
+
+    upload_scope_items = _build_upload_scope_items(visible_items)
+    should_require_metadata = bool(
+        get_user_setting(UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS)
+    )
+    if not should_require_metadata:
+        _launch_flickr_upload_flow(
+            parent,
+            api_key=api_key,
+            api_secret=api_secret,
+            upload_scope_items=upload_scope_items,
+        )
+        return
+
+    active_worker = getattr(parent, "_active_flickr_metadata_precheck_worker", None)
+    if active_worker is not None:
+        QMessageBox.warning(
+            parent,
+            "Upload to Flickr",
+            "A Flickr upload metadata check is already running.",
+        )
+        return
+
+    worker = FlickrMetadataPrecheckWorker(
+        db_manager=parent.db_manager,
+        upload_items=upload_scope_items,
+    )
+    parent._active_flickr_metadata_precheck_worker = worker
+
+    def _clear_active_precheck() -> None:
+        if getattr(parent, "_active_flickr_metadata_precheck_worker", None) is worker:
+            parent._active_flickr_metadata_precheck_worker = None
+
+    def _on_precheck_finished(missing_paths_obj: object) -> None:
+        _clear_active_precheck()
+        missing_paths = [
+            str(path).strip()
+            for path in (
+                missing_paths_obj if isinstance(missing_paths_obj, list) else []
+            )
+            if str(path).strip()
+        ]
+        if missing_paths:
+            _show_missing_required_metadata_dialog(parent, missing_paths)
+            return
+
+        _launch_flickr_upload_flow(
+            parent,
+            api_key=api_key,
+            api_secret=api_secret,
+            upload_scope_items=upload_scope_items,
+        )
+
+    def _on_precheck_cancelled() -> None:
+        _clear_active_precheck()
+
+    def _on_precheck_error(message: str) -> None:
+        _clear_active_precheck()
+        logger.warning(
+            "Flickr metadata precheck failed; continuing without precheck: %s",
+            str(message),
+        )
+        _launch_flickr_upload_flow(
+            parent,
+            api_key=api_key,
+            api_secret=api_secret,
+            upload_scope_items=upload_scope_items,
+        )
+
+    worker.signals.finished.connect(_on_precheck_finished)
+    worker.signals.cancelled.connect(_on_precheck_cancelled)
+    worker.signals.error.connect(_on_precheck_error)
+    QThreadPool.globalInstance().start(worker)

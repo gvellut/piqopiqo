@@ -284,6 +284,11 @@ SETTINGS_TABS: list[TabSpec] = [
                         label="Flickr API secret",
                         editor=EditorKind.TEXT,
                     ),
+                    FieldSpec(
+                        key=UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS,
+                        label="Reject upload if title or keywords missing",
+                        editor=EditorKind.BOOL,
+                    ),
                 ],
             ),
             GroupSpec(

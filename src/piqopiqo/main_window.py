@@ -92,6 +92,7 @@ class MainWindow(QMainWindow):
         self._watcher_suppressed: dict[str, float] = {}
         self._active_apply_gpx_worker = None
         self._active_flickr_upload_manager = None
+        self._active_flickr_metadata_precheck_worker = None
         self._shutdown_started = False
         self._selected_paths_cache: set[str] = set()
         self._selected_count_cache = 0
@@ -1511,6 +1512,13 @@ class MainWindow(QMainWindow):
                 "A Flickr upload operation is already running.",
             )
             return
+        if self._active_flickr_metadata_precheck_worker is not None:
+            QMessageBox.information(
+                self,
+                "Upload to Flickr",
+                "A Flickr upload metadata check is already running.",
+            )
+            return
 
         from .tools.flickr_upload import launch_flickr_upload
 
@@ -2179,6 +2187,9 @@ class MainWindow(QMainWindow):
             )
 
         self._stop_folder_watcher()
+        if self._active_flickr_metadata_precheck_worker is not None:
+            self._active_flickr_metadata_precheck_worker.request_cancel()
+            self._active_flickr_metadata_precheck_worker = None
         if self._active_flickr_upload_manager is not None:
             self._active_flickr_upload_manager.stop(timeout_s=timeout_s)
             self._active_flickr_upload_manager = None

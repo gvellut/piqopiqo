@@ -15,6 +15,7 @@ from .auth import (
     create_flickr_client,
     validate_token_or_cleanup,
 )
+from .service import has_required_flickr_upload_metadata
 
 
 class FlickrLoginWorkerSignals(QObject):
@@ -175,3 +176,59 @@ class FlickrAlbumCheckWorker(QRunnable):
             return
 
         self.signals.finished.emit(plan)
+
+
+class FlickrMetadataPrecheckWorkerSignals(QObject):
+    finished = Signal(object)  # list[str] missing_paths
+    cancelled = Signal()
+    error = Signal(str)
+
+
+class FlickrMetadataPrecheckWorker(QRunnable):
+    """Background worker that validates required upload metadata per photo."""
+
+    def __init__(self, *, db_manager, upload_items: list[dict]):
+        super().__init__()
+        self._db_manager = db_manager
+        self._upload_items = list(upload_items)
+        self._cancel_requested = threading.Event()
+        self.signals = FlickrMetadataPrecheckWorkerSignals()
+
+    def request_cancel(self) -> None:
+        self._cancel_requested.set()
+
+    def run(self) -> None:
+        if self._cancel_requested.is_set():
+            self.signals.cancelled.emit()
+            return
+
+        try:
+            missing_paths: list[str] = []
+            for entry in self._upload_items:
+                if self._cancel_requested.is_set():
+                    self.signals.cancelled.emit()
+                    return
+
+                file_path = str(entry.get("file_path") or "")
+                if not file_path:
+                    continue
+
+                metadata = entry.get("db_metadata")
+                if not isinstance(metadata, dict):
+                    db = self._db_manager.get_db_for_image(file_path)
+                    metadata = db.get_metadata(file_path)
+
+                if not has_required_flickr_upload_metadata(metadata):
+                    missing_paths.append(file_path)
+        except Exception as ex:  # pragma: no cover - unexpected infrastructure errors
+            if self._cancel_requested.is_set():
+                self.signals.cancelled.emit()
+                return
+            self.signals.error.emit(str(ex))
+            return
+
+        if self._cancel_requested.is_set():
+            self.signals.cancelled.emit()
+            return
+
+        self.signals.finished.emit(missing_paths)

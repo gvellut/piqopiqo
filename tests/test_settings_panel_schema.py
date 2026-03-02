@@ -59,6 +59,17 @@ def test_external_tools_tab_contains_manual_lens_group():
     ]
 
 
+def test_external_tools_tab_flickr_group_contains_required_metadata_toggle():
+    external_tab = next(tab for tab in SETTINGS_TABS if tab.title == "External/Tools")
+    group_by_title = {group.title: group for group in external_tab.groups}
+    assert "Flickr" in group_by_title
+    assert [field.key for field in group_by_title["Flickr"].fields] == [
+        UserSettingKey.FLICKR_API_KEY,
+        UserSettingKey.FLICKR_API_SECRET,
+        UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS,
+    ]
+
+
 def test_labels_and_shortcuts_tabs_layout_matches_expected_groups_and_fields():
     labels_tab = next(tab for tab in SETTINGS_TABS if tab.title == "Labels")
     assert [group.title for group in labels_tab.groups] == ["Status Labels"]

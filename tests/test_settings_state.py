@@ -234,12 +234,21 @@ def test_gpx_settings_defaults_and_env_override(isolated_settings, monkeypatch):
 def test_flickr_settings_defaults_and_roundtrip(isolated_settings):
     assert get_user_setting(UserSettingKey.FLICKR_API_KEY) == ""
     assert get_user_setting(UserSettingKey.FLICKR_API_SECRET) == ""
+    assert (
+        get_user_setting(UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS)
+        is False
+    )
 
     set_user_setting(UserSettingKey.FLICKR_API_KEY, "key123")
     set_user_setting(UserSettingKey.FLICKR_API_SECRET, "secret456")
+    set_user_setting(UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS, True)
 
     assert get_user_setting(UserSettingKey.FLICKR_API_KEY) == "key123"
     assert get_user_setting(UserSettingKey.FLICKR_API_SECRET) == "secret456"
+    assert (
+        get_user_setting(UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS)
+        is True
+    )
 
 
 def test_flickr_runtime_workers_env_override(isolated_settings, monkeypatch):

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import pytest
 
+from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.tools.flickr_upload.service import (
     TicketStatus,
     classify_ticket_complete,
     format_flickr_tags,
     format_flickr_tags_from_db_keywords,
     generate_timestamps,
+    has_required_flickr_upload_metadata,
     retry,
 )
 
@@ -27,6 +29,37 @@ def test_format_flickr_tags_from_db_keywords() -> None:
 def test_format_flickr_tags_rejects_double_quote() -> None:
     with pytest.raises(ValueError):
         format_flickr_tags(['bad"tag'])
+
+
+def test_has_required_flickr_upload_metadata_accepts_title_and_keywords() -> None:
+    assert has_required_flickr_upload_metadata(
+        {
+            DBFields.TITLE: "Title",
+            DBFields.KEYWORDS: "one, two",
+        }
+    )
+
+
+def test_has_required_flickr_upload_metadata_rejects_empty_title() -> None:
+    assert not has_required_flickr_upload_metadata(
+        {
+            DBFields.TITLE: "   ",
+            DBFields.KEYWORDS: "one, two",
+        }
+    )
+
+
+def test_has_required_flickr_upload_metadata_rejects_empty_keyword_tokens() -> None:
+    assert not has_required_flickr_upload_metadata(
+        {
+            DBFields.TITLE: "Title",
+            DBFields.KEYWORDS: " , , ",
+        }
+    )
+
+
+def test_has_required_flickr_upload_metadata_rejects_missing_metadata_dict() -> None:
+    assert not has_required_flickr_upload_metadata(None)
 
 
 def test_generate_timestamps_keeps_order() -> None:

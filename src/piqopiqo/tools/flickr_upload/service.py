@@ -7,6 +7,7 @@ from enum import Enum, auto
 import time
 
 from piqopiqo.keyword_utils import parse_keywords
+from piqopiqo.metadata.db_fields import DBFields
 
 from .constants import API_RETRY_DELAY_S
 
@@ -43,6 +44,19 @@ def format_flickr_tags_from_db_keywords(db_keywords: str | None) -> str | None:
         return None
     tags = parse_keywords(str(db_keywords))
     return format_flickr_tags(tags)
+
+
+def has_required_flickr_upload_metadata(db_metadata: dict | None) -> bool:
+    """Return whether metadata has a non-empty title and at least one valid keyword."""
+    if not isinstance(db_metadata, dict):
+        return False
+
+    title = db_metadata.get(DBFields.TITLE)
+    if not str(title or "").strip():
+        return False
+
+    tags = format_flickr_tags_from_db_keywords(db_metadata.get(DBFields.KEYWORDS))
+    return bool(tags)
 
 
 def generate_timestamps(now_ts: int, num_photos: int) -> list[int]:

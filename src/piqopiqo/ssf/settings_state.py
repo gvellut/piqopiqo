@@ -93,6 +93,9 @@ class UserSettingKey(StrEnum):
     GCP_SA_KEY_PATH = "gcpSaKeyPath"
     FLICKR_API_KEY = "flickrApiKey"
     FLICKR_API_SECRET = "flickrApiSecret"
+    FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS = (
+        "flickrUploadRequireTitleAndKeywords"
+    )
     MANUAL_LENSES = "manualLenses"
 
 
@@ -558,6 +561,10 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
     UserSettingKey.GCP_SA_KEY_PATH: SettingDef(default="", read_type=str),
     UserSettingKey.FLICKR_API_KEY: SettingDef(default="", read_type=str),
     UserSettingKey.FLICKR_API_SECRET: SettingDef(default="", read_type=str),
+    UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS: SettingDef(
+        default=False,
+        read_type=bool,
+    ),
     UserSettingKey.MANUAL_LENSES: SettingDef(
         default=[],
         read_type=str,
