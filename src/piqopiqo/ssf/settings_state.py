@@ -444,16 +444,9 @@ _STATE_REGISTRY: dict[StateKey, StateDef] = {
 
 _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
     UserSettingKey.CACHE_BASE_DIR: SettingDef(
-        # FIXME set default to the support dir / cache
-        # (Library / Application Support / cache on macos)
-        # this is my default.
-        # FIXME add a check at laucnh : it must be valid. If not : ask to reset to
-        # default or enter new path
         default=None,
         read_type=str,
     ),
-    # FIXME default : depends on the platform. This is the default for macos
-    # + check at launch that it exists (thumbnails lowres + metadata depend on it)
     UserSettingKey.EXIFTOOL_PATH: SettingDef(
         default=None,
         read_type=str,
@@ -464,10 +457,6 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         default=[],
         **_list_of_strings_params,
     ),
-    # FIXME put in the State. Add a slider. Beware : due to constraints in the cells
-    # may not go to 1 or 2 depending on the screen size. So need to check the min num
-    # or relax the constraints. Also see if constraints are related to screen or window
-    # size
     UserSettingKey.NUM_COLUMNS: SettingDef(default=6, read_type=int),
     UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE: SettingDef(
         default=OnFullscreenExitMultipleSelected.KEEP_SELECTION,
