@@ -146,7 +146,8 @@ class MandatorySettingsDialog(QDialog):
         if pending.auto_value:
             escaped_auto = html.escape(pending.auto_value)
             if pending.is_empty:
-                auto_label = QLabel(f"Auto value: <u>{escaped_auto}</u>")
+                auto_label = QLabel("Auto value")
+                auto_label.setStyleSheet("color: red;")
                 auto_label.setWordWrap(True)
                 layout.addWidget(auto_label)
                 return
@@ -156,7 +157,7 @@ class MandatorySettingsDialog(QDialog):
             hint_layout.setContentsMargins(0, 0, 0, 0)
             hint_layout.setSpacing(8)
 
-            auto_label = QLabel(f"Suggested auto value: <u>{escaped_auto}</u>")
+            auto_label = QLabel(f"Suggested auto value: <b>{escaped_auto}</b>")
             auto_label.setWordWrap(True)
             hint_layout.addWidget(auto_label, 1)
 

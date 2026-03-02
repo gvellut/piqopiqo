@@ -1,1 +1,0 @@
-../../../.agents/skills/automate-pyside6-and-screenshots/SKILL.md

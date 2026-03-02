@@ -3,6 +3,7 @@
 - [Specific macos](Ba_tasks/Da_Specific_macos.md)
 - [Prescaled down image in fullscreen (Claude made a mess of it; redo)](Ja_tasks/Qa_Prescaled_down_image_in_fullscreen.md)
     ~ [Correction](Ja_tasks/Qa.A_Correction.md)
+- [Fix too big dialogs](Ta_tasks/Ta_Fix_too_big_dialogs.md)
 ! [Fix date read delay if since:last](A_tasks/A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](A_tasks/B_Eject_SD_after_user_OK.md)
     !? [GUI lag](A_tasks/B.A_GUI_lag.md)
