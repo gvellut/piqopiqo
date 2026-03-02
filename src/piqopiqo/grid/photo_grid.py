@@ -29,6 +29,7 @@ from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.orientation import apply_orientation_to_pixmap
 from piqopiqo.shortcuts import (
     Shortcut,
+    build_filter_label_shortcut_bindings,
     build_label_shortcut_bindings,
     match_shortcut_sequence,
     parse_shortcut,
@@ -54,6 +55,11 @@ class PhotoGrid(QWidget):
     context_menu_requested = Signal(int, object)  # index, QPoint (global pos)
     visible_paths_changed = Signal(list)  # list[str] in display order
     label_shortcut_requested = Signal(object)  # str | None
+    filter_label_shortcut_requested = Signal(object)  # str | None
+    folder_filter_cycle_requested = Signal(int)  # +1 / -1
+    folder_filter_all_requested = Signal()
+    clear_filter_shortcut_requested = Signal()
+    focus_filter_search_shortcut_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -155,6 +161,83 @@ class PhotoGrid(QWidget):
             sc_select_all.activated.connect(self._activate_select_all_shortcut)
             self._shared_grid_view_shortcut_objects.append(sc_select_all)
 
+        for shortcut_str, label_name in build_filter_label_shortcut_bindings(
+            shortcuts, status_labels
+        ):
+            sc = QShortcut(parse_shortcut(shortcut_str), scope)
+            sc.setContext(Qt.WidgetWithChildrenShortcut)
+            sc.activated.connect(
+                lambda label_name=label_name: self._activate_filter_label_shortcut(
+                    label_name
+                )
+            )
+            self._shared_grid_view_shortcut_objects.append(sc)
+
+        folder_filter_all_shortcut = (
+            shortcuts.get(Shortcut.FILTER_FOLDER_ALL)
+            or shortcuts.get(Shortcut.FILTER_FOLDER_ALL.value)
+            or shortcuts.get(Shortcut.FILTER_FOLDER_ALL.name)
+        )
+        if folder_filter_all_shortcut:
+            sc_folder_all = QShortcut(parse_shortcut(folder_filter_all_shortcut), scope)
+            sc_folder_all.setContext(Qt.WidgetWithChildrenShortcut)
+            sc_folder_all.activated.connect(self._activate_folder_filter_all_shortcut)
+            self._shared_grid_view_shortcut_objects.append(sc_folder_all)
+
+        folder_filter_next_shortcut = (
+            shortcuts.get(Shortcut.FILTER_FOLDER_NEXT)
+            or shortcuts.get(Shortcut.FILTER_FOLDER_NEXT.value)
+            or shortcuts.get(Shortcut.FILTER_FOLDER_NEXT.name)
+        )
+        if folder_filter_next_shortcut:
+            sc_folder_next = QShortcut(
+                parse_shortcut(folder_filter_next_shortcut), scope
+            )
+            sc_folder_next.setContext(Qt.WidgetWithChildrenShortcut)
+            sc_folder_next.activated.connect(
+                lambda: self._activate_folder_filter_cycle_shortcut(1)
+            )
+            self._shared_grid_view_shortcut_objects.append(sc_folder_next)
+
+        folder_filter_prev_shortcut = (
+            shortcuts.get(Shortcut.FILTER_FOLDER_PREV)
+            or shortcuts.get(Shortcut.FILTER_FOLDER_PREV.value)
+            or shortcuts.get(Shortcut.FILTER_FOLDER_PREV.name)
+        )
+        if folder_filter_prev_shortcut:
+            sc_folder_prev = QShortcut(
+                parse_shortcut(folder_filter_prev_shortcut), scope
+            )
+            sc_folder_prev.setContext(Qt.WidgetWithChildrenShortcut)
+            sc_folder_prev.activated.connect(
+                lambda: self._activate_folder_filter_cycle_shortcut(-1)
+            )
+            self._shared_grid_view_shortcut_objects.append(sc_folder_prev)
+
+        clear_filter_shortcut = (
+            shortcuts.get(Shortcut.FILTER_CLEAR_ALL)
+            or shortcuts.get(Shortcut.FILTER_CLEAR_ALL.value)
+            or shortcuts.get(Shortcut.FILTER_CLEAR_ALL.name)
+        )
+        if clear_filter_shortcut:
+            sc_clear_filter = QShortcut(parse_shortcut(clear_filter_shortcut), scope)
+            sc_clear_filter.setContext(Qt.WidgetWithChildrenShortcut)
+            sc_clear_filter.activated.connect(self._activate_clear_filter_shortcut)
+            self._shared_grid_view_shortcut_objects.append(sc_clear_filter)
+
+        focus_search_shortcut = (
+            shortcuts.get(Shortcut.FILTER_FOCUS_SEARCH)
+            or shortcuts.get(Shortcut.FILTER_FOCUS_SEARCH.value)
+            or shortcuts.get(Shortcut.FILTER_FOCUS_SEARCH.name)
+        )
+        if focus_search_shortcut:
+            sc_focus_search = QShortcut(parse_shortcut(focus_search_shortcut), scope)
+            sc_focus_search.setContext(Qt.WidgetWithChildrenShortcut)
+            sc_focus_search.activated.connect(
+                self._activate_focus_filter_search_shortcut
+            )
+            self._shared_grid_view_shortcut_objects.append(sc_focus_search)
+
         sc_fullscreen = QShortcut(QKeySequence("Space"), scope)
         sc_fullscreen.setContext(Qt.WidgetWithChildrenShortcut)
         sc_fullscreen.activated.connect(self._activate_fullscreen_shortcut)
@@ -179,6 +262,31 @@ class PhotoGrid(QWidget):
         if not self._shared_grid_view_shortcuts_allowed():
             return
         self._request_fullscreen_from_current_selection()
+
+    def _activate_filter_label_shortcut(self, label_name: str | None) -> None:
+        if not self._shared_grid_view_shortcuts_allowed():
+            return
+        self.filter_label_shortcut_requested.emit(label_name)
+
+    def _activate_folder_filter_cycle_shortcut(self, step: int) -> None:
+        if not self._shared_grid_view_shortcuts_allowed():
+            return
+        self.folder_filter_cycle_requested.emit(step)
+
+    def _activate_folder_filter_all_shortcut(self) -> None:
+        if not self._shared_grid_view_shortcuts_allowed():
+            return
+        self.folder_filter_all_requested.emit()
+
+    def _activate_clear_filter_shortcut(self) -> None:
+        if not self._shared_grid_view_shortcuts_allowed():
+            return
+        self.clear_filter_shortcut_requested.emit()
+
+    def _activate_focus_filter_search_shortcut(self) -> None:
+        if not self._shared_grid_view_shortcuts_allowed():
+            return
+        self.focus_filter_search_shortcut_requested.emit()
 
     def _request_fullscreen_from_current_selection(self) -> None:
         selected_indices = [

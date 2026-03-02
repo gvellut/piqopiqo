@@ -1,0 +1,4 @@
+- number of columns : from the app : in the grid  main interface. Check this :  
+- NUM\_COLUMN \=2 : nothing displayed . why ? probably some rule about the ratio of grid cells  
+- Limit the min num columns : depending on size of window   
+- when doing the interactive column number chooser

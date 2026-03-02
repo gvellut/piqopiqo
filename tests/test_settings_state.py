@@ -141,6 +141,26 @@ def test_json_roundtrip_for_complex_user_settings(isolated_settings):
     assert roundtrip_custom_fields == ["File:FileSize", "EXIF:ISO"]
 
 
+def test_shortcuts_defaults_include_filter_shortcuts(isolated_settings):
+    shortcuts = get_user_setting(UserSettingKey.SHORTCUTS)
+
+    assert shortcuts[Shortcut.FILTER_LABEL_1] == "Alt+1"
+    assert shortcuts[Shortcut.FILTER_LABEL_2] == "Alt+2"
+    assert shortcuts[Shortcut.FILTER_LABEL_3] == "Alt+3"
+    assert shortcuts[Shortcut.FILTER_LABEL_4] == "Alt+4"
+    assert shortcuts[Shortcut.FILTER_LABEL_5] == "Alt+5"
+    assert shortcuts[Shortcut.FILTER_LABEL_6] == "Alt+6"
+    assert shortcuts[Shortcut.FILTER_LABEL_7] == "Alt+7"
+    assert shortcuts[Shortcut.FILTER_LABEL_8] == "Alt+8"
+    assert shortcuts[Shortcut.FILTER_LABEL_9] == "Alt+9"
+    assert shortcuts[Shortcut.FILTER_LABEL_NONE] == "Alt+`"
+    assert shortcuts[Shortcut.FILTER_FOLDER_ALL] == "Alt+0"
+    assert shortcuts[Shortcut.FILTER_FOLDER_NEXT] == "Alt+="
+    assert shortcuts[Shortcut.FILTER_FOLDER_PREV] == "Alt+-"
+    assert shortcuts[Shortcut.FILTER_CLEAR_ALL] == "Alt+\\"
+    assert shortcuts[Shortcut.FILTER_FOCUS_SEARCH] == "Ctrl+F"
+
+
 def test_manual_lenses_roundtrip(isolated_settings):
     presets = [
         ManualLensPreset(

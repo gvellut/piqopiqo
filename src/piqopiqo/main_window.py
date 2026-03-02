@@ -196,6 +196,21 @@ class MainWindow(QMainWindow):
         self.grid.selection_changed.connect(self.on_selection_changed)
         self.grid.context_menu_requested.connect(self._show_context_menu)
         self.grid.label_shortcut_requested.connect(self._apply_label_to_grid_selection)
+        self.grid.filter_label_shortcut_requested.connect(
+            self._on_filter_label_shortcut_requested
+        )
+        self.grid.folder_filter_cycle_requested.connect(
+            self._on_folder_filter_cycle_shortcut_requested
+        )
+        self.grid.folder_filter_all_requested.connect(
+            self._on_folder_filter_all_shortcut_requested
+        )
+        self.grid.clear_filter_shortcut_requested.connect(
+            self._on_clear_filter_shortcut_requested
+        )
+        self.grid.focus_filter_search_shortcut_requested.connect(
+            self._on_focus_filter_search_shortcut_requested
+        )
 
         # Create photo list model
         self.photo_model = PhotoListModel(
@@ -266,6 +281,31 @@ class MainWindow(QMainWindow):
             record_undo=True,
             sync_source="apply_label_shortcut_grid",
         )
+
+    def _on_filter_label_shortcut_requested(self, label_name: str | None) -> None:
+        if self._fullscreen_overlay is not None:
+            return
+        self.filter_panel.toggle_label_filter(label_name)
+
+    def _on_folder_filter_cycle_shortcut_requested(self, step: int) -> None:
+        if self._fullscreen_overlay is not None:
+            return
+        self.filter_panel.cycle_folder_filter(step)
+
+    def _on_folder_filter_all_shortcut_requested(self) -> None:
+        if self._fullscreen_overlay is not None:
+            return
+        self.filter_panel.set_all_folders()
+
+    def _on_clear_filter_shortcut_requested(self) -> None:
+        if self._fullscreen_overlay is not None:
+            return
+        self.filter_panel.clear_filter()
+
+    def _on_focus_filter_search_shortcut_requested(self) -> None:
+        if self._fullscreen_overlay is not None:
+            return
+        self.filter_panel.focus_search_field(select_all=True)
 
     def _apply_label_to_fullscreen_current(self, label_name: str | None):
         """Apply a label to only the currently visible fullscreen image."""

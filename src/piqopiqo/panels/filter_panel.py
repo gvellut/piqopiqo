@@ -368,3 +368,52 @@ class FilterPanel(ScrollableStrip):
     def clear_filter(self):
         """Clear all filters (called externally)."""
         self._on_clear_filter()
+
+    def toggle_label_filter(self, label_name: str | None) -> bool:
+        """Toggle the target label filter checkbox."""
+        if label_name is None:
+            checkbox = self._no_label_checkbox
+        else:
+            checkbox = self._label_checkboxes.get(label_name)
+        if checkbox is None or not checkbox.isEnabled():
+            return False
+
+        checkbox.setChecked(not checkbox.isChecked())
+        return True
+
+    def set_all_folders(self) -> bool:
+        """Set the folder filter to 'All folders'."""
+        if not self.folder_combo.isEnabled():
+            return False
+        if self.folder_combo.currentIndex() == 0:
+            return False
+        self.folder_combo.setCurrentIndex(0)
+        return True
+
+    def cycle_folder_filter(self, step: int) -> bool:
+        """Cycle folder filter through real folders (excluding All folders)."""
+        if step == 0 or not self.folder_combo.isEnabled():
+            return False
+
+        folder_count = self.folder_combo.count() - 1
+        if folder_count <= 1:
+            return False
+
+        current_index = self.folder_combo.currentIndex()
+        if current_index <= 0:
+            next_folder_index = 0 if step > 0 else folder_count - 1
+        else:
+            current_folder_index = current_index - 1
+            next_folder_index = (current_folder_index + step) % folder_count
+
+        self.folder_combo.setCurrentIndex(next_folder_index + 1)
+        return True
+
+    def focus_search_field(self, select_all: bool = True) -> bool:
+        """Focus the search text field."""
+        if not self.search_field.isEnabled():
+            return False
+        self.search_field.setFocus()
+        if select_all:
+            self.search_field.selectAll()
+        return True

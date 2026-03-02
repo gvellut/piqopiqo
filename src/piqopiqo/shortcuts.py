@@ -30,6 +30,21 @@ class Shortcut(UpperStrEnum):
     LABEL_8 = auto(), "Label 8"
     LABEL_9 = auto(), "Label 9"
     LABEL_NONE = auto(), "No label"
+    FILTER_LABEL_1 = auto(), "Filter label 1"
+    FILTER_LABEL_2 = auto(), "Filter label 2"
+    FILTER_LABEL_3 = auto(), "Filter label 3"
+    FILTER_LABEL_4 = auto(), "Filter label 4"
+    FILTER_LABEL_5 = auto(), "Filter label 5"
+    FILTER_LABEL_6 = auto(), "Filter label 6"
+    FILTER_LABEL_7 = auto(), "Filter label 7"
+    FILTER_LABEL_8 = auto(), "Filter label 8"
+    FILTER_LABEL_9 = auto(), "Filter label 9"
+    FILTER_LABEL_NONE = auto(), "Filter no label"
+    FILTER_FOLDER_ALL = auto(), "Filter all folders"
+    FILTER_FOLDER_NEXT = auto(), "Filter next folder"
+    FILTER_FOLDER_PREV = auto(), "Filter previous folder"
+    FILTER_CLEAR_ALL = auto(), "Clear filters"
+    FILTER_FOCUS_SEARCH = auto(), "Focus search"
     SELECT_ALL = auto(), "Select all"
     COLLAPSE_TO_LAST_SELECTED = auto(), "Keep last selected (grid)"
 
@@ -58,8 +73,27 @@ LABEL_SHORTCUTS: tuple[Shortcut, ...] = (
     Shortcut.LABEL_NONE,
 )
 
+FILTER_LABEL_SHORTCUTS: tuple[Shortcut, ...] = (
+    Shortcut.FILTER_LABEL_1,
+    Shortcut.FILTER_LABEL_2,
+    Shortcut.FILTER_LABEL_3,
+    Shortcut.FILTER_LABEL_4,
+    Shortcut.FILTER_LABEL_5,
+    Shortcut.FILTER_LABEL_6,
+    Shortcut.FILTER_LABEL_7,
+    Shortcut.FILTER_LABEL_8,
+    Shortcut.FILTER_LABEL_9,
+    Shortcut.FILTER_LABEL_NONE,
+)
+
 GRID_VIEW_CONFIGURABLE_SHORTCUTS: tuple[Shortcut, ...] = (
     *LABEL_SHORTCUTS,
+    *FILTER_LABEL_SHORTCUTS,
+    Shortcut.FILTER_FOLDER_ALL,
+    Shortcut.FILTER_FOLDER_NEXT,
+    Shortcut.FILTER_FOLDER_PREV,
+    Shortcut.FILTER_CLEAR_ALL,
+    Shortcut.FILTER_FOCUS_SEARCH,
     Shortcut.SELECT_ALL,
     Shortcut.COLLAPSE_TO_LAST_SELECTED,
 )
@@ -94,6 +128,39 @@ def build_label_shortcut_bindings(
     (Label 1..9, then No label). Missing labels or empty shortcut strings are skipped.
     """
 
+    return _build_indexed_label_shortcut_bindings(
+        shortcuts,
+        status_labels,
+        key_prefix="LABEL_",
+        key_none=Shortcut.LABEL_NONE,
+    )
+
+
+def build_filter_label_shortcut_bindings(
+    shortcuts: Mapping[Shortcut | str, str] | None,
+    status_labels: Iterable[StatusLabel] | Iterable[object] | None,
+) -> list[tuple[str, str | None]]:
+    """Resolve configured label filter shortcuts to concrete label names.
+
+    Returns a list of ``(shortcut_str, label_name)`` pairs in display order
+    (Label 1..9, then No label). Missing labels or empty shortcut strings are skipped.
+    """
+
+    return _build_indexed_label_shortcut_bindings(
+        shortcuts,
+        status_labels,
+        key_prefix="FILTER_LABEL_",
+        key_none=Shortcut.FILTER_LABEL_NONE,
+    )
+
+
+def _build_indexed_label_shortcut_bindings(
+    shortcuts: Mapping[Shortcut | str, str] | None,
+    status_labels: Iterable[StatusLabel] | Iterable[object] | None,
+    *,
+    key_prefix: str,
+    key_none: Shortcut,
+) -> list[tuple[str, str | None]]:
     shortcuts_mapping = shortcuts or {}
     labels_by_index: dict[int, str] = {}
     for status_label in status_labels or []:
@@ -104,7 +171,7 @@ def build_label_shortcut_bindings(
 
     bindings: list[tuple[str, str | None]] = []
     for index in range(1, 10):
-        shortcut_enum = Shortcut(f"LABEL_{index}")
+        shortcut_enum = Shortcut(f"{key_prefix}{index}")
         shortcut_str = _lookup_shortcut(shortcuts_mapping, shortcut_enum)
         if not shortcut_str:
             continue
@@ -113,7 +180,7 @@ def build_label_shortcut_bindings(
             continue
         bindings.append((shortcut_str, label_name))
 
-    label_none_shortcut = _lookup_shortcut(shortcuts_mapping, Shortcut.LABEL_NONE)
+    label_none_shortcut = _lookup_shortcut(shortcuts_mapping, key_none)
     if label_none_shortcut:
         bindings.append((label_none_shortcut, None))
 

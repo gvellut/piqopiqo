@@ -138,3 +138,64 @@ def test_escape_shortcut_has_no_effect_with_single_selection(qapp):
     assert grid._last_selected_index == 1
     assert grid._last_selected_path == "/tmp/b.jpg"
     assert emitted == []
+
+
+def test_filter_shortcut_activation_respects_shared_scope_focus_guard(qapp):
+    init_qsettings_store(dyn=True)
+
+    root = QWidget()
+    layout = QVBoxLayout(root)
+    grid = PhotoGrid()
+    panel_button = QPushButton("Panel Action")
+    search_field = QLineEdit()
+    layout.addWidget(grid)
+    layout.addWidget(panel_button)
+    layout.addWidget(search_field)
+    grid.set_grid_view_shortcut_scope(root)
+
+    root.show()
+    root.activateWindow()
+    qapp.processEvents()
+
+    captured_labels: list[str | None] = []
+    captured_cycles: list[int] = []
+    captured_all: list[bool] = []
+    captured_clear: list[bool] = []
+    captured_search: list[bool] = []
+    grid.filter_label_shortcut_requested.connect(captured_labels.append)
+    grid.folder_filter_cycle_requested.connect(captured_cycles.append)
+    grid.folder_filter_all_requested.connect(lambda: captured_all.append(True))
+    grid.clear_filter_shortcut_requested.connect(lambda: captured_clear.append(True))
+    grid.focus_filter_search_shortcut_requested.connect(lambda: captured_search.append(True))
+
+    panel_button.setFocus()
+    qapp.processEvents()
+
+    grid._activate_filter_label_shortcut("Approved")
+    grid._activate_filter_label_shortcut(None)
+    grid._activate_folder_filter_cycle_shortcut(1)
+    grid._activate_folder_filter_cycle_shortcut(-1)
+    grid._activate_folder_filter_all_shortcut()
+    grid._activate_clear_filter_shortcut()
+    grid._activate_focus_filter_search_shortcut()
+
+    assert captured_labels == ["Approved", None]
+    assert captured_cycles == [1, -1]
+    assert captured_all == [True]
+    assert captured_clear == [True]
+    assert captured_search == [True]
+
+    search_field.setFocus()
+    qapp.processEvents()
+
+    grid._activate_filter_label_shortcut("Review")
+    grid._activate_folder_filter_cycle_shortcut(1)
+    grid._activate_folder_filter_all_shortcut()
+    grid._activate_clear_filter_shortcut()
+    grid._activate_focus_filter_search_shortcut()
+
+    assert captured_labels == ["Approved", None]
+    assert captured_cycles == [1, -1]
+    assert captured_all == [True]
+    assert captured_clear == [True]
+    assert captured_search == [True]

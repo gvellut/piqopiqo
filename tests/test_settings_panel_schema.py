@@ -60,3 +60,18 @@ def test_external_tools_tab_contains_manual_lens_group():
     assert [field.key for field in group_by_title["Manual Lens"].fields] == [
         UserSettingKey.MANUAL_LENSES
     ]
+
+
+def test_labels_and_shortcuts_tabs_layout_matches_expected_groups_and_fields():
+    labels_tab = next(tab for tab in SETTINGS_TABS if tab.title == "Labels")
+    assert [group.title for group in labels_tab.groups] == ["Status Labels"]
+    assert [field.key for field in labels_tab.groups[0].fields] == [
+        UserSettingKey.STATUS_LABELS,
+        UserSettingKey.FILTER_IN_FULLSCREEN,
+    ]
+
+    shortcuts_tab = next(tab for tab in SETTINGS_TABS if tab.title == "Shortcuts")
+    assert [group.title for group in shortcuts_tab.groups] == ["Shortcuts"]
+    assert [field.key for field in shortcuts_tab.groups[0].fields] == [
+        UserSettingKey.SHORTCUTS
+    ]

@@ -181,7 +181,7 @@ SETTINGS_TABS: list[TabSpec] = [
         ],
     ),
     TabSpec(
-        title="Labels + Shortcuts",
+        title="Labels",
         groups=[
             GroupSpec(
                 title="Status Labels",
@@ -198,6 +198,11 @@ SETTINGS_TABS: list[TabSpec] = [
                     ),
                 ],
             ),
+        ],
+    ),
+    TabSpec(
+        title="Shortcuts",
+        groups=[
             GroupSpec(
                 title="Shortcuts",
                 fields=[
