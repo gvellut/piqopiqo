@@ -113,7 +113,7 @@ def cli(folder, dyn):
     init_qsettings_store(dyn=dyn)
 
     if not ensure_mandatory_settings_configured():
-        logger.info("Startup canceled: required settings were not confirmed.")
+        logger.warning("Startup canceled: required settings were not confirmed.")
         sys.exit(1)
 
     # Resolve cache base path in parent process and propagate to cache helpers.

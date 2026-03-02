@@ -1,2 +1,1 @@
 The dialog in src/piqopiqo/dialogs/mandatory_settings_dialog.py is too big. Make the height adjusted to the content.
-Also the path to 

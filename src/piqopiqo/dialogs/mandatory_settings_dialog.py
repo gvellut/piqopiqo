@@ -36,13 +36,13 @@ class MandatorySettingsDialog(QDialog):
     ):
         super().__init__(parent)
         self.setWindowTitle("Required Settings")
-        self.resize(760, 360)
 
         self._pending_settings = list(pending_settings)
         self._line_edits: dict[UserSettingKey, QLineEdit] = {}
         self._create_notes: dict[UserSettingKey, QLabel] = {}
 
         self._build_ui(error_message=error_message)
+        self.resize(760, self.sizeHint().height())
 
     def values(self) -> dict[UserSettingKey, str]:
         return {
