@@ -27,6 +27,7 @@ from .cache_paths import get_folder_cache_id, set_cache_base_dir
 from .color_management import refresh_main_screen_color_space_cache
 from .components.column_number_selector import ColumnNumberSelector
 from .components.status_bar import LoadingStatusBar
+from .dialogs.about_dialog import show_about
 from .dialogs.error_list_dialog import ErrorListDialog
 from .dialogs.workspace_properties_dialog import (
     WorkspaceFolderSummary,
@@ -1373,16 +1374,7 @@ class MainWindow(QMainWindow):
         self._fullscreen_menu_policy_active = False
 
     def on_about(self):
-        github_url = "https://github.com/gvellut/piqopiqo"
-        today = datetime.now().strftime("%Y-%m-%d")
-        QMessageBox.about(
-            self,
-            f"About {APP_NAME}",
-            f"<b>{APP_NAME}</b><br>"
-            f"Version: {piqopiqo_version}<br>"
-            f"Date: {today}<br><br>"
-            f'<a href="{github_url}">{github_url}</a>',
-        )
+        show_about(self)
 
     def on_settings(self):
         self.open_settings()

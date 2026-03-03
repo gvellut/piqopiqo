@@ -19,3 +19,5 @@ __pycache__
 *.spec
 
 *.png
+
+src/piqopiqo/_build_info.py

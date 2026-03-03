@@ -42,5 +42,6 @@ dev = ["pytest>=9.0.2", "taskipy>=1.14.1", "pyinstaller>=6.18.0"]
 pyqtauto = ["pyqtauto"]
 
 [tool.taskipy.tasks]
-build = "pyinstaller --name 'PiqoPiqo' --windowed --noconfirm --clean --icon='app.icns' --exclude-module=pyqtauto --paths='src' --add-data='app.icns:.' pyinstaller_main.py"
+build = "python pyinstaller_build.py"
+# need to install : brew install create-dmg
 package = "create-dmg --volname 'PiqoPiqo Installer' --volicon 'app.icns' --app-drop-link 600 185 'PiqoPiqo.dmg' 'dist/PiqoPiqo.app'"
