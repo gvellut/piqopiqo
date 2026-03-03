@@ -2,16 +2,18 @@
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
-   width="210mm"
-   height="210mm"
-   viewBox="0 0 210 210"
+   width="290mm"
+   height="290mm"
+   viewBox="0 0 290 290"
    version="1.1"
    id="svg1"
-   inkscape:export-filename="bitmap.png"
+   inkscape:export-filename="icon.svg"
    inkscape:export-xdpi="61.927616"
    inkscape:export-ydpi="61.927616"
    inkscape:version="1.4 (e7c3feb1, 2024-10-09)"
    sodipodi:docname="app_icon.svg"
+   inkscape:export-batch-path="/Users/guilhem/Documents/projects/github/piqopiqo"
+   inkscape:export-batch-name="app_icon"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
@@ -28,58 +30,94 @@
      inkscape:document-units="mm"
      inkscape:zoom="0.89887065"
      inkscape:cx="396.05254"
-     inkscape:cy="364.90234"
+     inkscape:cy="468.3655"
      inkscape:window-width="2560"
      inkscape:window-height="1387"
      inkscape:window-x="2304"
      inkscape:window-y="221"
      inkscape:window-maximized="1"
-     inkscape:current-layer="layer1" />
+     inkscape:current-layer="layer1"
+     showguides="true"
+     showgrid="true">
+    <sodipodi:guide
+       position="-5.0000001,250"
+       orientation="0,793.70079"
+       id="guide3"
+       inkscape:locked="false" />
+    <sodipodi:guide
+       position="210,210"
+       orientation="793.70079,0"
+       id="guide4"
+       inkscape:locked="false" />
+    <sodipodi:guide
+       position="210,0"
+       orientation="0,-793.70079"
+       id="guide5"
+       inkscape:locked="false" />
+    <sodipodi:guide
+       position="-40.000001,200"
+       orientation="-793.70079,0"
+       id="guide6"
+       inkscape:locked="false" />
+    <inkscape:grid
+       id="grid7"
+       units="mm"
+       originx="0"
+       originy="0"
+       spacingx="0.99999998"
+       spacingy="0.99999998"
+       empcolor="#0099e5"
+       empopacity="0.30196078"
+       color="#0099e5"
+       opacity="0.14901961"
+       empspacing="5"
+       enabled="true"
+       visible="true" />
+  </sodipodi:namedview>
   <defs
      id="defs1" />
   <g
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
-     id="layer1">
-    <rect
-       style="fill:#809eed;fill-opacity:1;stroke-width:0.264583"
+     id="layer1"
+     clip-path="none">
+    <path
        id="rect1"
-       width="286.40302"
-       height="254.90782"
-       x="-21.487612"
-       y="-11.774034" />
+       style="fill:#809eed;fill-opacity:1;stroke-width:0.371754"
+       d="M 0,0 V 290 H 290 V 0 Z" />
     <text
        xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:189.866px;line-height:1;font-family:Sans;-inkscape-font-specification:'Sans, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;direction:ltr;text-orientation:upright;text-anchor:middle;fill:#f82509;fill-opacity:1;stroke-width:0.406857"
-       x="48.841969"
-       y="148.05847"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:169.076px;line-height:1;font-family:'Helvetica Neue';-inkscape-font-specification:'Helvetica Neue, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;direction:ltr;text-orientation:upright;text-anchor:middle;fill:#f82509;fill-opacity:1;stroke-width:0.567318"
+       x="88.999474"
+       y="167.15956"
        id="text1"
        inkscape:highlight-color="#ff0000"><tspan
          sodipodi:role="line"
          id="tspan1"
-         x="48.841969"
-         y="148.05847">P</tspan></text>
+         x="88.999474"
+         y="167.15956"
+         style="stroke-width:0.567318">P</tspan></text>
     <text
        xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:74.516px;line-height:1;font-family:Geneva;-inkscape-font-specification:'Geneva, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;direction:ltr;text-orientation:upright;text-anchor:middle;fill:#f82509;fill-opacity:1;stroke-width:0.159677"
-       x="192.36575"
-       y="145.77023"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:121.254px;line-height:1;font-family:'Helvetica Neue';-inkscape-font-specification:'Helvetica Neue, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;direction:ltr;text-orientation:upright;text-anchor:middle;fill:#f82509;fill-opacity:1;stroke-width:0.159677"
+       x="224.84233"
+       y="184.00414"
        id="text2"><tspan
          sodipodi:role="line"
          id="tspan2"
-         style="stroke-width:0.159677"
-         x="192.36575"
-         y="145.77023">²</tspan></text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:121.254px;font-family:'Helvetica Neue';-inkscape-font-specification:'Helvetica Neue, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;stroke-width:0.159677"
+         x="224.84233"
+         y="184.00414">²</tspan></text>
     <text
        xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:99.3811px;line-height:1;font-family:Sans;-inkscape-font-specification:'Sans, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;direction:ltr;text-orientation:upright;text-anchor:middle;fill:#f82509;fill-opacity:1;stroke-width:0.13849"
-       x="110.67593"
-       y="185.44102"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:121.254px;line-height:1;font-family:'Helvetica Neue';-inkscape-font-specification:'Helvetica Neue, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;direction:ltr;text-orientation:upright;text-anchor:middle;fill:#f82509;fill-opacity:1;stroke-width:0.13849"
+       x="148.90982"
+       y="219.93161"
        id="text3"><tspan
          sodipodi:role="line"
          id="tspan3"
-         style="stroke-width:0.13849"
-         x="110.67593"
-         y="185.44102">iqo</tspan></text>
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:121.254px;font-family:'Helvetica Neue';-inkscape-font-specification:'Helvetica Neue, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;stroke-width:0.13849"
+         x="148.90982"
+         y="219.93161">iqo</tspan></text>
   </g>
 </svg>
