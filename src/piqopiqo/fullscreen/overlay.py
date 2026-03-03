@@ -1098,7 +1098,8 @@ class FullscreenOverlay(QWidget):
             # At base view (including small images): do nothing
             # Zoom IN for large images is handled in mousePressEvent
             logger.debug(
-                "Fullscreen click-zoom-out ignored: already at base view pos=(%.1f, %.1f)",
+                "Fullscreen click-zoom-out ignored: already at base view "
+                "pos=(%.1f, %.1f)",
                 screen_pos.x(),
                 screen_pos.y(),
             )

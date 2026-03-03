@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 from PySide6.QtCore import QCoreApplication
-from PySide6.QtWidgets import QApplication, QAbstractItemView, QMessageBox
+from PySide6.QtWidgets import QAbstractItemView, QApplication, QMessageBox
 import pytest
 
 from piqopiqo.dialogs.workspace_properties_dialog import (

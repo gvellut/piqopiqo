@@ -207,8 +207,10 @@ class WorkspacePropertiesDialog(QDialog):
         answer = QMessageBox.warning(
             self,
             "Clear Metadata",
-            "This will delete cached metadata databases for all loaded folders.\n\n"
-            "This cannot be undone. Continue?",
+            "This will delete cached metadata databases for all loaded folders "
+            "when the Property dialog is closed. If you haven't saved to EXIF, the "
+            "data will be lost.\n\n"
+            "This can be undone by pressing Cancel in the property dialog. Continue?",
             QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Cancel,
         )

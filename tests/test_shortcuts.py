@@ -41,7 +41,9 @@ def test_configurable_shortcut_view_registries_cover_all_shortcuts():
     assert Shortcut.SELECT_ALL in GRID_VIEW_CONFIGURABLE_SHORTCUTS
     assert Shortcut.SELECT_ALL not in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
     assert Shortcut.COLLAPSE_TO_LAST_SELECTED in GRID_VIEW_CONFIGURABLE_SHORTCUTS
-    assert Shortcut.COLLAPSE_TO_LAST_SELECTED not in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
+    assert (
+        Shortcut.COLLAPSE_TO_LAST_SELECTED not in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
+    )
     assert Shortcut.TOGGLE_RIGHT_SIDEBAR in GRID_VIEW_CONFIGURABLE_SHORTCUTS
     assert Shortcut.TOGGLE_RIGHT_SIDEBAR not in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
 
@@ -126,7 +128,7 @@ def test_build_filter_label_shortcut_bindings_resolves_status_labels_and_label_n
     assert bindings == [("Alt+1", "Pick"), ("Alt+2", "Review"), ("Alt+`", None)]
 
 
-def test_build_filter_label_shortcut_bindings_skips_missing_labels_and_empty_shortcuts():
+def test_build_filter_label_shortcut_bindings_skips_missing_and_empty():
     bindings = build_filter_label_shortcut_bindings(
         {
             Shortcut.FILTER_LABEL_1: "",

@@ -93,9 +93,7 @@ class UserSettingKey(StrEnum):
     GCP_SA_KEY_PATH = "gcpSaKeyPath"
     FLICKR_API_KEY = "flickrApiKey"
     FLICKR_API_SECRET = "flickrApiSecret"
-    FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS = (
-        "flickrUploadRequireTitleAndKeywords"
-    )
+    FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS = "flickrUploadRequireTitleAndKeywords"
     MANUAL_LENSES = "manualLenses"
 
 

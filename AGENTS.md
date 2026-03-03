@@ -371,6 +371,8 @@ Selection behavior:
 
 ## Development
 
+Run linting and formatting as the final step of your work. Fix the issues that come up.
+
 ```bash
 # Install dependencies
 uv sync

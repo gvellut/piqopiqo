@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import time
 import uuid
-from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import QApplication

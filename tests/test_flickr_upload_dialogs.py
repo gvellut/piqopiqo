@@ -129,9 +129,7 @@ def test_upload_progress_shows_single_running_step_line(qapp) -> None:  # noqa: 
     assert dialog.progress_text_label.isHidden() is True
 
     dialog._on_status("Check 2/10")
-    assert (
-        "Check upload status - Check 2/10" in dialog.stage_label.text()
-    )
+    assert "Check upload status - Check 2/10" in dialog.stage_label.text()
 
 
 def test_upload_progress_add_to_album_uses_merged_step_text(qapp) -> None:  # noqa: ARG001

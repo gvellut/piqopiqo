@@ -5,6 +5,7 @@ This module must stay free of Qt imports.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 import logging
 import os
@@ -12,7 +13,6 @@ from pathlib import Path
 import shutil
 import tempfile
 import time
-from collections.abc import Callable
 from typing import Any
 
 from attrs import define

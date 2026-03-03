@@ -67,7 +67,9 @@ class LoadingStatusBar(QStatusBar):
 
     def _read_side_padding(self) -> int:
         try:
-            padding = int(get_runtime_setting(RuntimeSettingKey.STATUS_BAR_SIDE_PADDING))
+            padding = int(
+                get_runtime_setting(RuntimeSettingKey.STATUS_BAR_SIDE_PADDING)
+            )
         except Exception:
             padding = 10
         return max(0, padding)
@@ -85,10 +87,13 @@ class LoadingStatusBar(QStatusBar):
 
         if filtered is not None and int(filtered) != int(total):
             self.count_label.setText(
-                f"{int(filtered)} of {int(total)} photos / {self._selected_count} selected"
+                f"{int(filtered)} of {int(total)} photos / "
+                f"{self._selected_count} selected"
             )
         else:
-            self.count_label.setText(f"{int(total)} photos / {self._selected_count} selected")
+            self.count_label.setText(
+                f"{int(total)} photos / {self._selected_count} selected"
+            )
 
     def set_thumb_progress(self, completed: int, total: int):
         """Update thumbnail loading progress."""

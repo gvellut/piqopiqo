@@ -69,7 +69,9 @@ class PhotoGrid(QWidget):
 
         self.setFocusPolicy(Qt.StrongFocus)
 
-        self.n_cols = self._clamp_num_columns(get_user_setting(UserSettingKey.NUM_COLUMNS))
+        self.n_cols = self._clamp_num_columns(
+            get_user_setting(UserSettingKey.NUM_COLUMNS)
+        )
         self.n_rows = 1
         self.items_data = []
         self._last_selected_index = -1
@@ -249,9 +251,7 @@ class PhotoGrid(QWidget):
                 parse_shortcut(toggle_sidebar_shortcut), scope
             )
             sc_toggle_sidebar.setContext(Qt.WidgetWithChildrenShortcut)
-            sc_toggle_sidebar.activated.connect(
-                self._activate_toggle_sidebar_shortcut
-            )
+            sc_toggle_sidebar.activated.connect(self._activate_toggle_sidebar_shortcut)
             self._shared_grid_view_shortcut_objects.append(sc_toggle_sidebar)
 
         sc_fullscreen = QShortcut(QKeySequence("Space"), scope)
@@ -420,7 +420,8 @@ class PhotoGrid(QWidget):
         if perf_enabled:
             elapsed_ms = (time.perf_counter() - started) * 1000.0
             logger.debug(
-                "Grid set_data completed: items=%d fast_first=%s rendered_via_scroll=%s total=%.1fms",
+                "Grid set_data completed: items=%d fast_first=%s "
+                "rendered_via_scroll=%s total=%.1fms",
                 len(items),
                 fast_first_paint,
                 rendered_via_scroll,
@@ -738,7 +739,9 @@ class PhotoGrid(QWidget):
             self._hq_display_enabled = False
             return
 
-        delay_ms = int(get_runtime_setting(RuntimeSettingKey.GRID_HQ_THUMB_LOAD_DELAY_MS))
+        delay_ms = int(
+            get_runtime_setting(RuntimeSettingKey.GRID_HQ_THUMB_LOAD_DELAY_MS)
+        )
         if delay_ms <= 0:
             self._fast_first_paint_active = False
             self._hq_display_enabled = True
@@ -1288,7 +1291,9 @@ class PhotoGrid(QWidget):
             self.on_cell_clicked(new_index, False, False)
             self._ensure_visible(new_index)
 
-    def _set_scrollbar_value(self, value: int, *, navigation_activity: bool = True) -> None:
+    def _set_scrollbar_value(
+        self, value: int, *, navigation_activity: bool = True
+    ) -> None:
         if navigation_activity:
             self.scrollbar.setValue(value)
             return

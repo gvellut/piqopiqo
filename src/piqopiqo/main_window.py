@@ -21,13 +21,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import __version__ as piqopiqo_version
-from . import platform
+from . import __version__ as piqopiqo_version, platform
 from .background.media_man import MediaManager
 from .cache_paths import get_folder_cache_id, set_cache_base_dir
 from .color_management import refresh_main_screen_color_space_cache
-from .components.status_bar import LoadingStatusBar
 from .components.column_number_selector import ColumnNumberSelector
+from .components.status_bar import LoadingStatusBar
 from .dialogs.error_list_dialog import ErrorListDialog
 from .dialogs.workspace_properties_dialog import (
     WorkspaceFolderSummary,
@@ -1169,7 +1168,8 @@ class MainWindow(QMainWindow):
         logger.debug(
             "Deferred filter apply completed: "
             "folder=%r labels=%s include_no_label=%s search=%r "
-            "result=%d/%d changed=%s model=%.1fms grid=%.1fms restore=%.1fms total=%.1fms",
+            "result=%d/%d changed=%s model=%.1fms grid=%.1fms "
+            "restore=%.1fms total=%.1fms",
             criteria_folder,
             criteria_labels,
             criteria_no_label,
@@ -1641,7 +1641,10 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
-        if not dialog.clear_thumb_cache_requested and not dialog.clear_metadata_requested:
+        if (
+            not dialog.clear_thumb_cache_requested
+            and not dialog.clear_metadata_requested
+        ):
             return
 
         self._start_workspace_cleanup(
@@ -1717,8 +1720,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Workspace Property",
-                "Cleanup completed with an error:\n\n"
-                f"{error_message}",
+                f"Cleanup completed with an error:\n\n{error_message}",
             )
 
     def _clear_filters_before_folder_load(self) -> None:
@@ -2218,7 +2220,8 @@ class MainWindow(QMainWindow):
 
         self._last_model_change_grid_ms = (after_grid - started) * 1000.0
         logger.debug(
-            "Model changed refresh timings: grid=%.1fms status=%.1fms panels=%.1fms total=%.1fms",
+            "Model changed refresh timings: grid=%.1fms status=%.1fms "
+            "panels=%.1fms total=%.1fms",
             (after_grid - started) * 1000.0,
             (after_status - after_grid) * 1000.0,
             (after_panels - after_status) * 1000.0,
@@ -2371,7 +2374,9 @@ class MainWindow(QMainWindow):
             clear_queued=True,
         )
         if not cleanup_pool_completed:
-            logger.warning("Timed out waiting for workspace cleanup to finish on shutdown")
+            logger.warning(
+                "Timed out waiting for workspace cleanup to finish on shutdown"
+            )
 
         if self.edit_panel is not None:
             self.edit_panel.shutdown_background_saves(

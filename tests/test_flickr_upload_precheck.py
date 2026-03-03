@@ -36,7 +36,9 @@ class _FakeDb:
 
 
 class _FakeDbManager:
-    def __init__(self, by_path: dict[str, dict | None] | None = None, *, fail: bool = False):
+    def __init__(
+        self, by_path: dict[str, dict | None] | None = None, *, fail: bool = False
+    ):
         self._by_path = by_path or {}
         self._fail = fail
 

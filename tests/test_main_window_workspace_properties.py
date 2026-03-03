@@ -33,7 +33,9 @@ class _MediaManagerStub:
         self.reset_calls: list[tuple[list[str], list[str]]] = []
         self.visible_calls: list[list[str]] = []
 
-    def reset_for_folder(self, file_paths: list[str], source_folders: list[str]) -> None:
+    def reset_for_folder(
+        self, file_paths: list[str], source_folders: list[str]
+    ) -> None:
         self.reset_calls.append((list(file_paths), list(source_folders)))
 
     def update_visible(self, visible_paths_in_order: list[str]) -> None:
@@ -147,15 +149,21 @@ def test_open_workspace_properties_accept_without_flags_does_not_start_cleanup(
             return QDialog.DialogCode.Accepted
 
     calls: list[dict] = []
-    monkeypatch.setattr("piqopiqo.main_window.WorkspacePropertiesDialog", _DialogNoAction)
-    monkeypatch.setattr(window, "_start_workspace_cleanup", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(
+        "piqopiqo.main_window.WorkspacePropertiesDialog", _DialogNoAction
+    )
+    monkeypatch.setattr(
+        window, "_start_workspace_cleanup", lambda **kwargs: calls.append(kwargs)
+    )
 
     window._on_open_workspace_properties()
 
     assert calls == []
 
 
-def test_open_workspace_properties_accept_with_flags_starts_cleanup(window, monkeypatch):
+def test_open_workspace_properties_accept_with_flags_starts_cleanup(
+    window, monkeypatch
+):
     window.root_folder = "/photos"
 
     class _DialogWithAction:
@@ -170,7 +178,9 @@ def test_open_workspace_properties_accept_with_flags_starts_cleanup(window, monk
     monkeypatch.setattr(
         "piqopiqo.main_window.WorkspacePropertiesDialog", _DialogWithAction
     )
-    monkeypatch.setattr(window, "_start_workspace_cleanup", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(
+        window, "_start_workspace_cleanup", lambda **kwargs: calls.append(kwargs)
+    )
 
     window._on_open_workspace_properties()
 

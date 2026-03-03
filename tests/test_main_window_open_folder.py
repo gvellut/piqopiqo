@@ -228,7 +228,7 @@ def test_pick_reselection_path_returns_none_when_no_visible_items():
     )
 
 
-def test_on_model_changed_auto_reselects_when_selection_disappears_after_metadata_sync():
+def test_on_model_changed_auto_reselects_after_metadata_sync():
     photos = [_Item("/a.jpg"), _Item("/d.jpg")]
     pending_context = {
         "old_photo_list_paths": ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],

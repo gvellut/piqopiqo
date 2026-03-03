@@ -167,7 +167,9 @@ def test_filter_shortcut_activation_respects_shared_scope_focus_guard(qapp):
     grid.folder_filter_cycle_requested.connect(captured_cycles.append)
     grid.folder_filter_all_requested.connect(lambda: captured_all.append(True))
     grid.clear_filter_shortcut_requested.connect(lambda: captured_clear.append(True))
-    grid.focus_filter_search_shortcut_requested.connect(lambda: captured_search.append(True))
+    grid.focus_filter_search_shortcut_requested.connect(
+        lambda: captured_search.append(True)
+    )
     grid.toggle_sidebar_shortcut_requested.connect(lambda: captured_toggle.append(True))
 
     panel_button.setFocus()
