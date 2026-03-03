@@ -11,7 +11,11 @@ from typing import TYPE_CHECKING
 from PySide6.QtWidgets import QMenu
 from send2trash import send2trash
 
-from piqopiqo.external_apps import open_in_external_app, reveal_in_file_manager
+from piqopiqo.external_apps import (
+    get_reveal_in_file_manager_label,
+    open_in_external_app,
+    reveal_in_file_manager,
+)
 from piqopiqo.model import ImageItem
 from piqopiqo.ssf.settings_state import UserSettingKey, get_user_setting
 
@@ -143,7 +147,7 @@ def show_context_menu(window: MainWindow, global_index: int, pos) -> None:
     menu = QMenu(window)
 
     # Reveal in Finder
-    reveal_action = menu.addAction("Reveal in Finder")
+    reveal_action = menu.addAction(get_reveal_in_file_manager_label())
     reveal_action.triggered.connect(lambda: reveal_in_file_manager(selected))
 
     # View in Application (only if configured)

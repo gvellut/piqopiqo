@@ -113,6 +113,20 @@ def clear_thumb_cache_for_folders(folder_paths: list[str]) -> None:
         clear_thumb_cache_for_folder(folder_path)
 
 
+def clear_metadata_cache_for_folder(folder_path: str) -> None:
+    """Clear the metadata database cache for a specific folder."""
+    db_dir = get_cache_dir_for_folder(folder_path) / "db"
+    if db_dir.exists():
+        shutil.rmtree(db_dir)
+        logger.info(f"Cleared metadata cache for: {folder_path}")
+
+
+def clear_metadata_cache_for_folders(folder_paths: list[str]) -> None:
+    """Clear metadata database cache for multiple folders."""
+    for folder_path in folder_paths:
+        clear_metadata_cache_for_folder(folder_path)
+
+
 def get_flickr_cache_dir() -> Path:
     """Get (and ensure) the Flickr token cache directory."""
     from piqopiqo.tools.flickr_upload.constants import FLICKR_TOKEN_DIR_NAME

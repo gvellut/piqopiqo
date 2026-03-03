@@ -7,10 +7,11 @@ import logging
 import os
 import time
 
-from PySide6.QtCore import Qt, QThreadPool, QTimer
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QFileDialog,
     QHBoxLayout,
     QMainWindow,
@@ -20,13 +21,18 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from . import __version__ as piqopiqo_version
 from . import platform
 from .background.media_man import MediaManager
-from .cache_paths import set_cache_base_dir
+from .cache_paths import get_folder_cache_id, set_cache_base_dir
 from .color_management import refresh_main_screen_color_space_cache
 from .components.status_bar import LoadingStatusBar
 from .components.column_number_selector import ColumnNumberSelector
 from .dialogs.error_list_dialog import ErrorListDialog
+from .dialogs.workspace_properties_dialog import (
+    WorkspaceFolderSummary,
+    WorkspacePropertiesDialog,
+)
 from .folder_scan import scan_folder
 from .folder_watcher import FolderWatcher
 from .fullscreen import FullscreenOverlay
@@ -60,6 +66,43 @@ logger = logging.getLogger(__name__)
 
 LARGE_SELECTION_PANEL_DEFER_THRESHOLD = 200
 SELECTION_PANEL_DEBOUNCE_MS = 120
+
+
+class _WorkspaceCleanupWorkerSignals(QObject):
+    finished = Signal(object)  # error string or None
+
+
+class _WorkspaceCleanupWorker(QRunnable):
+    def __init__(
+        self,
+        source_folders: list[str],
+        *,
+        clear_thumb_cache: bool,
+        clear_metadata: bool,
+    ) -> None:
+        super().__init__()
+        self._source_folders = list(source_folders)
+        self._clear_thumb_cache = bool(clear_thumb_cache)
+        self._clear_metadata = bool(clear_metadata)
+        self.signals = _WorkspaceCleanupWorkerSignals()
+
+    def run(self) -> None:
+        error_message = None
+        try:
+            from .cache_paths import (
+                clear_metadata_cache_for_folders,
+                clear_thumb_cache_for_folders,
+            )
+
+            if self._clear_metadata:
+                clear_metadata_cache_for_folders(self._source_folders)
+            if self._clear_thumb_cache:
+                clear_thumb_cache_for_folders(self._source_folders)
+        except Exception as exc:
+            logger.exception("Workspace cleanup failed")
+            error_message = str(exc)
+
+        self.signals.finished.emit(error_message)
 
 
 class MainWindow(QMainWindow):
@@ -110,9 +153,14 @@ class MainWindow(QMainWindow):
         self._fullscreen_menu_policy_active = False
         self._right_sidebar_collapsed = False
         self._right_sidebar_restore_size: int | None = None
+        self._workspace_cleanup_running = False
+        self._workspace_cleanup_context: dict | None = None
+        self._workspace_cleanup_worker: _WorkspaceCleanupWorker | None = None
 
         # Create metadata database manager
         self.db_manager = MetadataDBManager()
+        self._workspace_cleanup_pool = QThreadPool(self)
+        self._workspace_cleanup_pool.setMaxThreadCount(1)
 
         self._create_menu_bar()
 
@@ -1146,9 +1194,9 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
-        clear_data_action = QAction("Clear All Data", self)
-        clear_data_action.triggered.connect(self._on_clear_all_data)
-        file_menu.addAction(clear_data_action)
+        workspace_property_action = QAction("Property...", self)
+        workspace_property_action.triggered.connect(self._on_open_workspace_properties)
+        file_menu.addAction(workspace_property_action)
 
         file_menu.addSeparator()
 
@@ -1325,7 +1373,16 @@ class MainWindow(QMainWindow):
         self._fullscreen_menu_policy_active = False
 
     def on_about(self):
-        pass
+        github_url = "https://github.com/gvellut/piqopiqo"
+        today = datetime.now().strftime("%Y-%m-%d")
+        QMessageBox.about(
+            self,
+            f"About {APP_NAME}",
+            f"<b>{APP_NAME}</b><br>"
+            f"Version: {piqopiqo_version}<br>"
+            f"Date: {today}<br><br>"
+            f'<a href="{github_url}">{github_url}</a>',
+        )
 
     def on_settings(self):
         self.open_settings()
@@ -1535,6 +1592,134 @@ class MainWindow(QMainWindow):
         if folder:
             self._clear_filters_before_folder_load()
             self._load_folder(folder)
+
+    def _to_relative_folder_label(self, folder_path: str) -> str:
+        if not self.root_folder:
+            return folder_path
+        try:
+            relative = os.path.relpath(folder_path, self.root_folder)
+        except ValueError:
+            return folder_path
+        if relative in ("", "."):
+            return "."
+        return relative
+
+    def _build_workspace_folder_summaries(self) -> list[WorkspaceFolderSummary]:
+        photo_count_by_folder: dict[str, int] = {}
+        for item in self.photo_model.all_photos:
+            folder = item.source_folder
+            photo_count_by_folder[folder] = photo_count_by_folder.get(folder, 0) + 1
+
+        summaries: list[WorkspaceFolderSummary] = []
+        for folder_path in self.photo_model.source_folders:
+            summaries.append(
+                WorkspaceFolderSummary(
+                    folder_path=folder_path,
+                    relative_path=self._to_relative_folder_label(folder_path),
+                    cache_folder_name=get_folder_cache_id(folder_path),
+                    photo_count=int(photo_count_by_folder.get(folder_path, 0)),
+                )
+            )
+        return summaries
+
+    def _on_open_workspace_properties(self) -> None:
+        if not self.root_folder:
+            QMessageBox.information(
+                self,
+                "Workspace Property",
+                "No folder is currently loaded.",
+            )
+            return
+
+        dialog = WorkspacePropertiesDialog(
+            root_folder=self.root_folder,
+            total_photo_count=len(self.photo_model.all_photos),
+            folder_summaries=self._build_workspace_folder_summaries(),
+            parent=self,
+        )
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        if not dialog.clear_thumb_cache_requested and not dialog.clear_metadata_requested:
+            return
+
+        self._start_workspace_cleanup(
+            clear_thumb_cache=dialog.clear_thumb_cache_requested,
+            clear_metadata=dialog.clear_metadata_requested,
+        )
+
+    def _start_workspace_cleanup(
+        self,
+        *,
+        clear_thumb_cache: bool,
+        clear_metadata: bool,
+    ) -> None:
+        if not clear_thumb_cache and not clear_metadata:
+            return
+        if self._workspace_cleanup_running:
+            QMessageBox.information(
+                self,
+                "Workspace Property",
+                "A workspace cleanup is already running.",
+            )
+            return
+
+        source_folders = list(self.photo_model.source_folders)
+        file_paths = [item.path for item in self.photo_model.all_photos]
+        self._workspace_cleanup_context = {
+            "source_folders": source_folders,
+            "file_paths": file_paths,
+        }
+        self._workspace_cleanup_running = True
+
+        # Ensure DB files can be cleaned and stale media results are ignored.
+        self.db_manager.close_all()
+        self.media_manager.reset_for_folder([], [])
+        self.status_bar.reset()
+
+        worker = _WorkspaceCleanupWorker(
+            source_folders,
+            clear_thumb_cache=clear_thumb_cache,
+            clear_metadata=clear_metadata,
+        )
+        worker.signals.finished.connect(self._on_workspace_cleanup_finished)
+        self._workspace_cleanup_worker = worker
+        self._workspace_cleanup_pool.start(worker)
+
+    def _invalidate_workspace_items_for_reload(self) -> None:
+        for item in self.photo_model.all_photos:
+            item.state = 0
+            item._cache_state_dirty = True
+            item.embedded_pixmap = None
+            item.hq_pixmap = None
+            item.pixmap = None
+            item.exif_data = None
+            item.db_metadata = None
+
+    def _on_workspace_cleanup_finished(self, error_message: object) -> None:
+        context = self._workspace_cleanup_context or {}
+        source_folders = list(context.get("source_folders") or [])
+        file_paths = list(context.get("file_paths") or [])
+
+        self._workspace_cleanup_running = False
+        self._workspace_cleanup_context = None
+        self._workspace_cleanup_worker = None
+
+        self._invalidate_workspace_items_for_reload()
+        self.media_manager.reset_for_folder(file_paths, source_folders)
+        if self._last_visible_paths:
+            self.media_manager.update_visible(self._last_visible_paths)
+        self.grid.on_scroll(self.grid.scrollbar.value())
+        self._reconcile_selection_and_panels()
+
+        if isinstance(error_message, str) and error_message:
+            QMessageBox.warning(
+                self,
+                "Workspace Property",
+                "Cleanup completed with an error:\n\n"
+                f"{error_message}",
+            )
 
     def _clear_filters_before_folder_load(self) -> None:
         """Clear active filters before loading a new folder via Open Folder."""
@@ -2179,6 +2364,14 @@ class MainWindow(QMainWindow):
             logger.warning(
                 "Timed out waiting for label metadata saves to finish on shutdown"
             )
+
+        cleanup_pool_completed = drain_qthread_pool(
+            self._workspace_cleanup_pool,
+            timeout_ms,
+            clear_queued=True,
+        )
+        if not cleanup_pool_completed:
+            logger.warning("Timed out waiting for workspace cleanup to finish on shutdown")
 
         if self.edit_panel is not None:
             self.edit_panel.shutdown_background_saves(

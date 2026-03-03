@@ -2,10 +2,40 @@
 
 import logging
 import subprocess
+import sys
 
 from .model import ImageItem
 
 logger = logging.getLogger(__name__)
+
+
+def get_reveal_in_file_manager_label() -> str:
+    """Return a platform-specific label for reveal actions."""
+    if sys.platform == "darwin":
+        return "Reveal in Finder"
+    if sys.platform == "win32":
+        return "Reveal in Explorer"
+    return "Reveal in File Manager"
+
+
+def reveal_paths_in_file_manager(paths: list[str]) -> None:
+    """Reveal filesystem paths in the system file manager."""
+    if not paths:
+        return
+
+    try:
+        import showinfm
+
+        showinfm.show_in_file_manager(paths)
+    except Exception as e:
+        logger.error("Failed to reveal paths in file manager: %s", e)
+
+
+def reveal_path_in_file_manager(path: str) -> None:
+    """Reveal a single path in the system file manager."""
+    if not path:
+        return
+    reveal_paths_in_file_manager([path])
 
 
 def reveal_in_file_manager(photos: list[ImageItem]) -> None:
@@ -16,10 +46,8 @@ def reveal_in_file_manager(photos: list[ImageItem]) -> None:
     Args:
         photos: List of ImageItem objects to reveal.
     """
-    import showinfm
-
     paths = [photo.path for photo in photos]
-    showinfm.show_in_file_manager(paths)
+    reveal_paths_in_file_manager(paths)
 
 
 def open_in_external_app(app_name: str, paths: list[str]) -> None:

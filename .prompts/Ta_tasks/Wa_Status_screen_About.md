@@ -19,7 +19,7 @@ Do not make the popup too big : if too many folders. Put in a scroll panel. Stil
 
 OK Cancel
 
-- After exiting : on OK : do the clear if needed : the thumbnail or exif msut be read back (like when Opening a new new folder) using the media_man I think. Confirm.
+- After exiting : on OK : after the dialog is closed : do the clear if needed : do it in the background so GUI is not blocked : the thumbnail or exif must be read back (like when Opening a new new folder) using the media_man I think. Confirm.
 - if Cancel do not do the clear.
 
 
