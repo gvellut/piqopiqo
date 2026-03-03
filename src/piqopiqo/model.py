@@ -56,7 +56,8 @@ class FilterCriteria:
     search_text: str = ""  # Search in keywords + title (case insensitive)
 
 
-@attr.s(auto_attribs=True)
+# TODO define the dynamic attributes explicitly ; remove the slots=False
+@define(slots=False)
 class ImageItem:
     path: str
     name: str

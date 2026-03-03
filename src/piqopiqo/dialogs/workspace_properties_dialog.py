@@ -214,6 +214,13 @@ class WorkspacePropertiesDialog(QDialog):
             QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Cancel,
         )
+        # align left
+        # label = answer.findChild(QLabel, "qt_msgbox_label")
+        # if label:
+        #     label.setAlignment(
+        #         Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        #     )
+
         if answer != QMessageBox.StandardButton.Ok:
             return
 
