@@ -1,3 +1,4 @@
+* [Analyze and recommend refactor](Ta_tasks/Ab_Analyze_and_recommend_refactor.md)
 - [Safety if disk with SQLLite cache is unplugged detect and restart](Ta_tasks/Za_Safety_if_disk_with_SQLLite_cache_is_unplugged_.md)
 - [Base data redirect to settings](J_tasks/Q_Base_data_redirect_to_settings.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)

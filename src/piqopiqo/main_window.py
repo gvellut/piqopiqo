@@ -1274,12 +1274,6 @@ class MainWindow(QMainWindow):
             SortOrder.FILE_NAME_BY_FOLDER: sort_folder,
         }
 
-        view_menu.addSeparator()
-
-        regenerate_action = QAction("Regenerate Thumbnails", self)
-        regenerate_action.triggered.connect(self.on_regenerate_thumbnails)
-        view_menu.addAction(regenerate_action)
-
         # Tools menu
         tools_menu = menubar.addMenu("Tools")
 
@@ -1870,27 +1864,6 @@ class MainWindow(QMainWindow):
             item.pixmap = None
             self.media_manager.regenerate_thumbnails([path])
             self.grid.refresh_item(item._global_index)
-
-    def on_regenerate_thumbnails(self):
-        """Regenerate all thumbnails for currently loaded folders."""
-        if not self.photo_model.all_photos:
-            logger.warning("No folders loaded, nothing to regenerate")
-            return
-
-        items = list(self.photo_model.all_photos)
-        logger.info(f"Regenerating thumbnails for {len(items)} photo(s)")
-        self.media_manager.regenerate_thumbnails([p.path for p in items])
-
-        # Reset all image states to trigger re-generation
-        for item in items:
-            item.state = 0
-            item._cache_state_dirty = True
-            item.embedded_pixmap = None
-            item.hq_pixmap = None
-            item.pixmap = None
-
-        # Refresh the grid to trigger thumbnail requests
-        self.grid.on_scroll(self.grid.scrollbar.value())
 
     def on_reload_exif(self):
         """Reload EXIF (editable + panel fields) for selected or all filtered."""
