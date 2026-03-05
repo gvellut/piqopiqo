@@ -2,23 +2,18 @@
 
 import logging
 import subprocess
-import sys
 
 from .model import ImageItem
 
 logger = logging.getLogger(__name__)
 
 
-def get_reveal_in_file_manager_label() -> str:
-    """Return a platform-specific label for reveal actions."""
-    if sys.platform == "darwin":
-        return "Reveal in Finder"
-    if sys.platform == "win32":
-        return "Reveal in Explorer"
-    return "Reveal in File Manager"
+def get_reveal_in_file_manager_label_macos() -> str:
+    """Return the Finder label used for macOS reveal actions."""
+    return "Reveal in Finder"
 
 
-def reveal_paths_in_file_manager(paths: list[str]) -> None:
+def reveal_paths_in_file_manager_macos(paths: list[str]) -> None:
     """Reveal filesystem paths in the system file manager."""
     if not paths:
         return
@@ -31,14 +26,14 @@ def reveal_paths_in_file_manager(paths: list[str]) -> None:
         logger.error("Failed to reveal paths in file manager: %s", e)
 
 
-def reveal_path_in_file_manager(path: str) -> None:
+def reveal_path_in_file_manager_macos(path: str) -> None:
     """Reveal a single path in the system file manager."""
     if not path:
         return
-    reveal_paths_in_file_manager([path])
+    reveal_paths_in_file_manager_macos([path])
 
 
-def reveal_in_file_manager(photos: list[ImageItem]) -> None:
+def reveal_in_file_manager_macos(photos: list[ImageItem]) -> None:
     """Reveal photos in the system file manager.
 
     Groups files by folder and opens each folder with its files selected.
@@ -47,10 +42,10 @@ def reveal_in_file_manager(photos: list[ImageItem]) -> None:
         photos: List of ImageItem objects to reveal.
     """
     paths = [photo.path for photo in photos]
-    reveal_paths_in_file_manager(paths)
+    reveal_paths_in_file_manager_macos(paths)
 
 
-def open_in_external_app(app_name: str, paths: list[str]) -> None:
+def open_in_external_app_macos(app_name: str, paths: list[str]) -> None:
     """Open files in an external application.
 
     On macOS, uses ``open -a AppNameOrPath file1 file2 ...``.

@@ -22,8 +22,8 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.external_apps import (
-    get_reveal_in_file_manager_label,
-    reveal_path_in_file_manager,
+    get_reveal_in_file_manager_label_macos,
+    reveal_path_in_file_manager_macos,
 )
 
 
@@ -58,7 +58,7 @@ class WorkspacePropertiesDialog(QDialog):
         self._pending_clear_thumb_cache = False
         self._pending_clear_metadata = False
         self._selected_folder_path: str | None = None
-        self._reveal_label = get_reveal_in_file_manager_label()
+        self._reveal_label = get_reveal_in_file_manager_label_macos()
 
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
@@ -244,8 +244,8 @@ class WorkspacePropertiesDialog(QDialog):
         self.reveal_selected_folder_button.setEnabled(True)
 
     def _on_reveal_root_folder(self) -> None:
-        reveal_path_in_file_manager(self._root_folder)
+        reveal_path_in_file_manager_macos(self._root_folder)
 
     def _on_reveal_selected_folder(self) -> None:
         if self._selected_folder_path:
-            reveal_path_in_file_manager(self._selected_folder_path)
+            reveal_path_in_file_manager_macos(self._selected_folder_path)

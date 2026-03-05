@@ -7,11 +7,8 @@ from datetime import datetime
 import logging
 import math
 import os
-import sys
 
-if sys.platform == "darwin":
-    import AppKit
-
+import AppKit
 from PySide6.QtCore import QPointF, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
@@ -170,7 +167,7 @@ class FullscreenOverlay(QWidget):
         self.refresh_shortcuts()
 
         # Register safety cleanup
-        atexit.register(self.restore_macos_ui)
+        atexit.register(self.restore_ui_macos)
 
     def refresh_shortcuts(self) -> None:
         shortcuts = get_user_setting(UserSettingKey.SHORTCUTS)
@@ -669,7 +666,7 @@ class FullscreenOverlay(QWidget):
         )
 
         # Hide macOS Chrome (Menu Bar & Dock) strictly
-        self.hide_macos_ui()
+        self.hide_ui_macos()
 
         # Move window to the target screen
         self.setScreen(target_screen)
@@ -691,10 +688,8 @@ class FullscreenOverlay(QWidget):
         self.setFocus()
 
     # --- macOS Specific Logic ---
-    def hide_macos_ui(self):
+    def hide_ui_macos(self):
         """Uses AppKit to strictly hide Dock and Menu Bar."""
-        if sys.platform != "darwin":
-            return
         app = AppKit.NSApplication.sharedApplication()
 
         # Save current options to restore later
@@ -707,10 +702,8 @@ class FullscreenOverlay(QWidget):
         )
         app.setPresentationOptions_(new_opts)
 
-    def restore_macos_ui(self):
+    def restore_ui_macos(self):
         """Restores the Menu Bar and Dock."""
-        if sys.platform != "darwin":
-            return
         if self._prev_presentation_opts is None:
             return
 
@@ -723,7 +716,7 @@ class FullscreenOverlay(QWidget):
         self._pan_cursor_timer.stop()
         self._zoom_overlay_controller.shutdown()
         self._pixmap = None  # Free full-resolution image memory immediately
-        self.restore_macos_ui()  # Restore UI when closed
+        self.restore_ui_macos()  # Restore UI when closed
         super().closeEvent(event)
 
     # -----------------------------------

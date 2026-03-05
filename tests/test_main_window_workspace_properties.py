@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import sys
 import uuid
 
 from PySide6.QtCore import QCoreApplication
@@ -94,7 +93,7 @@ def window(qapp, monkeypatch):  # noqa: ARG001
     init_qsettings_store(dyn=True)
     monkeypatch.setattr("piqopiqo.main_window.MediaManager", _MediaManagerStub)
     monkeypatch.setattr(
-        "piqopiqo.main_window.refresh_main_screen_color_space_cache",
+        "piqopiqo.main_window.refresh_main_screen_color_space_cache_macos",
         lambda: None,
     )
 
@@ -120,7 +119,7 @@ def test_file_menu_contains_property_and_not_clear_all_data(window):
     assert "Clear All Data" not in action_texts
 
 
-def test_about_action_uses_about_role_and_non_macos_stays_in_help(window):
+def test_about_action_uses_about_role_and_stays_in_help(window):
     about_text = f"About {APP_NAME}"
     about_actions = [
         action for action in window.findChildren(QAction) if action.text() == about_text
@@ -129,10 +128,9 @@ def test_about_action_uses_about_role_and_non_macos_stays_in_help(window):
     about_action = about_actions[0]
     assert about_action.menuRole() == QAction.MenuRole.AboutRole
 
-    if sys.platform != "darwin":
-        help_menu = _menu_by_title(window, "Help")
-        assert help_menu is not None
-        assert about_action in help_menu.actions()
+    help_menu = _menu_by_title(window, "Help")
+    assert help_menu is not None
+    assert about_action in help_menu.actions()
 
 
 def test_open_workspace_properties_accept_without_flags_does_not_start_cleanup(

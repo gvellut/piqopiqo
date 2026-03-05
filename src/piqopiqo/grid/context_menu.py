@@ -12,9 +12,9 @@ from PySide6.QtWidgets import QMenu
 from send2trash import send2trash
 
 from piqopiqo.external_apps import (
-    get_reveal_in_file_manager_label,
-    open_in_external_app,
-    reveal_in_file_manager,
+    get_reveal_in_file_manager_label_macos,
+    open_in_external_app_macos,
+    reveal_in_file_manager_macos,
 )
 from piqopiqo.model import ImageItem
 from piqopiqo.ssf.settings_state import UserSettingKey, get_user_setting
@@ -126,7 +126,7 @@ def edit_in_external_app(window: MainWindow, photos: list[ImageItem]) -> None:
             anchor_path=duplicated_paths[-1],
             reveal_path=duplicated_paths[-1],
         )
-        open_in_external_app(
+        open_in_external_app_macos(
             get_user_setting(UserSettingKey.EXTERNAL_EDITOR),
             duplicated_paths,
         )
@@ -147,8 +147,8 @@ def show_context_menu(window: MainWindow, global_index: int, pos) -> None:
     menu = QMenu(window)
 
     # Reveal in Finder
-    reveal_action = menu.addAction(get_reveal_in_file_manager_label())
-    reveal_action.triggered.connect(lambda: reveal_in_file_manager(selected))
+    reveal_action = menu.addAction(get_reveal_in_file_manager_label_macos())
+    reveal_action.triggered.connect(lambda: reveal_in_file_manager_macos(selected))
 
     # View in Application (only if configured)
     external_viewer = get_user_setting(UserSettingKey.EXTERNAL_VIEWER)
@@ -157,7 +157,9 @@ def show_context_menu(window: MainWindow, global_index: int, pos) -> None:
             f"View in {display_external_app_name(external_viewer)}"
         )
         view_app_action.triggered.connect(
-            lambda: open_in_external_app(external_viewer, [p.path for p in selected])
+            lambda: open_in_external_app_macos(
+                external_viewer, [p.path for p in selected]
+            )
         )
 
     # Edit in Application (only if configured)

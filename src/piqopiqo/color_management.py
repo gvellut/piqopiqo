@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from enum import auto
 import logging
-import sys
 
+import AppKit
 from PySide6.QtGui import QColorSpace, QPixmap
+import Quartz
 
 from .utils import UpperStrEnum
 
@@ -27,17 +28,11 @@ def _is_valid_color_space(space: QColorSpace | None) -> bool:
     return bool(space is not None and space.isValid())
 
 
-def refresh_main_screen_color_space_cache() -> QColorSpace | None:
+def refresh_main_screen_color_space_cache_macos() -> QColorSpace | None:
     """Refresh and return the cached main-screen QColorSpace (macOS only)."""
     global _MAIN_SCREEN_COLOR_SPACE_CACHE
 
-    if sys.platform != "darwin":
-        _MAIN_SCREEN_COLOR_SPACE_CACHE = None
-        return None
-
     try:
-        import AppKit
-
         ns_screen = AppKit.NSScreen.mainScreen()
         if ns_screen is None:
             _MAIN_SCREEN_COLOR_SPACE_CACHE = None
@@ -70,14 +65,8 @@ def get_cached_main_screen_color_space() -> QColorSpace | None:
     return None
 
 
-def _extract_image_color_space_macos_pyobjc(image_path: str) -> QColorSpace | None:
-    if sys.platform != "darwin":
-        return None
-
+def _extract_image_color_space_pyobjc_macos(image_path: str) -> QColorSpace | None:
     try:
-        import AppKit
-        import Quartz
-
         url = Quartz.CFURLCreateWithFileSystemPath(
             None,
             image_path,
@@ -197,7 +186,7 @@ def _resolve_source_color_space(
 
     if prefer_pillow_extract:
         return _extract_image_color_space_pillow(image_path)
-    return _extract_image_color_space_macos_pyobjc(image_path)
+    return _extract_image_color_space_pyobjc_macos(image_path)
 
 
 def load_pixmap_with_color_management(

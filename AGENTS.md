@@ -371,15 +371,11 @@ Selection behavior:
 
 ## Development
 
+The tool uses `uv` for package management and `ruff` for formatting and linint.
+
 Run linting and formatting as the final step of your work. Fix the issues that come up.
 
 ```bash
-# Install dependencies
-uv sync
-
-# Install with dev dependencies (includes pyqtauto for testing)
-uv sync --all-extras
-
 # Run linting and formatting. Always use --fix.
 ruff check --fix
 ruff format

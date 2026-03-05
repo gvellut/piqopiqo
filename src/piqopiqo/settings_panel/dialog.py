@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from functools import partial
 import os
-import sys
 
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
@@ -268,13 +267,8 @@ class SettingsDialog(QDialog):
             normalized_path = path
             if normalized_path != os.sep:
                 normalized_path = normalized_path.rstrip(os.sep)
-            if sys.platform == "darwin":
-                if not normalized_path.lower().endswith(".app") or not os.path.isdir(
-                    path
-                ):
-                    return f"Application path must be an existing .app bundle.\n{value}"
-            elif not os.path.exists(path):
-                return f"The path does not exist:\n{value}"
+            if not normalized_path.lower().endswith(".app") or not os.path.isdir(path):
+                return f"Application path must be an existing .app bundle.\n{value}"
         return None
 
     def _autosave_field(self, key: UserSettingKey):

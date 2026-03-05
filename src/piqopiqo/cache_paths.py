@@ -11,7 +11,6 @@ import logging
 import os
 from pathlib import Path
 import shutil
-import sys
 
 logger = logging.getLogger(__name__)
 
@@ -19,25 +18,15 @@ _APP_NAME = "PiqoPiqo"
 _CACHE_BASE_DIR: Path | None = None
 
 
-def _default_support_dir() -> Path:
-    if sys.platform == "darwin":
-        base = Path.home() / "Library" / "Application Support"
-        support_dir = base / _APP_NAME
-    elif sys.platform == "win32":
-        appdata = os.environ.get("APPDATA")
-        base = Path(appdata) if appdata else Path.home() / "AppData" / "Roaming"
-        support_dir = base / _APP_NAME
-    else:
-        xdg_config = os.environ.get("XDG_CONFIG_HOME")
-        base = Path(xdg_config) if xdg_config else Path.home() / ".config"
-        support_dir = base / _APP_NAME.lower()
-
+def _default_support_dir_macos() -> Path:
+    base = Path.home() / "Library" / "Application Support"
+    support_dir = base / _APP_NAME
     support_dir.mkdir(parents=True, exist_ok=True)
     return support_dir
 
 
-def _default_cache_base_dir() -> Path:
-    cache_dir = _default_support_dir() / "cache"
+def _default_cache_base_dir_macos() -> Path:
+    cache_dir = _default_support_dir_macos() / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
 
@@ -47,7 +36,7 @@ def set_cache_base_dir(base_dir: str | os.PathLike[str] | None) -> Path:
     global _CACHE_BASE_DIR
 
     if base_dir is None:
-        _CACHE_BASE_DIR = _default_cache_base_dir()
+        _CACHE_BASE_DIR = _default_cache_base_dir_macos()
     else:
         _CACHE_BASE_DIR = Path(base_dir)
         _CACHE_BASE_DIR.mkdir(parents=True, exist_ok=True)

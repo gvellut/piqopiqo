@@ -12,7 +12,7 @@ from attrs import define, field
 from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
     get_runtime_setting,
-    get_support_dir,
+    get_support_dir_macos,
 )
 
 logger = logging.getLogger(__name__)
@@ -144,7 +144,7 @@ class KeywordTreeManager:
 
     def get_tree_path(self) -> Path:
         """Get the path to the keyword tree JSON file."""
-        return get_support_dir() / KEYWORD_TREE_FILE
+        return get_support_dir_macos() / KEYWORD_TREE_FILE
 
     def load(self) -> bool:
         """Load the keyword tree from file.

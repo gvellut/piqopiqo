@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 import html
 import os
-import sys
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
@@ -256,7 +255,7 @@ class PathEditor(BaseEditor):
         self.value_changed.emit()
 
 
-def _resolve_app_path_start_dir(current: str) -> str:
+def _resolve_app_path_start_dir_macos(current: str) -> str:
     if current:
         path = os.path.expanduser(current)
         if path != os.sep:
@@ -269,9 +268,7 @@ def _resolve_app_path_start_dir(current: str) -> str:
         if parent:
             return parent
 
-    if sys.platform == "darwin":
-        return "/Applications"
-    return os.path.expanduser("~")
+    return "/Applications"
 
 
 class AppPathEditor(PathEditor):
@@ -279,7 +276,7 @@ class AppPathEditor(PathEditor):
         super().__init__(
             is_file=False,
             browse_title="Select Application",
-            start_dir_resolver=_resolve_app_path_start_dir,
+            start_dir_resolver=_resolve_app_path_start_dir_macos,
         )
 
     def _browse(self):
@@ -288,19 +285,12 @@ class AppPathEditor(PathEditor):
 
         # On macOS, app bundles are directories; use file mode so `.app` bundles
         # are selectable in the native picker.
-        if sys.platform == "darwin":
-            value, _ = QFileDialog.getOpenFileName(
-                self,
-                self._browse_title,
-                start_dir,
-                "Applications (*.app);;All Files (*)",
-            )
-        else:
-            value, _ = QFileDialog.getOpenFileName(
-                self,
-                self._browse_title,
-                start_dir,
-            )
+        value, _ = QFileDialog.getOpenFileName(
+            self,
+            self._browse_title,
+            start_dir,
+            "Applications (*.app);;All Files (*)",
+        )
 
         if value:
             self._line_edit.setText(value)

@@ -21,10 +21,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import __version__ as piqopiqo_version, platform
 from .background.media_man import MediaManager
 from .cache_paths import get_folder_cache_id, set_cache_base_dir
-from .color_management import refresh_main_screen_color_space_cache
+from .color_management import refresh_main_screen_color_space_cache_macos
 from .components.column_number_selector import ColumnNumberSelector
 from .components.status_bar import LoadingStatusBar
 from .dialogs.about_dialog import show_about
@@ -111,7 +110,7 @@ class MainWindow(QMainWindow):
     def __init__(self, images, source_folders, root_folder):
         super().__init__()
         self.setWindowTitle(APP_NAME)
-        refresh_main_screen_color_space_cache()
+        refresh_main_screen_color_space_cache_macos()
 
         self._fullscreen_overlay = None
         self.root_folder = root_folder
@@ -1507,7 +1506,7 @@ class MainWindow(QMainWindow):
             UserSettingKey.FORCE_SRGB in changed_keys
             or UserSettingKey.SCREEN_COLOR_PROFILE in changed_keys
         ):
-            refresh_main_screen_color_space_cache()
+            refresh_main_screen_color_space_cache_macos()
             self.grid.invalidate_all_pixmap_caches()
             self.grid.on_scroll(self.grid.scrollbar.value())
             if self._fullscreen_overlay is not None:
@@ -2092,12 +2091,6 @@ class MainWindow(QMainWindow):
         logger.debug(f"Logical Size:   {log_geo.width()} x {log_geo.height()}")
         logger.debug(f"DPR:            {dpr}")
         logger.debug(f"Render Buffer:  {buffer_w} x {buffer_h}")
-
-        # not actually useful : cannot be used by the macos rendering (without changing
-        # the display resolution and flickering => so forget about it)
-        # TODO remove
-        phy_w, phy_h = platform.get_screen_true_resolution(current_screen)
-        logger.debug(f"Physical resolution:  {phy_w} x {phy_h}")
 
         self._fullscreen_started_with_multi_selection = len(selected_indices) > 1
         if self._fullscreen_started_with_multi_selection:

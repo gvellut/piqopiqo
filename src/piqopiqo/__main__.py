@@ -43,19 +43,18 @@ def resource_path(relative_path):
     return os.path.join(os.path.abspath("."), relative_path)
 
 
-def suppress_macos_menus():
-    if sys.platform == "darwin":
-        defaults = Foundation.NSUserDefaults.standardUserDefaults()
-        # Suppress Emoji & Symbols
-        defaults.setBool_forKey_(True, "NSDisabledCharacterPaletteMenuItem")
-        # Suppress Dictation
-        defaults.setBool_forKey_(True, "NSDisabledDictationMenuItem")
-        # Suppress "Enter Full Screen" from appearing in View menus app-wide
-        defaults.setBool_forKey_(False, "NSFullScreenMenuItemEverywhere")
-        # Remove Autofill (macOS 14+)
-        defaults.setBool_forKey_(True, "NSDisabledAutofillMenuItem")
-        # Remove Passwords (often linked to Autofill)
-        defaults.setBool_forKey_(True, "NSDisabledPasswordsMenuItem")
+def suppress_menus_macos():
+    defaults = Foundation.NSUserDefaults.standardUserDefaults()
+    # Suppress Emoji & Symbols
+    defaults.setBool_forKey_(True, "NSDisabledCharacterPaletteMenuItem")
+    # Suppress Dictation
+    defaults.setBool_forKey_(True, "NSDisabledDictationMenuItem")
+    # Suppress "Enter Full Screen" from appearing in View menus app-wide
+    defaults.setBool_forKey_(False, "NSFullScreenMenuItemEverywhere")
+    # Remove Autofill (macOS 14+)
+    defaults.setBool_forKey_(True, "NSDisabledAutofillMenuItem")
+    # Remove Passwords (often linked to Autofill)
+    defaults.setBool_forKey_(True, "NSDisabledPasswordsMenuItem")
 
 
 # does not seem necessary in 3.14
@@ -98,7 +97,7 @@ def cli(folder, dyn):
     setup_logging(logger)
     # patch_cpython_dummy_thread_finalizer()
 
-    suppress_macos_menus()
+    suppress_menus_macos()
 
     # Launch GUI
     app = QApplication(sys.argv)

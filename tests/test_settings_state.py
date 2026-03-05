@@ -20,10 +20,9 @@ from piqopiqo.ssf.settings_state import (
     StateKey,
     UserSettingKey,
     _deserialize_exif_fields,
-    _resolve_default_cache_base_dir,
-    _resolve_default_exiftool_path,
+    _resolve_default_exiftool_path_macos,
+    default_cache_base_dir_candidate_macos,
     evaluate_pending_mandatory_settings,
-    get_cache_base_dir_candidate,
     get_effective_exif_panel_fields,
     get_mandatory_setting_spec,
     get_mandatory_setting_specs,
@@ -443,7 +442,6 @@ def test_validate_mandatory_exiftool_path_uses_executable_check(monkeypatch):
 
 
 def test_resolve_default_exiftool_path_prefers_homebrew_on_macos(monkeypatch):
-    monkeypatch.setattr(settings_state.sys, "platform", "darwin", raising=False)
     monkeypatch.setattr(
         settings_state.shutil,
         "which",
@@ -455,11 +453,10 @@ def test_resolve_default_exiftool_path_prefers_homebrew_on_macos(monkeypatch):
         lambda path: path in {"/opt/homebrew/bin/exiftool", "/usr/local/bin/exiftool"},
     )
 
-    assert _resolve_default_exiftool_path() == "/opt/homebrew/bin/exiftool"
+    assert _resolve_default_exiftool_path_macos() == "/opt/homebrew/bin/exiftool"
 
 
 def test_resolve_default_exiftool_path_falls_back_to_which(monkeypatch):
-    monkeypatch.setattr(settings_state.sys, "platform", "linux", raising=False)
     monkeypatch.setattr(
         settings_state.shutil,
         "which",
@@ -471,11 +468,9 @@ def test_resolve_default_exiftool_path_falls_back_to_which(monkeypatch):
         lambda path: path == "/usr/bin/exiftool",
     )
 
-    assert _resolve_default_exiftool_path() == str(Path("/usr/bin/exiftool").resolve())
-
-
-def test_resolve_default_cache_base_dir_matches_candidate():
-    assert _resolve_default_cache_base_dir() == str(get_cache_base_dir_candidate())
+    assert _resolve_default_exiftool_path_macos() == str(
+        Path("/usr/bin/exiftool").resolve()
+    )
 
 
 def test_evaluate_pending_mandatory_settings_reports_missing_cache_auto_value(
@@ -491,7 +486,7 @@ def test_evaluate_pending_mandatory_settings_reports_missing_cache_auto_value(
     assert UserSettingKey.EXIFTOOL_PATH in by_key
     assert by_key[UserSettingKey.CACHE_BASE_DIR].is_empty is True
     assert by_key[UserSettingKey.CACHE_BASE_DIR].auto_value == str(
-        get_cache_base_dir_candidate()
+        default_cache_base_dir_candidate_macos()
     )
     assert by_key[UserSettingKey.EXIFTOOL_PATH].is_empty is True
 
