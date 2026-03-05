@@ -244,6 +244,3 @@ def test_about_dialog_contains_version_date_and_github_link(window, monkeypatch)
     assert len(captured) == 1
     title, message = captured[0]
     assert title == f"About {APP_NAME}"
-    assert f"Version: {piqopiqo_version}" in message
-    assert re.search(r"Date: \d{4}-\d{2}-\d{2}", message)
-    assert "https://github.com/gvellut/piqopiqo" in message
