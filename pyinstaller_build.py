@@ -5,7 +5,7 @@ import subprocess
 import PyInstaller.__main__
 
 from piqopiqo import __version__ as piqopiqoversion
-from piqopiqo.ssf.settings_state import APP_NAME
+from piqopiqo.ssf.settings_state import APP_NAME, ORG_DOMAIN
 
 # info for the about of the built .app
 try:
@@ -41,5 +41,6 @@ PyInstaller.__main__.run(
         "--exclude-module=pyqtauto",  # Exclude specific module
         "--paths=src",  # Additional import paths
         f"--add-data=app.icns{pro_sep}.",  # Add data file
+        f"--osx-bundle-identifier=com.{ORG_DOMAIN}.{APP_NAME}",
     ]
 )

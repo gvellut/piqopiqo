@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 # Application identity constants (used by QCoreApplication and support paths)
 APP_NAME = "PiqoPiqo"
 ORG_NAME = "Guilhem V"
-ORG_DOMAIN = "com.vellut"
+ORG_DOMAIN = "vellut"  # com. is added by Qt
 
 ENV_PREFIX = "PIQO_"
 
