@@ -246,6 +246,51 @@ def test_non_text_protection_read_only_toggle(qapp):
     assert panel.keyword_tree_btn.isEnabled() is True
 
 
+def test_non_text_protection_preserves_multiple_values_on_focus(qapp):
+    """Protected non-text fields must keep <Multiple Values> text when clicked."""
+    init_qsettings_store(dyn=True)
+    set_user_setting(UserSettingKey.PROTECT_NON_TEXT_METADATA, True)
+
+    panel = EditPanel(_StubDBManager())
+    item1 = ImageItem(
+        path="/tmp/multi-a.jpg",
+        name="multi-a.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={
+            DBFields.TITLE: "A",
+            DBFields.LATITUDE: "1.0",
+            DBFields.LONGITUDE: "2.0",
+            DBFields.TIME_TAKEN: "2020-01-01 00:00:00",
+        },
+    )
+    item2 = ImageItem(
+        path="/tmp/multi-b.jpg",
+        name="multi-b.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={
+            DBFields.TITLE: "B",
+            DBFields.LATITUDE: "3.0",
+            DBFields.LONGITUDE: "4.0",
+            DBFields.TIME_TAKEN: "2020-01-02 00:00:00",
+        },
+    )
+    panel.update_for_selection([item1, item2])
+
+    from PySide6.QtCore import QEvent, Qt
+    from PySide6.QtGui import QFocusEvent
+
+    focus_in = QFocusEvent(QEvent.Type.FocusIn, Qt.FocusReason.MouseFocusReason)
+
+    # Simulate clicking on each protected field
+    for widget in (panel.lat_edit, panel.lon_edit, panel.time_edit):
+        assert widget.isReadOnly() is True
+        assert widget.text() == "<Multiple Values>"
+        widget.focusInEvent(focus_in)
+        assert widget.text() == "<Multiple Values>"
+
+
 def test_non_text_protection_blocks_gui_save_for_locked_fields(qapp, monkeypatch):
     init_qsettings_store(dyn=True)
     set_user_setting(UserSettingKey.PROTECT_NON_TEXT_METADATA, True)

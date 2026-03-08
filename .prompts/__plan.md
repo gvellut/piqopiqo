@@ -71,3 +71,4 @@
 ! [Specific macos](Ba_tasks/Da_Specific_macos.md)
 ! [Check if UpperStrEnum is useful](Ta_tasks/Bb_Check_if_UpperStrEnum_is_useful.md)
 ! [Fullscreen overlay should not be resizable](Ta_tasks/Cb_Fullscreen_overlay_should_not_be_resizable.md)
+! [Bug Protect non text metadata multiple](Db_tasks/Db_Bug_Protect_non_text_metadata_multiple.md)

@@ -1,0 +1,3 @@
+When setting UserSettingKey.PROTECT_NON_TEXT_METADATA is set to True : it currently works for single selection only. It should work for multiple selected items. Currently, the non-text fields are editable if multiple items are selected in the grid. This is a bug : If set to true, no non-text field should be editable, no matter how they are selected in the GUI or how many. Correct.
+
+They are actually non editable : However when clicking on them, the <Multiple Values> special text is erased and the field becomes blank as if ready for editing. It should not happen : when clicking on the protected field, the <Multiple Values> special text should remain.
