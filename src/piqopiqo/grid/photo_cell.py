@@ -36,8 +36,8 @@ class PhotoCell(QFrame):
         # Mimic the behavior of the delegate: accept focus, handle mouse
         self.setFocusPolicy(Qt.ClickFocus)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        # We handle drawing manually, but setting a stylesheet for the base is optional
-        self.setStyleSheet("background-color: black;")
+        bg_color = get_runtime_setting(RuntimeSettingKey.GRID_BACKGROUND_COLOR)
+        self.setStyleSheet(f"background-color: {bg_color};")
 
     def set_content(self, data: dict | None, is_selected: bool):
         self.current_data = data

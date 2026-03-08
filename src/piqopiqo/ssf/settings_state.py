@@ -139,6 +139,7 @@ class RuntimeSettingKey(StrEnum):
     GRID_ITEM_FIELDS = "gridItemFields"
     EXIF_FIELDS = "exifFields"
     THUMB_MAX_DIM = "thumbMaxDim"
+    GRID_BACKGROUND_COLOR = "gridBackgroundColor"
     FULLSCREEN_BACKGROUND_COLOR = "fullscreenBackgroundColor"
     CLEAR_CACHE_ON_START = "clearCacheOnStart"
     SETTINGS_PANEL_SAVE_MODE = "settingsPanelSaveMode"
@@ -659,6 +660,9 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
         env_parser=lambda raw: _deserialize_exif_fields(_parse_json(raw)),
     ),
     RuntimeSettingKey.THUMB_MAX_DIM: SettingDef(default=1024, read_type=int),
+    RuntimeSettingKey.GRID_BACKGROUND_COLOR: SettingDef(
+        default="#888888", read_type=str
+    ),
     RuntimeSettingKey.FULLSCREEN_BACKGROUND_COLOR: SettingDef(
         default="black", read_type=str
     ),

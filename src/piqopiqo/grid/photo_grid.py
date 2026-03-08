@@ -69,6 +69,9 @@ class PhotoGrid(QWidget):
 
         self.setFocusPolicy(Qt.StrongFocus)
 
+        bg_color = get_runtime_setting(RuntimeSettingKey.GRID_BACKGROUND_COLOR)
+        self.setStyleSheet(f"#photo_grid {{ background-color: {bg_color}; }}")
+
         self.n_cols = self._clamp_num_columns(
             get_user_setting(UserSettingKey.NUM_COLUMNS)
         )
