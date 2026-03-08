@@ -82,6 +82,8 @@ class ImageItem:
     db_metadata: dict | None = None  # Cached DB metadata for editable fields
 
 
+# TODO need the UpperStrEnum ? (see where serialized : also just as easy to load the
+# text with Enum)
 class OnFullscreenExitMultipleSelected(UpperStrEnum):
     KEEP_SELECTION = auto()
     SELECT_LAST_VIEWED = auto()

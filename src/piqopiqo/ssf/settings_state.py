@@ -662,6 +662,7 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
             ExifField("Composite:ShutterSpeed", "Shutter Speed", "shutter_speed"),
             ExifField("EXIF:FNumber", "F-Number"),
             ExifField("EXIF:ISO"),
+            ExifField("EXIF:ExposureCompensation", "EV", "exposure_compensation"),
             ExifField("File:FileName", "File Name"),
         ],
         read_type=str,

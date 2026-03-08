@@ -107,9 +107,18 @@ def _format_focal_mm_value(value: str) -> str:
     return f"{_format_number_1_decimal(numeric)} mm"
 
 
+def _format_ev_value(value: str) -> str:
+    if value == "0":
+        return "--"
+    if value.startswith("-"):
+        return value
+    return f"+{value}"
+
+
 _EXIF_VALUE_FORMATTERS: dict[str, Callable[[str], str]] = {
     "shutter_speed": _format_shutter_speed_value,
     "focal_mm": _format_focal_mm_value,
+    "exposure_compensation": _format_ev_value,
 }
 
 
