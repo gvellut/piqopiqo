@@ -104,8 +104,8 @@ def test_shortcuts_editor_accepts_enum_and_string_keys(qapp):
         {
             Shortcut.ZOOM_IN: "=",
             Shortcut.ZOOM_OUT.name: "-",
-            Shortcut.SELECT_ALL.value: "ctrl+a",
-            Shortcut.FILTER_LABEL_1.value: "Alt+1",
+            Shortcut.SELECT_ALL.name: "ctrl+a",
+            Shortcut.FILTER_LABEL_1.name: "Alt+1",
         }
     )
 

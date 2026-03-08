@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-from enum import auto
+from enum import Enum, auto
 import logging
 
 import AppKit
 from PySide6.QtGui import QColorSpace, QPixmap
 import Quartz
 
-from .utils import UpperStrEnum
-
 logger = logging.getLogger(__name__)
 
 _MAIN_SCREEN_COLOR_SPACE_CACHE: QColorSpace | None = None
 
 
-class ScreenColorProfileMode(UpperStrEnum):
+class ScreenColorProfileMode(Enum):
     FROM_MAIN_SCREEN = auto()
     SRGB = auto()
     DISPLAY_P3 = auto()
@@ -134,10 +132,6 @@ def _coerce_screen_color_profile_mode(
         return value
 
     raw = str(value)
-    try:
-        return ScreenColorProfileMode(raw)
-    except ValueError:
-        pass
     try:
         return ScreenColorProfileMode[raw]
     except KeyError:

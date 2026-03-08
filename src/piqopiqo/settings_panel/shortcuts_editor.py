@@ -101,8 +101,6 @@ class ShortcutsEditor(QWidget):
             text = ""
             if key in mapping:
                 text = str(mapping[key])
-            elif key.value in mapping:
-                text = str(mapping[key.value])
             elif key.name in mapping:
                 text = str(mapping[key.name])
             line_edit.setText(text)

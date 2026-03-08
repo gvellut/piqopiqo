@@ -1,4 +1,3 @@
-from enum import StrEnum
 import logging
 import os
 import sys
@@ -25,9 +24,3 @@ def setup_logging(logger=None):
     level_for_passed = logging.DEBUG if os.getenv("DEBUG") == "1" else logging.INFO
     if logger and logger is not root_logger:
         logger.setLevel(level_for_passed)
-
-
-class UpperStrEnum(StrEnum):
-    @staticmethod
-    def _generate_next_value_(name, start, count, last_values):
-        return name

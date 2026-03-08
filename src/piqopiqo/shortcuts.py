@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from enum import auto
+from enum import Enum, auto
 import logging
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QKeyCombination, Qt
 from PySide6.QtGui import QKeyEvent, QKeySequence
-
-from .utils import UpperStrEnum
 
 if TYPE_CHECKING:
     from piqopiqo.model import StatusLabel
@@ -16,7 +14,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Shortcut(UpperStrEnum):
+class Shortcut(Enum):
     ZOOM_IN = auto(), "Zoom in"
     ZOOM_OUT = auto(), "Zoom out"
     ZOOM_RESET = auto(), "Zoom reset"
@@ -49,13 +47,12 @@ class Shortcut(UpperStrEnum):
     COLLAPSE_TO_LAST_SELECTED = auto(), "Keep last selected (grid)"
     TOGGLE_RIGHT_SIDEBAR = auto(), "Toggle right sidebar"
 
-    def __new__(cls, name, label):
-        obj = str.__new__(cls, name)
-
-        obj._value_ = name
+    def __new__(cls, value, label):
+        obj = object.__new__(cls)
+        obj._value_ = value
         return obj
 
-    def __init__(self, name, label):
+    def __init__(self, value, label):
         self.label = label
 
 
@@ -173,7 +170,7 @@ def _build_indexed_label_shortcut_bindings(
 
     bindings: list[tuple[str, str | None]] = []
     for index in range(1, 10):
-        shortcut_enum = Shortcut(f"{key_prefix}{index}")
+        shortcut_enum = Shortcut[f"{key_prefix}{index}"]
         shortcut_str = _lookup_shortcut(shortcuts_mapping, shortcut_enum)
         if not shortcut_str:
             continue
@@ -193,7 +190,7 @@ def _lookup_shortcut(
     shortcuts_mapping: Mapping[Shortcut | str, str],
     shortcut_key: Shortcut,
 ) -> str | None:
-    for candidate in (shortcut_key, shortcut_key.value, shortcut_key.name):
+    for candidate in (shortcut_key, shortcut_key.name):
         value = shortcuts_mapping.get(candidate)
         if value is None:
             continue

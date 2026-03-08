@@ -14,11 +14,6 @@ from piqopiqo.shortcuts import (
 )
 
 
-def test_shortcut_values_stay_uppercase_constants():
-    for shortcut in Shortcut:
-        assert shortcut.value == shortcut.name
-
-
 def test_shortcut_labels_are_human_readable():
     assert Shortcut.ZOOM_IN.label == "Zoom in"
     assert Shortcut.ZOOM_OUT.label == "Zoom out"
@@ -85,7 +80,7 @@ def test_build_label_shortcut_bindings_resolves_status_labels_and_label_none():
     bindings = build_label_shortcut_bindings(
         {
             Shortcut.LABEL_1: "1",
-            Shortcut.LABEL_2.value: "2",
+            Shortcut.LABEL_2.name: "2",
             Shortcut.LABEL_NONE.name: "`",
         },
         [
@@ -116,7 +111,7 @@ def test_build_filter_label_shortcut_bindings_resolves_status_labels_and_label_n
     bindings = build_filter_label_shortcut_bindings(
         {
             Shortcut.FILTER_LABEL_1: "Alt+1",
-            Shortcut.FILTER_LABEL_2.value: "Alt+2",
+            Shortcut.FILTER_LABEL_2.name: "Alt+2",
             Shortcut.FILTER_LABEL_NONE.name: "Alt+`",
         },
         [

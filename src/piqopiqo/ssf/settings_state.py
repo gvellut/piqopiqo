@@ -336,7 +336,7 @@ def _serialize_shortcuts(value: dict[Shortcut, str] | dict[str, str]) -> dict[st
     out: dict[str, str] = {}
     for key, shortcut in value.items():
         if isinstance(key, Shortcut):
-            k = key.value
+            k = key.name
         else:
             k = str(key)
         out[k] = str(shortcut)
@@ -354,12 +354,9 @@ def _deserialize_shortcuts(data: Any) -> dict[Shortcut, str]:
 
         key = None
         try:
-            key = Shortcut(key_str)
-        except ValueError:
-            try:
-                key = Shortcut[key_str]
-            except KeyError:
-                key = None
+            key = Shortcut[key_str]
+        except KeyError:
+            key = None
 
         if key is not None:
             out[key] = shortcut
@@ -371,7 +368,7 @@ def _serialize_on_fullscreen_exit_selection_mode(
     value: OnFullscreenExitMultipleSelected | str,
 ) -> str:
     if isinstance(value, OnFullscreenExitMultipleSelected):
-        return value.value
+        return value.name
     return str(value)
 
 
@@ -380,8 +377,8 @@ def _deserialize_on_fullscreen_exit_selection_mode(
 ) -> OnFullscreenExitMultipleSelected:
     raw = str(data)
     try:
-        return OnFullscreenExitMultipleSelected(raw)
-    except ValueError:
+        return OnFullscreenExitMultipleSelected[raw]
+    except KeyError:
         return OnFullscreenExitMultipleSelected.KEEP_SELECTION
 
 
@@ -389,19 +386,16 @@ def _serialize_screen_color_profile_mode(
     value: ScreenColorProfileMode | str,
 ) -> str:
     if isinstance(value, ScreenColorProfileMode):
-        return value.value
+        return value.name
     return str(value)
 
 
 def _deserialize_screen_color_profile_mode(data: Any) -> ScreenColorProfileMode:
     raw = str(data)
     try:
-        return ScreenColorProfileMode(raw)
-    except ValueError:
-        try:
-            return ScreenColorProfileMode[raw]
-        except KeyError:
-            return ScreenColorProfileMode.FROM_MAIN_SCREEN
+        return ScreenColorProfileMode[raw]
+    except KeyError:
+        return ScreenColorProfileMode.FROM_MAIN_SCREEN
 
 
 def _deserialize_column_stretch(data: Any) -> tuple[int, int]:
@@ -412,11 +406,7 @@ def _deserialize_column_stretch(data: Any) -> tuple[int, int]:
     raise ValueError("Invalid EXIF panel column stretch")
 
 
-def _parse_enum(env_value: str, enum_type: type[StrEnum], fallback: StrEnum) -> StrEnum:
-    try:
-        return enum_type(env_value)
-    except ValueError:
-        pass
+def _parse_enum(env_value: str, enum_type: type[Enum], fallback: Enum) -> Enum:
     try:
         return enum_type[env_value]
     except KeyError:

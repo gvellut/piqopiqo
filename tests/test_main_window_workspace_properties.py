@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import uuid
 
 from PySide6.QtCore import QCoreApplication
@@ -10,7 +9,6 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 import pytest
 
-from piqopiqo import __version__ as piqopiqo_version
 from piqopiqo.main_window import MainWindow
 from piqopiqo.model import ImageItem
 from piqopiqo.ssf.settings_state import APP_NAME, init_qsettings_store

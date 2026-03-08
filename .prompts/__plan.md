@@ -69,3 +69,4 @@
 ! [Status screen + About](Ta_tasks/Wa_Status_screen_About.md)
 ! [Analyze and recommend refactor](Ta_tasks/Ab_Analyze_and_recommend_refactor.md)
 ! [Specific macos](Ba_tasks/Da_Specific_macos.md)
+! [Check if UpperStrEnum is useful](Ta_tasks/Bb_Check_if_UpperStrEnum_is_useful.md)
