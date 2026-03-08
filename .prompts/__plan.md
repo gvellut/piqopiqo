@@ -70,3 +70,4 @@
 ! [Analyze and recommend refactor](Ta_tasks/Ab_Analyze_and_recommend_refactor.md)
 ! [Specific macos](Ba_tasks/Da_Specific_macos.md)
 ! [Check if UpperStrEnum is useful](Ta_tasks/Bb_Check_if_UpperStrEnum_is_useful.md)
+! [Fullscreen overlay should not be resizable](Ta_tasks/Cb_Fullscreen_overlay_should_not_be_resizable.md)

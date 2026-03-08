@@ -19,5 +19,6 @@ __pycache__
 *.spec
 
 *.png
+CLAUDE.md
 
 src/piqopiqo/_build_info.py

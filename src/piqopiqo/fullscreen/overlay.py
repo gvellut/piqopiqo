@@ -678,9 +678,10 @@ class FullscreenOverlay(QWidget):
         rect = target_screen.geometry()
         self.setGeometry(rect)
 
-        # Explicitly set size and position
+        # Explicitly set size and position, and prevent resizing
         self.resize(rect.size())
         self.move(rect.topLeft())
+        self.setFixedSize(rect.size())
 
         # Force focus
         self.raise_()
