@@ -1,12 +1,12 @@
 # PiqoPiqo
 
-PiqoPiqo is a lightweight image viewer / metadata editor built with Python and PySide6. 
+PiqoPiqo is a lightweight JPEG viewer / metadata editor built with Python and PySide6. 
 
-It is aimed at replacing the workflow I had with Adobe Bridge + custom command-line tools. In the current version, it is a relatively basic replacement and it is only for macOS but it is still convenient for me.
+It is aimed at replacing the workflow I had with Adobe Bridge for triaging JPEG + custom command-line tools. In the current version, it is a relatively basic replacement and it is only for macOS but it is still convenient for me.
 
 ![GUI](https://cdn.vellut.com/other/piqopiqo.jpg)
 
-Beyond image triaging and metadata editing, it also allows:
+Beyond JEPG triaging and metadata editing, it also allows:
 
 - copy from a SD card (by date, taking into account the last copied images)
 - georeferencing from a GPX file (functionality of [gpx2exif](https://github.com/gvellut/gpx2exif))
@@ -16,11 +16,11 @@ Beyond image triaging and metadata editing, it also allows:
 
 ## Limitations
 
-It only works on macos (only tested there + some non-abastracted dependencies like `pyobjc`).
-
-`exiftool` needs to be installed (used for all EXIF reading and writing + small thumbnail extraction). Homebrew (on macos) can be used to install it: `brew install exiftool`.
-
-The EXIF is extracted to an external SQLLite DB for edition. However, it is possible to save the data back to EXIF explicitly (but not in the course of normal edition).
+- It only works on macOS (only tested there + some non-abastracted dependencies like `pyobjc`).
+- It is limited to JPEG (no support for RAW).
+- The EXIF is extracted to an external SQLite DB for edition. It is not possible to directly edit the EXIF but there is a command to save the SQLite data back to EXIF explicitly.
+- `exiftool` needs to be installed (used for all EXIF reading and writing + small thumbnail extraction). Homebrew can be used to install it: `brew install exiftool`.
+- The only view common with Adobe Bridge is the grid (*Essentials*). All the others (*Libraries*, *Filmstrip*, *Output*, *Metadata*, *Workflow*) are not available (I never used them).
 
 ## Usage
 
