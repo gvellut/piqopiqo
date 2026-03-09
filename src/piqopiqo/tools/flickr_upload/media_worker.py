@@ -7,7 +7,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
+from functools import partial
 import logging
+from operator import attrgetter
 import os
 from pathlib import Path
 import shutil
@@ -655,6 +657,48 @@ def _add_to_album_group(flickr, album_id: str, photo_ids: list[str]) -> None:
             timeout=UPLOAD_TIMEOUT_S,
         ),
     )
+
+    _reorder_album(flickr, album_id)
+
+
+def _reorder_album(flickr, album_id):
+    # get everything in the album and reorder it: tried with only passing the new
+    # uploads but weird result
+    album_photos = retry(API_RETRIES, partial(_get_photos, flickr, album_id))
+    photos = sorted(album_photos, key=attrgetter("datetaken"))
+    photo_ids = list(map(attrgetter("id"), photos))
+
+    q_photo_ids = ",".join(photo_ids)
+    retry(
+        API_RETRIES,
+        lambda: flickr.photosets.reorderPhotos(
+            photoset_id=album_id, photo_ids=q_photo_ids
+        ),
+    )
+
+
+def _get_photos(flickr, album_id, extras="date_taken,url_o", **kwargs):
+    return _all_pages(
+        "photoset",
+        "photo",
+        flickr.photosets.getPhotos,
+        photoset_id=album_id,
+        extras=extras,
+        **kwargs,
+    )
+
+
+def _all_pages(page_elem, iter_elem, func, *args, **kwargs):
+    page = 1
+    acc = []
+    while True:
+        paginated = func(*args, **kwargs, page=page)[page_elem]
+        acc.extend(paginated[iter_elem])
+
+        if int(paginated["page"]) >= int(paginated["pages"]):
+            return acc
+
+        page += 1
 
 
 def run_create_album_task(task: dict) -> dict:
