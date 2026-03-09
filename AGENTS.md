@@ -286,7 +286,9 @@ Selection behavior:
 - Copy-from-SD uses `UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER` as the destination base; ensure the target volume is mounted.
 - Output folders are created as `YYYYMMDD_<name>/<VOLUME_NAME>` using the SD card volume name directly.
 - Optional SD card name filtering is controlled by `RuntimeSettingKey.SDCARD_NAMES`.
-- Date spec supports `TD`, `YD`, `YD2`, `YD3`, `YYYYMMDD`, `YYYYMMDD-YYYYMMDD`, `since:YYYYMMDD`, `since:last`, `L/L2/L3` and uses file modification time.
+- Date spec supports `TD`, `YD`, `YD2`, `YD3`, `YYYYMMDD`, `YYYYMMDD-YYYYMMDD`, `since:YYYYMMDD`, `since:last`, `between:YYYYMMDD-YYYYMMDD`, `between:-YYYYMMDD`, `L/L2/L3` and uses file modification time.
+- `between:` returns dates strictly between start and end (exclusive of both sides); missing start resolves to last copied date for the volume (like `since:last`).
+- Synonym prefixes: `s:` expands to `since:`, `b:` expands to `between:`.
 - Copy runs in a background worker with progress and cancel; eject uses `diskutil` and is skipped on cancel.
 - `MediaManager` handles EXIF + thumbnails via multiprocessing; DB writes happen in the main process (SQLite single-writer). Filesystem/tool paths are resolved in the parent process and passed explicitly in worker task payloads.
 - Thumbnail cache layout is split by quality under each folder cache:

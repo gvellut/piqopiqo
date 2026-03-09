@@ -14,7 +14,8 @@ import threading
 from typing import Any
 
 from attrs import define
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 DATE_FMT = "%Y%m%d"
 OUTPUT_DATE_FMT = DATE_FMT
 PREFIX_SINCE = "since:"
+PREFIX_BETWEEN = "between:"
 
 
 @define(frozen=True)
@@ -110,6 +112,19 @@ def is_since(date_s):
     return date_s.startswith(PREFIX_SINCE)
 
 
+def is_between(date_s):
+    return date_s.startswith(PREFIX_BETWEEN)
+
+
+def _normalize_prefix_synonyms(date_s: str) -> str:
+    """Expand short synonyms: s: -> since:, b: -> between:."""
+    if date_s.startswith("s:"):
+        return PREFIX_SINCE + date_s[2:]
+    if date_s.startswith("b:"):
+        return PREFIX_BETWEEN + date_s[2:]
+    return date_s
+
+
 def _get_since_last_folder_dates(volume: PhotoVolume) -> list[str]:
     folder_for_sd = volume.name
     return find_date_folders(
@@ -139,7 +154,20 @@ def _build_no_images_message(date_spec: str, volume: PhotoVolume) -> str:
     return "No image found for the selected date(s)."
 
 
+def _resolve_last_copied_date(volume: PhotoVolume) -> str:
+    """Return the last copied date token for the volume, or a far-past fallback."""
+    dirs = _get_since_last_folder_dates(volume)
+    if dirs:
+        token = dirs[0]
+        logger.info("last => %s", token)
+        return token
+    logger.info("No existing folder: From the beginning")
+    return "10000101"
+
+
 def to_dates(date_s, volume: PhotoVolume):
+    date_s = _normalize_prefix_synonyms(date_s)
+
     if date_s == "TD":
         return datetime.now().date()
 
@@ -162,6 +190,9 @@ def to_dates(date_s, volume: PhotoVolume):
     if date_s == "L3":
         return find_latest_date(volume.path, rank=2)
 
+    if is_between(date_s):
+        return _resolve_between(date_s, volume)
+
     if "-" in date_s:
         return parse_date_range(date_s)
 
@@ -169,16 +200,7 @@ def to_dates(date_s, volume: PhotoVolume):
     if is_since(date_s):
         date_s = date_s[len(PREFIX_SINCE) :]
         if date_s == "last":
-            dirs = _get_since_last_folder_dates(volume)
-            if dirs:
-                # replace with last folder in order
-                date_s = dirs[0]
-                logger.info("last => %s", date_s)
-            else:
-                # no folder (new camera maybe?)
-                # dummy date far in the past
-                date_s = "10000101"
-                logger.info("No existing folder: From the beginning")
+            date_s = _resolve_last_copied_date(volume)
 
         # only first 8 characters in case title copied
         date_s = date_s[:8]
@@ -189,6 +211,61 @@ def to_dates(date_s, volume: PhotoVolume):
         return filtered
 
     return datetime.strptime(date_s, DATE_FMT).date()
+
+
+def _resolve_last_copied_date_before(
+    volume: PhotoVolume,
+    before: date,
+) -> str:
+    """Return the last copied date token for the volume that is before *before*."""
+    dirs = _get_since_last_folder_dates(volume)
+    for d in dirs:
+        token = str(d)[:8]
+        try:
+            folder_date = datetime.strptime(token, DATE_FMT).date()
+        except ValueError:
+            continue
+        if folder_date < before:
+            logger.info("last before %s => %s", before.isoformat(), token)
+            return token
+    logger.info("No existing folder before %s: From the beginning", before.isoformat())
+    return "10000101"
+
+
+def _resolve_between(date_s: str, volume: PhotoVolume) -> list[date]:
+    """Resolve between:START-END spec (both sides exclusive).
+
+    If START is missing, uses the last copied date before END for the volume.
+    """
+    inner = date_s[len(PREFIX_BETWEEN) :]
+    parts = inner.split("-", 1)
+    start_str = parts[0].strip() if parts[0].strip() else ""
+    end_str = parts[1].strip() if len(parts) > 1 and parts[1].strip() else ""
+
+    # Parse end first so we can use it to resolve a missing start
+    if end_str:
+        end_str = end_str[:8]
+        end_date = datetime.strptime(end_str, DATE_FMT).date()
+    else:
+        end_date = None
+
+    if not start_str:
+        if end_date is not None:
+            start_str = _resolve_last_copied_date_before(volume, end_date)
+        else:
+            start_str = _resolve_last_copied_date(volume)
+
+    # only first 8 characters in case title copied
+    start_str = start_str[:8]
+    start_date = datetime.strptime(start_str, DATE_FMT).date()
+
+    all_dates = find_all_dates(volume.path)
+    filtered = [
+        d for d in all_dates if d > start_date and (end_date is None or d < end_date)
+    ]
+    if not filtered:
+        logger.warning("No photo between the specified dates.")
+    return filtered
 
 
 def parse_date_range(date_range_str):
@@ -480,7 +557,8 @@ class CopySdInputDialog(QDialog):
 
         help_label = QLabel(
             "Date spec examples: TD, YD, YYYYMMDD, YYYYMMDD-YYYYMMDD, "
-            "since:YYYYMMDD, since:last, L/L2/L3."
+            "since:YYYYMMDD (s:), since:last, between:YYYYMMDD-YYYYMMDD (b:), "
+            "L/L2/L3."
         )
         help_label.setWordWrap(True)
         layout.addWidget(help_label)
@@ -535,18 +613,25 @@ class CopySdProgressDialog(QDialog):
         self.stage_label.setWordWrap(True)
         layout.addWidget(self.stage_label)
 
+        status_row = QHBoxLayout()
         self.status_label = QLabel("Preparing copy...")
         self.status_label.setWordWrap(True)
-        layout.addWidget(self.status_label)
+        status_row.addWidget(self.status_label, 1)
+
+        self.progress_text_label = QLabel("")
+        self.progress_text_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        mono = QFont("menlo")
+        mono.setStyleHint(QFont.StyleHint.Monospace)
+        self.progress_text_label.setFont(mono)
+        status_row.addWidget(self.progress_text_label)
+        layout.addLayout(status_row)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setRange(0, 0)
         layout.addWidget(self.progress_bar)
-
-        self.progress_text_label = QLabel("")
-        self.progress_text_label.setWordWrap(True)
-        layout.addWidget(self.progress_text_label)
 
         self.error_label = QLabel()
         self.error_label.setStyleSheet("color: red;")
@@ -735,7 +820,10 @@ def _resolve_dates_with_progress(parent, date_spec: str, volume: PhotoVolume):
     Returns dates on success, an error string on ValueError, or None if cancelled.
     """
     # Fast path: specs that don't scan the filesystem
-    if date_spec in ("TD", "YD", "YD2", "YD3") or "-" in date_spec:
+    normalized = _normalize_prefix_synonyms(date_spec)
+    if date_spec in ("TD", "YD", "YD2", "YD3") or (
+        "-" in date_spec and not is_between(normalized) and not is_since(normalized)
+    ):
         try:
             return to_dates(date_spec, volume)
         except ValueError:

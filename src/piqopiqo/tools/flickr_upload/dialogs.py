@@ -7,6 +7,7 @@ import os
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QThreadPool, Signal
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -306,18 +307,25 @@ class FlickrUploadProgressDialog(QDialog):
         self.status_label.hide()
         layout.addWidget(self.status_label)
 
+        stage_row = QHBoxLayout()
         self.stage_label = QLabel("")
         self.stage_label.setWordWrap(True)
-        layout.addWidget(self.stage_label)
+        stage_row.addWidget(self.stage_label, 1)
+
+        self.progress_text_label = QLabel("")
+        self.progress_text_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        mono = QFont("menlo")
+        mono.setStyleHint(QFont.StyleHint.Monospace)
+        self.progress_text_label.setFont(mono)
+        self.progress_text_label.hide()
+        stage_row.addWidget(self.progress_text_label)
+        layout.addLayout(stage_row)
 
         self.progress_bar = QProgressBar(self)
         self.progress_bar.setRange(0, 0)
         layout.addWidget(self.progress_bar)
-
-        self.progress_text_label = QLabel("")
-        self.progress_text_label.setWordWrap(True)
-        self.progress_text_label.hide()
-        layout.addWidget(self.progress_text_label)
 
         self.album_action_label = QLabel("")
         self.album_action_label.setWordWrap(True)

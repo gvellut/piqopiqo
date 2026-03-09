@@ -3,6 +3,7 @@
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
 - [Prescaled down image in fullscreen (Claude made a mess of it; redo)](Ja_tasks/Qa_Prescaled_down_image_in_fullscreen.md)
     ~ [Correction](Ja_tasks/Qa.A_Correction.md)
+- [GPKG export on top of KML](Db_tasks/Gb_GPKG_export_on_top_of_KML.md)
 ! [Fix date read delay if since:last](A_tasks/A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](A_tasks/B_Eject_SD_after_user_OK.md)
     !? [GUI lag](A_tasks/B.A_GUI_lag.md)
@@ -73,3 +74,4 @@
 ! [Fullscreen overlay should not be resizable](Ta_tasks/Cb_Fullscreen_overlay_should_not_be_resizable.md)
 ! [Bug Protect non text metadata multiple](Db_tasks/Db_Bug_Protect_non_text_metadata_multiple.md)
 ! [Color of grid background](Db_tasks/Eb_Color_of_grid_background.md)
+! [Progress total fixed](Db_tasks/Fb_Progress_total_fixed.md)
