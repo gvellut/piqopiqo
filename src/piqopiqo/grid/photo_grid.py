@@ -69,6 +69,8 @@ class PhotoGrid(QWidget):
 
         self.setFocusPolicy(Qt.StrongFocus)
 
+        # covered by the cells (with same color) but will appear in the grid when no
+        # cell is shown like at the end of the grid
         bg_color = get_runtime_setting(RuntimeSettingKey.GRID_BACKGROUND_COLOR)
         self.setStyleSheet(f"#photo_grid {{ background-color: {bg_color}; }}")
 

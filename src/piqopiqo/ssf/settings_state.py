@@ -140,6 +140,7 @@ class RuntimeSettingKey(StrEnum):
     EXIF_FIELDS = "exifFields"
     THUMB_MAX_DIM = "thumbMaxDim"
     GRID_BACKGROUND_COLOR = "gridBackgroundColor"
+    GRID_BORDER_COLOR = "gridBorderColor"
     FULLSCREEN_BACKGROUND_COLOR = "fullscreenBackgroundColor"
     CLEAR_CACHE_ON_START = "clearCacheOnStart"
     SETTINGS_PANEL_SAVE_MODE = "settingsPanelSaveMode"
@@ -663,6 +664,7 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.GRID_BACKGROUND_COLOR: SettingDef(
         default="#4a4a4a", read_type=str
     ),
+    RuntimeSettingKey.GRID_BORDER_COLOR: SettingDef(default="#888888", read_type=str),
     RuntimeSettingKey.FULLSCREEN_BACKGROUND_COLOR: SettingDef(
         default="#323232", read_type=str
     ),

@@ -39,6 +39,10 @@ class PhotoCell(QFrame):
         bg_color = get_runtime_setting(RuntimeSettingKey.GRID_BACKGROUND_COLOR)
         self.setStyleSheet(f"background-color: {bg_color};")
 
+        self.border_color = QColor(
+            get_runtime_setting(RuntimeSettingKey.GRID_BORDER_COLOR)
+        )
+
     def set_content(self, data: dict | None, is_selected: bool):
         self.current_data = data
         self.is_selected = is_selected
@@ -216,8 +220,8 @@ class PhotoCell(QFrame):
                     )
                 y_offset += line_height
 
-            # Draw border around item Wiw look like lines of the grid
-            painter.setPen(QPen(QColor("#555555"), 1))
+            # Draw border around item to look like lines of the grid
+            painter.setPen(QPen(self.border_color, 1))
             painter.drawRect(rect)
         finally:
             painter.end()
