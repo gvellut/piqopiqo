@@ -75,3 +75,4 @@
 ! [Bug Protect non text metadata multiple](Db_tasks/Db_Bug_Protect_non_text_metadata_multiple.md)
 ! [Color of grid background](Db_tasks/Eb_Color_of_grid_background.md)
 ! [Progress total fixed](Db_tasks/Fb_Progress_total_fixed.md)
+! [KML photo rotation](Db_tasks/Hb_KML_photo_rotation.md)

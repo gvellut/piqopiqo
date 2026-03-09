@@ -197,17 +197,41 @@ def _kml_title(image_path: str) -> str:
     return image_name
 
 
-def _kml_description(image_path: str, kml_thumbnail_size: int) -> str:
+_ORIENTATION_TO_CSS_ROTATE: dict[int, str] = {
+    3: "rotate(180deg)",
+    6: "rotate(90deg)",
+    8: "rotate(270deg)",
+}
+
+
+def _kml_description(
+    image_path: str, kml_thumbnail_size: int, orientation: int | None = None
+) -> str:
     image_name = os.path.basename(image_path)
     src = _file_uri(image_path)
-    return (
-        f"{image_name}<br/><br/>\n"
-        f'<img src="{src}" width="{int(kml_thumbnail_size)}" />\n'
+    css_rotate = _ORIENTATION_TO_CSS_ROTATE.get(orientation or 1)
+    style = ""
+    if css_rotate:
+        style = f'style="transform: {css_rotate}; transform-origin: center;"'
+        v1 = (
+            f'<div style="height: {kml_thumbnail_size}; display: flex; '
+            'align-items: center; margin-top: 20px;">'
+        )
+        v2 = "</div>"
+    else:
+        v1 = v2 = ""
+    return "\n".join(
+        [
+            f"{image_name}<br/><br/>",
+            v1,
+            f'<img src="{src}" width="{int(kml_thumbnail_size)}" {style} />',
+            v2,
+        ]
     )
 
 
 def write_kml(
-    positions: list[tuple[tuple[float, float], str]],
+    positions: list[tuple[tuple[float, float], str, int | None]],
     kml_path: str,
     kml_thumbnail_size: int = KML_THUMBNAIL_SIZE,
 ) -> None:
@@ -223,9 +247,9 @@ def write_kml(
     )
     document = fastkml.containers.Document(name="Photos", styles=[style])
 
-    for (lat, lon), image_path in positions:
+    for (lat, lon), image_path, orientation in positions:
         title = _kml_title(image_path)
-        desc = _kml_description(image_path, kml_thumbnail_size)
+        desc = _kml_description(image_path, kml_thumbnail_size, orientation)
         point = fastkml.features.Placemark(
             name=title,
             description=desc,

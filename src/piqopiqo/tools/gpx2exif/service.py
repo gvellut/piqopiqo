@@ -217,7 +217,7 @@ def apply_gpx_to_folders(
 
         snapshot: dict[str, dict] = {}
         folder_updated_paths: set[str] = set()
-        folder_positions: list[tuple[tuple[float, float], str]] = []
+        folder_positions: list[tuple[tuple[float, float], str, int | None]] = []
 
         for file_path in sorted(file_paths):
             if cancel_token.is_set():
@@ -273,7 +273,8 @@ def apply_gpx_to_folders(
                 folder_updated_paths.add(file_path)
 
             if position is not None:
-                folder_positions.append((position, file_path))
+                orientation = metadata.get(DBFields.ORIENTATION)
+                folder_positions.append((position, file_path, orientation))
 
             processed += 1
             folder_result.processed += 1

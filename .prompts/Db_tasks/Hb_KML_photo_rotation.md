@@ -1,0 +1,2 @@
+When exporting the check output for gpx apply : with KML.
+Add a style="transform: rotate(90deg); transform-origin: center;" to the html img tag in description : only if the rotation in the metadadb for the photo in question needs it (if no rotation needed do not output it). Replace the 90deg by the determined angle according to the rotation.
