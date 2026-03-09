@@ -30,7 +30,12 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..ssf.settings_state import UserSettingKey, get_user_setting
+from piqopiqo.ssf.settings_state import (
+    StateKey,
+    UserSettingKey,
+    get_state,
+    get_user_setting,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +52,6 @@ class PhotoVolume:
     path: str
 
 
-@define(frozen=True)
-class DateRange:
-    start: date | None
-    end: date | None
-
-
 class MediaType(Enum):
     INTERNAL = auto()
     SD_CARD = auto()
@@ -61,29 +60,10 @@ class MediaType(Enum):
 
 
 def date_to_str(d):
-    if isinstance(d, DateRange):
-        s = []
-        if d.start:
-            s.append(d.start.isoformat() + " ")
-        s.append("-")
-        if d.end:
-            s.append(" " + d.end.isoformat())
-        return "".join(s)
     return d.isoformat()
 
 
 def dirname_with_date(parent_folder, name, f_date):
-    if isinstance(f_date, DateRange):
-        # all the same anyway
-        date_r = f_date
-        if date_r.end:
-            f_date = date_r.end
-        elif date_r.start:
-            f_date = date_r.start
-        else:
-            # today
-            f_date = datetime.now().date()
-
     date_s = f_date.strftime(OUTPUT_DATE_FMT)
     output_folder = os.path.join(parent_folder, f"{date_s}_{name}")
 
@@ -182,9 +162,6 @@ def to_fixed_dates(date_s):
     if date_s == "YD3":
         return datetime.now().date() - timedelta(days=3)
 
-    if "-" in date_s:
-        return parse_date_range(date_s)
-
     return datetime.strptime(date_s, DATE_FMT).date()
 
 
@@ -275,18 +252,6 @@ def _resolve_between(date_s: str, volume: PhotoVolume) -> list[date]:
     if not filtered:
         logger.warning("No photo between the specified dates.")
     return filtered
-
-
-def parse_date_range(date_range_str):
-    dates = date_range_str.split("-")
-    start_date = datetime.strptime(dates[0], DATE_FMT).date() if dates[0] else None
-    end_date = (
-        datetime.strptime(dates[1], DATE_FMT).date()
-        if len(dates) > 1 and dates[1]
-        else None
-    )
-
-    return DateRange(start_date, end_date)
 
 
 def find_latest_date(volume_path, rank=0):
@@ -407,16 +372,6 @@ def filter_relevant_image(filename):
     return filename.lower().endswith((".jpg", ".jpeg", ".raf", ".raw", ".m4a", ".avi"))
 
 
-def filter_by_date(image_date, date_):
-    if isinstance(date_, DateRange):
-        if date_.start and image_date < date_.start:
-            return False
-        if date_.end and image_date > date_.end:
-            return False
-        return True
-    return image_date == date_
-
-
 def iter_files_for_date(volume: PhotoVolume, f_date):
     for root, _, filenames in os.walk(volume.path):
         for filename in filenames:
@@ -424,10 +379,11 @@ def iter_files_for_date(volume: PhotoVolume, f_date):
                 continue
             file_path = os.path.join(root, filename)
             try:
-                last_modified_date = datetime.fromtimestamp(os.path.getmtime(file_path))
+                last_modified_date = datetime.fromtimestamp(os.path.getctime(file_path))
             except OSError:
                 continue
-            if filter_by_date(last_modified_date.date(), f_date):
+
+            if last_modified_date.date() == f_date:
                 yield file_path
 
 
@@ -913,8 +869,6 @@ def launch_copy_sd(parent=None):
             f"Cannot access output folder: {output_parent_folder}\n{exc}",
         )
         return
-
-    from ..ssf.settings_state import StateKey, get_state
 
     state = get_state()
     name = state.get(StateKey.COPY_SD_NAME_SUFFIX) or ""
