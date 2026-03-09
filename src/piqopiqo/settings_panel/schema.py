@@ -305,6 +305,13 @@ SETTINGS_TABS: list[TabSpec] = [
     ),
 ]
 
+_SETTINGS_TAB_TITLE_BY_KEY: dict[UserSettingKey, str] = {
+    field.key: tab.title
+    for tab in SETTINGS_TABS
+    for group in tab.groups
+    for field in group.fields
+}
+
 
 def iter_all_field_specs() -> list[FieldSpec]:
     fields: list[FieldSpec] = []
@@ -312,3 +319,7 @@ def iter_all_field_specs() -> list[FieldSpec]:
         for group in tab.groups:
             fields.extend(group.fields)
     return fields
+
+
+def get_settings_tab_title_for_key(key: UserSettingKey) -> str | None:
+    return _SETTINGS_TAB_TITLE_BY_KEY.get(key)

@@ -1,6 +1,10 @@
 """Tests for settings panel descriptors."""
 
-from piqopiqo.settings_panel.schema import SETTINGS_TABS, iter_all_field_specs
+from piqopiqo.settings_panel.schema import (
+    SETTINGS_TABS,
+    get_settings_tab_title_for_key,
+    iter_all_field_specs,
+)
 from piqopiqo.ssf.settings_state import UserSettingKey
 
 
@@ -83,3 +87,19 @@ def test_labels_and_shortcuts_tabs_layout_matches_expected_groups_and_fields():
     assert [field.key for field in shortcuts_tab.groups[0].fields] == [
         UserSettingKey.SHORTCUTS
     ]
+
+
+def test_settings_tab_title_lookup_maps_external_tools_keys():
+    assert (
+        get_settings_tab_title_for_key(UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER)
+        == "External/Tools"
+    )
+    assert get_settings_tab_title_for_key(UserSettingKey.MANUAL_LENSES) == (
+        "External/Tools"
+    )
+    assert get_settings_tab_title_for_key(UserSettingKey.FLICKR_API_KEY) == (
+        "External/Tools"
+    )
+    assert get_settings_tab_title_for_key(UserSettingKey.FLICKR_API_SECRET) == (
+        "External/Tools"
+    )

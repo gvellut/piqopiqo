@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 import pytest
 
 from piqopiqo.color_management import ScreenColorProfileMode
+from piqopiqo.main_window import MainWindow
 from piqopiqo.settings_panel.dialog import SettingsDialog
 from piqopiqo.ssf import settings_state
 from piqopiqo.ssf.settings_state import (
@@ -72,6 +73,21 @@ def test_initial_tab_title_selects_requested_tab(qapp, monkeypatch):
     assert dialog._tabs is not None
     current_title = dialog._tabs.tabText(dialog._tabs.currentIndex())
     assert current_title == "External/Tools"
+
+
+def test_open_settings_for_key_uses_schema_tab_title():
+    class _WindowStub:
+        def __init__(self) -> None:
+            self.calls: list[str | None] = []
+
+        def open_settings(self, tab_title: str | None = None) -> None:
+            self.calls.append(tab_title)
+
+    window = _WindowStub()
+
+    MainWindow.open_settings_for_key(window, UserSettingKey.FLICKR_API_SECRET)
+
+    assert window.calls == ["External/Tools"]
 
 
 def test_autosave_choice_enum_setting_roundtrip(qapp, monkeypatch):

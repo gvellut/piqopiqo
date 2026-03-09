@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 import pytest
 
 from piqopiqo.ssf.settings_state import UserSettingKey
@@ -52,6 +52,7 @@ class _FakeParent:
         self.db_manager = db_manager
         self._active_flickr_metadata_precheck_worker = None
         self.selection_calls: list[tuple[list[str], str | None, str | None]] = []
+        self.open_settings_calls: list[UserSettingKey] = []
 
     def select_paths_in_grid(
         self,
@@ -61,6 +62,9 @@ class _FakeParent:
         reveal_path: str | None = None,
     ) -> None:
         self.selection_calls.append((list(paths), anchor_path, reveal_path))
+
+    def open_settings_for_key(self, key: UserSettingKey) -> None:
+        self.open_settings_calls.append(key)
 
 
 class _ImmediateThreadPool:
@@ -228,3 +232,45 @@ def test_launch_flickr_upload_fails_open_when_precheck_errors(qapp, monkeypatch)
     assert warnings == []
     assert parent.selection_calls == []
     assert parent._active_flickr_metadata_precheck_worker is None
+
+
+def test_launch_flickr_upload_missing_credentials_opens_settings(qapp, monkeypatch):  # noqa: ARG001
+    parent = _FakeParent(
+        [_FakeItem("/a.jpg", {"title": "A", "keywords": "one"})],
+        _FakeDbManager(),
+    )
+    values = {
+        UserSettingKey.FLICKR_API_KEY: "",
+        UserSettingKey.FLICKR_API_SECRET: "",
+        UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS: False,
+    }
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.get_user_setting",
+        lambda key: values[key],
+    )
+
+    prompt_calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.prompt_open_settings_for_missing_setting",
+        lambda _parent, *, title, text, icon=QMessageBox.Icon.Warning: (
+            prompt_calls.append((title, text)) or True
+        ),
+    )
+
+    launch_calls: list[object] = []
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs._launch_flickr_upload_flow",
+        lambda *_args, **_kwargs: launch_calls.append("called"),
+    )
+
+    dialogs.launch_flickr_upload(parent)
+
+    assert launch_calls == []
+    assert prompt_calls == [
+        (
+            "Upload to Flickr",
+            "Flickr API key and Flickr API secret are empty.\n"
+            "Set them in Settings > External/Tools > Flickr.",
+        )
+    ]
+    assert parent.open_settings_calls == [UserSettingKey.FLICKR_API_KEY]

@@ -80,6 +80,7 @@ class _WindowStub:
         self.status_bar = _StatusBar()
         self._background_db_save_pool = _ImmediatePool()
         self.synced: list[tuple[set[str], str]] = []
+        self.open_settings_calls: list[UserSettingKey] = []
 
     def sync_model_after_metadata_update(
         self,
@@ -88,6 +89,9 @@ class _WindowStub:
         allow_fullscreen_filter: bool = False,
     ) -> None:
         self.synced.append((set(changed_fields), source))
+
+    def open_settings_for_key(self, key: UserSettingKey) -> None:
+        self.open_settings_calls.append(key)
 
 
 def test_lens_selection_dialog_requires_explicit_choice(qapp):  # noqa: ARG001
@@ -126,16 +130,19 @@ def test_launch_manual_lens_warns_when_no_presets(tmp_path, monkeypatch):
     item = _item(str(folder / "a.jpg"), str(folder))
     window = _WindowStub(db_manager=dbm, selected_items=[item], visible_items=[item])
 
-    warnings: list[str] = []
+    prompt_calls: list[tuple[str, str]] = []
     monkeypatch.setattr(
-        QMessageBox,
-        "warning",
-        lambda _parent, _title, text: warnings.append(str(text)),
+        manual_lens,
+        "prompt_open_settings_for_missing_setting",
+        lambda _parent, *, title, text, icon=QMessageBox.Icon.Warning: (
+            prompt_calls.append((title, text)) or True
+        ),
     )
 
     manual_lens.launch_manual_lens(window)
-    assert warnings
-    assert "No lens presets found" in warnings[0]
+    assert prompt_calls
+    assert "No lens presets found" in prompt_calls[0][1]
+    assert window.open_settings_calls == [UserSettingKey.MANUAL_LENSES]
 
 
 def test_launch_manual_lens_falls_back_to_visible_when_no_selection(

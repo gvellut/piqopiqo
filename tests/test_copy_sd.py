@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QApplication
+from types import SimpleNamespace
+
+from PySide6.QtWidgets import QApplication, QMessageBox
 import pytest
 
+from piqopiqo.ssf.settings_state import UserSettingKey
 from piqopiqo.tools.copy_sd import (
     CopySdProgressDialog,
     PhotoVolume,
     _build_no_images_message,
+    launch_copy_sd,
 )
 
 
@@ -64,3 +68,40 @@ def test_copy_progress_counter_label_updates(qapp):  # noqa: ARG001
 
     dialog._on_finished(5, 5, False, 0)
     assert dialog.progress_text_label.text() == "5/5"
+
+
+def test_launch_copy_sd_missing_base_folder_opens_settings(monkeypatch):
+    parent = SimpleNamespace(open_settings_calls=[])
+
+    def _open_settings_for_key(key: UserSettingKey) -> None:
+        parent.open_settings_calls.append(key)
+
+    parent.open_settings_for_key = _open_settings_for_key
+
+    monkeypatch.setattr(
+        "piqopiqo.tools.copy_sd.get_sd_volume",
+        lambda: PhotoVolume("CARD", "/Volumes/CARD"),
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.copy_sd.get_user_setting",
+        lambda key: [] if key == UserSettingKey.SDCARD_NAMES else "",
+    )
+
+    prompt_calls: list[tuple[str, str, QMessageBox.Icon]] = []
+    monkeypatch.setattr(
+        "piqopiqo.tools.copy_sd.prompt_open_settings_for_missing_setting",
+        lambda _parent, *, title, text, icon=QMessageBox.Icon.Warning: (
+            prompt_calls.append((title, text, icon)) or True
+        ),
+    )
+
+    launch_copy_sd(parent)
+
+    assert prompt_calls == [
+        (
+            "Copy from SD",
+            "BASE_EXTERNAL_FOLDER is not configured.",
+            QMessageBox.Icon.Critical,
+        )
+    ]
+    assert parent.open_settings_calls == [UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER]

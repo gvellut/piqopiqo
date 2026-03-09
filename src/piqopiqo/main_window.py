@@ -49,6 +49,7 @@ from .orientation import rotate_orientation_left, rotate_orientation_right
 from .panels import EditPanel, ExifPanel, FilterPanel
 from .photo_model import PhotoListModel, SortOrder
 from .settings_panel import SettingsDialog
+from .settings_panel.schema import get_settings_tab_title_for_key
 from .ssf.settings_state import (
     APP_NAME,
     RuntimeSettingKey,
@@ -1418,6 +1419,9 @@ class MainWindow(QMainWindow):
         dialog.setting_saved.connect(self._on_setting_saved)
         dialog.exec()
         self._apply_settings_changes(dialog.changed_keys)
+
+    def open_settings_for_key(self, key: UserSettingKey) -> None:
+        self.open_settings(tab_title=get_settings_tab_title_for_key(key))
 
     def _on_setting_saved(self, key: object) -> None:
         resolved_key = (

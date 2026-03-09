@@ -14,6 +14,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from piqopiqo.dialogs.settings_redirect import (
+    prompt_open_settings_for_missing_setting,
+)
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.save_workers import MetadataSaveWorker
 from piqopiqo.model import ManualLensPreset
@@ -161,12 +164,18 @@ def launch_manual_lens(window: MainWindow) -> None:
 
     presets = _load_manual_lens_presets()
     if not presets:
-        QMessageBox.warning(
+        should_open_settings = prompt_open_settings_for_missing_setting(
             window,
-            "Set Lens Info",
-            "No lens presets found. Add presets in Settings > External/Tools > "
-            "Manual Lens.",
+            title="Set Lens Info",
+            text=(
+                "No lens presets found. Add presets in Settings > External/Tools > "
+                "Manual Lens."
+            ),
         )
+        if should_open_settings:
+            open_settings = getattr(window, "open_settings_for_key", None)
+            if callable(open_settings):
+                open_settings(UserSettingKey.MANUAL_LENSES)
         return
 
     picker = LensSelectionDialog(presets, parent=window)

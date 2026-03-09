@@ -30,6 +30,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from piqopiqo.dialogs.settings_redirect import (
+    prompt_open_settings_for_missing_setting,
+)
 from piqopiqo.ssf.settings_state import (
     StateKey,
     UserSettingKey,
@@ -853,11 +856,16 @@ def launch_copy_sd(parent=None):
 
     output_parent_folder = get_user_setting(UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER)
     if not output_parent_folder:
-        QMessageBox.critical(
+        should_open_settings = prompt_open_settings_for_missing_setting(
             parent,
-            "Copy from SD",
-            "BASE_EXTERNAL_FOLDER is not configured.",
+            title="Copy from SD",
+            text="BASE_EXTERNAL_FOLDER is not configured.",
+            icon=QMessageBox.Icon.Critical,
         )
+        if should_open_settings:
+            open_settings = getattr(parent, "open_settings_for_key", None)
+            if callable(open_settings):
+                open_settings(UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER)
         return
 
     try:

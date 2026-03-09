@@ -22,6 +22,9 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.cache_paths import get_flickr_cache_dir, get_flickr_token_file_path
+from piqopiqo.dialogs.settings_redirect import (
+    prompt_open_settings_for_missing_setting,
+)
 from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
     UserSettingKey,
@@ -901,20 +904,18 @@ def launch_flickr_upload(parent: MainWindow) -> None:
     api_secret = str(get_user_setting(UserSettingKey.FLICKR_API_SECRET) or "").strip()
 
     if not api_key or not api_secret:
-        dialog = QMessageBox(parent)
-        dialog.setIcon(QMessageBox.Icon.Warning)
-        dialog.setWindowTitle("Upload to Flickr")
-        dialog.setText(
-            "Flickr API key and Flickr API secret are empty.\n"
-            "Set them in Settings > External/Workflow > Flickr."
+        should_open_settings = prompt_open_settings_for_missing_setting(
+            parent,
+            title="Upload to Flickr",
+            text=(
+                "Flickr API key and Flickr API secret are empty.\n"
+                "Set them in Settings > External/Tools > Flickr."
+            ),
         )
-        go_to_settings_btn = dialog.addButton(
-            "Go to settings", QMessageBox.ButtonRole.AcceptRole
-        )
-        dialog.addButton(QMessageBox.StandardButton.Cancel)
-        dialog.exec()
-        if dialog.clickedButton() == go_to_settings_btn:
-            parent.open_settings(tab_title="External/Workflow")
+        if should_open_settings:
+            open_settings = getattr(parent, "open_settings_for_key", None)
+            if callable(open_settings):
+                open_settings(UserSettingKey.FLICKR_API_KEY)
         return
 
     visible_items = list(parent.images_data)
