@@ -81,3 +81,60 @@ def test_ensure_visible_with_navigation_activity_marks(qapp, monkeypatch):
 
     assert grid.scrollbar.value() == 5
     assert marks["count"] >= 1
+
+
+def test_ensure_path_at_viewport_row_positions_item_on_requested_row(qapp):
+    init_qsettings_store(dyn=True)
+    grid = PhotoGrid()
+    grid._rebuild_grid(2, 1)
+    grid.set_data([_item(f"/tmp/{i}.jpg") for i in range(6)])
+    qapp.processEvents()
+
+    assert (
+        grid._ensure_path_at_viewport_row(
+            "/tmp/4.jpg",
+            1,
+            navigation_activity=False,
+        )
+        is True
+    )
+    qapp.processEvents()
+
+    assert grid.scrollbar.value() == 3
+
+
+def test_ensure_path_at_viewport_row_clamps_when_exact_row_is_not_possible(qapp):
+    init_qsettings_store(dyn=True)
+    grid = PhotoGrid()
+    grid._rebuild_grid(3, 1)
+    grid.set_data([_item(f"/tmp/{i}.jpg") for i in range(5)])
+    qapp.processEvents()
+
+    assert (
+        grid._ensure_path_at_viewport_row(
+            "/tmp/4.jpg",
+            0,
+            navigation_activity=False,
+        )
+        is True
+    )
+    qapp.processEvents()
+
+    assert grid.scrollbar.value() == 2
+
+
+def test_ensure_path_at_viewport_row_returns_false_for_missing_path(qapp):
+    init_qsettings_store(dyn=True)
+    grid = PhotoGrid()
+    grid._rebuild_grid(2, 1)
+    grid.set_data([_item(f"/tmp/{i}.jpg") for i in range(3)])
+    qapp.processEvents()
+
+    assert (
+        grid._ensure_path_at_viewport_row(
+            "/tmp/missing.jpg",
+            0,
+            navigation_activity=False,
+        )
+        is False
+    )

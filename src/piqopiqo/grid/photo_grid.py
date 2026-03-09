@@ -1308,6 +1308,31 @@ class PhotoGrid(QWidget):
         finally:
             self._suppress_scroll_navigation_activity = False
 
+    def _ensure_path_at_viewport_row(
+        self,
+        path: str,
+        viewport_row: int,
+        *,
+        navigation_activity: bool = True,
+    ) -> bool:
+        if not self.items_data or self.n_cols <= 0 or self.n_rows <= 0:
+            return False
+
+        index = self.get_index_for_path(path)
+        if index is None:
+            return False
+
+        target_row = index // self.n_cols
+        clamped_viewport_row = max(0, min(int(viewport_row), self.n_rows - 1))
+        desired_top = max(
+            0,
+            min(target_row - clamped_viewport_row, int(self.scrollbar.maximum())),
+        )
+        self._set_scrollbar_value(
+            desired_top, navigation_activity=navigation_activity
+        )
+        return True
+
     def _ensure_visible(self, index, *, navigation_activity: bool = True):
         """Scrolls the grid if the index is out of view."""
         # Calculate the row this item belongs to

@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+from PySide6.QtWidgets import QMessageBox
+
 from piqopiqo.main_window import MainWindow
 
 
 class _FakeMainWindow:
     def __init__(self):
         self.root_folder = "/previous"
-        self.events: list[str] = []
+        self.events: list[object] = []
 
     def _clear_filters_before_folder_load(self) -> None:
         self.events.append("clear")
 
-    def _load_folder(self, folder: str) -> None:
-        self.events.append(f"load:{folder}")
+    def _load_folder(self, folder: str, *, reset_grid_to_top: bool = False) -> None:
+        self.events.append(("load", folder, reset_grid_to_top))
 
 
 class _FakeGridEnsureVisible:
@@ -149,6 +151,87 @@ class _FakeSidebarCollapseWindow:
         self._right_sidebar_restore_size = restore_size
 
 
+class _FakeGridFilterRestore:
+    def __init__(self, *, ensure_result: bool = True):
+        self.ensure_result = ensure_result
+        self.calls: list[tuple[str, int, bool]] = []
+
+    def _ensure_path_at_viewport_row(
+        self,
+        path: str,
+        viewport_row: int,
+        *,
+        navigation_activity: bool = True,
+    ) -> bool:
+        self.calls.append((path, viewport_row, navigation_activity))
+        return self.ensure_result
+
+
+class _FakeFilterRestoreWindow:
+    def __init__(self, new_photo_list_paths: list[str], *, ensure_result: bool = True):
+        self.images_data = [_Item(path) for path in new_photo_list_paths]
+        self.grid = _FakeGridFilterRestore(ensure_result=ensure_result)
+        self.visible_calls: list[str | None] = []
+
+    def _pick_filter_fallback_target(
+        self,
+        previous_visible_paths: list[str],
+        old_photo_list_paths: list[str],
+        new_photo_list_paths: list[str],
+        visible_rows_by_path: dict[str, int],
+    ) -> tuple[str | None, int | None]:
+        return MainWindow._pick_filter_fallback_target(
+            self,
+            previous_visible_paths,
+            old_photo_list_paths,
+            new_photo_list_paths,
+            visible_rows_by_path,
+        )
+
+    def _pick_filter_restore_target(
+        self,
+        snapshot: dict,
+        new_photo_list_paths: list[str],
+    ) -> tuple[str | None, int | None]:
+        return MainWindow._pick_filter_restore_target(
+            self,
+            snapshot,
+            new_photo_list_paths,
+        )
+
+    def _ensure_grid_path_visible(self, path: str | None) -> bool:
+        self.visible_calls.append(path)
+        return path is not None
+
+
+class _FakeDBManagerForClearAllData:
+    def __init__(self):
+        self.deleted = False
+        self.closed = False
+
+    def delete_all_metadata(self) -> None:
+        self.deleted = True
+
+    def close_all(self) -> None:
+        self.closed = True
+
+
+class _FakePhotoModelForClearAllData:
+    def __init__(self):
+        self.source_folders = ["/photos/source"]
+
+
+class _FakeClearAllDataWindow:
+    def __init__(self):
+        self.root_folder = "/photos/root"
+        self.db_manager = _FakeDBManagerForClearAllData()
+        self.photo_model = _FakePhotoModelForClearAllData()
+        self.load_calls: list[tuple[str, bool]] = []
+
+    def _load_folder(self, folder: str, *, reset_grid_to_top: bool = False) -> None:
+        self.load_calls.append((folder, reset_grid_to_top))
+
+
 def test_on_open_clears_filters_before_loading_folder(monkeypatch):
     fake_window = _FakeMainWindow()
     monkeypatch.setattr(
@@ -158,7 +241,7 @@ def test_on_open_clears_filters_before_loading_folder(monkeypatch):
 
     MainWindow.on_open(fake_window)
 
-    assert fake_window.events == ["clear", "load:/new-folder"]
+    assert fake_window.events == ["clear", ("load", "/new-folder", True)]
 
 
 def test_on_open_does_nothing_when_dialog_cancelled(monkeypatch):
@@ -185,6 +268,94 @@ def test_ensure_grid_path_visible_returns_false_for_missing_path():
 
     assert MainWindow._ensure_grid_path_visible(fake_window, "/missing.jpg") is False
     assert fake_window.grid.calls == []
+
+
+def test_filter_restore_prefers_visible_anchor_and_keeps_row():
+    fake_window = _FakeFilterRestoreWindow(["/a.jpg", "/b.jpg", "/c.jpg"])
+    snapshot = {
+        "photo_list_paths": ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],
+        "visible_paths": ["/b.jpg", "/c.jpg"],
+        "selected_visible_paths": ["/b.jpg", "/c.jpg"],
+        "visible_rows_by_path": {"/b.jpg": 0, "/c.jpg": 1},
+        "visible_anchor_path": "/c.jpg",
+    }
+
+    MainWindow._restore_grid_viewport_after_filter_change(fake_window, snapshot)
+
+    assert fake_window.grid.calls == [("/c.jpg", 1, False)]
+    assert fake_window.visible_calls == []
+
+
+def test_filter_restore_falls_back_to_first_visible_selected_when_anchor_not_visible():
+    fake_window = _FakeFilterRestoreWindow(["/a.jpg", "/b.jpg", "/c.jpg"])
+    snapshot = {
+        "photo_list_paths": ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],
+        "visible_paths": ["/b.jpg", "/c.jpg"],
+        "selected_visible_paths": ["/b.jpg", "/c.jpg"],
+        "visible_rows_by_path": {"/b.jpg": 0, "/c.jpg": 1},
+        "visible_anchor_path": None,
+    }
+
+    MainWindow._restore_grid_viewport_after_filter_change(fake_window, snapshot)
+
+    assert fake_window.grid.calls == [("/b.jpg", 0, False)]
+    assert fake_window.visible_calls == []
+
+
+def test_filter_restore_falls_back_to_first_visible_path_when_no_visible_selection_survives():
+    fake_window = _FakeFilterRestoreWindow(["/a.jpg", "/c.jpg"])
+    snapshot = {
+        "photo_list_paths": ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],
+        "visible_paths": ["/b.jpg", "/c.jpg"],
+        "selected_visible_paths": ["/b.jpg"],
+        "visible_rows_by_path": {"/b.jpg": 0, "/c.jpg": 1},
+        "visible_anchor_path": None,
+    }
+
+    MainWindow._restore_grid_viewport_after_filter_change(fake_window, snapshot)
+
+    assert fake_window.grid.calls == [("/c.jpg", 1, False)]
+    assert fake_window.visible_calls == []
+
+
+def test_filter_restore_uses_row_aware_fallback_when_no_visible_path_survives():
+    fake_window = _FakeFilterRestoreWindow(["/a.jpg", "/g.jpg"])
+    snapshot = {
+        "photo_list_paths": [
+            "/a.jpg",
+            "/b.jpg",
+            "/c.jpg",
+            "/d.jpg",
+            "/e.jpg",
+            "/f.jpg",
+            "/g.jpg",
+        ],
+        "visible_paths": ["/d.jpg", "/e.jpg", "/f.jpg"],
+        "selected_visible_paths": [],
+        "visible_rows_by_path": {"/d.jpg": 0, "/e.jpg": 1, "/f.jpg": 2},
+        "visible_anchor_path": None,
+    }
+
+    MainWindow._restore_grid_viewport_after_filter_change(fake_window, snapshot)
+
+    assert fake_window.grid.calls == [("/g.jpg", 2, False)]
+    assert fake_window.visible_calls == []
+
+
+def test_filter_restore_falls_back_to_visibility_when_row_restore_fails():
+    fake_window = _FakeFilterRestoreWindow(["/a.jpg", "/b.jpg"], ensure_result=False)
+    snapshot = {
+        "photo_list_paths": ["/a.jpg", "/b.jpg"],
+        "visible_paths": ["/b.jpg"],
+        "selected_visible_paths": ["/b.jpg"],
+        "visible_rows_by_path": {"/b.jpg": 0},
+        "visible_anchor_path": "/b.jpg",
+    }
+
+    MainWindow._restore_grid_viewport_after_filter_change(fake_window, snapshot)
+
+    assert fake_window.grid.calls == [("/b.jpg", 0, False)]
+    assert fake_window.visible_calls == ["/b.jpg"]
 
 
 def test_on_model_changed_forwards_fast_first_paint_and_resets_flag():
@@ -226,6 +397,26 @@ def test_pick_reselection_path_returns_none_when_no_visible_items():
         MainWindow._pick_metadata_reselection_path(old_paths, new_paths, "/a.jpg")
         is None
     )
+
+
+def test_clear_all_data_reloads_without_open_folder_top_reset(monkeypatch):
+    fake_window = _FakeClearAllDataWindow()
+    monkeypatch.setattr(
+        "piqopiqo.main_window.QMessageBox.warning",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
+    )
+    cleared_folders: list[list[str]] = []
+    monkeypatch.setattr(
+        "piqopiqo.cache_paths.clear_thumb_cache_for_folders",
+        lambda folders: cleared_folders.append(list(folders)),
+    )
+
+    MainWindow._on_clear_all_data(fake_window)
+
+    assert fake_window.db_manager.deleted is True
+    assert fake_window.db_manager.closed is True
+    assert cleared_folders == [["/photos/source"]]
+    assert fake_window.load_calls == [("/photos/root", False)]
 
 
 def test_on_model_changed_auto_reselects_after_metadata_sync():

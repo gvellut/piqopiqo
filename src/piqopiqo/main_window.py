@@ -1012,10 +1012,29 @@ class MainWindow(QMainWindow):
         return self.db_manager.ensure_items_metadata_ready(items)
 
     def _capture_grid_viewport_snapshot(self) -> dict:
+        visible_paths = self.grid.get_viewport_visible_paths()
+        visible_indices = self.grid.get_viewport_visible_indices()
+        top_row = int(self.grid.scrollbar.value())
+        visible_rows_by_path: dict[str, int] = {}
+        if self.grid.n_cols > 0:
+            for index in visible_indices:
+                if 0 <= index < len(self.grid.items_data):
+                    path = self.grid.items_data[index].path
+                    visible_rows_by_path[path] = (index // self.grid.n_cols) - top_row
+
+        visible_anchor_path = None
+        anchor_index = self.grid._choose_anchor_from_current_selection()
+        if 0 <= anchor_index < len(self.grid.items_data):
+            candidate = self.grid.items_data[anchor_index].path
+            if candidate in visible_rows_by_path:
+                visible_anchor_path = candidate
+
         return {
             "photo_list_paths": [item.path for item in self.images_data],
-            "visible_paths": self.grid.get_viewport_visible_paths(),
+            "visible_paths": visible_paths,
             "selected_visible_paths": self.grid.get_viewport_selected_paths(),
+            "visible_rows_by_path": visible_rows_by_path,
+            "visible_anchor_path": visible_anchor_path,
         }
 
     def _ensure_grid_path_visible(self, path: str | None) -> bool:
@@ -1027,15 +1046,16 @@ class MainWindow(QMainWindow):
         self.grid._ensure_visible(index, navigation_activity=False)
         return True
 
-    def _pick_filter_fallback_target_path(
+    def _pick_filter_fallback_target(
         self,
         previous_visible_paths: list[str],
         old_photo_list_paths: list[str],
         new_photo_list_paths: list[str],
-    ) -> str | None:
+        visible_rows_by_path: dict[str, int],
+    ) -> tuple[str | None, int | None]:
         """Pick a fallback target near the previous viewport when filter removes it."""
         if not previous_visible_paths or not new_photo_list_paths:
-            return None
+            return (None, None)
 
         old_index_by_path = {path: i for i, path in enumerate(old_photo_list_paths)}
         previous_indices = [
@@ -1044,25 +1064,55 @@ class MainWindow(QMainWindow):
             if path in old_index_by_path
         ]
         if not previous_indices:
-            return None
+            return (None, None)
 
         best_path = None
-        best_distance = None
-        best_old_index = None
+        best_row = None
+        best_score = None
         for path in new_photo_list_paths:
             old_index = old_index_by_path.get(path)
             if old_index is None:
                 continue
-            distance = min(abs(old_index - prev_idx) for prev_idx in previous_indices)
-            if (
-                best_distance is None
-                or distance < best_distance
-                or (distance == best_distance and old_index < best_old_index)
-            ):
+            nearest_old_visible_index = min(
+                previous_indices,
+                key=lambda prev_idx: (abs(old_index - prev_idx), prev_idx),
+            )
+            score = (
+                abs(old_index - nearest_old_visible_index),
+                old_index,
+                nearest_old_visible_index,
+            )
+            if best_score is None or score < best_score:
                 best_path = path
-                best_distance = distance
-                best_old_index = old_index
-        return best_path
+                best_row = visible_rows_by_path.get(
+                    old_photo_list_paths[nearest_old_visible_index]
+                )
+                best_score = score
+        return (best_path, best_row)
+
+    def _pick_filter_restore_target(
+        self,
+        snapshot: dict,
+        new_photo_list_paths: list[str],
+    ) -> tuple[str | None, int | None]:
+        new_path_set = set(new_photo_list_paths)
+        visible_rows_by_path = snapshot.get("visible_rows_by_path") or {}
+
+        visible_anchor_path = snapshot.get("visible_anchor_path")
+        if visible_anchor_path in new_path_set:
+            return (visible_anchor_path, visible_rows_by_path.get(visible_anchor_path))
+
+        for key in ("selected_visible_paths", "visible_paths"):
+            for path in snapshot.get(key, []):
+                if path in new_path_set:
+                    return (path, visible_rows_by_path.get(path))
+
+        return self._pick_filter_fallback_target(
+            snapshot.get("visible_paths", []),
+            snapshot.get("photo_list_paths", []),
+            new_photo_list_paths,
+            visible_rows_by_path,
+        )
 
     def _restore_grid_viewport_after_sort_change(self, snapshot: dict) -> None:
         target_path = None
@@ -1077,27 +1127,18 @@ class MainWindow(QMainWindow):
 
     def _restore_grid_viewport_after_filter_change(self, snapshot: dict) -> None:
         new_photo_list_paths = [item.path for item in self.images_data]
-        new_path_set = set(new_photo_list_paths)
-
-        target_path = next(
-            (
-                path
-                for path in snapshot["selected_visible_paths"]
-                if path in new_path_set
-            ),
-            None,
+        target_path, preferred_row = self._pick_filter_restore_target(
+            snapshot,
+            new_photo_list_paths,
         )
         if target_path is None:
-            target_path = next(
-                (path for path in snapshot["visible_paths"] if path in new_path_set),
-                None,
-            )
-        if target_path is None:
-            target_path = self._pick_filter_fallback_target_path(
-                snapshot["visible_paths"],
-                snapshot["photo_list_paths"],
-                new_photo_list_paths,
-            )
+            return
+        if preferred_row is not None and self.grid._ensure_path_at_viewport_row(
+            target_path,
+            preferred_row,
+            navigation_activity=False,
+        ):
+            return
         self._ensure_grid_path_visible(target_path)
 
     def select_paths_in_grid(
@@ -1576,7 +1617,7 @@ class MainWindow(QMainWindow):
         )
         if folder:
             self._clear_filters_before_folder_load()
-            self._load_folder(folder)
+            self._load_folder(folder, reset_grid_to_top=True)
 
     def _to_relative_folder_label(self, folder_path: str) -> str:
         if not self.root_folder:
@@ -1715,7 +1756,7 @@ class MainWindow(QMainWindow):
             # Ensure the filter reset is applied before the new folder scan starts.
             self._apply_pending_filter_change()
 
-    def _load_folder(self, folder: str):
+    def _load_folder(self, folder: str, *, reset_grid_to_top: bool = False):
         """Load images from a folder and update the UI."""
         logger.info(f"Loading folder: {folder}")
         self._stop_folder_watcher()
@@ -1747,6 +1788,8 @@ class MainWindow(QMainWindow):
         self.filter_panel.set_folders(source_folders)
 
         self.grid.set_data(self.photo_model.photos)
+        if reset_grid_to_top:
+            self.grid._set_scrollbar_value(0, navigation_activity=False)
 
         # Update status bar
         self._update_status_bar_count()
