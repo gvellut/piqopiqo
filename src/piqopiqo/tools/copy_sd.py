@@ -116,6 +116,10 @@ def is_between(date_s):
     return date_s.startswith(PREFIX_BETWEEN)
 
 
+def is_dynamic(date_s):
+    return is_since(date_s) or is_between(date_s) or date_s in ("L", "L2", "L3")
+
+
 def _normalize_prefix_synonyms(date_s: str) -> str:
     """Expand short synonyms: s: -> since:, b: -> between:."""
     if date_s.startswith("s:"):
@@ -165,9 +169,7 @@ def _resolve_last_copied_date(volume: PhotoVolume) -> str:
     return "10000101"
 
 
-def to_dates(date_s, volume: PhotoVolume):
-    date_s = _normalize_prefix_synonyms(date_s)
-
+def to_fixed_dates(date_s):
     if date_s == "TD":
         return datetime.now().date()
 
@@ -180,6 +182,13 @@ def to_dates(date_s, volume: PhotoVolume):
     if date_s == "YD3":
         return datetime.now().date() - timedelta(days=3)
 
+    if "-" in date_s:
+        return parse_date_range(date_s)
+
+    return datetime.strptime(date_s, DATE_FMT).date()
+
+
+def to_dynamic_dates(date_s, volume: PhotoVolume):
     if date_s == "L":
         # L for latest
         return find_latest_date(volume.path)
@@ -190,27 +199,13 @@ def to_dates(date_s, volume: PhotoVolume):
     if date_s == "L3":
         return find_latest_date(volume.path, rank=2)
 
+    # may return multiple dates
+
     if is_between(date_s):
         return _resolve_between(date_s, volume)
 
-    if "-" in date_s:
-        return parse_date_range(date_s)
-
-    # may return multiple dates
     if is_since(date_s):
-        date_s = date_s[len(PREFIX_SINCE) :]
-        if date_s == "last":
-            date_s = _resolve_last_copied_date(volume)
-
-        # only first 8 characters in case title copied
-        date_s = date_s[:8]
-        date_since = datetime.strptime(date_s, DATE_FMT).date()
-        filtered = filter_after(find_all_dates(volume.path), date_since)
-        if not filtered:
-            logger.warning("No photo since last date.")
-        return filtered
-
-    return datetime.strptime(date_s, DATE_FMT).date()
+        return _resolve_since(date_s, volume)
 
 
 def _resolve_last_copied_date_before(
@@ -230,6 +225,20 @@ def _resolve_last_copied_date_before(
             return token
     logger.info("No existing folder before %s: From the beginning", before.isoformat())
     return "10000101"
+
+
+def _resolve_since(date_s: str, volume: PhotoVolume) -> list[date]:
+    date_s = date_s[len(PREFIX_SINCE) :]
+    if date_s == "last":
+        date_s = _resolve_last_copied_date(volume)
+
+    # only first 8 characters in case title copied
+    date_s = date_s[:8]
+    date_since = datetime.strptime(date_s, DATE_FMT).date()
+    filtered = filter_after(find_all_dates(volume.path), date_since)
+    if not filtered:
+        logger.warning("No photo since last date.")
+    return filtered
 
 
 def _resolve_between(date_s: str, volume: PhotoVolume) -> list[date]:
@@ -808,7 +817,7 @@ class _ResolveDatesWorker(QRunnable):
 
     def run(self):
         try:
-            dates = to_dates(self._date_spec, self._volume)
+            dates = to_dynamic_dates(self._date_spec, self._volume)
             self.signals.finished.emit(dates)
         except ValueError:
             self.signals.error.emit("Invalid date spec. Please try again.")
@@ -821,18 +830,17 @@ def _resolve_dates_with_progress(parent, date_spec: str, volume: PhotoVolume):
     """
     # Fast path: specs that don't scan the filesystem
     normalized = _normalize_prefix_synonyms(date_spec)
-    if date_spec in ("TD", "YD", "YD2", "YD3") or (
-        "-" in date_spec and not is_between(normalized) and not is_since(normalized)
-    ):
+    if not is_dynamic(normalized):
+        # No worker needed for fixed dates
         try:
-            return to_dates(date_spec, volume)
+            return to_fixed_dates(date_spec, volume)
         except ValueError:
             return "Invalid date spec. Please try again."
 
     result_holder: list[object] = []
     error_holder: list[str] = []
 
-    worker = _ResolveDatesWorker(date_spec, volume)
+    worker = _ResolveDatesWorker(normalized, volume)
 
     def on_finished(dates):
         result_holder.append(dates)
