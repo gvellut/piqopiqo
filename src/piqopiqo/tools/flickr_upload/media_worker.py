@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
-from functools import partial
 import logging
 from operator import attrgetter
 import os
@@ -201,47 +200,23 @@ def _get_uploaded_photos_indirect(
 ) -> tuple[list[dict], bool]:
     date_s = upload_ts - int(margin_s)
 
-    photos_uploaded: list[dict] = []
-    page = 1
-    per_page = min(max(number, 10), 500)
-
-    while len(photos_uploaded) < number:
-        kwargs: dict[str, Any] = {
-            "user_id": "me",
-            "page": page,
-            "per_page": per_page,
-            "sort": "date-posted-desc",
-            "extras": "date_taken,tags",
-        }
-        if date_s is not None:
-            # we restrict the time so photos uploaded before are not taken into account
-            kwargs["min_upload_date"] = date_s
-
-        page_response = flickr.photos.search(**kwargs)
-        photos_root = page_response.get("photos", {})
-        rows = _as_list(photos_root.get("photo"))
-        rows = [row for row in rows if isinstance(row, dict)]
-
-        if not rows:
-            break
-
-        photos_uploaded.extend(rows)
-
-        try:
-            pages = int(photos_root.get("pages", 1))
-            current_page = int(photos_root.get("page", page))
-        except (TypeError, ValueError):
-            break
-
-        if current_page >= pages:
-            break
-        page += 1
+    photos_uploaded = _all_pages(
+        "photos",
+        "photo",
+        flickr.photos.search,
+        user_id="me",
+        per_page=min(max(number, 10), 500),
+        sort="date-posted-desc",
+        extras="date_taken,tags",
+        min_upload_date=date_s,
+    )
+    photos_uploaded = [photo for photo in photos_uploaded if isinstance(photo, dict)]
 
     if len(photos_uploaded) < number:
         return [], True
 
     photos_uploaded = photos_uploaded[:number]
-    photos_uploaded.sort(key=lambda row: str(row.get("datetaken", "")))
+    photos_uploaded.sort(key=lambda photo: str(photo.get("datetaken", "")))
     return photos_uploaded, False
 
 
@@ -257,7 +232,7 @@ def _reupload_photos_without_tags(
     # path (done here actually)
     # this is for me : always add tags but more direct
     failures: list[dict] = []
-    ordered_entries = sorted(upload_entries, key=lambda row: int(row["order"]))
+    ordered_entries = sorted(upload_entries, key=lambda entry: int(entry["order"]))
 
     for idx in range(min(len(ordered_entries), len(uploaded_photos))):
         local = ordered_entries[idx]
@@ -575,62 +550,31 @@ def run_set_public_task(task: dict) -> dict:
         }
 
 
-def _extract_album_photo_rows(response: dict) -> list[dict]:
-    photoset = response.get("photoset") if isinstance(response, dict) else None
-    if not isinstance(photoset, dict):
-        return []
-    rows = photoset.get("photo")
-    if rows is None:
-        return []
-    if isinstance(rows, list):
-        return [row for row in rows if isinstance(row, dict)]
-    if isinstance(rows, dict):
-        return [rows]
-    return []
-
-
-def _get_album_photos(flickr, album_id: str) -> list[dict]:
-    photos: list[dict] = []
-    page = 1
-    while True:
-        response = flickr.photosets.getPhotos(
-            photoset_id=album_id,
-            page=page,
-            per_page=500,
-            timeout=UPLOAD_TIMEOUT_S,
-        )
-        photos.extend(_extract_album_photo_rows(response))
-
-        photoset = response.get("photoset") if isinstance(response, dict) else None
-        if not isinstance(photoset, dict):
-            break
-        try:
-            current_page = int(photoset.get("page", page))
-            pages = int(photoset.get("pages", 1))
-        except (TypeError, ValueError):
-            break
-        if current_page >= pages:
-            break
-        page += 1
-    return photos
-
-
-def _add_to_album_group(flickr, album_id: str, photo_ids: list[str]) -> None:
-    existing_rows = retry(
-        API_RETRIES,
-        lambda: _get_album_photos(flickr, album_id),
+def _get_album_photos(flickr, album_id: str, **kwargs) -> list[dict]:
+    return _all_pages(
+        "photoset",
+        "photo",
+        flickr.photosets.getPhotos,
+        photoset_id=album_id,
+        per_page=500,
+        timeout=UPLOAD_TIMEOUT_S,
+        **kwargs,
     )
-    if existing_rows is None:
+
+
+def _add_to_album(flickr, album_id: str, photo_ids: list[str]) -> None:
+    existing_photos = _get_album_photos(flickr, album_id)
+    if existing_photos is None:
         raise RuntimeError(f"Unable to list existing photos in album {album_id}.")
 
     existing_photo_ids: list[str] = []
     primary_photo_id = ""
-    for row in existing_rows:
-        pid = str(row.get("id") or "").strip()
+    for photo in existing_photos:
+        pid = str(photo.get("id") or "").strip()
         if not pid:
             continue
         existing_photo_ids.append(pid)
-        if row.get("isprimary") in (1, "1"):
+        if photo.get("isprimary") in (1, "1"):
             primary_photo_id = pid
 
     all_photo_ids: list[str] = []
@@ -664,7 +608,7 @@ def _add_to_album_group(flickr, album_id: str, photo_ids: list[str]) -> None:
 def _reorder_album(flickr, album_id):
     # get everything in the album and reorder it: tried with only passing the new
     # uploads but weird result
-    album_photos = retry(API_RETRIES, partial(_get_photos, flickr, album_id))
+    album_photos = _get_album_photos(flickr, album_id, extras="date_taken")
     photos = sorted(album_photos, key=attrgetter("datetaken"))
     photo_ids = list(map(attrgetter("id"), photos))
 
@@ -677,28 +621,25 @@ def _reorder_album(flickr, album_id):
     )
 
 
-def _get_photos(flickr, album_id, extras="date_taken,url_o", **kwargs):
-    return _all_pages(
-        "photoset",
-        "photo",
-        flickr.photosets.getPhotos,
-        photoset_id=album_id,
-        extras=extras,
-        **kwargs,
-    )
-
-
 def _all_pages(page_elem, iter_elem, func, *args, **kwargs):
     page = 1
     acc = []
     while True:
-        paginated = func(*args, **kwargs, page=page)[page_elem]
-        acc.extend(paginated[iter_elem])
+        response = retry(API_RETRIES, func, *args, **kwargs, page=page)
 
-        if int(paginated["page"]) >= int(paginated["pages"]):
-            return acc
+        paginated = response.get(page_elem) if isinstance(response, dict) else None
+        if not isinstance(paginated, dict):
+            break
+        acc.extend(_as_list(paginated.get(iter_elem)))
+
+        try:
+            if int(paginated.get("page", page)) >= int(paginated.get("pages", 1)):
+                break
+        except (TypeError, ValueError):
+            break
 
         page += 1
+    return acc
 
 
 def run_create_album_task(task: dict) -> dict:
@@ -789,7 +730,7 @@ def run_add_to_album_task(task: dict) -> dict:
             token_cache_dir=token_cache_dir,
             response_format="parsed-json",
         )
-        _add_to_album_group(flickr, album_id, photo_ids)
+        _add_to_album(flickr, album_id, photo_ids)
         return {
             "ok": True,
             "stage": FlickrStage.STAGE_ADD_TO_ALBUM.label,
