@@ -661,10 +661,10 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     ),
     RuntimeSettingKey.THUMB_MAX_DIM: SettingDef(default=1024, read_type=int),
     RuntimeSettingKey.GRID_BACKGROUND_COLOR: SettingDef(
-        default="#888888", read_type=str
+        default="#4a4a4a", read_type=str
     ),
     RuntimeSettingKey.FULLSCREEN_BACKGROUND_COLOR: SettingDef(
-        default="black", read_type=str
+        default="#323232", read_type=str
     ),
     RuntimeSettingKey.CLEAR_CACHE_ON_START: SettingDef(default=False, read_type=bool),
     RuntimeSettingKey.SETTINGS_PANEL_SAVE_MODE: SettingDef(
