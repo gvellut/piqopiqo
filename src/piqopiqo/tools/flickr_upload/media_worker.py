@@ -170,6 +170,7 @@ def run_upload_task(task: dict) -> dict:
             "db_metadata": db_metadata,
         }
     except Exception as ex:
+        logger.exception("run_upload_task")
         return {
             "ok": False,
             "stage": FlickrStage.STAGE_UPLOAD.label,
@@ -502,6 +503,7 @@ def run_set_date_task(task: dict) -> dict:
             "file_path": file_path,
         }
     except Exception as ex:
+        logger.exception("run_set_date_task")
         return {
             "ok": False,
             "stage": FlickrStage.STAGE_RESET_DATE.label,
@@ -544,6 +546,7 @@ def run_set_public_task(task: dict) -> dict:
             "file_path": file_path,
         }
     except Exception as ex:
+        logger.exception("run_set_public_task")
         return {
             "ok": False,
             "stage": FlickrStage.STAGE_MAKE_PUBLIC.label,
@@ -705,6 +708,7 @@ def run_create_album_task(task: dict) -> dict:
             "album_url": build_album_url(user_nsid, album_id),
         }
     except Exception as ex:
+        logger.exception("run_create_album_task")
         return {
             "ok": False,
             "stage": FlickrStage.STAGE_ADD_TO_ALBUM.label,
@@ -741,6 +745,7 @@ def run_add_to_album_task(task: dict) -> dict:
             "added_count": len(photo_ids),
         }
     except Exception as ex:
+        logger.exception("run_add_to_album_task")
         return {
             "ok": False,
             "stage": FlickrStage.STAGE_ADD_TO_ALBUM.label,
