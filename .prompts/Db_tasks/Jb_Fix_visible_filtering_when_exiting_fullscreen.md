@@ -1,5 +1,15 @@
-If Filter in Fullscreen is false : when setting label in fullscreen (using a shortcut) and label not in filter, When coming back : the photo is removed : but the grid visibly is modified to remove the image. It should have been removed before from the grid and no moving when coming back (invisible from the user : he comes back to the grid without the filtered out cells and without seeing the grid move to eject the cells)
+The model/filter refresh timing was already fixed. The remaining issue is different:
+when a fullscreen label change affects filtering, the hidden grid selection highlight
+can still be driven by the old fullscreen index. On exit, the blue selected item can
+briefly appear at its old slot and then jump to its final slot after the filtered grid
+state is applied.
 
-Did not check If Filter in Fullscreen true : but it should be the same. Do not wait for the exit of fullscreen to update the grid (ejection of the image should not be seen by the user).
+The fix is not to delay filtering until exit. The fix is to keep the hidden grid
+selection synchronized by path while fullscreen is open, so exiting fullscreen reveals
+the already-final grid state.
 
-Beware that with Filter in fullscreen set to false : the label for a photo can be changed so the photo is filtered out. However, the image is still in the fullscreen loop with that setting. So the user can go back to that image while in fullscreen and change the label again to something that is filtered in. The image must not be gone from the grid when exiting fullscreen : in both case the image must not be seen moving by the user (ejection or reinsertion), at least as much as possible (if set label then exit immediately : the update to the grid could be seen ie you do not have to wait for the ejection to finish to exit fullscreen )
+This must also preserve the existing `Filter in fullscreen = false` behavior:
+an image can be filtered out of the grid while still remaining in the fullscreen loop,
+then later be labeled back into the filter before exit. In both directions, exiting
+fullscreen should not reveal a visible selection jump or cell movement beyond the case
+where the user exits immediately before the background grid update had time to finish.

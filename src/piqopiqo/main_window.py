@@ -2135,15 +2135,19 @@ class MainWindow(QMainWindow):
     def _clear_grid_selection(self) -> None:
         self.grid.select_paths([], anchor_path=None)
 
-    def _restore_grid_after_fullscreen_exit(self, snapshot: dict | None) -> None:
+    def _resolve_grid_selection_for_fullscreen_snapshot(
+        self,
+        snapshot: dict | None,
+        *,
+        keep_multi_selection: bool,
+    ) -> tuple[list[str], str | None]:
         if snapshot is None:
-            return
+            return ([], None)
 
         current_photo_list_paths = [item.path for item in self.images_data]
         current_path_set = set(current_photo_list_paths)
         if not current_photo_list_paths:
-            self._clear_grid_selection()
-            return
+            return ([], None)
 
         current_path = snapshot.get("current_path")
         loop_paths = [
@@ -2169,17 +2173,10 @@ class MainWindow(QMainWindow):
                 )
             )
             if target_path is None:
-                self._clear_grid_selection()
-                return
-            self.select_paths_in_grid(
-                [target_path],
-                anchor_path=target_path,
-                reveal_path=target_path,
-            )
-            return
+                return ([], None)
+            return ([target_path], target_path)
 
         surviving_loop_paths = [path for path in loop_paths if path in current_path_set]
-
         if current_path in current_path_set:
             target_path = current_path
         else:
@@ -2196,22 +2193,67 @@ class MainWindow(QMainWindow):
                 current_path,
             )
             if target_path is None:
-                self._clear_grid_selection()
-                return
-            self.select_paths_in_grid(
-                [target_path],
-                anchor_path=target_path,
-                reveal_path=target_path,
-            )
+                return ([], None)
+            return ([target_path], target_path)
+
+        selection_paths = (
+            surviving_loop_paths if keep_multi_selection else [target_path]
+        )
+        return (selection_paths, target_path)
+
+    def _sync_grid_selection_with_fullscreen(self) -> None:
+        overlay = getattr(self, "_fullscreen_overlay", None)
+        if overlay is None:
             return
 
-        if (
-            get_user_setting(UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE)
-            == OnFullscreenExitMultipleSelected.KEEP_SELECTION
-        ):
-            selection_paths = surviving_loop_paths
-        else:
-            selection_paths = [target_path]
+        selection_paths, target_path = (
+            self._resolve_grid_selection_for_fullscreen_snapshot(
+                self._capture_fullscreen_exit_snapshot(overlay),
+                keep_multi_selection=self._fullscreen_started_with_multi_selection,
+            )
+        )
+        current_selected_paths = [
+            item.path for item in self.images_data if item.is_selected
+        ]
+
+        if not selection_paths:
+            if current_selected_paths:
+                self._clear_grid_selection()
+            return
+
+        if set(current_selected_paths) == set(selection_paths):
+            if target_path is None:
+                return
+            target_index = self.grid.get_index_for_path(target_path)
+            if target_index is not None:
+                self.grid._set_selection_anchor(target_index)
+            self._ensure_grid_path_visible(target_path)
+            return
+
+        self.select_paths_in_grid(
+            selection_paths,
+            anchor_path=target_path,
+            reveal_path=target_path,
+        )
+
+    def _restore_grid_after_fullscreen_exit(self, snapshot: dict | None) -> None:
+        keep_multi_selection = bool(
+            snapshot is not None
+            and snapshot.get("started_with_multi_selection")
+            and (
+                get_user_setting(UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE)
+                == OnFullscreenExitMultipleSelected.KEEP_SELECTION
+            )
+        )
+        selection_paths, target_path = (
+            self._resolve_grid_selection_for_fullscreen_snapshot(
+                snapshot,
+                keep_multi_selection=keep_multi_selection,
+            )
+        )
+        if not selection_paths:
+            self._clear_grid_selection()
+            return
 
         self.select_paths_in_grid(
             selection_paths,
@@ -2298,18 +2340,11 @@ class MainWindow(QMainWindow):
         overlay_ref.destroyed.connect(on_fullscreen_close)
         overlay_ref.show_on_screen(current_screen)
 
-    def _on_fullscreen_index_changed(self, new_index: int):
-        """Update grid selection when navigating in fullscreen mode."""
-        if self._fullscreen_overlay and self._fullscreen_started_with_multi_selection:
-            # In multi-selection mode, just update the last selected index
-            self.grid._set_selection_anchor(new_index)
-            self.grid._ensure_visible(new_index)
-            # We still need to repaint the grid to show the new "last selected" item
-            self.grid.on_scroll(self.grid.scrollbar.value())
-        else:
-            # In single-selection (all items visible) mode, update the selection
-            self.grid.on_cell_clicked(new_index, False, False)
-            self.grid._ensure_visible(new_index)
+    def _on_fullscreen_index_changed(self, _new_index: int):
+        """Update the hidden grid selection from fullscreen by path."""
+        if getattr(self, "_fullscreen_overlay", None) is None:
+            return
+        self._sync_grid_selection_with_fullscreen()
 
     # --- Model signal handlers ---
 
@@ -2324,6 +2359,8 @@ class MainWindow(QMainWindow):
         self._pending_metadata_reselection_context = None
         if reselection_context is not None:
             self._apply_pending_metadata_reselection(reselection_context)
+        if getattr(self, "_fullscreen_overlay", None) is not None:
+            self._sync_grid_selection_with_fullscreen()
         self._next_model_change_fast_first_paint = False
         after_grid = time.perf_counter()
 
