@@ -783,13 +783,12 @@ class MainWindow(QMainWindow):
             return
 
         label_only = fields == {DBFields.LABEL}
-        can_filter_in_fullscreen = (
-            allow_fullscreen_filter
-            and label_only
-            and bool(get_user_setting(UserSettingKey.FILTER_IN_FULLSCREEN))
+        should_sync_label_in_fullscreen = allow_fullscreen_filter and label_only
+        rebind_fullscreen_loop = should_sync_label_in_fullscreen and bool(
+            get_user_setting(UserSettingKey.FILTER_IN_FULLSCREEN)
         )
 
-        if self._fullscreen_overlay is not None and not can_filter_in_fullscreen:
+        if self._fullscreen_overlay is not None and not should_sync_label_in_fullscreen:
             self._pending_model_sync_after_fullscreen = True
             self._pending_model_sync_fields.update(fields)
             logger.debug(
@@ -802,7 +801,7 @@ class MainWindow(QMainWindow):
         self._execute_metadata_model_sync(
             fields,
             source=source,
-            rebind_fullscreen_loop=can_filter_in_fullscreen,
+            rebind_fullscreen_loop=rebind_fullscreen_loop,
         )
 
     def _execute_metadata_model_sync(

@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 import logging
-from operator import attrgetter
+from operator import itemgetter
 import os
 from pathlib import Path
 import shutil
@@ -359,7 +359,10 @@ def run_resolve_tickets_task(
         if not to_check:
             break
 
-        response = flickr.photos.upload.checkTickets(tickets=",".join(to_check))
+        response = retry(
+            API_RETRIES,
+            lambda: flickr.photos.upload.checkTickets(tickets=",".join(to_check)),  # noqa : B023
+        )
         checks += 1
         if check_progress_callback is not None:
             check_progress_callback(min(checks, MAX_NUM_CHECKS), MAX_NUM_CHECKS)
@@ -609,8 +612,8 @@ def _reorder_album(flickr, album_id):
     # get everything in the album and reorder it: tried with only passing the new
     # uploads but weird result
     album_photos = _get_album_photos(flickr, album_id, extras="date_taken")
-    photos = sorted(album_photos, key=attrgetter("datetaken"))
-    photo_ids = list(map(attrgetter("id"), photos))
+    photos = sorted(album_photos, key=itemgetter("datetaken"))
+    photo_ids = list(map(itemgetter("id"), photos))
 
     q_photo_ids = ",".join(photo_ids)
     retry(
@@ -625,7 +628,7 @@ def _all_pages(page_elem, iter_elem, func, *args, **kwargs):
     page = 1
     acc = []
     while True:
-        response = retry(API_RETRIES, func, *args, **kwargs, page=page)
+        response = retry(API_RETRIES, lambda: func(*args, **kwargs, page=page))  # noqa: B023
 
         paginated = response.get(page_elem) if isinstance(response, dict) else None
         if not isinstance(paginated, dict):

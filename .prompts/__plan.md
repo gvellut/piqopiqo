@@ -1,4 +1,3 @@
-- [Fix visible filtering when exiting fullscreen](Db_tasks/Jb_Fix_visible_filtering_when_exiting_fullscreen.md)
 - [Safety if disk with SQLLite cache is unplugged detect and restart](Ta_tasks/Za_Safety_if_disk_with_SQLLite_cache_is_unplugged_.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
 - [Prescaled down image in fullscreen (Claude made a mess of it; redo)](Ja_tasks/Qa_Prescaled_down_image_in_fullscreen.md)
@@ -78,3 +77,4 @@
 ! [KML photo rotation](Db_tasks/Hb_KML_photo_rotation.md)
 ! [When keeping item in view maintain row](Db_tasks/Ib_When_keeping_item_in_view_maintain_row.md)
 ! [Base data redirect to settings](J_tasks/Q_Base_data_redirect_to_settings.md)
+! [Fix visible filtering when exiting fullscreen](Db_tasks/Jb_Fix_visible_filtering_when_exiting_fullscreen.md)
