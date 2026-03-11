@@ -99,6 +99,7 @@ class UserSettingKey(StrEnum):
 class RuntimeSettingKey(StrEnum):
     DETACHED_KEYWORD_TREE = "detachedKeywordTree"
     INITIAL_RESOLUTION = "initialResolution"
+    TIME_TAKEN_LOAD_RESORT_BATCH_SIZE = "timeTakenLoadResortBatchSize"
     EXIF_PANEL_COLUMN_STRETCH = "exifPanelColumnStretch"
     EXIF_PANEL_ROW_SPACING = "exifPanelRowSpacing"
     GRID_ITEM_SHOW_LABEL_SWATCH = "gridItemShowLabelSwatch"
@@ -571,6 +572,10 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
         default=None,
         read_type=str,
         env_parser=lambda raw: raw,
+    ),
+    RuntimeSettingKey.TIME_TAKEN_LOAD_RESORT_BATCH_SIZE: SettingDef(
+        default=100,
+        read_type=int,
     ),
     RuntimeSettingKey.EXIF_PANEL_COLUMN_STRETCH: SettingDef(
         default=(30, 70),

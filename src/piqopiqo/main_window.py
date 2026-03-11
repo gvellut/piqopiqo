@@ -7,6 +7,7 @@ import logging
 import os
 import time
 
+from attrs import define
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
@@ -21,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .background.media_man import MediaManager
+from .background.media_man import FolderPrimingResult, MediaManager
 from .cache_paths import get_folder_cache_id, set_cache_base_dir
 from .color_management import refresh_main_screen_color_space_cache_macos
 from .components.column_number_selector import ColumnNumberSelector
@@ -66,6 +67,13 @@ logger = logging.getLogger(__name__)
 
 LARGE_SELECTION_PANEL_DEFER_THRESHOLD = 200
 SELECTION_PANEL_DEBOUNCE_MS = 120
+
+
+@define
+class _DeferredTimeTakenLoadResortState:
+    pending_paths: set[str]
+    processed_since_last_resort: int
+    batch_size: int
 
 
 class _WorkspaceCleanupWorkerSignals(QObject):
@@ -142,6 +150,9 @@ class MainWindow(QMainWindow):
         self._selection_panel_refresh_serial = 0
         self._selection_panel_refresh_scheduled_serial: int | None = None
         self._selection_panel_refresh_in_progress = False
+        self._deferred_time_taken_load_resort_state: (
+            _DeferredTimeTakenLoadResortState | None
+        ) = None
         self._selection_panel_refresh_timer = QTimer(self)
         self._selection_panel_refresh_timer.setSingleShot(True)
         self._selection_panel_refresh_timer.timeout.connect(
@@ -279,6 +290,7 @@ class MainWindow(QMainWindow):
         self.media_manager.thumb_ready.connect(self.on_thumb_ready)
         self.media_manager.thumb_progress_updated.connect(self._on_thumb_progress)
         self.media_manager.editable_ready.connect(self._on_editable_ready)
+        self.media_manager.editable_terminal.connect(self._on_editable_terminal)
         self.media_manager.exif_progress_updated.connect(self._on_exif_progress)
         self.media_manager.panel_fields_ready.connect(self._on_panel_fields_ready)
         self.media_manager.all_completed.connect(self._on_loading_complete)
@@ -313,8 +325,7 @@ class MainWindow(QMainWindow):
             self.db_manager,
             parent=self,
         )
-        self._apply_saved_sort_order_for_load()
-        photos = [ImageItem(**data) for data in images]
+        photos = self._prepare_photos_for_folder_load(images, source_folders)
         self.photo_model.set_photos(photos, source_folders)
         self._items_by_path = {item.path: item for item in self.photo_model.all_photos}
 
@@ -336,10 +347,7 @@ class MainWindow(QMainWindow):
         self._update_status_bar_count()
 
         # Start background loading (EXIF + thumbs)
-        self.media_manager.reset_for_folder(
-            [p.path for p in self.photo_model.all_photos],
-            self.photo_model.source_folders,
-        )
+        self.media_manager.resume_processing()
         if self._last_visible_paths:
             self.media_manager.update_visible(self._last_visible_paths)
 
@@ -631,11 +639,95 @@ class MainWindow(QMainWindow):
 
     def _on_loading_complete(self):
         """Handle completion of loading (thumbnails or EXIF)."""
+        if self._deferred_time_taken_load_resort_state is not None:
+            self._run_deferred_time_taken_load_resort(source="folder_load_complete")
+            self._deferred_time_taken_load_resort_state = None
         self.status_bar.set_has_errors(self.media_manager.has_errors())
 
     def _on_visible_paths_changed(self, visible_paths: list[str]):
         self._last_visible_paths = list(visible_paths)
         self.media_manager.update_visible(self._last_visible_paths)
+
+    @staticmethod
+    def _normalize_time_taken_load_resort_batch_size(value: object) -> int:
+        try:
+            batch_size = int(value)
+        except (TypeError, ValueError):
+            return 0
+        return max(0, batch_size)
+
+    def _get_time_taken_load_resort_batch_size(self) -> int:
+        return self._normalize_time_taken_load_resort_batch_size(
+            get_runtime_setting(RuntimeSettingKey.TIME_TAKEN_LOAD_RESORT_BATCH_SIZE)
+        )
+
+    def _apply_cached_editable_metadata_for_items(
+        self,
+        items_by_path: dict[str, ImageItem],
+        priming: FolderPrimingResult,
+    ) -> None:
+        for file_path, metadata in priming.cached_editable_metadata.items():
+            item = items_by_path.get(file_path)
+            if item is None:
+                continue
+            item.db_metadata = dict(metadata)
+
+    def _initialize_deferred_time_taken_load_resort_state(
+        self,
+        sort_order: SortOrder,
+        priming: FolderPrimingResult,
+    ) -> None:
+        self._deferred_time_taken_load_resort_state = None
+        if sort_order != SortOrder.TIME_TAKEN:
+            return
+
+        missing_paths = set(priming.missing_editable_paths)
+        if not missing_paths:
+            return
+
+        self._deferred_time_taken_load_resort_state = (
+            _DeferredTimeTakenLoadResortState(
+                pending_paths=missing_paths,
+                processed_since_last_resort=0,
+                batch_size=self._get_time_taken_load_resort_batch_size(),
+            )
+        )
+
+    def _prepare_photos_for_folder_load(
+        self,
+        images: list[dict],
+        source_folders: list[str],
+    ) -> list[ImageItem]:
+        sort_order = self._apply_saved_sort_order_for_load()
+        self.media_manager.pause_processing()
+        priming = self.media_manager.reset_for_folder(
+            [str(data["path"]) for data in images],
+            source_folders,
+        )
+        photos = [ImageItem(**data) for data in images]
+        self._apply_cached_editable_metadata_for_items(
+            {item.path: item for item in photos},
+            priming,
+        )
+        self._initialize_deferred_time_taken_load_resort_state(sort_order, priming)
+        return photos
+
+    def _should_defer_time_taken_load_resort_for(self, file_path: str) -> bool:
+        state = self._deferred_time_taken_load_resort_state
+        return state is not None and file_path in state.pending_paths
+
+    def _run_deferred_time_taken_load_resort(self, *, source: str) -> None:
+        if self.photo_model.sort_order != SortOrder.TIME_TAKEN:
+            self._deferred_time_taken_load_resort_state = None
+            return
+
+        snapshot = self._capture_grid_viewport_snapshot()
+        self._execute_metadata_model_sync(
+            {DBFields.TIME_TAKEN},
+            source=source,
+            rebind_fullscreen_loop=False,
+        )
+        self._restore_grid_viewport_after_sort_change(snapshot)
 
     def _set_selected_cache_from_items(self, items: list[ImageItem]) -> None:
         self._selected_paths_cache = {item.path for item in items}
@@ -741,6 +833,9 @@ class MainWindow(QMainWindow):
                 if selected_items:
                     self.edit_panel.update_for_selection(selected_items)
 
+        if self._should_defer_time_taken_load_resort_for(file_path):
+            return
+
         needs_resort = self.photo_model.sort_order == SortOrder.TIME_TAKEN
         if self._current_filter is not None:
             needs_resort = needs_resort or bool(
@@ -760,6 +855,22 @@ class MainWindow(QMainWindow):
             if not self._model_refresh_scheduled:
                 self._model_refresh_scheduled = True
                 QTimer.singleShot(50, self._flush_scheduled_model_sync)
+
+    def _on_editable_terminal(self, file_path: str, _success: bool) -> None:
+        state = self._deferred_time_taken_load_resort_state
+        if state is None or file_path not in state.pending_paths:
+            return
+
+        state.pending_paths.remove(file_path)
+        state.processed_since_last_resort += 1
+
+        if state.batch_size <= 0:
+            return
+        if state.processed_since_last_resort < state.batch_size:
+            return
+
+        self._run_deferred_time_taken_load_resort(source="folder_load_chunk")
+        state.processed_since_last_resort = 0
 
     def _flush_scheduled_model_sync(self):
         self._model_refresh_scheduled = False
@@ -1707,6 +1818,7 @@ class MainWindow(QMainWindow):
 
         # Ensure DB files can be cleaned and stale media results are ignored.
         self.db_manager.close_all()
+        self.media_manager.pause_processing()
         self.media_manager.reset_for_folder([], [])
         self.status_bar.reset()
 
@@ -1739,9 +1851,12 @@ class MainWindow(QMainWindow):
         self._workspace_cleanup_worker = None
 
         self._invalidate_workspace_items_for_reload()
-        self.media_manager.reset_for_folder(file_paths, source_folders)
+        self.media_manager.pause_processing()
+        priming = self.media_manager.reset_for_folder(file_paths, source_folders)
+        self._apply_cached_editable_metadata_for_items(self._items_by_path, priming)
         if self._last_visible_paths:
             self.media_manager.update_visible(self._last_visible_paths)
+        self.media_manager.resume_processing()
         self.grid.on_scroll(self.grid.scrollbar.value())
         self._reconcile_selection_and_panels()
 
@@ -1782,8 +1897,7 @@ class MainWindow(QMainWindow):
         self.status_bar.reset()
 
         # Update photo model (replaces old _all_images_data and images_data)
-        photos = [ImageItem(**data) for data in images]
-        self._apply_saved_sort_order_for_load()
+        photos = self._prepare_photos_for_folder_load(images, source_folders)
         self.photo_model.set_photos(photos, source_folders)
         self._items_by_path = {item.path: item for item in self.photo_model.all_photos}
 
@@ -1798,10 +1912,7 @@ class MainWindow(QMainWindow):
         self._update_status_bar_count()
 
         # Start background loading (EXIF + thumbs)
-        self.media_manager.reset_for_folder(
-            [p.path for p in self.photo_model.all_photos],
-            self.photo_model.source_folders,
-        )
+        self.media_manager.resume_processing()
         if self._last_visible_paths:
             self.media_manager.update_visible(self._last_visible_paths)
 
@@ -2286,15 +2397,18 @@ class MainWindow(QMainWindow):
         if action is not None and not action.isChecked():
             action.setChecked(True)
 
-    def _apply_saved_sort_order_for_load(self) -> None:
+    def _apply_saved_sort_order_for_load(self) -> SortOrder:
         order = self._read_saved_sort_order()
         self.photo_model.set_sort_order(order, emit_signals=False)
         self._set_sort_menu_checked(order)
+        return order
 
     def _set_sort_order(self, order: SortOrder):
         """Set the sort order via menu."""
         if self.photo_model.sort_order == order:
             return
+        if order != SortOrder.TIME_TAKEN:
+            self._deferred_time_taken_load_resort_state = None
         snapshot = self._capture_grid_viewport_snapshot()
         self.photo_model.set_sort_order(order)
         self._restore_grid_viewport_after_sort_change(snapshot)

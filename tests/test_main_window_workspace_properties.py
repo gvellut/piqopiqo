@@ -9,6 +9,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 import pytest
 
+from piqopiqo.background.media_man import FolderPrimingResult
 from piqopiqo.main_window import MainWindow
 from piqopiqo.model import ImageItem
 from piqopiqo.ssf.settings_state import APP_NAME, init_qsettings_store
@@ -20,20 +21,32 @@ class _SignalStub:
 
 
 class _MediaManagerStub:
+    next_priming_result = FolderPrimingResult({}, set())
+
     def __init__(self, *_args, **_kwargs):
         self.thumb_ready = _SignalStub()
         self.thumb_progress_updated = _SignalStub()
         self.editable_ready = _SignalStub()
+        self.editable_terminal = _SignalStub()
         self.exif_progress_updated = _SignalStub()
         self.panel_fields_ready = _SignalStub()
         self.all_completed = _SignalStub()
         self.reset_calls: list[tuple[list[str], list[str]]] = []
         self.visible_calls: list[list[str]] = []
+        self.pause_calls = 0
+        self.resume_calls = 0
 
     def reset_for_folder(
         self, file_paths: list[str], source_folders: list[str]
-    ) -> None:
+    ) -> FolderPrimingResult:
         self.reset_calls.append((list(file_paths), list(source_folders)))
+        return self.next_priming_result
+
+    def pause_processing(self) -> None:
+        self.pause_calls += 1
+
+    def resume_processing(self) -> None:
+        self.resume_calls += 1
 
     def update_visible(self, visible_paths_in_order: list[str]) -> None:
         self.visible_calls.append(list(visible_paths_in_order))
@@ -89,6 +102,7 @@ def qapp(monkeypatch):
 @pytest.fixture
 def window(qapp, monkeypatch):  # noqa: ARG001
     init_qsettings_store(dyn=True)
+    _MediaManagerStub.next_priming_result = FolderPrimingResult({}, set())
     monkeypatch.setattr("piqopiqo.main_window.MediaManager", _MediaManagerStub)
     monkeypatch.setattr(
         "piqopiqo.main_window.refresh_main_screen_color_space_cache_macos",

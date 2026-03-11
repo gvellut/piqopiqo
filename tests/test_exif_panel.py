@@ -100,6 +100,7 @@ def test_exif_panel_custom_fields_are_appended_and_deduped(qapp, monkeypatch):
         "Composite:ShutterSpeed",
         "EXIF:FNumber",
         "EXIF:ISO",
+        "EXIF:ExposureCompensation",
         "File:FileName",
         "File:FileSize",
         "EXIF:LensModel",

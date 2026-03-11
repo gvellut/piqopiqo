@@ -72,6 +72,12 @@ class _Worker:
     current_task_id: int | None = None
 
 
+@define(frozen=True)
+class FolderPrimingResult:
+    cached_editable_metadata: dict[str, dict]
+    missing_editable_paths: set[str]
+
+
 class MediaManager(QObject):
     """Manages EXIF extraction, embedded preview extraction and thumbnail generation."""
 
@@ -81,6 +87,7 @@ class MediaManager(QObject):
 
     # Editable metadata (EXIF_TO_DB_MAPPING) signals
     editable_ready = Signal(str, dict)  # file_path, metadata
+    editable_terminal = Signal(str, bool)  # file_path, success
     exif_progress_updated = Signal(int, int)  # completed, total
 
     # EXIF panel fields signals
@@ -151,7 +158,7 @@ class MediaManager(QObject):
 
     def reset_for_folder(
         self, file_paths: list[str], source_folders: list[str]
-    ) -> None:
+    ) -> FolderPrimingResult:
         """Reset internal state for a new folder."""
         self._file_infos.clear()
         self._visible_paths.clear()
@@ -194,7 +201,7 @@ class MediaManager(QObject):
         self.exif_progress_updated.emit(self._exif_completed, self._exif_total)
 
         # Prime from DB / caches and queue missing work (initially non-visible).
-        self._prime_and_queue_initial(file_paths)
+        return self._prime_and_queue_initial(file_paths)
 
     def add_files(self, file_paths: list[str]) -> None:
         """Register new files and enqueue processing for them."""
@@ -477,6 +484,13 @@ class MediaManager(QObject):
 
         self._workers.clear()
 
+    def pause_processing(self) -> None:
+        self._tick_timer.stop()
+
+    def resume_processing(self) -> None:
+        if not self._tick_timer.isActive():
+            self._tick_timer.start()
+
     # -------------------------------------------------------------------------
     # Internal: priming & queueing
     # -------------------------------------------------------------------------
@@ -500,7 +514,10 @@ class MediaManager(QObject):
             except Exception:
                 continue
 
-    def _prime_and_queue_initial(self, file_paths: list[str]) -> None:
+    def _prime_and_queue_initial(self, file_paths: list[str]) -> FolderPrimingResult:
+        cached_editable_metadata: dict[str, dict] = {}
+        missing_editable_paths: set[str] = set()
+
         for file_path in file_paths:
             info = self._file_infos.get(file_path)
             if info is None:
@@ -514,8 +531,9 @@ class MediaManager(QObject):
             if meta is not None:
                 self._editable_done.add(file_path)
                 self._exif_completed += 1
-                self.editable_ready.emit(file_path, meta)
+                cached_editable_metadata[file_path] = dict(meta)
             else:
+                missing_editable_paths.add(file_path)
                 self._queue_combined(file_path, want_editable=True)
 
             # Panel fields (stored in DB as key/value)
@@ -550,6 +568,10 @@ class MediaManager(QObject):
 
         self.thumb_progress_updated.emit(self._thumb_completed, self._thumb_total)
         self.exif_progress_updated.emit(self._exif_completed, self._exif_total)
+        return FolderPrimingResult(
+            cached_editable_metadata=cached_editable_metadata,
+            missing_editable_paths=missing_editable_paths,
+        )
 
     def _queue_combined(
         self,
@@ -910,6 +932,8 @@ class MediaManager(QObject):
 
             # Editable metadata
             editable_meta = entry.get("editable_metadata")
+            editable_requested = isinstance(editable_meta, dict)
+            editable_success = not bool(entry_error)
             if isinstance(editable_meta, dict):
                 db = self._db_manager.get_db_for_folder(info.source_folder)
                 try:
@@ -923,6 +947,9 @@ class MediaManager(QObject):
                         )
                 except Exception as e:
                     self._exif_errors[file_path] = str(e)
+                    editable_success = False
+            if editable_requested:
+                self.editable_terminal.emit(file_path, editable_success)
 
             # Panel fields
             panel_fields = entry.get("panel_fields")

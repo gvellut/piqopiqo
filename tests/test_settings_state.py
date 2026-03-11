@@ -65,6 +65,7 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_GPX_IGNORE_OFFSET",
         "PIQO_GPX_TIMEZONE",
         "PIQO_TIME_SHIFT_UNKNOWN_FOLDER_IGNORE",
+        "PIQO_TIME_TAKEN_LOAD_RESORT_BATCH_SIZE",
         "PIQO_TIMESHIFT_CACHE_NUM",
         "PIQO_FLICKR_UPLOAD_MAX_WORKERS",
         "PIQO_PROTECT_NON_TEXT_METADATA",
@@ -228,6 +229,21 @@ def test_gpx_settings_defaults_and_env_override(isolated_settings, monkeypatch):
     assert get_user_setting(UserSettingKey.GPX_TIMEZONE) == "Europe/Paris"
     assert get_user_setting(UserSettingKey.TIME_SHIFT_UNKNOWN_FOLDER_IGNORE) is False
     assert get_runtime_setting(RuntimeSettingKey.TIMESHIFT_CACHE_NUM) == 3
+
+
+def test_time_taken_load_resort_batch_size_default_and_env_override(
+    isolated_settings, monkeypatch
+):
+    assert (
+        get_runtime_setting(RuntimeSettingKey.TIME_TAKEN_LOAD_RESORT_BATCH_SIZE) == 100
+    )
+
+    monkeypatch.setenv("PIQO_TIME_TAKEN_LOAD_RESORT_BATCH_SIZE", "25")
+    init_qsettings_store(dyn=False)
+
+    assert (
+        get_runtime_setting(RuntimeSettingKey.TIME_TAKEN_LOAD_RESORT_BATCH_SIZE) == 25
+    )
 
 
 def test_flickr_settings_defaults_and_roundtrip(isolated_settings):
@@ -404,16 +420,17 @@ def test_effective_exif_panel_fields_merge_custom_fields_dedupes(isolated_settin
     fields = get_effective_exif_panel_fields()
     keys = [field.key for field in fields]
 
-    assert keys[:6] == [
+    assert keys[:7] == [
         "EXIF:FocalLength",
         "EXIF:FocalLengthIn35mmFormat",
         "Composite:ShutterSpeed",
         "EXIF:FNumber",
         "EXIF:ISO",
+        "EXIF:ExposureCompensation",
         "File:FileName",
     ]
-    assert keys[6:] == ["File:FileSize", "EXIF:LensModel"]
-    assert all(field.format is None for field in fields[6:])
+    assert keys[7:] == ["File:FileSize", "EXIF:LensModel"]
+    assert all(field.format is None for field in fields[7:])
 
 
 def test_mandatory_setting_registry_contains_cache_and_exiftool():
