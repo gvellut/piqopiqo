@@ -748,10 +748,10 @@ def _confirm_copy(
     parent, volume: PhotoVolume, dates: list, output_folder_base: list[str]
 ):
     text_folder = ", ".join(output_folder_base)
-    text_date = ", ".join([date_to_str(d) for d in dates])
+    text_date = "- " + "\n- ".join([date_to_str(d) for d in dates])
     confirm_text = (
-        f"The images will be copied from : {volume.name} to {text_folder} "
-        f"(dates: {text_date})\nConfirm?"
+        f"The images will be copied from : {volume.name} to {text_folder}. Dates:\n"
+        f"{text_date}\nConfirm?"
     )
     result = QMessageBox.question(
         parent,
