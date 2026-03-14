@@ -1,0 +1,2 @@
+When duplicating or editin with <external> (and mybe other) : the progress bar in the status bar makes the status grow in height which makes eg the grid wobble (slighly smaller then go back to bigger).
+Either : make sure the display of the progress bar does not change the height of the status bar OR make the status bar big enough from the start so the height of the status does not grow when the progress bar is displayed.

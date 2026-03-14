@@ -83,3 +83,4 @@
 ! [Visible filtering still happening](Db_tasks/Lb_Visible_filtering_still_happening.md)
 ! [Eject from loop in fullscreen](Db_tasks/Mb_Eject_from_loop_in_fullscreen.md)
 ! [Correct Edit with external must copy the metadata](Db_tasks/Nb_Correct_Edit_with_external_must_copy_the_metadat.md)
+! [progress bar in status bar makes it temporarily bigger](Pb_tasks/Ob_progress_bar_in_status_bar_makes_it_temporarily_.md)

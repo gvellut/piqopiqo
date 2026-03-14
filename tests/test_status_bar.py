@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 from PySide6.QtCore import QCoreApplication
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMainWindow
 import pytest
 
 from piqopiqo.components.status_bar import LoadingStatusBar
@@ -46,3 +46,23 @@ def test_status_bar_side_padding_runtime_setting_is_applied(qapp, monkeypatch):
     right_layout = status_bar._right_cluster.layout()
     assert left_layout.contentsMargins().left() == 16
     assert right_layout.contentsMargins().right() == 16
+
+
+def test_status_bar_height_stays_stable_when_progress_or_errors_appear(qapp):
+    init_qsettings_store(dyn=True)
+    window = QMainWindow()
+    status_bar = LoadingStatusBar()
+    window.setStatusBar(status_bar)
+    window.show()
+    qapp.processEvents()
+
+    initial_height = status_bar.height()
+
+    status_bar.set_thumb_progress(1, 10)
+    qapp.processEvents()
+    assert status_bar.height() == initial_height
+
+    status_bar.reset()
+    status_bar.set_has_errors(True)
+    qapp.processEvents()
+    assert status_bar.height() == initial_height

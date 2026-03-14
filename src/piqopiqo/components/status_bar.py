@@ -61,6 +61,12 @@ class LoadingStatusBar(QStatusBar):
         self.error_btn.setFlat(True)
         self.error_btn.hide()
         right_layout.addWidget(self.error_btn)
+        self._right_cluster.setMinimumHeight(
+            max(
+                self.progress_bar.sizeHint().height(),
+                self.error_btn.sizeHint().height(),
+            )
+        )
         self.addPermanentWidget(self._right_cluster)
 
         self.setSizeGripEnabled(False)
