@@ -1,0 +1,1 @@
+The No label filter should include labels that are not in the list of explicit labels : so if label renamed is settings, No Label will also show those ones (even if metadata has a label value : if it is not in the choices => filtered in by No Label)

@@ -266,6 +266,7 @@ class PhotoListModel(QObject):
 
         labels = {label for label in criteria.labels if label}
         include_no_label = bool(criteria.include_no_label)
+        explicit_labels = {label for label in criteria.explicit_labels if label}
         search_text = (criteria.search_text or "").strip()
 
         if folder is None and not labels and not include_no_label and not search_text:
@@ -275,6 +276,7 @@ class PhotoListModel(QObject):
             folder=folder,
             labels=labels,
             include_no_label=include_no_label,
+            explicit_labels=explicit_labels,
             search_text=search_text,
         )
 
@@ -312,11 +314,16 @@ class PhotoListModel(QObject):
             if photo.db_metadata:
                 photo_label = photo.db_metadata.get(DBFields.LABEL)
 
-            if self._filter.include_no_label and not photo_label:
-                pass  # Matches "no label"
-            elif photo_label and photo_label in self._filter.labels:
-                pass  # Matches selected label
-            else:
+            matches_explicit_label = bool(photo_label) and photo_label in self._filter.labels
+            matches_no_label = self._filter.include_no_label and (
+                not photo_label
+                or (
+                    bool(self._filter.explicit_labels)
+                    and photo_label not in self._filter.explicit_labels
+                )
+            )
+
+            if not matches_explicit_label and not matches_no_label:
                 return False
 
         # Search filter

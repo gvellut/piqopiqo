@@ -50,6 +50,16 @@ def test_toggle_label_filter_and_no_label(qapp):
     assert panel.toggle_label_filter("does-not-exist") is False
 
 
+def test_current_filter_includes_current_explicit_labels(qapp):
+    init_qsettings_store(dyn=True)
+    panel = FilterPanel()
+    panel.set_folders(["/photos/a", "/photos/b"])
+
+    criteria = panel.get_current_filter()
+
+    assert criteria.explicit_labels == set(panel._label_checkboxes)
+
+
 def test_cycle_folder_filter_skips_all_folders_and_wraps(qapp):
     init_qsettings_store(dyn=True)
     panel = FilterPanel()

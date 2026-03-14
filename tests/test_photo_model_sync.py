@@ -105,3 +105,20 @@ def test_set_filter_normalizes_empty_criteria_and_skips_unchanged_updates():
     changed = model.set_filter(FilterCriteria(labels={"Approved"}))
     assert changed is False
     assert emitted == [1]
+
+
+def test_no_label_filter_includes_unknown_labels_from_old_settings():
+    model = PhotoListModel(MetadataDBManager())
+    renamed = _item("/photos/a.jpg", label="Renamed")
+    current = _item("/photos/b.jpg", label="Approved")
+    empty = _item("/photos/c.jpg", label=None)
+
+    model.set_photos([renamed, current, empty], ["/photos"])
+    model.set_filter(
+        FilterCriteria(
+            include_no_label=True,
+            explicit_labels={"Approved", "Rejected"},
+        )
+    )
+
+    assert [item.path for item in model.photos] == ["/photos/a.jpg", "/photos/c.jpg"]

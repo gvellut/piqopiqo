@@ -362,6 +362,7 @@ class FilterPanel(ScrollableStrip):
             folder=folder,
             labels=labels,
             include_no_label=include_no_label,
+            explicit_labels=set(self._label_checkboxes),
             search_text=search_text,
         )
 
