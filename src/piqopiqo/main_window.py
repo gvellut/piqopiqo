@@ -138,6 +138,7 @@ class MainWindow(QMainWindow):
         self._pending_model_sync_after_fullscreen = False
         self._pending_model_sync_fields: set[str] = set()
         self._pending_metadata_reselection_context: dict | None = None
+        self._pending_fullscreen_grid_sync_snapshot: dict | None = None
         self._fullscreen_exit_snapshot_override: dict | None = None
         self._fullscreen_started_with_multi_selection = False
         self._folder_watcher: FolderWatcher | None = None
@@ -925,13 +926,19 @@ class MainWindow(QMainWindow):
     ) -> None:
         old_loop_paths: list[str] = []
         old_current_path: str | None = None
+        fullscreen_grid_sync_snapshot = None
         if rebind_fullscreen_loop and self._fullscreen_overlay is not None:
             old_loop_paths = self._fullscreen_overlay.get_visible_paths()
             old_current_path = self._fullscreen_overlay.get_current_path()
+        elif self._fullscreen_overlay is not None:
+            fullscreen_grid_sync_snapshot = self._capture_fullscreen_exit_snapshot(
+                self._fullscreen_overlay
+            )
 
         self._pending_metadata_reselection_context = (
             self._capture_metadata_reselection_context()
         )
+        self._pending_fullscreen_grid_sync_snapshot = fullscreen_grid_sync_snapshot
 
         logger.debug(
             "Refreshing model after metadata update from %s: %s",
@@ -2225,15 +2232,22 @@ class MainWindow(QMainWindow):
         )
         return (selection_paths, target_path)
 
-    def _sync_grid_selection_with_fullscreen(self) -> None:
+    def _sync_grid_selection_with_fullscreen(
+        self,
+        snapshot: dict | None = None,
+    ) -> None:
         overlay = getattr(self, "_fullscreen_overlay", None)
-        if overlay is None:
-            return
+        if snapshot is None:
+            if overlay is None:
+                return
+            snapshot = self._capture_fullscreen_exit_snapshot(overlay)
 
         selection_paths, target_path = (
             self._resolve_grid_selection_for_fullscreen_snapshot(
-                self._capture_fullscreen_exit_snapshot(overlay),
-                keep_multi_selection=self._fullscreen_started_with_multi_selection,
+                snapshot,
+                keep_multi_selection=bool(
+                    snapshot.get("started_with_multi_selection")
+                ),
             )
         )
         current_selected_paths = [
@@ -2319,6 +2333,7 @@ class MainWindow(QMainWindow):
             self._fullscreen_overlay.close()
             self._fullscreen_overlay = None
             self._fullscreen_started_with_multi_selection = False
+            self._pending_fullscreen_grid_sync_snapshot = None
             self._fullscreen_exit_snapshot_override = None
 
         start_index = selected_indices[0]
@@ -2374,6 +2389,7 @@ class MainWindow(QMainWindow):
 
             self._fullscreen_overlay = None
             self._fullscreen_started_with_multi_selection = False
+            self._pending_fullscreen_grid_sync_snapshot = None
             self._setup_shortcuts()
             self._set_fullscreen_menu_action_policy(False)
             self._refresh_undo_label_action_enabled_for_context()
@@ -2412,10 +2428,14 @@ class MainWindow(QMainWindow):
         )
         reselection_context = self._pending_metadata_reselection_context
         self._pending_metadata_reselection_context = None
+        fullscreen_grid_sync_snapshot = self._pending_fullscreen_grid_sync_snapshot
+        self._pending_fullscreen_grid_sync_snapshot = None
         if reselection_context is not None:
             self._apply_pending_metadata_reselection(reselection_context)
         if getattr(self, "_fullscreen_overlay", None) is not None:
-            self._sync_grid_selection_with_fullscreen()
+            self._sync_grid_selection_with_fullscreen(
+                snapshot=fullscreen_grid_sync_snapshot
+            )
         self._next_model_change_fast_first_paint = False
         after_grid = time.perf_counter()
 

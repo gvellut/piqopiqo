@@ -50,6 +50,7 @@ class _SequenceWindow:
         self._pending_model_sync_after_fullscreen = False
         self._pending_model_sync_fields: set[str] = set()
         self._pending_metadata_reselection_context = None
+        self._pending_fullscreen_grid_sync_snapshot = None
         self.execute_calls: list[tuple[set[str], str, bool]] = []
 
     @property
@@ -58,6 +59,20 @@ class _SequenceWindow:
 
     def _capture_metadata_reselection_context(self) -> dict | None:
         return MainWindow._capture_metadata_reselection_context(self)
+
+    def _capture_fullscreen_exit_snapshot(
+        self,
+        _overlay: object,
+        *,
+        current_path_override: str | None = None,
+    ) -> dict:
+        return {
+            "current_path": current_path_override,
+            "loop_paths": [],
+            "all_paths": [],
+            "ejected_paths": [],
+            "started_with_multi_selection": False,
+        }
 
     def _rebind_fullscreen_loop_after_model_sync(
         self,
@@ -100,6 +115,8 @@ class _FakeFullscreenOverlay:
         self.all_paths = list(all_paths)
         self.ejected_paths = list(ejected_paths or [])
         self.close_calls = 0
+        self.color_swatch_updates = 0
+        self.update_calls = 0
 
     def get_current_path(self) -> str | None:
         return self.current_path
@@ -138,6 +155,12 @@ class _FakeFullscreenOverlay:
     def close(self) -> None:
         self.close_calls += 1
 
+    def _update_color_swatch(self) -> None:
+        self.color_swatch_updates += 1
+
+    def update(self) -> None:
+        self.update_calls += 1
+
 
 class _FakeGridFullscreenSync:
     def __init__(self) -> None:
@@ -158,6 +181,27 @@ class _FakeGridFullscreenSync:
     def _set_selection_anchor(self, index: int) -> None:
         self.anchor_indices.append(index)
 
+    def refresh_item(self, _index: int) -> None:
+        return
+
+
+class _FakeBackgroundSavePool:
+    def __init__(self) -> None:
+        self.workers: list[object] = []
+
+    def start(self, worker: object) -> None:
+        self.workers.append(worker)
+
+
+class _FakeWindowDbManager:
+    def get_db_for_image(self, _path: str) -> object:
+        return object()
+
+
+class _FakeStatusBar:
+    def showMessage(self, _message: str, _timeout_ms: int) -> None:
+        return
+
 
 class _FullscreenSelectionWindow:
     def __init__(
@@ -177,6 +221,7 @@ class _FullscreenSelectionWindow:
         self._pending_model_sync_after_fullscreen = False
         self._pending_model_sync_fields: set[str] = set()
         self._pending_metadata_reselection_context = None
+        self._pending_fullscreen_grid_sync_snapshot = None
         self._fullscreen_exit_snapshot_override = None
         self._next_model_change_fast_first_paint = False
         self._last_model_change_grid_ms = None
@@ -258,8 +303,11 @@ class _FullscreenSelectionWindow:
             current_path,
         )
 
-    def _sync_grid_selection_with_fullscreen(self) -> None:
-        MainWindow._sync_grid_selection_with_fullscreen(self)
+    def _sync_grid_selection_with_fullscreen(
+        self,
+        snapshot: dict | None = None,
+    ) -> None:
+        MainWindow._sync_grid_selection_with_fullscreen(self, snapshot=snapshot)
 
     def _restore_grid_after_fullscreen_exit(self, snapshot: dict | None) -> None:
         MainWindow._restore_grid_after_fullscreen_exit(self, snapshot)
@@ -307,8 +355,171 @@ class _FullscreenSelectionWindow:
             self._ensure_grid_path_visible(reveal_path)
 
 
+class _FullscreenLabelApplyWindow(_FullscreenSelectionWindow):
+    def __init__(
+        self,
+        photo_model: PhotoListModel,
+        overlay: _FakeFullscreenOverlay,
+        *,
+        started_with_multi_selection: bool,
+    ) -> None:
+        super().__init__(
+            photo_model,
+            overlay,
+            started_with_multi_selection=started_with_multi_selection,
+        )
+        self._items_by_path = {item.path: item for item in photo_model.all_photos}
+        self._background_db_save_pool = _FakeBackgroundSavePool()
+        self.db_manager = _FakeWindowDbManager()
+        self.status_bar = _FakeStatusBar()
+        self.edit_panel = None
+
+    def _ensure_db_metadata_ready(self, _items: list[ImageItem]) -> bool:
+        return True
+
+    def _apply_label_to_items(
+        self,
+        selected_items: list[ImageItem],
+        label_name: str | None,
+        *,
+        record_undo: bool,
+        sync_source: str,
+    ) -> None:
+        MainWindow._apply_label_to_items(
+            self,
+            selected_items,
+            label_name,
+            record_undo=record_undo,
+            sync_source=sync_source,
+        )
+
+    def _apply_label_to_fullscreen_current(self, label_name: str | None) -> None:
+        MainWindow._apply_label_to_fullscreen_current(self, label_name)
+
+    def sync_model_after_metadata_update(
+        self,
+        changed_fields: set[str],
+        source: str,
+        allow_fullscreen_filter: bool = False,
+    ) -> None:
+        MainWindow.sync_model_after_metadata_update(
+            self,
+            changed_fields,
+            source=source,
+            allow_fullscreen_filter=allow_fullscreen_filter,
+        )
+
+
 def _selected_paths(items: list[ImageItem]) -> list[str]:
     return [item.path for item in items if item.is_selected]
+
+
+def _assert_last_selected_fullscreen_item_reenters_after_label_toggle(
+    monkeypatch,
+    selected_paths: list[str],
+) -> None:
+    monkeypatch.setattr(
+        "piqopiqo.main_window.get_user_setting",
+        lambda key: (
+            False
+            if key == UserSettingKey.FILTER_IN_FULLSCREEN
+            else OnFullscreenExitMultipleSelected.KEEP_SELECTION
+        ),
+    )
+    monkeypatch.setattr(
+        "piqopiqo.main_window.MetadataSaveWorker",
+        lambda db, path, metadata: {
+            "db": db,
+            "path": path,
+            "metadata": metadata,
+        },
+    )
+
+    model = PhotoListModel(MetadataDBManager())
+    items = [_item("/photos/a.jpg", label="Approved")]
+    items.extend(
+        _item(path, label="Approved")
+        for path in [
+            "/photos/b.jpg",
+            "/photos/c.jpg",
+            "/photos/d.jpg",
+        ]
+    )
+    model.set_photos(items, ["/photos"])
+    model.set_filter(FilterCriteria(labels={"Approved"}))
+
+    last_path = selected_paths[-1]
+    overlay = _FakeFullscreenOverlay(
+        current_path=last_path,
+        loop_paths=list(selected_paths),
+        all_paths=[item.path for item in items],
+    )
+    window = _FullscreenLabelApplyWindow(
+        model,
+        overlay,
+        started_with_multi_selection=True,
+    )
+    window.select_paths_in_grid(
+        list(selected_paths),
+        anchor_path=last_path,
+        reveal_path=last_path,
+    )
+    window.selection_calls.clear()
+
+    window._apply_label_to_fullscreen_current("Rejected")
+
+    expected_visible_after_out = [
+        path for path in [item.path for item in items] if path != last_path
+    ]
+    expected_selected_after_out = [path for path in selected_paths if path != last_path]
+
+    assert [item.path for item in window.images_data] == expected_visible_after_out
+    assert _selected_paths(window.images_data) == expected_selected_after_out
+    assert overlay.get_current_path() == last_path
+    assert window._pending_fullscreen_grid_sync_snapshot is None
+    assert overlay.color_swatch_updates == 1
+    assert overlay.update_calls == 1
+
+    window._apply_label_to_fullscreen_current("Approved")
+
+    assert [item.path for item in window.images_data] == [
+        item.path for item in items
+    ]
+    assert _selected_paths(window.images_data) == list(selected_paths)
+    assert window.selection_calls[-1] == (
+        list(selected_paths),
+        last_path,
+        last_path,
+    )
+    assert window._pending_fullscreen_grid_sync_snapshot is None
+    assert overlay.get_current_path() == last_path
+    assert overlay.color_swatch_updates == 2
+    assert overlay.update_calls == 2
+
+    exit_snapshot = MainWindow._capture_fullscreen_exit_snapshot(window, overlay)
+    before_exit_call = window.selection_calls[-1]
+    MainWindow._restore_grid_after_fullscreen_exit(window, exit_snapshot)
+
+    assert _selected_paths(window.images_data) == list(selected_paths)
+    assert window.selection_calls[-1] == before_exit_call
+
+
+def test_fullscreen_last_selected_item_reenters_after_label_toggle_for_two_items(
+    monkeypatch,
+):
+    _assert_last_selected_fullscreen_item_reenters_after_label_toggle(
+        monkeypatch,
+        ["/photos/b.jpg", "/photos/c.jpg"],
+    )
+
+
+def test_fullscreen_last_selected_item_reenters_after_label_toggle_for_three_items(
+    monkeypatch,
+):
+    _assert_last_selected_fullscreen_item_reenters_after_label_toggle(
+        monkeypatch,
+        ["/photos/b.jpg", "/photos/c.jpg", "/photos/d.jpg"],
+    )
 
 
 def test_fullscreen_label_sync_runs_immediately_when_filter_in_fullscreen_is_off(
