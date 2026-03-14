@@ -1,0 +1,1 @@
+When setting keywords from metadata edit panel : when you validate and set to the db (after Enter or leave field), also clena the fields : remove the empty keywords (, , or ,,) => empty keywords should not be in db + format ie space afet the command ", " then next keyword

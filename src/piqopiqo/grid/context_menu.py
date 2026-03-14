@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import logging
 import os
 import shutil
 from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import QMenu
+from PySide6.QtWidgets import QApplication, QMenu
 from send2trash import send2trash
 
 from piqopiqo.external_apps import (
@@ -51,25 +50,68 @@ def get_duplicate_path(original_path: str) -> str:
         counter += 1
 
 
-def duplicate_photos(window: MainWindow, photos: list[ImageItem]) -> None:
+def _duplicate_photos_with_metadata(
+    window: MainWindow,
+    photos: list[ImageItem],
+    *,
+    log_suffix: str = "",
+) -> list[str]:
+    if not photos:
+        return []
+
+    if not window.db_manager.ensure_items_metadata_ready(photos):
+        QApplication.beep()
+        window.status_bar.showMessage("Reading...", 2000)
+        return []
+
+    duplicated_paths: list[str] = []
     for photo in photos:
+        if photo.db_metadata is None:
+            logger.error("Missing metadata for duplicated photo: %s", photo.path)
+            continue
+
         new_path = get_duplicate_path(photo.path)
         try:
             shutil.copy2(photo.path, new_path)
             window._suppress_watcher_paths([new_path])
 
+            copied_metadata = dict(photo.db_metadata)
+            db = window.db_manager.get_db_for_image(new_path)
+            db.save_metadata(new_path, copied_metadata)
+
             new_item = ImageItem(
                 path=new_path,
                 name=os.path.basename(new_path),
-                created=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                created=photo.created,
                 source_folder=photo.source_folder,
+                db_metadata=copied_metadata,
             )
 
             window.photo_model.add_photo(new_item)
-            logger.info(f"Duplicated {photo.path} to {new_path}")
+            duplicated_paths.append(new_path)
+            logger.info(
+                "Duplicated %s to %s%s",
+                photo.path,
+                new_path,
+                log_suffix,
+            )
 
         except OSError as e:
-            logger.error(f"Failed to duplicate {photo.path}: {e}")
+            logger.error("Failed to duplicate %s: %s", photo.path, e)
+
+    return duplicated_paths
+
+
+def duplicate_photos(window: MainWindow, photos: list[ImageItem]) -> None:
+    duplicated_paths = _duplicate_photos_with_metadata(window, photos)
+    if not duplicated_paths:
+        return
+
+    window.select_paths_in_grid(
+        duplicated_paths,
+        anchor_path=duplicated_paths[-1],
+        reveal_path=duplicated_paths[-1],
+    )
 
 
 def move_to_trash(window: MainWindow, photos: list[ImageItem]) -> None:
@@ -102,24 +144,11 @@ def regenerate_selected_thumbnails(window: MainWindow, photos: list[ImageItem]) 
 
 
 def edit_in_external_app(window: MainWindow, photos: list[ImageItem]) -> None:
-    duplicated_paths = []
-    for photo in photos:
-        new_path = get_duplicate_path(photo.path)
-        try:
-            shutil.copy2(photo.path, new_path)
-            window._suppress_watcher_paths([new_path])
-            new_item = ImageItem(
-                path=new_path,
-                name=os.path.basename(new_path),
-                created=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                source_folder=photo.source_folder,
-            )
-            window.photo_model.add_photo(new_item)
-            duplicated_paths.append(new_path)
-            logger.info(f"Duplicated {photo.path} to {new_path} for editing")
-        except OSError as e:
-            logger.error(f"Failed to duplicate {photo.path}: {e}")
-
+    duplicated_paths = _duplicate_photos_with_metadata(
+        window,
+        photos,
+        log_suffix=" for editing",
+    )
     if duplicated_paths:
         window.select_paths_in_grid(
             duplicated_paths,

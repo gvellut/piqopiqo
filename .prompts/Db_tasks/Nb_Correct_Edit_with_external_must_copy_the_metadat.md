@@ -1,3 +1,3 @@
-When using Edit with <external program> : a new photo is created (by duplicating the relevant photo first, before open) : the new photos must have the same metadata (including time taken and position ; all) as the photo it was copied from.
+When using Edit with <external program> : a new photo is created (by duplicating the relevant photo first, before open) : the new photos must have the same metadata (including time taken and position ; all) as the photo it was copied from. So copy the metadata from the original photo to the duplicated one (and if sort order is time taken : the new photo must be next to the original one)
 Same thing for duplicate if not already done.
 Also, when using Edit with ... or duplicate, The new photos must be selected (instead of the photos they were duplicated from).
