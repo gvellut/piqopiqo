@@ -147,6 +147,7 @@ def test_json_roundtrip_for_complex_user_settings(isolated_settings):
 def test_shortcuts_defaults_include_filter_shortcuts(isolated_settings):
     shortcuts = get_user_setting(UserSettingKey.SHORTCUTS)
 
+    assert shortcuts[Shortcut.EJECT_FROM_LOOP] == "\\"
     assert shortcuts[Shortcut.FILTER_LABEL_1] == "Alt+1"
     assert shortcuts[Shortcut.FILTER_LABEL_2] == "Alt+2"
     assert shortcuts[Shortcut.FILTER_LABEL_3] == "Alt+3"

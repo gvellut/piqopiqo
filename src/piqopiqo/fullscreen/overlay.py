@@ -105,12 +105,19 @@ class FullscreenOverlay(QWidget):
     # Signal to notify when the current index changes
     index_changed = Signal(int)
     label_shortcut_requested = Signal(object)  # str | None
+    eject_from_loop_requested = Signal()
 
     def __init__(self, all_items: list, visible_indices: list, start_index: int):
         super().__init__()
         self.all_items = all_items
         self.visible_indices = visible_indices
         self.current_visible_idx = self.visible_indices.index(start_index)
+        self._all_paths_order = [
+            path
+            for item in self.all_items
+            if isinstance((path := getattr(item, "path", None)), str)
+        ]
+        self._ejected_paths: set[str] = set()
         self._prev_presentation_opts = None
 
         self._transform = QTransform()
@@ -186,12 +193,14 @@ class FullscreenOverlay(QWidget):
         return paths
 
     def get_all_paths(self) -> list[str]:
-        paths: list[str] = []
-        for item in self.all_items:
-            path = getattr(item, "path", None)
-            if isinstance(path, str):
-                paths.append(path)
-        return paths
+        return list(self._all_paths_order)
+
+    def get_ejected_paths(self) -> list[str]:
+        ordered = [
+            path for path in self._all_paths_order if path in self._ejected_paths
+        ]
+        extras = sorted(self._ejected_paths.difference(ordered))
+        return ordered + extras
 
     def get_current_path(self) -> str | None:
         if not self.visible_indices:
@@ -251,6 +260,41 @@ class FullscreenOverlay(QWidget):
         if new_global_index != old_global_index:
             self.index_changed.emit(new_global_index)
         return True
+
+    def eject_current_from_loop(self) -> dict[str, object] | None:
+        current_path = self.get_current_path()
+        if current_path is None:
+            return None
+        if not self.visible_indices:
+            return None
+        if not (0 <= self.current_visible_idx < len(self.visible_indices)):
+            return None
+
+        old_visible_indices = list(self.visible_indices)
+        old_current_visible_idx = self.current_visible_idx
+        old_global_index = old_visible_indices[old_current_visible_idx]
+        self._ejected_paths.add(current_path)
+
+        new_visible_indices = (
+            old_visible_indices[:old_current_visible_idx]
+            + old_visible_indices[old_current_visible_idx + 1 :]
+        )
+        if not new_visible_indices:
+            self.visible_indices = []
+            self.current_visible_idx = 0
+            return {"auto_close": True, "ejected_path": current_path}
+
+        target_visible_idx = min(old_current_visible_idx, len(new_visible_indices) - 1)
+        self._navigate_to_preserve_zoom(
+            target_visible_idx,
+            visible_indices=new_visible_indices,
+            old_global_index=old_global_index,
+        )
+        return {
+            "auto_close": False,
+            "ejected_path": current_path,
+            "current_path": self.get_current_path(),
+        }
 
     def _setup_zoom_overlay(self):
         """Creates the zoom level overlay widget."""
@@ -497,7 +541,13 @@ class FullscreenOverlay(QWidget):
         if self._load_pixmap_at_current_index():
             self.update()
 
-    def _navigate_to_preserve_zoom(self, new_visible_idx: int):
+    def _navigate_to_preserve_zoom(
+        self,
+        new_visible_idx: int,
+        *,
+        visible_indices: list[int] | None = None,
+        old_global_index: int | None = None,
+    ):
         """Navigate to a new image while preserving zoom level and center position.
 
         Keeps the same zoom factor. The center of the image preserves its screen
@@ -509,7 +559,12 @@ class FullscreenOverlay(QWidget):
         - Allowed extra space is set based on the initial position to prevent
           clamping from shifting the image when navigating back and forth
         """
-        total_visible = len(self.visible_indices)
+        target_visible_indices = (
+            list(visible_indices)
+            if visible_indices is not None
+            else self.visible_indices
+        )
+        total_visible = len(target_visible_indices)
         if total_visible == 0:
             return
 
@@ -517,42 +572,55 @@ class FullscreenOverlay(QWidget):
             new_visible_idx % total_visible + total_visible
         ) % total_visible
 
-        if new_visible_idx != self.current_visible_idx:
-            # Get where the old image's center is on screen (can be offscreen)
-            old_image_center_screen = self._get_image_center_screen_coords()
+        if visible_indices is None and new_visible_idx == self.current_visible_idx:
+            return
 
-            # Save zoom state
-            saved_zoom_level = self._zoom_level
-            saved_zoom_state = self._zoom_state
-            saved_zoom_direction = self._zoom_direction
+        previous_global_index = old_global_index
+        if previous_global_index is None:
+            if self.visible_indices and (
+                0 <= self.current_visible_idx < len(self.visible_indices)
+            ):
+                previous_global_index = self.visible_indices[self.current_visible_idx]
 
-            # Load new image
-            self.current_visible_idx = new_visible_idx
-            self._load_image_only()
+        # Get where the old image's center is on screen (can be offscreen)
+        old_image_center_screen = self._get_image_center_screen_coords()
 
-            # Restore zoom state
-            self._zoom_level = saved_zoom_level
-            self._zoom_state = saved_zoom_state
-            self._zoom_direction = saved_zoom_direction
+        # Save zoom state
+        saved_zoom_level = self._zoom_level
+        saved_zoom_state = self._zoom_state
+        saved_zoom_direction = self._zoom_direction
 
-            # Position new image center at the same screen position (without clamping)
-            self._position_image_center_at_screen_no_clamp(old_image_center_screen)
+        if visible_indices is not None:
+            self.visible_indices = target_visible_indices
 
-            # Check if the new image would be completely offscreen
-            if self._is_image_completely_offscreen():
-                # Fall back to base view
-                self._load_current_image()
-            else:
-                # Set allowed extra space based on the new position
-                self._set_allowed_extra_space_from_current()
-                # Now clamp with the new allowed space
-                self._clamp_pan()
+        # Load new image
+        self.current_visible_idx = new_visible_idx
+        self._load_image_only()
 
-            # Emit signal
-            global_index = self.visible_indices[self.current_visible_idx]
+        # Restore zoom state
+        self._zoom_level = saved_zoom_level
+        self._zoom_state = saved_zoom_state
+        self._zoom_direction = saved_zoom_direction
+
+        # Position new image center at the same screen position (without clamping)
+        self._position_image_center_at_screen_no_clamp(old_image_center_screen)
+
+        # Check if the new image would be completely offscreen
+        if self._is_image_completely_offscreen():
+            # Fall back to base view
+            self._load_current_image()
+        else:
+            # Set allowed extra space based on the new position
+            self._set_allowed_extra_space_from_current()
+            # Now clamp with the new allowed space
+            self._clamp_pan()
+
+        # Emit signal
+        global_index = self.visible_indices[self.current_visible_idx]
+        if global_index != previous_global_index:
             self.index_changed.emit(global_index)
 
-            self.update()
+        self.update()
 
     def _load_image_only(self):
         """Load the image at current index WITHOUT resetting zoom/pan state."""
@@ -860,6 +928,13 @@ class FullscreenOverlay(QWidget):
         ):
             # Reset zoom to base view
             self._zoom_to_base_view()
+        elif match_shortcut_sequence(
+            event,
+            get_user_setting(UserSettingKey.SHORTCUTS).get(
+                Shortcut.EJECT_FROM_LOOP
+            ),
+        ):
+            self.eject_from_loop_requested.emit()
         else:
             for shortcut_str, label_name in self._label_shortcut_bindings:
                 if match_shortcut_sequence(event, shortcut_str):

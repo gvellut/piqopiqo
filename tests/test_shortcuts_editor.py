@@ -95,6 +95,7 @@ def test_shortcuts_editor_uses_sectioned_two_column_layout(qapp):
         Shortcut.ZOOM_IN.label,
         Shortcut.ZOOM_OUT.label,
         Shortcut.ZOOM_RESET.label,
+        Shortcut.EJECT_FROM_LOOP.label,
     ]
 
 

@@ -1,3 +1,4 @@
+- [Correct Edit with external must copy the metadata](Db_tasks/Nb_Correct_Edit_with_external_must_copy_the_metadat.md)
 - [Safety if disk with SQLLite cache is unplugged detect and restart](Ta_tasks/Za_Safety_if_disk_with_SQLLite_cache_is_unplugged_.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
 - [Prescaled down image in fullscreen (Claude made a mess of it; redo)](Ja_tasks/Qa_Prescaled_down_image_in_fullscreen.md)
@@ -80,3 +81,4 @@
 ! [Fix visible filtering when exiting fullscreen](Db_tasks/Jb_Fix_visible_filtering_when_exiting_fullscreen.md)
 ! [Date taken update](Db_tasks/Kb_Date_taken_update.md)
 ! [Visible filtering still happening](Db_tasks/Lb_Visible_filtering_still_happening.md)
+! [Eject from loop in fullscreen](Db_tasks/Mb_Eject_from_loop_in_fullscreen.md)

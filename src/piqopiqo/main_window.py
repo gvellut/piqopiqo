@@ -138,6 +138,7 @@ class MainWindow(QMainWindow):
         self._pending_model_sync_after_fullscreen = False
         self._pending_model_sync_fields: set[str] = set()
         self._pending_metadata_reselection_context: dict | None = None
+        self._fullscreen_exit_snapshot_override: dict | None = None
         self._fullscreen_started_with_multi_selection = False
         self._folder_watcher: FolderWatcher | None = None
         self._watcher_suppressed: dict[str, float] = {}
@@ -2122,11 +2123,21 @@ class MainWindow(QMainWindow):
             self._fullscreen_overlay is None and self._label_undo_entry is not None
         )
 
-    def _capture_fullscreen_exit_snapshot(self, overlay: FullscreenOverlay) -> dict:
+    def _capture_fullscreen_exit_snapshot(
+        self,
+        overlay: FullscreenOverlay,
+        *,
+        current_path_override: str | None = None,
+    ) -> dict:
         return {
-            "current_path": overlay.get_current_path(),
+            "current_path": (
+                current_path_override
+                if current_path_override is not None
+                else overlay.get_current_path()
+            ),
             "loop_paths": overlay.get_visible_paths(),
             "all_paths": overlay.get_all_paths(),
+            "ejected_paths": overlay.get_ejected_paths(),
             "started_with_multi_selection": (
                 self._fullscreen_started_with_multi_selection
             ),
@@ -2160,15 +2171,26 @@ class MainWindow(QMainWindow):
             for path in snapshot.get("all_paths", [])
             if isinstance(path, str) and path
         ]
+        ejected_paths = {
+            path
+            for path in snapshot.get("ejected_paths", [])
+            if isinstance(path, str) and path
+        }
         started_with_multi = bool(snapshot.get("started_with_multi_selection"))
+        selectable_path_set = current_path_set.difference(ejected_paths)
+        visible_path_set = {
+            path
+            for path in loop_paths
+            if path in selectable_path_set
+        }
 
         if not started_with_multi:
             target_path = (
                 current_path
-                if current_path in current_path_set
+                if current_path in visible_path_set
                 else self._pick_next_path_in_loop(
                     all_paths,
-                    current_path_set,
+                    selectable_path_set,
                     current_path,
                 )
             )
@@ -2176,8 +2198,10 @@ class MainWindow(QMainWindow):
                 return ([], None)
             return ([target_path], target_path)
 
-        surviving_loop_paths = [path for path in loop_paths if path in current_path_set]
-        if current_path in current_path_set:
+        surviving_loop_paths = [
+            path for path in loop_paths if path in selectable_path_set
+        ]
+        if current_path in visible_path_set:
             target_path = current_path
         else:
             target_path = self._pick_next_path_in_loop(
@@ -2189,7 +2213,7 @@ class MainWindow(QMainWindow):
         if target_path is None:
             target_path = self._pick_next_path_in_loop(
                 all_paths,
-                current_path_set,
+                selectable_path_set,
                 current_path,
             )
             if target_path is None:
@@ -2261,6 +2285,30 @@ class MainWindow(QMainWindow):
             reveal_path=target_path,
         )
 
+    def _on_fullscreen_eject_from_loop_requested(self) -> None:
+        overlay = getattr(self, "_fullscreen_overlay", None)
+        if overlay is None:
+            return
+
+        result = overlay.eject_current_from_loop()
+        if not result:
+            return
+
+        if not result.get("auto_close"):
+            if overlay is self._fullscreen_overlay:
+                self._sync_grid_selection_with_fullscreen()
+            return
+
+        ejected_path = result.get("ejected_path")
+        current_path_override = ejected_path if isinstance(ejected_path, str) else None
+        exit_snapshot = self._capture_fullscreen_exit_snapshot(
+            overlay,
+            current_path_override=current_path_override,
+        )
+        self._fullscreen_exit_snapshot_override = exit_snapshot
+        self._restore_grid_after_fullscreen_exit(exit_snapshot)
+        overlay.close()
+
     def _handle_fullscreen_overlay(self, selected_indices: list):
         """Display the selected image in a fullscreen overlay."""
         if not selected_indices:
@@ -2271,6 +2319,7 @@ class MainWindow(QMainWindow):
             self._fullscreen_overlay.close()
             self._fullscreen_overlay = None
             self._fullscreen_started_with_multi_selection = False
+            self._fullscreen_exit_snapshot_override = None
 
         start_index = selected_indices[0]
 
@@ -2304,6 +2353,9 @@ class MainWindow(QMainWindow):
         overlay_ref.label_shortcut_requested.connect(
             self._apply_label_to_fullscreen_current
         )
+        overlay_ref.eject_from_loop_requested.connect(
+            self._on_fullscreen_eject_from_loop_requested
+        )
         self._setup_shortcuts()
         self._set_fullscreen_menu_action_policy(True)
         self._refresh_undo_label_action_enabled_for_context()
@@ -2315,7 +2367,10 @@ class MainWindow(QMainWindow):
             if self._fullscreen_overlay is not overlay_ref:
                 return
 
-            exit_snapshot = self._capture_fullscreen_exit_snapshot(overlay_ref)
+            exit_snapshot = self._fullscreen_exit_snapshot_override
+            if exit_snapshot is None:
+                exit_snapshot = self._capture_fullscreen_exit_snapshot(overlay_ref)
+            self._fullscreen_exit_snapshot_override = None
 
             self._fullscreen_overlay = None
             self._fullscreen_started_with_multi_selection = False

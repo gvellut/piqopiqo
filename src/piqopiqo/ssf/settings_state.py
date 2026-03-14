@@ -498,6 +498,7 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
             Shortcut.ZOOM_IN: "=",
             Shortcut.ZOOM_OUT: "-",
             Shortcut.ZOOM_RESET: "0",
+            Shortcut.EJECT_FROM_LOOP: "\\",
             Shortcut.LABEL_1: "1",
             Shortcut.LABEL_2: "2",
             Shortcut.LABEL_3: "3",

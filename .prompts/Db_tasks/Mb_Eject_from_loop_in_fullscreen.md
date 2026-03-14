@@ -1,0 +1,4 @@
+In fullscreen mode : add a Shortcut to eject from loop : 
+= > will remove current photo from loop => will eject (photo will no longer be displayed in the loop using the arrow left / right) + immediately go to next photo in loop or exit fullscreen if no photo in the loop. (if no photo, when exiting fullscreen automatically, use the same selection behaviour when selecting as when a label is changed in fullscreen and the label is not in the filters (I think the next photo from the last shown in fullscreen). When exiting normally (ie by user action) ; no change from now (except the ejected photos are no longer selected)
+The ejected photos are no longer selected in the grid when exiting fullscreen (the unselect must not wait for the fullscreen to exit to happen : when exiting fullscreen, the user should not see the unselection happen ie the photo still selected then the unselection happen)
+Use the key : \ for the default shortcut

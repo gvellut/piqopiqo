@@ -18,6 +18,7 @@ def test_shortcut_labels_are_human_readable():
     assert Shortcut.ZOOM_IN.label == "Zoom in"
     assert Shortcut.ZOOM_OUT.label == "Zoom out"
     assert Shortcut.ZOOM_RESET.label == "Zoom reset"
+    assert Shortcut.EJECT_FROM_LOOP.label == "Eject from loop"
     assert Shortcut.LABEL_1.label == "Label 1"
     assert Shortcut.LABEL_NONE.label == "No label"
     assert Shortcut.FILTER_LABEL_1.label == "Filter label 1"
@@ -46,6 +47,8 @@ def test_configurable_shortcut_view_registries_cover_all_shortcuts():
     assert Shortcut.ZOOM_IN not in GRID_VIEW_CONFIGURABLE_SHORTCUTS
     assert Shortcut.ZOOM_OUT in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
     assert Shortcut.ZOOM_RESET in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
+    assert Shortcut.EJECT_FROM_LOOP in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
+    assert Shortcut.EJECT_FROM_LOOP not in GRID_VIEW_CONFIGURABLE_SHORTCUTS
 
     for label_shortcut in LABEL_SHORTCUTS:
         assert label_shortcut in GRID_VIEW_CONFIGURABLE_SHORTCUTS

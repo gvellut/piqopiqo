@@ -18,6 +18,7 @@ class Shortcut(Enum):
     ZOOM_IN = auto(), "Zoom in"
     ZOOM_OUT = auto(), "Zoom out"
     ZOOM_RESET = auto(), "Zoom reset"
+    EJECT_FROM_LOOP = auto(), "Eject from loop"
     LABEL_1 = auto(), "Label 1"
     LABEL_2 = auto(), "Label 2"
     LABEL_3 = auto(), "Label 3"
@@ -101,6 +102,7 @@ FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS: tuple[Shortcut, ...] = (
     Shortcut.ZOOM_IN,
     Shortcut.ZOOM_OUT,
     Shortcut.ZOOM_RESET,
+    Shortcut.EJECT_FROM_LOOP,
     *LABEL_SHORTCUTS,
 )
 

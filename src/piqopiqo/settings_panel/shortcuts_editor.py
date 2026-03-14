@@ -72,6 +72,7 @@ class ShortcutsEditor(QWidget):
                     Shortcut.ZOOM_IN,
                     Shortcut.ZOOM_OUT,
                     Shortcut.ZOOM_RESET,
+                    Shortcut.EJECT_FROM_LOOP,
                 ),
             ),
         ]
