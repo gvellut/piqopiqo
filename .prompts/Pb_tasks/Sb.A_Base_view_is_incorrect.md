@@ -1,0 +1,2 @@
+For the case I mentioned : vertical images that are not wide enough to cover the width of the screen after 100%, the zoom maintains the pixel sot that's good.
+However, when going back to the base view : instead of the image taking the full height of the screen and the empty space equal on both sides, the base view looks complely irregularm, with empty space at the top or the bottom (depending on where the zoom was made) and the photo cut There is also different empty space on both sides. 

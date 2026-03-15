@@ -192,26 +192,44 @@ def calculate_clamp_correction(
     Returns:
         Tuple (dx, dy) correction to apply in screen coordinates
     """
-    dx = 0.0
-    if img_rect_width < view_width:
-        # Center horizontally
-        center_x = view_width / 2
-        img_center_x = (img_rect_left + img_rect_right) / 2
-        dx = center_x - img_center_x
-    elif img_rect_left > effective_space["left"]:
-        dx = effective_space["left"] - img_rect_left
-    elif img_rect_right < view_width - effective_space["right"]:
-        dx = view_width - effective_space["right"] - img_rect_right
+    clamped_left = clamp_axis_origin(
+        img_rect_left,
+        img_rect_width,
+        view_width,
+        effective_space["left"],
+        effective_space["right"],
+    )
+    clamped_top = clamp_axis_origin(
+        img_rect_top,
+        img_rect_height,
+        view_height,
+        effective_space["top"],
+        effective_space["bottom"],
+    )
 
-    dy = 0.0
-    if img_rect_height < view_height:
-        # Center vertically
-        center_y = view_height / 2
-        img_center_y = (img_rect_top + img_rect_bottom) / 2
-        dy = center_y - img_center_y
-    elif img_rect_top > effective_space["top"]:
-        dy = effective_space["top"] - img_rect_top
-    elif img_rect_bottom < view_height - effective_space["bottom"]:
-        dy = view_height - effective_space["bottom"] - img_rect_bottom
+    return clamped_left - img_rect_left, clamped_top - img_rect_top
 
-    return dx, dy
+
+def clamp_axis_origin(
+    origin: float,
+    content_size: float,
+    view_size: float,
+    near_space: float,
+    far_space: float,
+) -> float:
+    """Clamp an axis origin within the allowed near/far empty-space interval.
+
+    The valid origin range is:
+    [view_size - content_size - far_space, near_space]
+
+    If the interval is impossible (for example the content is much smaller than the
+    viewport and the allowed near/far spaces do not overlap), use the midpoint of
+    the conflicting bounds rather than biasing to one side.
+    """
+    min_origin = view_size - content_size - far_space
+    max_origin = near_space
+
+    if min_origin > max_origin:
+        return (min_origin + max_origin) / 2.0
+
+    return min(max(origin, min_origin), max_origin)

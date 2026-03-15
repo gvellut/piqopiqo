@@ -7,6 +7,7 @@ with empty space calculations.
 
 from piqopiqo.fullscreen.pan import (
     calculate_allowed_extra_from_current,
+    calculate_clamp_correction,
     calculate_current_space,
     calculate_effective_space_per_side,
     is_image_visible,
@@ -243,6 +244,54 @@ class TestCalculateCurrentSpace:
         assert result["right"] == -100  # 800 - 900
         assert result["top"] == -50
         assert result["bottom"] == -50  # 600 - 650
+
+
+class TestCalculateClampCorrection:
+    """Tests for clamp correction with per-side empty-space bounds."""
+
+    def test_undersized_axis_preserves_off_center_position(self):
+        """An undersized axis can stay off-center when current bounds allow it."""
+        dx, dy = calculate_clamp_correction(
+            img_rect_left=450,
+            img_rect_right=1050,
+            img_rect_top=-100,
+            img_rect_bottom=900,
+            img_rect_width=600,
+            img_rect_height=1000,
+            view_width=1200,
+            view_height=800,
+            effective_space={
+                "left": 450,
+                "right": 150,
+                "top": 300,
+                "bottom": 300,
+            },
+        )
+
+        assert dx == 0
+        assert dy == 0
+
+    def test_conflicting_undersized_axis_bounds_use_midpoint(self):
+        """Impossible near/far limits fall back to the midpoint of the bounds."""
+        dx, dy = calculate_clamp_correction(
+            img_rect_left=0,
+            img_rect_right=200,
+            img_rect_top=100,
+            img_rect_bottom=700,
+            img_rect_width=200,
+            img_rect_height=600,
+            view_width=1200,
+            view_height=800,
+            effective_space={
+                "left": 300,
+                "right": 300,
+                "top": 100,
+                "bottom": 100,
+            },
+        )
+
+        assert dx == 500
+        assert dy == 0
 
 
 class TestNavigationScenarios:

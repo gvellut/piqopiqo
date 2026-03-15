@@ -86,3 +86,5 @@
 ! [progress bar in status bar makes it temporarily bigger](Pb_tasks/Ob_progress_bar_in_status_bar_makes_it_temporarily_.md)
 ! [No label filter should include other labels](Pb_tasks/Qb_No_label_filter_should_include_other_labels.md)
 ! [Shortcut for labels in fullscreen stuck](Pb_tasks/Rb_Shortcut_for_labels_in_fullscreen_stuck.md)
+! [Zoom in fullscreen must be below the mouse](Pb_tasks/Sb_Zoom_in_fullscreen_must_be_below_the_mouse.md)
+    !? [Base view is incorrect](Pb_tasks/Sb.A_Base_view_is_incorrect.md)

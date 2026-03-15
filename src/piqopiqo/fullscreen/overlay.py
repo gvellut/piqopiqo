@@ -47,7 +47,7 @@ from piqopiqo.ssf.settings_state import (
 )
 
 from .info_panel import ZoomOverlayController
-from .pan import calculate_allowed_extra_from_current
+from .pan import calculate_allowed_extra_from_current, calculate_clamp_correction
 from .zoom import (
     ZoomDirection,
     ZoomState,
@@ -944,7 +944,13 @@ class FullscreenOverlay(QWidget):
 
     def _screen_to_image_coords(self, screen_pos: QPointF) -> QPointF:
         """Convert screen coordinates to image coordinates."""
+        if self._pixmap.isNull():
+            return QPointF()
+
         base_scale = self._get_base_scale_factor()
+        if math.isclose(base_scale, 0.0):
+            return QPointF()
+
         pixmap_size = self._pixmap.size()
 
         scaled_width = pixmap_size.width() * base_scale
@@ -954,11 +960,33 @@ class FullscreenOverlay(QWidget):
         base_x = (target_rect.width() - scaled_width) / 2
         base_y = (target_rect.height() - scaled_height) / 2
 
-        # Convert to image space (accounting for base scale)
-        img_x = (screen_pos.x() - base_x) / base_scale
-        img_y = (screen_pos.y() - base_y) / base_scale
+        image_space = QPointF(
+            (screen_pos.x() - base_x) / base_scale,
+            (screen_pos.y() - base_y) / base_scale,
+        )
 
-        return QPointF(img_x, img_y)
+        inverse_transform, invertible = self._transform.inverted()
+        if invertible:
+            return inverse_transform.map(image_space)
+
+        return image_space
+
+    def _clamp_image_coords_to_pixmap(self, image_pos: QPointF) -> QPointF:
+        """Clamp an image-space position to the current pixmap bounds."""
+        if self._pixmap.isNull():
+            return QPointF(image_pos)
+
+        img_rect = self._pixmap.rect()
+        return QPointF(
+            max(img_rect.left(), min(image_pos.x(), img_rect.right())),
+            max(img_rect.top(), min(image_pos.y(), img_rect.bottom())),
+        )
+
+    def _get_zoom_anchor_for_screen_pos(self, screen_pos: QPointF) -> QPointF:
+        """Resolve a screen position to a valid image-space zoom anchor."""
+        return self._clamp_image_coords_to_pixmap(
+            self._screen_to_image_coords(screen_pos)
+        )
 
     def wheelEvent(self, event):
         """Handle mouse wheel events for zooming."""
@@ -968,18 +996,7 @@ class FullscreenOverlay(QWidget):
             get_runtime_setting(RuntimeSettingKey.ZOOM_WHEEL_SENSITIVITY)
         )
         if abs(self._wheel_acc) >= 120 * zoom_wheel_sensitivity:
-            # Convert mouse position to image coordinates
-            center_pos = self._screen_to_image_coords(event.position())
-
-            # Clamp to image rect
-            img_rect = self._pixmap.rect()
-            if not img_rect.contains(center_pos.toPoint()):
-                center_pos.setX(
-                    max(img_rect.left(), min(center_pos.x(), img_rect.right()))
-                )
-                center_pos.setY(
-                    max(img_rect.top(), min(center_pos.y(), img_rect.bottom()))
-                )
+            center_pos = self._get_zoom_anchor_for_screen_pos(event.position())
 
             if self._wheel_acc > 0:
                 self._zoom_in(center_pos)
@@ -994,6 +1011,7 @@ class FullscreenOverlay(QWidget):
         self._zoom_level = 1.0
         self._zoom_state = ZoomState.BASE_VIEW
         self._zoom_direction = ZoomDirection.OUT
+        self._reset_allowed_extra_space()
         self._notify_zoom_state_changed()
         self.update()
 
@@ -1010,12 +1028,16 @@ class FullscreenOverlay(QWidget):
         self._zoom_level = new_zoom_level
 
         if new_state == ZoomState.BASE_VIEW:
-            self._transform.reset()
+            self._zoom_to_base_view()
+            return
+
+        factor = new_zoom_level / old_zoom_level
+        if math.isclose(factor, 1.0):
+            self._set_allowed_extra_space_from_current()
+            self._clamp_pan()
             self._notify_zoom_state_changed()
-            self.update()
         else:
-            factor = new_zoom_level / old_zoom_level
-            self._apply_zoom(factor, center_pos)
+            self._apply_zoom(factor, center_pos, preserve_position=True)
             self._notify_zoom_state_changed()
 
     def _zoom_in(self, center_pos: QPointF):
@@ -1052,13 +1074,23 @@ class FullscreenOverlay(QWidget):
         self._zoom_direction = ZoomDirection.OUT
         self._zoom_to_state(next_state, center_pos)
 
-    def _apply_zoom(self, factor: float, center_pos: QPointF):
+    def _apply_zoom(
+        self,
+        factor: float,
+        center_pos: QPointF,
+        *,
+        preserve_position: bool = False,
+    ):
         """Apply zoom transformation centered on the given image position."""
         transform = QTransform()
         transform.translate(center_pos.x(), center_pos.y())
         transform.scale(factor, factor)
         transform.translate(-center_pos.x(), -center_pos.y())
-        self._transform = self._transform * transform
+        # Pre-multiply so the new zoom step is applied in image space before the
+        # existing pan/zoom transform; this keeps the anchored pixel stationary.
+        self._transform = transform * self._transform
+        if preserve_position:
+            self._set_allowed_extra_space_from_current()
         logger.debug(f"Zoom level updated to: {self._zoom_level}")
         self._clamp_pan()
         self.update()
@@ -1099,7 +1131,7 @@ class FullscreenOverlay(QWidget):
                 )
             elif self._zoom_state == ZoomState.BASE_VIEW and not self._is_small_image:
                 # Base view with large image: zoom in immediately on mouse down
-                center_pos = self._screen_to_image_coords(event.position())
+                center_pos = self._get_zoom_anchor_for_screen_pos(event.position())
                 self._zoom_direction = ZoomDirection.IN
                 self._zoom_to_state(ZoomState.ZOOM_100, center_pos)
                 # Mark that we just zoomed in (so release doesn't zoom back out)
@@ -1182,7 +1214,10 @@ class FullscreenOverlay(QWidget):
                 screen_pos.y(),
             )
             self._zoom_direction = ZoomDirection.OUT
-            self._zoom_to_base_view()
+            self._zoom_to_state(
+                ZoomState.BASE_VIEW,
+                self._get_zoom_anchor_for_screen_pos(screen_pos),
+            )
 
     def mouseMoveEvent(self, event: QMouseEvent):
         """Handle mouse move events to perform panning."""
@@ -1356,23 +1391,17 @@ class FullscreenOverlay(QWidget):
         # Get per-side effective empty space (in screen coordinates)
         effective_space = self._get_effective_empty_space_per_side()
 
-        # Calculate required corrections
-        dx = 0
-        if final_img_rect.width() < view_rect.width():
-            dx = view_rect.center().x() - final_img_rect.center().x()
-        elif final_img_rect.left() > effective_space["left"]:
-            dx = effective_space["left"] - final_img_rect.left()
-        elif final_img_rect.right() < view_rect.width() - effective_space["right"]:
-            dx = view_rect.width() - effective_space["right"] - final_img_rect.right()
-
-        dy = 0
-        if final_img_rect.height() < view_rect.height():
-            dy = view_rect.center().y() - final_img_rect.center().y()
-        elif final_img_rect.top() > effective_space["top"]:
-            dy = effective_space["top"] - final_img_rect.top()
-        elif final_img_rect.bottom() < view_rect.height() - effective_space["bottom"]:
-            bottom_limit = view_rect.height() - effective_space["bottom"]
-            dy = bottom_limit - final_img_rect.bottom()
+        dx, dy = calculate_clamp_correction(
+            img_rect_left=final_img_rect.left(),
+            img_rect_right=final_img_rect.right(),
+            img_rect_top=final_img_rect.top(),
+            img_rect_bottom=final_img_rect.bottom(),
+            img_rect_width=final_img_rect.width(),
+            img_rect_height=final_img_rect.height(),
+            view_width=view_rect.width(),
+            view_height=view_rect.height(),
+            effective_space=effective_space,
+        )
 
         # Apply corrections (convert from screen coords to image coords)
         if dx or dy:
