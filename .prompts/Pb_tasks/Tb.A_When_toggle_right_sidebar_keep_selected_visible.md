@@ -1,0 +1,3 @@
+When toggling right sidebar, it is possible the number of rows change : in this case keep the last selected item visible. If none is selected, keep the first visible item visible (similar to filters set / unset).
+
+In terms of selection : when using Keep Last Selected (Grid) : on top of hwat is done now, also make sure the selected item is visible in the grid (if already visible : do nothing ; it not, scroll the grid to put it in view)

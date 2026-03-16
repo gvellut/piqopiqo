@@ -573,6 +573,12 @@ class PhotoGrid(QWidget):
         """Recreate the grid widgets only if dimensions changed."""
         logger.debug(f"Rebuilding grid: {rows}x{cols}")
 
+        app = QApplication.instance()
+        focus_widget = app.focusWidget() if app is not None else None
+        restore_grid_focus = (
+            focus_widget is not None and self._widget_is_within_scope(focus_widget, self)
+        )
+
         # Clear existing cells
         for cell in self.cells:
             self.grid_layout.removeWidget(cell)
@@ -595,6 +601,9 @@ class PhotoGrid(QWidget):
         rendered_via_scroll = self._recalculate_scrollbar()
         if not rendered_via_scroll:
             self._render_current_view()
+
+        if restore_grid_focus:
+            self.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _calculate_metadata_height(self) -> int:
         """Calculate the height needed for metadata display."""

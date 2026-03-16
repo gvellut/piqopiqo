@@ -1,3 +1,5 @@
+* [Toggle right sidebar works only once](Pb_tasks/Tb_Toggle_right_sidebar_works_only_once.md)
+    *? [When toggle right sidebar keep selected visible](Pb_tasks/Tb.A_When_toggle_right_sidebar_keep_selected_visible.md)
 - [Keyword clean on validate](Pb_tasks/Pb_Keyword_clean_on_validate.md)
 - [Safety if disk with SQLLite cache is unplugged detect and restart](Ta_tasks/Za_Safety_if_disk_with_SQLLite_cache_is_unplugged_.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
