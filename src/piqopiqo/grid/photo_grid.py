@@ -1258,6 +1258,7 @@ class PhotoGrid(QWidget):
             )
             if collapse_shortcut and match_shortcut_sequence(event, collapse_shortcut):
                 self.on_cell_clicked(anchor_index, False, False)
+                self._ensure_visible(anchor_index)
                 event.accept()
                 return
 

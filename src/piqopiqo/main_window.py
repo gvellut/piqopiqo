@@ -1593,10 +1593,61 @@ class MainWindow(QMainWindow):
             self._right_sidebar_restore_size = right_size
             self._right_sidebar_collapsed = False
 
+    def _capture_sidebar_toggle_viewport_restore_context(
+        self,
+    ) -> tuple[int, str | None, int | None]:
+        grid = getattr(self, "grid", None)
+        if grid is None:
+            return (0, None, None)
+
+        previous_rows = int(getattr(grid, "n_rows", 0))
+        visible_paths = list(grid.get_viewport_visible_paths())
+        items_data = getattr(grid, "items_data", [])
+        anchor_index = grid._choose_anchor_from_current_selection()
+        if 0 <= anchor_index < len(items_data):
+            target_path = items_data[anchor_index].path
+            preferred_row = None
+            if (
+                target_path in visible_paths
+                and int(getattr(grid, "n_cols", 0)) > 0
+                and getattr(grid, "scrollbar", None) is not None
+            ):
+                preferred_row = (anchor_index // grid.n_cols) - int(
+                    grid.scrollbar.value()
+                )
+            return (previous_rows, target_path, preferred_row)
+
+        if visible_paths:
+            return (previous_rows, visible_paths[0], 0)
+
+        return (previous_rows, None, None)
+
+    def _restore_grid_viewport_after_sidebar_toggle(
+        self,
+        previous_rows: int,
+        target_path: str | None,
+        preferred_row: int | None,
+    ) -> None:
+        grid = getattr(self, "grid", None)
+        if grid is None or not target_path:
+            return
+        if int(getattr(grid, "n_rows", 0)) == int(previous_rows):
+            return
+        if preferred_row is not None and grid._ensure_path_at_viewport_row(
+            target_path,
+            preferred_row,
+            navigation_activity=False,
+        ):
+            return
+        self._ensure_grid_path_visible(target_path)
+
     def _toggle_right_sidebar_collapsed(self) -> None:
         if self._main_splitter.count() < 2:
             return
 
+        previous_rows, target_path, preferred_row = (
+            MainWindow._capture_sidebar_toggle_viewport_restore_context(self)
+        )
         sizes = self._main_splitter.sizes()
         if len(sizes) < 2:
             return
@@ -1613,6 +1664,9 @@ class MainWindow(QMainWindow):
         if right_size > 0 and not self._right_sidebar_collapsed:
             self._right_sidebar_collapsed = True
             self._main_splitter.setSizes([total, 0])
+            MainWindow._restore_grid_viewport_after_sidebar_toggle(
+                self, previous_rows, target_path, preferred_row
+            )
             return
 
         restore_size = self._right_sidebar_restore_size
@@ -1622,6 +1676,9 @@ class MainWindow(QMainWindow):
 
         self._right_sidebar_collapsed = False
         self._main_splitter.setSizes([max(0, total - restore_size), restore_size])
+        MainWindow._restore_grid_viewport_after_sidebar_toggle(
+            self, previous_rows, target_path, preferred_row
+        )
 
     def _apply_settings_changes(self, changed_keys: set[UserSettingKey]) -> None:
         if not changed_keys:

@@ -76,6 +76,7 @@ class _FakeModelChangedWindow:
         self.photo_model = _FakePhotoModelForModelChange()
         self._next_model_change_fast_first_paint = True
         self._pending_metadata_reselection_context = None
+        self._pending_fullscreen_grid_sync_snapshot = None
         self._last_model_change_grid_ms = None
         self.events: list[str] = []
 
@@ -92,6 +93,7 @@ class _FakeModelChangedWindowReselection:
         self.photo_model = _FakePhotoModelForModelChange(photos)
         self._next_model_change_fast_first_paint = False
         self._pending_metadata_reselection_context = pending_context
+        self._pending_fullscreen_grid_sync_snapshot = None
         self._last_model_change_grid_ms = None
         self.events: list[str] = []
         self.visible_paths: list[str] = []
@@ -149,6 +151,62 @@ class _FakeSidebarCollapseWindow:
         self._main_splitter = _FakeSplitterCollapse(sizes)
         self._right_sidebar_collapsed = False
         self._right_sidebar_restore_size = restore_size
+
+
+class _FakeScrollBar:
+    def __init__(self, value: int):
+        self._value = value
+
+    def value(self) -> int:
+        return self._value
+
+
+class _FakeSidebarToggleGrid:
+    def __init__(
+        self,
+        paths: list[str],
+        *,
+        n_rows: int,
+        n_cols: int,
+        top_row: int,
+        anchor_index: int = -1,
+        ensure_row_result: bool = True,
+    ):
+        self.items_data = [_Item(path) for path in paths]
+        self.n_rows = n_rows
+        self.n_cols = n_cols
+        self.scrollbar = _FakeScrollBar(top_row)
+        self._anchor_index = anchor_index
+        self.ensure_row_result = ensure_row_result
+        self.ensure_row_calls: list[tuple[str, int, bool]] = []
+
+    def get_viewport_visible_paths(self) -> list[str]:
+        start = self.scrollbar.value() * self.n_cols
+        end = min(len(self.items_data), start + (self.n_rows * self.n_cols))
+        return [self.items_data[index].path for index in range(start, end)]
+
+    def _choose_anchor_from_current_selection(self) -> int:
+        return self._anchor_index
+
+    def _ensure_path_at_viewport_row(
+        self,
+        path: str,
+        viewport_row: int,
+        *,
+        navigation_activity: bool = True,
+    ) -> bool:
+        self.ensure_row_calls.append((path, viewport_row, navigation_activity))
+        return self.ensure_row_result
+
+
+class _FakeSidebarToggleViewportWindow:
+    def __init__(self, grid: _FakeSidebarToggleGrid):
+        self.grid = grid
+        self.visible_calls: list[str | None] = []
+
+    def _ensure_grid_path_visible(self, path: str | None) -> bool:
+        self.visible_calls.append(path)
+        return path is not None
 
 
 class _FakeGridFilterRestore:
@@ -478,3 +536,76 @@ def test_toggle_right_sidebar_restores_from_manual_collapsed_state():
 
     assert fake_window._right_sidebar_collapsed is False
     assert fake_window._main_splitter.set_sizes_calls == [[820, 180]]
+
+
+def test_capture_sidebar_toggle_viewport_context_prefers_selected_anchor():
+    fake_window = _FakeSidebarToggleViewportWindow(
+        _FakeSidebarToggleGrid(
+            ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],
+            n_rows=2,
+            n_cols=1,
+            top_row=0,
+            anchor_index=1,
+        )
+    )
+
+    context = MainWindow._capture_sidebar_toggle_viewport_restore_context(fake_window)
+
+    assert context == (2, "/b.jpg", 1)
+
+
+def test_capture_sidebar_toggle_viewport_context_falls_back_to_first_visible():
+    fake_window = _FakeSidebarToggleViewportWindow(
+        _FakeSidebarToggleGrid(
+            ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],
+            n_rows=2,
+            n_cols=1,
+            top_row=2,
+        )
+    )
+
+    context = MainWindow._capture_sidebar_toggle_viewport_restore_context(fake_window)
+
+    assert context == (2, "/c.jpg", 0)
+
+
+def test_restore_grid_viewport_after_sidebar_toggle_uses_preferred_row_first():
+    grid = _FakeSidebarToggleGrid(
+        ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],
+        n_rows=3,
+        n_cols=1,
+        top_row=0,
+        ensure_row_result=True,
+    )
+    fake_window = _FakeSidebarToggleViewportWindow(grid)
+
+    MainWindow._restore_grid_viewport_after_sidebar_toggle(
+        fake_window,
+        2,
+        "/c.jpg",
+        0,
+    )
+
+    assert grid.ensure_row_calls == [("/c.jpg", 0, False)]
+    assert fake_window.visible_calls == []
+
+
+def test_restore_grid_viewport_after_sidebar_toggle_falls_back_to_visibility():
+    grid = _FakeSidebarToggleGrid(
+        ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],
+        n_rows=3,
+        n_cols=1,
+        top_row=0,
+        ensure_row_result=False,
+    )
+    fake_window = _FakeSidebarToggleViewportWindow(grid)
+
+    MainWindow._restore_grid_viewport_after_sidebar_toggle(
+        fake_window,
+        2,
+        "/d.jpg",
+        0,
+    )
+
+    assert grid.ensure_row_calls == [("/d.jpg", 0, False)]
+    assert fake_window.visible_calls == ["/d.jpg"]

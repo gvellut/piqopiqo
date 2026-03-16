@@ -116,6 +116,31 @@ def test_escape_shortcut_collapses_multiselection_to_anchor(qapp):
     assert emitted == [{0}]
 
 
+def test_escape_shortcut_reveals_anchor_when_it_is_offscreen(qapp):
+    init_qsettings_store(dyn=True)
+    set_user_setting(
+        UserSettingKey.SHORTCUTS,
+        {Shortcut.COLLAPSE_TO_LAST_SELECTED: "Esc"},
+    )
+
+    grid = PhotoGrid()
+    grid._rebuild_grid(1, 1)
+    items = [_item(f"/tmp/{index}.jpg") for index in range(6)]
+    grid.set_data(items)
+    grid.on_cell_clicked(0, False, False)
+    grid.on_cell_clicked(5, False, True)
+    grid.scrollbar.setValue(0)
+    qapp.processEvents()
+
+    event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key_Escape, Qt.NoModifier)
+    grid.keyPressEvent(event)
+    qapp.processEvents()
+
+    assert [item.is_selected for item in items] == [False, False, False, False, False, True]
+    assert grid._last_selected_index == 5
+    assert grid.scrollbar.value() == 5
+
+
 def test_escape_shortcut_has_no_effect_with_single_selection(qapp):
     init_qsettings_store(dyn=True)
     set_user_setting(

@@ -183,3 +183,20 @@ def test_toggle_sidebar_shortcut_preserves_panel_focus(window, qapp):
     _press_toggle_shortcut(window, qapp)
     assert window._main_splitter.sizes()[1] > 0
     assert qapp.focusWidget() is window.exif_panel
+
+
+def test_toggle_sidebar_keeps_selected_path_visible_when_rows_change(window, qapp):
+    initial_rows = _configure_window_for_sidebar_rebuild(window, qapp)
+    target_index = 150
+    target_path = window.images_data[target_index].path
+
+    window.grid.on_cell_clicked(target_index, False, False)
+    qapp.processEvents()
+
+    assert target_path not in window.grid.get_viewport_visible_paths()
+
+    window._toggle_right_sidebar_collapsed()
+    qapp.processEvents()
+
+    assert window.grid.n_rows != initial_rows
+    assert target_path in window.grid.get_viewport_visible_paths()
