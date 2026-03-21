@@ -452,6 +452,8 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         default=[],
         **_list_of_strings_params,
     ),
+    # actually a State (not set in settings : but in GUI) but states and settings
+    # are conceptually the same (just states are implicit)
     UserSettingKey.NUM_COLUMNS: SettingDef(default=6, read_type=int),
     UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE: SettingDef(
         default=OnFullscreenExitMultipleSelected.KEEP_SELECTION,
@@ -651,6 +653,8 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     # function)
     RuntimeSettingKey.EXIF_FIELDS: SettingDef(
         default=[
+            ExifField("EXIF:Model"),
+            ExifField("EXIF:LensModel"),
             ExifField("EXIF:FocalLength", format="focal_mm"),
             ExifField(
                 "EXIF:FocalLengthIn35mmFormat",
