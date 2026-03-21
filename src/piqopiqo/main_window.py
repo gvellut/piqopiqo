@@ -1538,7 +1538,7 @@ class MainWindow(QMainWindow):
         self.grid._ensure_visible(index, navigation_activity=False)
         return True
 
-    def _pick_filter_fallback_target(
+    def _pick_grid_viewport_fallback_target(
         self,
         previous_visible_paths: list[str],
         old_photo_list_paths: list[str],
@@ -1582,7 +1582,21 @@ class MainWindow(QMainWindow):
                 best_score = score
         return (best_path, best_row)
 
-    def _pick_filter_restore_target(
+    def _pick_filter_fallback_target(
+        self,
+        previous_visible_paths: list[str],
+        old_photo_list_paths: list[str],
+        new_photo_list_paths: list[str],
+        visible_rows_by_path: dict[str, int],
+    ) -> tuple[str | None, int | None]:
+        return self._pick_grid_viewport_fallback_target(
+            previous_visible_paths,
+            old_photo_list_paths,
+            new_photo_list_paths,
+            visible_rows_by_path,
+        )
+
+    def _pick_grid_viewport_restore_target(
         self,
         snapshot: dict,
         new_photo_list_paths: list[str],
@@ -1599,11 +1613,21 @@ class MainWindow(QMainWindow):
                 if path in new_path_set:
                     return (path, visible_rows_by_path.get(path))
 
-        return self._pick_filter_fallback_target(
+        return self._pick_grid_viewport_fallback_target(
             snapshot.get("visible_paths", []),
             snapshot.get("photo_list_paths", []),
             new_photo_list_paths,
             visible_rows_by_path,
+        )
+
+    def _pick_filter_restore_target(
+        self,
+        snapshot: dict,
+        new_photo_list_paths: list[str],
+    ) -> tuple[str | None, int | None]:
+        return self._pick_grid_viewport_restore_target(
+            snapshot,
+            new_photo_list_paths,
         )
 
     def _restore_grid_viewport_after_sort_change(self, snapshot: dict) -> None:
@@ -1617,9 +1641,9 @@ class MainWindow(QMainWindow):
                 break
         self._ensure_grid_path_visible(target_path)
 
-    def _restore_grid_viewport_after_filter_change(self, snapshot: dict) -> None:
+    def _restore_grid_viewport_from_snapshot(self, snapshot: dict) -> None:
         new_photo_list_paths = [item.path for item in self.images_data]
-        target_path, preferred_row = self._pick_filter_restore_target(
+        target_path, preferred_row = self._pick_grid_viewport_restore_target(
             snapshot,
             new_photo_list_paths,
         )
@@ -1632,6 +1656,9 @@ class MainWindow(QMainWindow):
         ):
             return
         self._ensure_grid_path_visible(target_path)
+
+    def _restore_grid_viewport_after_filter_change(self, snapshot: dict) -> None:
+        self._restore_grid_viewport_from_snapshot(snapshot)
 
     def select_paths_in_grid(
         self,
@@ -1944,10 +1971,15 @@ class MainWindow(QMainWindow):
     def _apply_grid_num_columns(self, value: object, *, persist: bool) -> None:
         min_cols, max_cols = self._get_grid_num_column_bounds()
         columns = self._clamp_grid_num_columns(value)
+        restore_snapshot = None
+        if columns != self.grid.n_cols:
+            restore_snapshot = self._capture_grid_viewport_snapshot()
         self.grid.set_num_columns(columns)
         self.column_selector.set_value(columns, min_cols, max_cols)
         if persist:
             set_user_setting(UserSettingKey.NUM_COLUMNS, columns)
+        if restore_snapshot is not None:
+            self._restore_grid_viewport_from_snapshot(restore_snapshot)
 
     def _on_column_selector_decrement(self) -> None:
         self._apply_grid_num_columns(self.grid.n_cols - 1, persist=True)

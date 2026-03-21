@@ -556,18 +556,7 @@ class PhotoGrid(QWidget):
         cols = self._clamp_num_columns(num_columns)
         if cols == self.n_cols:
             return
-
-        preserve_path = None
-        visible_paths = self.get_viewport_visible_paths()
-        if visible_paths:
-            preserve_path = visible_paths[0]
-
         self._apply_layout_for_geometry(cols)
-
-        if preserve_path is not None:
-            index = self.get_index_for_path(preserve_path)
-            if index is not None:
-                self._ensure_visible(index, navigation_activity=False)
 
     def _rebuild_grid(self, rows, cols):
         """Recreate the grid widgets only if dimensions changed."""
@@ -1246,22 +1235,23 @@ class PhotoGrid(QWidget):
             super().keyPressEvent(event)
             return
 
+        anchor_index = self._choose_anchor_from_current_selection()
+        if anchor_index == -1:
+            anchor_index = selected_indices[-1]
+
+        collapse_shortcut = self._lookup_configured_shortcut(
+            Shortcut.COLLAPSE_TO_LAST_SELECTED
+        )
+        if collapse_shortcut and match_shortcut_sequence(event, collapse_shortcut):
+            if len(selected_indices) > 1:
+                self.on_cell_clicked(anchor_index, False, False)
+            self._ensure_visible(anchor_index)
+            event.accept()
+            return
+
         # Handle navigation
         if len(selected_indices) > 1:
             # Multi-selection: anchor-based actions
-            anchor_index = self._choose_anchor_from_current_selection()
-            if anchor_index == -1:
-                anchor_index = selected_indices[-1]
-
-            collapse_shortcut = self._lookup_configured_shortcut(
-                Shortcut.COLLAPSE_TO_LAST_SELECTED
-            )
-            if collapse_shortcut and match_shortcut_sequence(event, collapse_shortcut):
-                self.on_cell_clicked(anchor_index, False, False)
-                self._ensure_visible(anchor_index)
-                event.accept()
-                return
-
             # Multi-selection: collapse and move
             if key == Qt.Key_Left:
                 new_index = anchor_index - 1

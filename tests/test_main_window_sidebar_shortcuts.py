@@ -144,6 +144,37 @@ def _first_populated_cell(window: MainWindow):
     return next(cell for cell in window.grid.cells if cell.current_data is not None)
 
 
+def _viewport_row_for_path(window: MainWindow, path: str) -> int:
+    index = window.grid.get_index_for_path(path)
+    assert index is not None
+    return (index // window.grid.n_cols) - window.grid.scrollbar.value()
+
+
+def _place_selected_path_on_viewport_row(
+    window: MainWindow,
+    qapp: QApplication,
+    target_index: int,
+    viewport_row: int,
+) -> str:
+    assert window.grid.n_rows > viewport_row
+
+    target_path = window.images_data[target_index].path
+    window.grid.on_cell_clicked(target_index, False, False)
+    qapp.processEvents()
+
+    target_data_row = target_index // window.grid.n_cols
+    top_row = max(
+        0,
+        min(target_data_row - viewport_row, window.grid.scrollbar.maximum()),
+    )
+    window.grid.scrollbar.setValue(top_row)
+    qapp.processEvents()
+
+    assert target_path in window.grid.get_viewport_visible_paths()
+    assert _viewport_row_for_path(window, target_path) == viewport_row
+    return target_path
+
+
 def test_toggle_sidebar_shortcut_repeats_from_grid_after_rebuild(window, qapp):
     initial_rows = _configure_window_for_sidebar_rebuild(window, qapp)
     cell = _first_populated_cell(window)
@@ -200,3 +231,30 @@ def test_toggle_sidebar_keeps_selected_path_visible_when_rows_change(window, qap
 
     assert window.grid.n_rows != initial_rows
     assert target_path in window.grid.get_viewport_visible_paths()
+
+
+@pytest.mark.parametrize(
+    ("button_attr", "expected_delta"),
+    [("increment_button", 1), ("decrement_button", -1)],
+)
+def test_column_selector_keeps_visible_selected_anchor_on_same_row(
+    window,
+    qapp,
+    button_attr,
+    expected_delta,
+):
+    viewport_row = 1
+    target_path = _place_selected_path_on_viewport_row(
+        window,
+        qapp,
+        target_index=72,
+        viewport_row=viewport_row,
+    )
+    initial_cols = window.grid.n_cols
+
+    getattr(window.column_selector, button_attr).click()
+    qapp.processEvents()
+
+    assert window.grid.n_cols == initial_cols + expected_delta
+    assert target_path in window.grid.get_viewport_visible_paths()
+    assert _viewport_row_for_path(window, target_path) == viewport_row

@@ -141,7 +141,7 @@ def test_escape_shortcut_reveals_anchor_when_it_is_offscreen(qapp):
     assert grid.scrollbar.value() == 5
 
 
-def test_escape_shortcut_has_no_effect_with_single_selection(qapp):
+def test_escape_shortcut_keeps_scroll_position_when_anchor_is_already_visible(qapp):
     init_qsettings_store(dyn=True)
     set_user_setting(
         UserSettingKey.SHORTCUTS,
@@ -149,19 +149,63 @@ def test_escape_shortcut_has_no_effect_with_single_selection(qapp):
     )
 
     grid = PhotoGrid()
-    items = [_item("/tmp/a.jpg"), _item("/tmp/b.jpg"), _item("/tmp/c.jpg")]
+    grid._rebuild_grid(1, 1)
+    items = [_item(f"/tmp/{index}.jpg") for index in range(6)]
     grid.set_data(items)
-    grid.on_cell_clicked(1, False, False)
+    grid.on_cell_clicked(0, False, False)
+    grid.on_cell_clicked(5, False, True)
+    grid.scrollbar.setValue(5)
+    qapp.processEvents()
+
+    event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key_Escape, Qt.NoModifier)
+    grid.keyPressEvent(event)
+    qapp.processEvents()
+
+    assert [item.is_selected for item in items] == [
+        False,
+        False,
+        False,
+        False,
+        False,
+        True,
+    ]
+    assert grid._last_selected_index == 5
+    assert grid.scrollbar.value() == 5
+
+
+def test_escape_shortcut_reveals_single_selected_item_when_it_is_offscreen(qapp):
+    init_qsettings_store(dyn=True)
+    set_user_setting(
+        UserSettingKey.SHORTCUTS,
+        {Shortcut.COLLAPSE_TO_LAST_SELECTED: "Esc"},
+    )
+
+    grid = PhotoGrid()
+    grid._rebuild_grid(1, 1)
+    items = [_item(f"/tmp/{index}.jpg") for index in range(6)]
+    grid.set_data(items)
+    grid.on_cell_clicked(5, False, False)
+    grid.scrollbar.setValue(0)
+    qapp.processEvents()
 
     emitted: list[set[int]] = []
     grid.selection_changed.connect(lambda indices: emitted.append(set(indices)))
 
     event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key_Escape, Qt.NoModifier)
     grid.keyPressEvent(event)
+    qapp.processEvents()
 
-    assert [item.is_selected for item in items] == [False, True, False]
-    assert grid._last_selected_index == 1
-    assert grid._last_selected_path == "/tmp/b.jpg"
+    assert [item.is_selected for item in items] == [
+        False,
+        False,
+        False,
+        False,
+        False,
+        True,
+    ]
+    assert grid._last_selected_index == 5
+    assert grid._last_selected_path == "/tmp/5.jpg"
+    assert grid.scrollbar.value() == 5
     assert emitted == []
 
 

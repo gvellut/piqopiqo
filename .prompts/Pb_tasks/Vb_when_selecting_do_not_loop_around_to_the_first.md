@@ -1,0 +1,1 @@
+When getting back from fullscreen and all the selected items in the loop (or the last visible one if only one selected) are no longer in the filter : when choosing the next : for selection : if it is the last item in the list of photos : do not go to the first item in the list of photos. Instead, go to the last in the photo list.

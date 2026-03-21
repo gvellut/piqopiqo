@@ -231,6 +231,21 @@ class _FakeFilterRestoreWindow:
         self.grid = _FakeGridFilterRestore(ensure_result=ensure_result)
         self.visible_calls: list[str | None] = []
 
+    def _pick_grid_viewport_fallback_target(
+        self,
+        previous_visible_paths: list[str],
+        old_photo_list_paths: list[str],
+        new_photo_list_paths: list[str],
+        visible_rows_by_path: dict[str, int],
+    ) -> tuple[str | None, int | None]:
+        return MainWindow._pick_grid_viewport_fallback_target(
+            self,
+            previous_visible_paths,
+            old_photo_list_paths,
+            new_photo_list_paths,
+            visible_rows_by_path,
+        )
+
     def _pick_filter_fallback_target(
         self,
         previous_visible_paths: list[str],
@@ -244,6 +259,17 @@ class _FakeFilterRestoreWindow:
             old_photo_list_paths,
             new_photo_list_paths,
             visible_rows_by_path,
+        )
+
+    def _pick_grid_viewport_restore_target(
+        self,
+        snapshot: dict,
+        new_photo_list_paths: list[str],
+    ) -> tuple[str | None, int | None]:
+        return MainWindow._pick_grid_viewport_restore_target(
+            self,
+            snapshot,
+            new_photo_list_paths,
         )
 
     def _pick_filter_restore_target(
@@ -328,7 +354,7 @@ def test_ensure_grid_path_visible_returns_false_for_missing_path():
     assert fake_window.grid.calls == []
 
 
-def test_filter_restore_prefers_visible_anchor_and_keeps_row():
+def test_grid_viewport_restore_prefers_visible_anchor_and_keeps_row():
     fake_window = _FakeFilterRestoreWindow(["/a.jpg", "/b.jpg", "/c.jpg"])
     snapshot = {
         "photo_list_paths": ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],
@@ -338,13 +364,13 @@ def test_filter_restore_prefers_visible_anchor_and_keeps_row():
         "visible_anchor_path": "/c.jpg",
     }
 
-    MainWindow._restore_grid_viewport_after_filter_change(fake_window, snapshot)
+    MainWindow._restore_grid_viewport_from_snapshot(fake_window, snapshot)
 
     assert fake_window.grid.calls == [("/c.jpg", 1, False)]
     assert fake_window.visible_calls == []
 
 
-def test_filter_restore_falls_back_to_first_visible_selected_when_anchor_not_visible():
+def test_grid_viewport_restore_falls_back_to_first_visible_selected_when_anchor_not_visible():
     fake_window = _FakeFilterRestoreWindow(["/a.jpg", "/b.jpg", "/c.jpg"])
     snapshot = {
         "photo_list_paths": ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],
@@ -354,13 +380,13 @@ def test_filter_restore_falls_back_to_first_visible_selected_when_anchor_not_vis
         "visible_anchor_path": None,
     }
 
-    MainWindow._restore_grid_viewport_after_filter_change(fake_window, snapshot)
+    MainWindow._restore_grid_viewport_from_snapshot(fake_window, snapshot)
 
     assert fake_window.grid.calls == [("/b.jpg", 0, False)]
     assert fake_window.visible_calls == []
 
 
-def test_filter_restore_falls_back_to_first_visible_path_when_no_visible_selection_survives():
+def test_grid_viewport_restore_falls_back_to_first_visible_path_when_no_visible_selection_survives():
     fake_window = _FakeFilterRestoreWindow(["/a.jpg", "/c.jpg"])
     snapshot = {
         "photo_list_paths": ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],
@@ -370,13 +396,13 @@ def test_filter_restore_falls_back_to_first_visible_path_when_no_visible_selecti
         "visible_anchor_path": None,
     }
 
-    MainWindow._restore_grid_viewport_after_filter_change(fake_window, snapshot)
+    MainWindow._restore_grid_viewport_from_snapshot(fake_window, snapshot)
 
     assert fake_window.grid.calls == [("/c.jpg", 1, False)]
     assert fake_window.visible_calls == []
 
 
-def test_filter_restore_uses_row_aware_fallback_when_no_visible_path_survives():
+def test_grid_viewport_restore_uses_row_aware_fallback_when_no_visible_path_survives():
     fake_window = _FakeFilterRestoreWindow(["/a.jpg", "/g.jpg"])
     snapshot = {
         "photo_list_paths": [
@@ -394,13 +420,13 @@ def test_filter_restore_uses_row_aware_fallback_when_no_visible_path_survives():
         "visible_anchor_path": None,
     }
 
-    MainWindow._restore_grid_viewport_after_filter_change(fake_window, snapshot)
+    MainWindow._restore_grid_viewport_from_snapshot(fake_window, snapshot)
 
     assert fake_window.grid.calls == [("/g.jpg", 2, False)]
     assert fake_window.visible_calls == []
 
 
-def test_filter_restore_falls_back_to_visibility_when_row_restore_fails():
+def test_grid_viewport_restore_falls_back_to_visibility_when_row_restore_fails():
     fake_window = _FakeFilterRestoreWindow(["/a.jpg", "/b.jpg"], ensure_result=False)
     snapshot = {
         "photo_list_paths": ["/a.jpg", "/b.jpg"],
@@ -410,7 +436,7 @@ def test_filter_restore_falls_back_to_visibility_when_row_restore_fails():
         "visible_anchor_path": "/b.jpg",
     }
 
-    MainWindow._restore_grid_viewport_after_filter_change(fake_window, snapshot)
+    MainWindow._restore_grid_viewport_from_snapshot(fake_window, snapshot)
 
     assert fake_window.grid.calls == [("/b.jpg", 0, False)]
     assert fake_window.visible_calls == ["/b.jpg"]
