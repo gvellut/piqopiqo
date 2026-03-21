@@ -1,4 +1,4 @@
-- [when selecting do not loop around to the first](Pb_tasks/Vb_when_selecting_do_not_loop_around_to_the_first.md)
+- [Undo Label filtered int](Pb_tasks/Wb_Undo_Label_filtered_int.md)
 - [Keyword clean on validate](Pb_tasks/Pb_Keyword_clean_on_validate.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
 - [Prescaled down image in fullscreen (Claude made a mess of it; redo)](Ja_tasks/Qa_Prescaled_down_image_in_fullscreen.md)
@@ -92,3 +92,4 @@
     !? [When toggle right sidebar keep selected visible](Pb_tasks/Tb.A_When_toggle_right_sidebar_keep_selected_visible.md)
 ! [Safety if disk with SQLLite cache is unplugged detect and restart](Ta_tasks/Za_Safety_if_disk_with_SQLLite_cache_is_unplugged_.md)
 ! [When changing the columns keep selected visible](Pb_tasks/Ub_When_changing_the_columns_keep_selected_visible.md)
+! [when selecting do not loop around to the first](Pb_tasks/Vb_when_selecting_do_not_loop_around_to_the_first.md)

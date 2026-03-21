@@ -103,6 +103,7 @@ class FullscreenOverlay(QWidget):
     """A fullscreen overlay widget for displaying an image at full resolution."""
 
     # Signal to notify when the current index changes
+    about_to_close = Signal()
     index_changed = Signal(int)
     label_shortcut_requested = Signal(object)  # str | None
     eject_from_loop_requested = Signal()
@@ -782,6 +783,7 @@ class FullscreenOverlay(QWidget):
 
     def closeEvent(self, event):
         """Handle window closing."""
+        self.about_to_close.emit()
         self._pan_cursor_timer.stop()
         self._zoom_overlay_controller.shutdown()
         self._pixmap = None  # Free full-resolution image memory immediately
