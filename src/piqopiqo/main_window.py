@@ -433,6 +433,8 @@ class MainWindow(QMainWindow):
             label_name,
             record_undo=True,
             sync_source="apply_label_shortcut_grid",
+            label_undo_origin="grid",
+            label_undo_anchor_path=self._get_grid_label_undo_anchor_path(),
         )
 
     def _on_filter_label_shortcut_requested(self, label_name: str | None) -> None:
@@ -476,9 +478,68 @@ class MainWindow(QMainWindow):
         self._apply_label_to_items(
             [item],
             label_name,
-            record_undo=False,
+            record_undo=True,
             sync_source="apply_label_shortcut_fullscreen",
+            label_undo_origin="fullscreen",
+            label_undo_anchor_path=current_path,
         )
+
+    def _get_grid_label_undo_anchor_path(self) -> str | None:
+        anchor_index = self.grid._choose_anchor_from_current_selection()
+        if 0 <= anchor_index < len(self.images_data):
+            anchor_item = self.images_data[anchor_index]
+            if anchor_item.is_selected:
+                return anchor_item.path
+
+        selected_items = self._get_selected_items()
+        if not selected_items:
+            return None
+        return selected_items[-1].path
+
+    def _should_create_new_label_undo_entry(
+        self,
+        items: list[ImageItem],
+        *,
+        origin: str,
+    ) -> bool:
+        if self._selection_changed_since_edit:
+            return True
+
+        entry = self._label_undo_entry
+        if entry is None:
+            return True
+        if entry.origin != origin:
+            return True
+
+        current_paths = {item.path for item in items}
+        entry_paths = {item.path for item in entry.items}
+        return current_paths != entry_paths
+
+    def _record_label_undo_entry(
+        self,
+        items: list[ImageItem],
+        previous_labels: dict[str, str | None],
+        label_name: str | None,
+        *,
+        origin: str,
+        anchor_path: str | None,
+    ) -> None:
+        if self._should_create_new_label_undo_entry(items, origin=origin):
+            self._label_undo_entry = LabelUndoEntry(
+                items=list(items),
+                previous_labels=dict(previous_labels),
+                new_labels={item.path: label_name for item in items},
+                anchor_path=anchor_path,
+                origin=origin,
+            )
+            self._selection_changed_since_edit = False
+            return
+
+        if self._label_undo_entry is None:
+            return
+        self._label_undo_entry.new_labels = {
+            item.path: label_name for item in items
+        }
 
     def _apply_label_to_items(
         self,
@@ -487,6 +548,8 @@ class MainWindow(QMainWindow):
         *,
         record_undo: bool,
         sync_source: str,
+        label_undo_origin: str | None = None,
+        label_undo_anchor_path: str | None = None,
     ) -> None:
         """Apply a label to the given items and sync model/grid/fullscreen state."""
         if not selected_items:
@@ -504,24 +567,16 @@ class MainWindow(QMainWindow):
             previous_labels[item.path] = item.db_metadata.get(DBFields.LABEL)
 
         if record_undo:
-            # Create undo entry if selection changed since last edit
-            if self._selection_changed_since_edit:
-                self._label_undo_entry = LabelUndoEntry(
-                    items=list(selected_items),
-                    previous_labels=previous_labels,
-                    new_labels={item.path: label_name for item in selected_items},
-                )
-                self._selection_changed_since_edit = False
-            else:
-                if self._label_undo_entry is not None:
-                    self._label_undo_entry.new_labels = {
-                        item.path: label_name for item in selected_items
-                    }
-
+            self._record_label_undo_entry(
+                selected_items,
+                previous_labels,
+                label_name,
+                origin=label_undo_origin or "grid",
+                anchor_path=label_undo_anchor_path,
+            )
             self._label_undo_is_redo = False
             self._undo_label_action.setText("Undo label")
-            if self._fullscreen_overlay is None:
-                self._undo_label_action.setEnabled(True)
+            self._refresh_undo_label_action_enabled_for_context()
 
         # Apply the label changes
         for item in selected_items:
@@ -633,8 +688,9 @@ class MainWindow(QMainWindow):
             return
 
         entry = self._label_undo_entry
+        is_redo = self._label_undo_is_redo
 
-        if self._label_undo_is_redo:
+        if is_redo:
             # Redo: apply the new labels
             labels_to_apply = entry.new_labels
             self._undo_label_action.setText("Undo label")
@@ -695,6 +751,27 @@ class MainWindow(QMainWindow):
             {DBFields.LABEL},
             source="undo_redo_label",
             allow_fullscreen_filter=True,
+        )
+        if not is_redo:
+            self._restore_visible_items_after_label_undo(entry)
+
+    def _restore_visible_items_after_label_undo(
+        self,
+        entry: LabelUndoEntry,
+    ) -> None:
+        visible_paths = []
+        current_paths = {item.path for item in self.images_data}
+        for item in entry.items:
+            if item.path in current_paths:
+                visible_paths.append(item.path)
+
+        if not visible_paths:
+            return
+
+        self.select_paths_in_grid(
+            visible_paths,
+            anchor_path=entry.anchor_path,
+            reveal_path=entry.anchor_path,
         )
 
     def _on_edit_finished(self):
@@ -2610,7 +2687,13 @@ class MainWindow(QMainWindow):
 
     def _reconcile_selection_and_panels(self) -> None:
         selected_items = self.photo_model.get_selected_photos()
-        self._selection_changed_since_edit = True
+        selected_paths = {item.path for item in selected_items}
+        if (
+            not hasattr(self, "_selection_changed_since_edit")
+            or len(selected_items) != self._selected_count_cache
+            or selected_paths != self._selected_paths_cache
+        ):
+            self._selection_changed_since_edit = True
         self._set_selected_cache_from_items(selected_items)
         self._update_status_bar_count()
         self._apply_or_defer_panel_refresh(selected_items=selected_items)

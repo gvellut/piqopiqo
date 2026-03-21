@@ -94,8 +94,12 @@ class LabelUndoEntry:
         items: List of ImageItem references that were modified.
         previous_labels: Dict mapping item path to label value before the edit.
         new_labels: Dict mapping item path to label value after the edit.
+        anchor_path: Anchor/reveal path used when undo restores filtered items.
+        origin: Source of the edit ("grid" or "fullscreen").
     """
 
     items: list[ImageItem]
     previous_labels: dict[str, str | None]
     new_labels: dict[str, str | None]
+    anchor_path: str | None
+    origin: str

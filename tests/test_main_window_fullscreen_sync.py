@@ -210,6 +210,18 @@ class _FakeStatusBar:
         return
 
 
+class _FakeAction:
+    def __init__(self) -> None:
+        self.text = "Undo label"
+        self.enabled = False
+
+    def setText(self, text: str) -> None:
+        self.text = text
+
+    def setEnabled(self, enabled: bool) -> None:
+        self.enabled = enabled
+
+
 class _FakeFullscreenGridHandoffState:
     def __init__(self) -> None:
         self.selection_paths: list[str] = []
@@ -477,9 +489,43 @@ class _FullscreenLabelApplyWindow(_FullscreenSelectionWindow):
         self.db_manager = _FakeWindowDbManager()
         self.status_bar = _FakeStatusBar()
         self.edit_panel = None
+        self._undo_label_action = _FakeAction()
+        self._label_undo_entry = None
+        self._label_undo_is_redo = False
+        self._selection_changed_since_edit = True
 
     def _ensure_db_metadata_ready(self, _items: list[ImageItem]) -> bool:
         return True
+
+    def _should_create_new_label_undo_entry(
+        self,
+        items: list[ImageItem],
+        *,
+        origin: str,
+    ) -> bool:
+        return MainWindow._should_create_new_label_undo_entry(
+            self,
+            items,
+            origin=origin,
+        )
+
+    def _record_label_undo_entry(
+        self,
+        items: list[ImageItem],
+        previous_labels: dict[str, str | None],
+        label_name: str | None,
+        *,
+        origin: str,
+        anchor_path: str | None,
+    ) -> None:
+        MainWindow._record_label_undo_entry(
+            self,
+            items,
+            previous_labels,
+            label_name,
+            origin=origin,
+            anchor_path=anchor_path,
+        )
 
     def _apply_label_to_items(
         self,
@@ -488,6 +534,8 @@ class _FullscreenLabelApplyWindow(_FullscreenSelectionWindow):
         *,
         record_undo: bool,
         sync_source: str,
+        label_undo_origin: str | None = None,
+        label_undo_anchor_path: str | None = None,
     ) -> None:
         MainWindow._apply_label_to_items(
             self,
@@ -495,6 +543,8 @@ class _FullscreenLabelApplyWindow(_FullscreenSelectionWindow):
             label_name,
             record_undo=record_undo,
             sync_source=sync_source,
+            label_undo_origin=label_undo_origin,
+            label_undo_anchor_path=label_undo_anchor_path,
         )
 
     def _apply_label_to_fullscreen_current(self, label_name: str | None) -> None:
