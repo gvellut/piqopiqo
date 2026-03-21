@@ -102,11 +102,6 @@ SETTINGS_TABS: list[TabSpec] = [
                             ),
                         ],
                     ),
-                    FieldSpec(
-                        key=UserSettingKey.FILTER_IN_FULLSCREEN,
-                        label="Filter in fullscreen",
-                        editor=EditorKind.BOOL,
-                    ),
                 ],
             ),
             GroupSpec(
@@ -183,6 +178,11 @@ SETTINGS_TABS: list[TabSpec] = [
                         key=UserSettingKey.STATUS_LABELS,
                         label="",
                         editor=EditorKind.STATUS_LABELS,
+                    ),
+                    FieldSpec(
+                        key=UserSettingKey.FILTER_IN_FULLSCREEN,
+                        label="Filter in fullscreen",
+                        editor=EditorKind.BOOL,
                     ),
                 ],
             ),

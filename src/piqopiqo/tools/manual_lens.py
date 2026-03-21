@@ -149,8 +149,23 @@ def _build_clear_confirmation_text(image_count: int) -> str:
 def _save_manual_lens_for_item(
     window: MainWindow, *, file_path: str, metadata: dict
 ) -> None:
-    db = window.db_manager.get_db_for_image(file_path)
-    worker = MetadataSaveWorker(db, file_path, metadata.copy())
+    submit_background_save = getattr(window, "_submit_background_metadata_save", None)
+    if callable(submit_background_save):
+        submit_background_save(
+            file_path=file_path,
+            data=metadata,
+            changed_fields=set(DBFields.MANUAL_LENS_FIELDS),
+            source="manual_lens",
+        )
+        return
+
+    worker = MetadataSaveWorker(
+        window.db_manager,
+        file_path,
+        metadata.copy(),
+        changed_fields=set(DBFields.MANUAL_LENS_FIELDS),
+        source="manual_lens",
+    )
     window._background_db_save_pool.start(worker)
 
 

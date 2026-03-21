@@ -10,6 +10,7 @@ from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import QDialog, QMessageBox
 
 from piqopiqo.metadata.db_fields import DBFields
+from piqopiqo.metadata.metadata_db import MetadataDBUnavailableError
 from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
     StateKey,
@@ -70,38 +71,54 @@ def persist_folder_time_shift(
     window: MainWindow,
     folder_path: str,
     time_shift: str | None,
-) -> None:
+) -> bool:
     shift = normalize_time_shift(time_shift)
     db_folder = window.db_manager.get_db_for_folder(folder_path)
-    db_folder.set_folder_value(FOLDER_STATE_LAST_TIME_SHIFT, shift)
+    try:
+        db_folder.set_folder_value(FOLDER_STATE_LAST_TIME_SHIFT, shift)
+    except MetadataDBUnavailableError:
+        handle_interrupted = getattr(window, "_handle_interrupted_db_action", None)
+        if callable(handle_interrupted):
+            handle_interrupted(action_name="Apply GPX")
+        return False
     if shift is None:
-        return
+        return True
 
     relative_folder = to_relative_folder(
         window.root_folder or folder_path,
         folder_path,
     )
     _remember_time_shift(relative_folder=relative_folder, time_shift=shift)
+    return True
 
 
 def _persist_apply_gpx_time_shifts(
     window: MainWindow,
     folder_time_shifts: dict[str, str],
-) -> None:
+) -> bool:
     for folder_path, time_shift in folder_time_shifts.items():
-        persist_folder_time_shift(window, folder_path, time_shift)
+        if not persist_folder_time_shift(window, folder_path, time_shift):
+            return False
+    return True
 
 
 def _set_gpx_path_for_folders(
     window: MainWindow,
     source_folders: list[str],
     gpx_path: str | None,
-) -> None:
+) -> bool:
     value = str(gpx_path).strip() if gpx_path is not None else ""
     to_store = value if value else None
     for folder in source_folders:
         db = window.db_manager.get_db_for_folder(folder)
-        db.set_folder_value(FOLDER_STATE_LAST_GPX_PATH, to_store)
+        try:
+            db.set_folder_value(FOLDER_STATE_LAST_GPX_PATH, to_store)
+        except MetadataDBUnavailableError:
+            handle_interrupted = getattr(window, "_handle_interrupted_db_action", None)
+            if callable(handle_interrupted):
+                handle_interrupted(action_name="Apply GPX")
+            return False
+    return True
 
 
 def _get_first_folder_gpx_path(window: MainWindow, source_folders: list[str]) -> str:
@@ -269,8 +286,10 @@ def launch_apply_gpx(window: MainWindow) -> None:
         return
 
     gpx_path, mode, folder_time_shifts = input_dialog.get_values()
-    _persist_apply_gpx_time_shifts(window, folder_time_shifts)
-    _set_gpx_path_for_folders(window, source_folders, gpx_path)
+    if not _persist_apply_gpx_time_shifts(window, folder_time_shifts):
+        return
+    if not _set_gpx_path_for_folders(window, source_folders, gpx_path):
+        return
     update_db = mode == ApplyGpxMode.UPDATE_DB
 
     folder_to_files: dict[str, list[str]] = {}
@@ -366,7 +385,13 @@ def launch_clear_gps(window: MainWindow) -> None:
         updated_metadata = metadata.copy()
         updated_metadata[DBFields.LATITUDE] = None
         updated_metadata[DBFields.LONGITUDE] = None
-        db.save_metadata(item.path, updated_metadata)
+        try:
+            db.save_metadata(item.path, updated_metadata)
+        except MetadataDBUnavailableError:
+            handle_interrupted = getattr(window, "_handle_interrupted_db_action", None)
+            if callable(handle_interrupted):
+                handle_interrupted(action_name="Clear GPS")
+            break
 
         item.db_metadata = updated_metadata.copy()
         updated_count += 1
@@ -376,5 +401,5 @@ def launch_clear_gps(window: MainWindow) -> None:
 
     window.sync_model_after_metadata_update(
         {DBFields.LATITUDE, DBFields.LONGITUDE},
-        source="clear_gps",
+        source="clear_gpx",
     )

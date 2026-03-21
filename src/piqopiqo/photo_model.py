@@ -16,6 +16,8 @@ from .model import FilterCriteria, ImageItem
 if TYPE_CHECKING:
     from .metadata.metadata_db import MetadataDBManager
 
+from .metadata.metadata_db import MetadataDBUnavailableError
+
 logger = logging.getLogger(__name__)
 
 
@@ -172,7 +174,10 @@ class PhotoListModel(QObject):
         """Clean up DB and cache data for a removed photo."""
         # Delete from metadata DB
         db = self._db_manager.get_db_for_folder(source_folder)
-        db.delete_metadata(file_path)
+        try:
+            db.delete_metadata(file_path)
+        except MetadataDBUnavailableError:
+            logger.warning("Skipping metadata cleanup while DB recovery is active")
 
         # Delete thumbnail cache files
         from .cache_paths import (

@@ -25,6 +25,7 @@ from piqopiqo.cache_paths import get_flickr_cache_dir, get_flickr_token_file_pat
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
+from piqopiqo.metadata.metadata_db import MetadataDBUnavailableError
 from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
     UserSettingKey,
@@ -703,12 +704,19 @@ def _set_album_for_folders(
     parent: MainWindow,
     source_folders: list[str],
     album_id: str | None,
-) -> None:
+) -> bool:
     value = str(album_id).strip() if album_id is not None else ""
     to_store = value if value else None
     for folder in source_folders:
         db = parent.db_manager.get_db_for_folder(folder)
-        db.set_folder_value(FOLDER_STATE_LAST_FLICKR_ALBUM_ID, to_store)
+        try:
+            db.set_folder_value(FOLDER_STATE_LAST_FLICKR_ALBUM_ID, to_store)
+        except MetadataDBUnavailableError:
+            handle_interrupted = getattr(parent, "_handle_interrupted_db_action", None)
+            if callable(handle_interrupted):
+                handle_interrupted(action_name="Upload to Flickr")
+            return False
+    return True
 
 
 def _get_first_folder_album_id(parent: MainWindow, source_folders: list[str]) -> str:

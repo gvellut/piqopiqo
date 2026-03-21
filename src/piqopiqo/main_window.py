@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 import logging
 import os
+import subprocess
 import time
 
 from attrs import define
@@ -23,7 +24,11 @@ from PySide6.QtWidgets import (
 )
 
 from .background.media_man import FolderPrimingResult, MediaManager
-from .cache_paths import get_folder_cache_id, set_cache_base_dir
+from .cache_paths import (
+    clear_metadata_cache_for_folders,
+    get_folder_cache_id,
+    set_cache_base_dir,
+)
 from .color_management import refresh_main_screen_color_space_cache_macos
 from .components.column_number_selector import ColumnNumberSelector
 from .components.status_bar import LoadingStatusBar
@@ -38,7 +43,11 @@ from .folder_watcher import FolderWatcher
 from .fullscreen import FullscreenOverlay
 from .grid.photo_grid import PhotoGrid
 from .metadata.db_fields import DBFields
-from .metadata.metadata_db import MetadataDBManager
+from .metadata.metadata_db import (
+    MetadataDBFault,
+    MetadataDBManager,
+    MetadataDBUnavailableError,
+)
 from .metadata.save_workers import MetadataSaveWorker, drain_qthread_pool
 from .model import (
     FilterCriteria,
@@ -61,6 +70,7 @@ from .ssf.settings_state import (
     get_state,
     get_user_setting,
     set_user_setting,
+    sync_qsettings_store,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,6 +84,14 @@ class _DeferredTimeTakenLoadResortState:
     pending_paths: set[str]
     processed_since_last_resort: int
     batch_size: int
+
+
+@define
+class _PendingMetadataSaveReplay:
+    file_path: str
+    data: dict
+    changed_fields: set[str]
+    source: str
 
 
 class _WorkspaceCleanupWorkerSignals(QObject):
@@ -116,7 +134,13 @@ class _WorkspaceCleanupWorker(QRunnable):
 class MainWindow(QMainWindow):
     """Main application window."""
 
-    def __init__(self, images, source_folders, root_folder):
+    def __init__(
+        self,
+        images,
+        source_folders,
+        root_folder,
+        launch_command: list[str] | None = None,
+    ):
         super().__init__()
         self.setWindowTitle(APP_NAME)
         refresh_main_screen_color_space_cache_macos()
@@ -169,9 +193,19 @@ class MainWindow(QMainWindow):
         self._workspace_cleanup_running = False
         self._workspace_cleanup_context: dict | None = None
         self._workspace_cleanup_worker: _WorkspaceCleanupWorker | None = None
+        self._launch_command = list(launch_command or [])
+        self._db_recovery_active = False
+        self._db_recovery_affected_folders: set[str] = set()
+        self._db_recovery_pending_metadata_saves: dict[str, _PendingMetadataSaveReplay] = {}
+        self._db_recovery_pending_redo_messages: list[str] = []
+        self._db_recovery_rebuild_attempted = False
+        self._db_recovery_probe_timer = QTimer(self)
+        self._db_recovery_probe_timer.setSingleShot(True)
+        self._db_recovery_probe_timer.timeout.connect(self._probe_db_recovery)
 
         # Create metadata database manager
         self.db_manager = MetadataDBManager()
+        self.db_manager.signals.fault_reported.connect(self._on_db_fault_reported)
         self._workspace_cleanup_pool = QThreadPool(self)
         self._workspace_cleanup_pool.setMaxThreadCount(1)
 
@@ -486,9 +520,23 @@ class MainWindow(QMainWindow):
             item.db_metadata[DBFields.LABEL] = label_name
 
             # Save to DB in background
-            db = self.db_manager.get_db_for_image(item.path)
-            worker = MetadataSaveWorker(db, item.path, item.db_metadata.copy())
-            self._background_db_save_pool.start(worker)
+            submit_background_save = getattr(
+                self,
+                "_submit_background_metadata_save",
+                None,
+            )
+            if callable(submit_background_save):
+                submit_background_save(
+                    file_path=item.path,
+                    data=item.db_metadata.copy(),
+                    changed_fields={DBFields.LABEL},
+                    source=sync_source,
+                )
+            else:
+                db = self.db_manager.get_db_for_image(item.path)
+                self._background_db_save_pool.start(
+                    MetadataSaveWorker(db, item.path, item.db_metadata.copy())
+                )
 
             # Refresh grid cell immediately
             self.grid.refresh_item(item._global_index)
@@ -542,9 +590,23 @@ class MainWindow(QMainWindow):
             item._pixmap_source = None
 
             # Save to DB in background
-            db = self.db_manager.get_db_for_image(item.path)
-            worker = MetadataSaveWorker(db, item.path, item.db_metadata.copy())
-            self._background_db_save_pool.start(worker)
+            submit_background_save = getattr(
+                self,
+                "_submit_background_metadata_save",
+                None,
+            )
+            if callable(submit_background_save):
+                submit_background_save(
+                    file_path=item.path,
+                    data=item.db_metadata.copy(),
+                    changed_fields={DBFields.ORIENTATION},
+                    source="rotate_image",
+                )
+            else:
+                db = self.db_manager.get_db_for_image(item.path)
+                self._background_db_save_pool.start(
+                    MetadataSaveWorker(db, item.path, item.db_metadata.copy())
+                )
 
             # Refresh grid cell immediately
             self.grid.refresh_item(item._global_index)
@@ -589,9 +651,23 @@ class MainWindow(QMainWindow):
                 item.db_metadata[DBFields.LABEL] = label_value
 
                 # Save to DB in background
-                db = self.db_manager.get_db_for_image(item.path)
-                worker = MetadataSaveWorker(db, item.path, item.db_metadata.copy())
-                self._background_db_save_pool.start(worker)
+                submit_background_save = getattr(
+                    self,
+                    "_submit_background_metadata_save",
+                    None,
+                )
+                if callable(submit_background_save):
+                    submit_background_save(
+                        file_path=item.path,
+                        data=item.db_metadata.copy(),
+                        changed_fields={DBFields.LABEL},
+                        source="undo_redo_label",
+                    )
+                else:
+                    db = self.db_manager.get_db_for_image(item.path)
+                    self._background_db_save_pool.start(
+                        MetadataSaveWorker(db, item.path, item.db_metadata.copy())
+                    )
 
                 # Refresh grid cell immediately
                 self.grid.refresh_item(item._global_index)
@@ -1129,6 +1205,303 @@ class MainWindow(QMainWindow):
 
     def _ensure_db_metadata_ready(self, items: list[ImageItem]) -> bool:
         return self.db_manager.ensure_items_metadata_ready(items)
+
+    @staticmethod
+    def _metadata_recovery_refresh_fields() -> set[str]:
+        return {
+            DBFields.TITLE,
+            DBFields.DESCRIPTION,
+            DBFields.KEYWORDS,
+            DBFields.TIME_TAKEN,
+            DBFields.LABEL,
+            DBFields.LATITUDE,
+            DBFields.LONGITUDE,
+            DBFields.ORIENTATION,
+            *DBFields.MANUAL_LENS_FIELDS,
+        }
+
+    def _persist_window_state(self) -> None:
+        state = get_state()
+        state.set(StateKey.WINDOW_GEOMETRY, self.saveGeometry())
+        state.set(StateKey.WINDOW_STATE, self.saveState())
+        state.set(StateKey.MAIN_SPLITTER, self._main_splitter.saveState())
+        if self._right_splitter:
+            state.set(StateKey.RIGHT_SPLITTER, self._right_splitter.saveState())
+
+    def _submit_background_metadata_save(
+        self,
+        *,
+        file_path: str,
+        data: dict,
+        changed_fields: set[str],
+        source: str,
+        safe_to_replay: bool = True,
+    ) -> None:
+        worker = MetadataSaveWorker(
+            self.db_manager,
+            file_path,
+            data.copy(),
+            changed_fields=changed_fields,
+            source=source,
+            safe_to_replay=safe_to_replay,
+        )
+        worker.signals.failed.connect(self._on_metadata_save_worker_failure)
+        self._background_db_save_pool.start(worker)
+
+    def _queue_replayable_metadata_save(
+        self,
+        *,
+        file_path: str,
+        data: dict,
+        changed_fields: set[str],
+        source: str,
+    ) -> None:
+        existing = self._db_recovery_pending_metadata_saves.get(file_path)
+        merged_changed_fields = {str(field) for field in changed_fields if field}
+        if existing is not None:
+            merged_changed_fields.update(existing.changed_fields)
+        self._db_recovery_pending_metadata_saves[file_path] = _PendingMetadataSaveReplay(
+            file_path=file_path,
+            data=data.copy(),
+            changed_fields=merged_changed_fields,
+            source=str(source),
+        )
+
+    def _record_db_redo_warning(self, message: str) -> None:
+        text = str(message).strip()
+        if not text:
+            return
+        if text in self._db_recovery_pending_redo_messages:
+            return
+        self._db_recovery_pending_redo_messages.append(text)
+
+    def _on_metadata_save_worker_failure(self, payload: object) -> None:
+        if not isinstance(payload, dict):
+            return
+
+        fault = payload.get("fault")
+        file_path = str(payload.get("file_path") or "")
+        data = payload.get("data")
+        changed_fields = {
+            str(field) for field in (payload.get("changed_fields") or set()) if field
+        }
+        source = str(payload.get("source") or "metadata_save")
+        safe_to_replay = bool(payload.get("safe_to_replay"))
+        error_message = str(payload.get("error_message") or "").strip()
+        if (
+            safe_to_replay
+            and isinstance(fault, MetadataDBFault)
+            and fault.is_transient
+            and file_path
+            and isinstance(data, dict)
+        ):
+            self._queue_replayable_metadata_save(
+                file_path=file_path,
+                data=data,
+                changed_fields=changed_fields or set(data.keys()),
+                source=source,
+            )
+            return
+
+        if error_message:
+            self._record_db_redo_warning(
+                f"An in-progress metadata save could not be finished ({source}). "
+                "Please redo that action after recovery."
+            )
+
+    def _on_db_fault_reported(self, fault: object) -> None:
+        if self._shutdown_started or not isinstance(fault, MetadataDBFault):
+            return
+
+        self._db_recovery_affected_folders.add(fault.folder_path)
+        if not self._db_recovery_active:
+            self._db_recovery_active = True
+            self._db_recovery_rebuild_attempted = False
+            self.media_manager.pause_processing()
+            self.status_bar.showMessage("Reconnecting metadata cache...", 0)
+        self._schedule_db_recovery_probe(immediate=fault.path_available)
+
+    def _schedule_db_recovery_probe(self, *, immediate: bool = False) -> None:
+        if not self._db_recovery_active:
+            return
+        interval_ms = 0 if immediate else 1000
+        if self._db_recovery_probe_timer.isActive():
+            self._db_recovery_probe_timer.stop()
+        self._db_recovery_probe_timer.start(interval_ms)
+
+    def _replay_pending_metadata_saves(self) -> tuple[bool, set[str]]:
+        changed_fields: set[str] = set()
+        for file_path, pending in list(self._db_recovery_pending_metadata_saves.items()):
+            try:
+                db = self.db_manager.get_db_for_image(file_path)
+                db.save_metadata(file_path, pending.data)
+            except MetadataDBUnavailableError as exc:
+                if exc.fault.is_transient:
+                    return False, changed_fields
+                self._record_db_redo_warning(
+                    "Some metadata changes could not be replayed automatically. "
+                    "Please redo those actions after recovery."
+                )
+                return False, changed_fields
+            except Exception:
+                logger.exception(
+                    "Unexpected failure while replaying metadata save for %s",
+                    file_path,
+                )
+                self._record_db_redo_warning(
+                    "Some metadata changes could not be replayed automatically. "
+                    "Please redo those actions after recovery."
+                )
+                return False, changed_fields
+
+            changed_fields.update(pending.changed_fields)
+            self._db_recovery_pending_metadata_saves.pop(file_path, None)
+        return True, changed_fields
+
+    def _refresh_workspace_after_db_recovery(
+        self,
+        *,
+        clear_metadata_folders: list[str] | None = None,
+        changed_fields: set[str] | None = None,
+    ) -> None:
+        if clear_metadata_folders:
+            clear_metadata_cache_for_folders(list(clear_metadata_folders))
+
+        self.db_manager.close_all()
+        self.status_bar.reset()
+        self._invalidate_workspace_items_for_reload()
+        self.media_manager.pause_processing()
+        priming = self.media_manager.reset_for_folder(
+            [item.path for item in self.photo_model.all_photos],
+            list(self.photo_model.source_folders),
+        )
+        self._apply_cached_editable_metadata_for_items(self._items_by_path, priming)
+        if self._last_visible_paths:
+            self.media_manager.update_visible(self._last_visible_paths)
+        self.media_manager.resume_processing()
+        self.grid.on_scroll(self.grid.scrollbar.value())
+
+        fields = (
+            {str(field) for field in changed_fields if field}
+            if changed_fields
+            else self._metadata_recovery_refresh_fields()
+        )
+        self.sync_model_after_metadata_update(
+            fields,
+            source="db_recovery",
+        )
+
+    def _show_pending_db_redo_warning(self) -> None:
+        if not self._db_recovery_pending_redo_messages:
+            return
+
+        text = "\n\n".join(self._db_recovery_pending_redo_messages)
+        self._db_recovery_pending_redo_messages.clear()
+        QMessageBox.warning(
+            self,
+            "Metadata Cache Recovery",
+            text,
+        )
+
+    def _finish_db_recovery(
+        self,
+        *,
+        rebuilt_folders: list[str] | None = None,
+    ) -> None:
+        self._db_recovery_active = False
+        self._db_recovery_affected_folders.clear()
+        if self._db_recovery_probe_timer.isActive():
+            self._db_recovery_probe_timer.stop()
+        self.status_bar.clearMessage()
+        self.status_bar.set_has_errors(self.media_manager.has_errors())
+
+        if rebuilt_folders:
+            self._record_db_redo_warning(
+                "The metadata cache had to be rebuilt for one or more folders. "
+                "Cache-only metadata changes may need to be redone."
+            )
+        self._show_pending_db_redo_warning()
+
+    def _relaunch_after_db_recovery_failure(self, message: str) -> None:
+        QMessageBox.critical(
+            self,
+            "Metadata Cache Recovery",
+            message,
+        )
+        self._persist_window_state()
+        sync_qsettings_store()
+        self.shutdown_for_quit()
+
+        if self._launch_command:
+            try:
+                subprocess.Popen(self._launch_command, close_fds=True)
+            except Exception:
+                logger.exception("Failed to relaunch application")
+
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
+
+    def _probe_db_recovery(self) -> None:
+        if not self._db_recovery_active:
+            return
+
+        rebuild_folders: set[str] = set()
+        for folder_path in sorted(self._db_recovery_affected_folders):
+            allow_create = any(
+                os.path.dirname(file_path) == folder_path
+                for file_path in self._db_recovery_pending_metadata_saves
+            )
+            healthy, fault = self.db_manager.probe_folder_health(
+                folder_path,
+                allow_create=allow_create,
+            )
+            if healthy:
+                continue
+            if fault is None or fault.is_transient:
+                self._schedule_db_recovery_probe(immediate=False)
+                return
+            rebuild_folders.add(folder_path)
+
+        if rebuild_folders:
+            try:
+                self._db_recovery_pending_metadata_saves.clear()
+                self._refresh_workspace_after_db_recovery(
+                    clear_metadata_folders=sorted(rebuild_folders),
+                    changed_fields=self._metadata_recovery_refresh_fields(),
+                )
+            except Exception as exc:
+                logger.exception("Failed to rebuild metadata cache after DB fault")
+                self._relaunch_after_db_recovery_failure(
+                    "The metadata cache could not be recovered automatically.\n\n"
+                    f"{exc}\n\nThe application will relaunch."
+                )
+                return
+            self._finish_db_recovery(rebuilt_folders=sorted(rebuild_folders))
+            return
+
+        replay_completed, changed_fields = self._replay_pending_metadata_saves()
+        if not replay_completed:
+            self._schedule_db_recovery_probe(immediate=False)
+            return
+
+        try:
+            self._refresh_workspace_after_db_recovery(changed_fields=changed_fields)
+        except Exception as exc:
+            logger.exception("Failed to refresh workspace after DB recovery")
+            self._relaunch_after_db_recovery_failure(
+                "The metadata cache recovered, but the workspace could not be "
+                f"reloaded safely.\n\n{exc}\n\nThe application will relaunch."
+            )
+            return
+
+        self._finish_db_recovery()
+
+    def _handle_interrupted_db_action(self, *, action_name: str) -> None:
+        self._record_db_redo_warning(
+            f"{action_name} was interrupted while the metadata cache was unavailable. "
+            "Please reconnect the cache disk and redo that action after recovery."
+        )
 
     def _capture_grid_viewport_snapshot(self) -> dict:
         visible_paths = self.grid.get_viewport_visible_paths()
@@ -2626,14 +2999,7 @@ class MainWindow(QMainWindow):
         self._load_folder(self.root_folder)
 
     def closeEvent(self, event):
-        # Save window and splitter state
-        state = get_state()
-        state.set(StateKey.WINDOW_GEOMETRY, self.saveGeometry())
-        state.set(StateKey.WINDOW_STATE, self.saveState())
-        state.set(StateKey.MAIN_SPLITTER, self._main_splitter.saveState())
-        if self._right_splitter:
-            state.set(StateKey.RIGHT_SPLITTER, self._right_splitter.saveState())
-
+        self._persist_window_state()
         super().closeEvent(event)
 
     def shutdown_for_quit(self) -> None:
@@ -2641,6 +3007,7 @@ class MainWindow(QMainWindow):
         if self._shutdown_started:
             return
         self._shutdown_started = True
+        self._persist_window_state()
 
         timeout_s = float(get_runtime_setting(RuntimeSettingKey.SHUTDOWN_TIMEOUT_S))
         timeout_ms = int(max(0.0, timeout_s) * 1000)
@@ -2682,3 +3049,4 @@ class MainWindow(QMainWindow):
             self.media_manager.stop(timeout_s=timeout_s)
         if hasattr(self, "db_manager"):
             self.db_manager.close_all()
+        sync_qsettings_store()

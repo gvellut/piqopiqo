@@ -1,6 +1,6 @@
 Disk where cache + SQLLite DB for folders was disconnected : error in writing / reading. Then error in reading. 
 
-=> Detect and reload DB + redo DB write : no need to show warning dialog if no data loss (just connection to SQLLite was lost : reconnect to the .db file). If data loss (ie the user has to redo its action : show warning)
+=> Detect and reload DB + redo DB write : no need to show warning dialog if no data loss (just connection to SQLLite was lost : reconnect to the .db file). If data loss but reoverable (ie the user has to redo its action but there is no loss of coherence) : show warning)
 Or if not recoverable : show warning and relaunch the application. Make sure to clean everything and sync the qSettings like when quitting (done currentky ?)
 
 Detection whent it happens ? checkfiles test on the disk where the DB is located. Or detection when readf / write is attempted

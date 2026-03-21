@@ -18,7 +18,7 @@ from attrs import define
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from piqopiqo.cache_paths import ensure_thumb_dir
-from piqopiqo.metadata.metadata_db import MetadataDBManager
+from piqopiqo.metadata.metadata_db import MetadataDBManager, MetadataDBUnavailableError
 from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
     UserSettingKey,
@@ -945,6 +945,8 @@ class MediaManager(QObject):
                         self.exif_progress_updated.emit(
                             self._exif_completed, self._exif_total
                         )
+                except MetadataDBUnavailableError:
+                    editable_success = False
                 except Exception as e:
                     self._exif_errors[file_path] = str(e)
                     editable_success = False
@@ -958,6 +960,8 @@ class MediaManager(QObject):
                 try:
                     db.save_exif_fields(file_path, panel_fields)
                     self.panel_fields_ready.emit(file_path, panel_fields)
+                except MetadataDBUnavailableError:
+                    pass
                 except Exception as e:
                     self._exif_errors[file_path] = str(e)
 

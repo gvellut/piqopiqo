@@ -15,6 +15,7 @@ from piqopiqo.external_apps import (
     open_in_external_app_macos,
     reveal_in_file_manager_macos,
 )
+from piqopiqo.metadata.metadata_db import MetadataDBUnavailableError
 from piqopiqo.model import ImageItem
 from piqopiqo.ssf.settings_state import UserSettingKey, get_user_setting
 
@@ -77,7 +78,19 @@ def _duplicate_photos_with_metadata(
 
             copied_metadata = dict(photo.db_metadata)
             db = window.db_manager.get_db_for_image(new_path)
-            db.save_metadata(new_path, copied_metadata)
+            try:
+                db.save_metadata(new_path, copied_metadata)
+            except MetadataDBUnavailableError:
+                queue_replay = getattr(window, "_queue_replayable_metadata_save", None)
+                if callable(queue_replay):
+                    queue_replay(
+                        file_path=new_path,
+                        data=copied_metadata,
+                        changed_fields=set(copied_metadata.keys()),
+                        source="duplicate_photo",
+                    )
+                else:
+                    raise
 
             new_item = ImageItem(
                 path=new_path,

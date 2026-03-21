@@ -450,9 +450,27 @@ class EditPanel(QWidget):
         # Update the specific field
         data[field_name] = value
 
-        # Save to database in background (avoid GUI thread)
-        worker = MetadataSaveWorker(db, item.path, data)
-        self._db_writer_pool.start(worker)
+        submit_background_save = getattr(
+            self.window(),
+            "_submit_background_metadata_save",
+            None,
+        )
+        if callable(submit_background_save):
+            submit_background_save(
+                file_path=item.path,
+                data=data,
+                changed_fields={field_name},
+                source="edit_panel",
+            )
+        else:
+            worker = MetadataSaveWorker(
+                self.db_manager,
+                item.path,
+                data,
+                changed_fields={field_name},
+                source="edit_panel",
+            )
+            self._db_writer_pool.start(worker)
 
         # Update item's cached db_metadata
         item.db_metadata = data

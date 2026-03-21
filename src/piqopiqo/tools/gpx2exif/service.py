@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from attrs import define, field
 
 from piqopiqo.metadata.db_fields import DBFields
+from piqopiqo.metadata.metadata_db import MetadataDBUnavailableError
 
 from .constants import DEFAULT_GPX_TOLERANCE_SECONDS, FOLDER_STATE_LAST_TIME_SHIFT
 from .gpx_processing import (
@@ -269,7 +270,14 @@ def apply_gpx_to_folders(
                     updated_metadata[DBFields.LATITUDE] = lat
                     updated_metadata[DBFields.LONGITUDE] = lon
 
-                db.save_metadata(file_path, updated_metadata)
+                try:
+                    db.save_metadata(file_path, updated_metadata)
+                except MetadataDBUnavailableError as exc:
+                    raise RuntimeError(
+                        "Apply GPX was interrupted because the metadata cache "
+                        "became unavailable. Reconnect the cache disk, wait for "
+                        "recovery, then rerun Apply GPX."
+                    ) from exc
                 folder_updated_paths.add(file_path)
 
             if position is not None:
@@ -286,7 +294,14 @@ def apply_gpx_to_folders(
                 for file_path in sorted(folder_updated_paths):
                     previous = snapshot.get(file_path)
                     if previous is not None:
-                        db.save_metadata(file_path, previous)
+                        try:
+                            db.save_metadata(file_path, previous)
+                        except MetadataDBUnavailableError as exc:
+                            raise RuntimeError(
+                                "Apply GPX rollback failed because the metadata "
+                                "cache became unavailable. Reconnect the cache "
+                                "disk and rerun Apply GPX."
+                            ) from exc
                 folder_result.rolled_back = True
             break
 

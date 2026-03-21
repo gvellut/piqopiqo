@@ -150,7 +150,12 @@ def cli(folder, dyn):
     icon_path = resource_path("app.icns")
     app.setWindowIcon(QIcon(icon_path))
 
-    window = MainWindow(images, source_folders, folder)
+    window = MainWindow(
+        images,
+        source_folders,
+        folder,
+        launch_command=[sys.executable, *sys.argv],
+    )
     app.aboutToQuit.connect(window.shutdown_for_quit)
 
     initial_resolution = get_runtime_setting(RuntimeSettingKey.INITIAL_RESOLUTION)

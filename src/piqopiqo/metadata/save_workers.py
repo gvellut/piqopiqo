@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import QRunnable, QThreadPool
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
+
+from .metadata_db import MetadataDBUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -28,21 +30,62 @@ class MetadataSaveWorker(QRunnable):
     This unified worker replaces both _LabelSaveWorker and DBSaveWorker.
     """
 
-    def __init__(self, db, file_path: str, data: dict):
+    class Signals(QObject):
+        finished = Signal(str)
+        failed = Signal(object)
+
+    def __init__(
+        self,
+        db_manager,
+        file_path: str,
+        data: dict,
+        *,
+        changed_fields: set[str] | None = None,
+        source: str = "metadata_save",
+        safe_to_replay: bool = True,
+    ):
         """Initialize the worker.
 
         Args:
-            db: The database instance to save to.
+            db_manager: The database manager used to resolve a fresh DB instance.
             file_path: Path to the file being saved.
             data: Metadata dictionary to save.
         """
         super().__init__()
-        self.db = db
+        self.db_manager = db_manager
         self.file_path = file_path
         self.data = data
+        self.changed_fields = {str(field) for field in changed_fields or set() if field}
+        self.source = str(source)
+        self.safe_to_replay = bool(safe_to_replay)
+        self.signals = self.Signals()
 
     def run(self):
         try:
-            self.db.save_metadata(self.file_path, self.data)
+            db = self.db_manager.get_db_for_image(self.file_path)
+            db.save_metadata(self.file_path, self.data)
+            self.signals.finished.emit(self.file_path)
+        except MetadataDBUnavailableError as exc:
+            self.signals.failed.emit(
+                {
+                    "file_path": self.file_path,
+                    "data": self.data.copy(),
+                    "changed_fields": set(self.changed_fields),
+                    "fault": exc.fault,
+                    "safe_to_replay": self.safe_to_replay,
+                    "source": self.source,
+                }
+            )
         except Exception as e:
             logger.error(f"Failed to save metadata for {self.file_path}: {e}")
+            self.signals.failed.emit(
+                {
+                    "file_path": self.file_path,
+                    "data": self.data.copy(),
+                    "changed_fields": set(self.changed_fields),
+                    "fault": None,
+                    "safe_to_replay": False,
+                    "source": self.source,
+                    "error_message": str(e),
+                }
+            )
