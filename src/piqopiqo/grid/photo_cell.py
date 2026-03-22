@@ -104,28 +104,31 @@ class PhotoCell(QFrame):
             # Unpack Layout Info (computed in parent resizeEvent)
             pad = self.layout_info.get("pad", 5)
             meta_h = self.layout_info.get("meta_h", 20)
+            use_full_image_rect = bool(self.layout_info.get("use_full_image_rect"))
 
             # Image Rect
             img_rect = rect.adjusted(pad, pad, -pad, -(pad + meta_h))
-            square_size = max(0, min(img_rect.width(), img_rect.height()))
-            square_rect = QRect(0, 0, square_size, square_size)
-            square_rect.moveCenter(img_rect.center())
+            image_rect = img_rect
+            if not use_full_image_rect:
+                square_size = max(0, min(img_rect.width(), img_rect.height()))
+                image_rect = QRect(0, 0, square_size, square_size)
+                image_rect.moveCenter(img_rect.center())
 
             if state == 0:
-                painter.fillRect(square_rect, QColor("black"))
+                painter.fillRect(image_rect, QColor("black"))
             else:
                 if pixmap:
                     # Orientation is already applied in item.pixmap by the grid.
-                    # Always scale to fit a centered square area (up or down)
-                    # while preserving aspect ratio, then keep centered.
-                    if square_rect.width() > 0 and square_rect.height() > 0:
+                    # Scale to fit the active image area while preserving aspect
+                    # ratio, then keep the pixmap centered inside that area.
+                    if image_rect.width() > 0 and image_rect.height() > 0:
                         scaled = pixmap.scaled(
-                            square_rect.size(),
+                            image_rect.size(),
                             Qt.KeepAspectRatio,
                             Qt.SmoothTransformation,
                         )
                         pixmap_rect = scaled.rect()
-                        pixmap_rect.moveCenter(square_rect.center())
+                        pixmap_rect.moveCenter(image_rect.center())
                         painter.drawPixmap(pixmap_rect, scaled)
 
             # Draw label swatch (top-right corner of image area)
@@ -137,8 +140,8 @@ class PhotoCell(QFrame):
                         swatch_size = 16
                         swatch_margin = 4
                         swatch_rect = QRect(
-                            square_rect.right() - swatch_size - swatch_margin,
-                            square_rect.top() + swatch_margin,
+                            image_rect.right() - swatch_size - swatch_margin,
+                            image_rect.top() + swatch_margin,
                             swatch_size,
                             swatch_size,
                         )

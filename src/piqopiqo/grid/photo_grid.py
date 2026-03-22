@@ -83,6 +83,8 @@ class PhotoGrid(QWidget):
         self._last_selected_index = -1
         self._last_selected_path: str | None = None
         self.layout_info = {}
+        self._use_collapsed_sidebar_wide_layout = False
+        self._collapsed_sidebar_fixed_rows: int | None = None
 
         # Main Layout: Grid Container + Scrollbar
         self.main_layout = QHBoxLayout(self)
@@ -537,6 +539,25 @@ class PhotoGrid(QWidget):
             return
         self._apply_layout_for_geometry(cols)
 
+    def set_sidebar_collapsed_layout(
+        self, collapsed: bool, *, fixed_rows: int | None = None
+    ) -> None:
+        use_collapsed_layout = bool(collapsed)
+        normalized_rows: int | None = None
+        if use_collapsed_layout:
+            requested_rows = self.n_rows if fixed_rows is None else fixed_rows
+            normalized_rows = max(1, int(requested_rows))
+
+        if (
+            self._use_collapsed_sidebar_wide_layout == use_collapsed_layout
+            and self._collapsed_sidebar_fixed_rows == normalized_rows
+        ):
+            return
+
+        self._use_collapsed_sidebar_wide_layout = use_collapsed_layout
+        self._collapsed_sidebar_fixed_rows = normalized_rows
+        self._apply_layout_for_geometry(self.n_cols)
+
     def _rebuild_grid(self, rows, cols):
         """Recreate the grid widgets only if dimensions changed."""
         logger.debug(f"Rebuilding grid: {rows}x{cols}")
@@ -609,18 +630,27 @@ class PhotoGrid(QWidget):
         img_box_side = avail_w / cols
 
         meta_h = self._calculate_metadata_height()
-        row_base_h = max(1.0, float(pad + img_box_side + meta_h + pad))
-
-        visible_rows = max(1, int(panel_h / row_base_h))
-        used_h = visible_rows * row_base_h
-        remaining = panel_h - used_h
-        extra_per_row = remaining / visible_rows if visible_rows > 0 else 0.0
+        if (
+            self._use_collapsed_sidebar_wide_layout
+            and self._collapsed_sidebar_fixed_rows is not None
+        ):
+            visible_rows = max(1, int(self._collapsed_sidebar_fixed_rows))
+            row_total_h = max(1.0, float(panel_h) / float(visible_rows))
+            img_rect_h = max(1.0, row_total_h - float(meta_h) - (2.0 * float(pad)))
+        else:
+            row_base_h = max(1.0, float(pad + img_box_side + meta_h + pad))
+            visible_rows = max(1, int(panel_h / row_base_h))
+            used_h = visible_rows * row_base_h
+            remaining = panel_h - used_h
+            extra_per_row = remaining / visible_rows if visible_rows > 0 else 0.0
+            img_rect_h = img_box_side + extra_per_row
 
         layout_info = {
             "img_rect_w": img_box_side,
-            "img_rect_h": img_box_side + extra_per_row,
+            "img_rect_h": img_rect_h,
             "meta_h": meta_h,
             "pad": pad,
+            "use_full_image_rect": self._use_collapsed_sidebar_wide_layout,
         }
         return layout_info, visible_rows
 

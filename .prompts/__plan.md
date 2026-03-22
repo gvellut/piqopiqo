@@ -4,7 +4,6 @@
 - [Prescaled down image in fullscreen (Claude made a mess of it; redo)](Ja_tasks/Qa_Prescaled_down_image_in_fullscreen.md)
     ~ [Correction](Ja_tasks/Qa.A_Correction.md)
 - [GPKG export on top of KML](Db_tasks/Gb_GPKG_export_on_top_of_KML.md)
-- [Hide right column does not change number of rows](Yb_tasks/Bc_Hide_right_column_does_not_change_number_of_rows.md)
 - [Flickr max workers diff for upload and set date public](Yb_tasks/Cc_Flickr_max_workers_diff_for_upload_and_set_date_.md)
 ! [Fix date read delay if since:last](A_tasks/A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](A_tasks/B_Eject_SD_after_user_OK.md)
@@ -101,3 +100,4 @@
 ! [Grid fullscreen sync](Yb_tasks/Ac_Grid_fullscreen_sync.md)
 ! [Undo label issue](Yb_tasks/Dc_Undo_label_issue.md)
 ! [Flick upload arrange dialog](Yb_tasks/Ec_Flick_upload_arrange_dialog.md)
+! [Hide right column does not change number of rows](Yb_tasks/Bc_Hide_right_column_does_not_change_number_of_rows.md)

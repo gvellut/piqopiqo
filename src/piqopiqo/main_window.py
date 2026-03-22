@@ -2125,8 +2125,6 @@ class MainWindow(QMainWindow):
         grid = getattr(self, "grid", None)
         if grid is None or not target_path:
             return
-        if int(getattr(grid, "n_rows", 0)) == int(previous_rows):
-            return
         if preferred_row is not None and grid._ensure_path_at_viewport_row(
             target_path,
             preferred_row,
@@ -2139,12 +2137,21 @@ class MainWindow(QMainWindow):
         if self._main_splitter.count() < 2:
             return
 
+        grid = getattr(self, "grid", None)
         previous_rows, target_path, preferred_row = (
             MainWindow._capture_sidebar_toggle_viewport_restore_context(self)
         )
         sizes = self._main_splitter.sizes()
         if len(sizes) < 2:
             return
+
+        app = QApplication.instance()
+        focus_widget = app.focusWidget() if app is not None else None
+        restore_grid_focus = (
+            grid is not None
+            and focus_widget is not None
+            and (focus_widget is grid or grid.isAncestorOf(focus_widget))
+        )
 
         grid_size = max(0, int(sizes[0]))
         right_size = max(0, int(sizes[1]))
@@ -2156,11 +2163,15 @@ class MainWindow(QMainWindow):
             self._right_sidebar_restore_size = right_size
 
         if right_size > 0 and not self._right_sidebar_collapsed:
+            if grid is not None:
+                grid.set_sidebar_collapsed_layout(True, fixed_rows=previous_rows)
             self._right_sidebar_collapsed = True
             self._main_splitter.setSizes([total, 0])
             MainWindow._restore_grid_viewport_after_sidebar_toggle(
                 self, previous_rows, target_path, preferred_row
             )
+            if restore_grid_focus:
+                grid.setFocus(Qt.FocusReason.OtherFocusReason)
             return
 
         restore_size = self._right_sidebar_restore_size
@@ -2170,9 +2181,13 @@ class MainWindow(QMainWindow):
 
         self._right_sidebar_collapsed = False
         self._main_splitter.setSizes([max(0, total - restore_size), restore_size])
+        if grid is not None:
+            grid.set_sidebar_collapsed_layout(False)
         MainWindow._restore_grid_viewport_after_sidebar_toggle(
             self, previous_rows, target_path, preferred_row
         )
+        if restore_grid_focus and grid is not None:
+            grid.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _apply_settings_changes(self, changed_keys: set[UserSettingKey]) -> None:
         if not changed_keys:

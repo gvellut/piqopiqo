@@ -121,25 +121,6 @@ def _press_toggle_shortcut(window: MainWindow, qapp: QApplication) -> None:
     qapp.processEvents()
 
 
-def _configure_window_for_sidebar_rebuild(window: MainWindow, qapp: QApplication) -> int:
-    for height in range(520, 1101, 20):
-        window.resize(900, height)
-        qapp.processEvents()
-        initial_rows = window.grid.n_rows
-
-        window._toggle_right_sidebar_collapsed()
-        qapp.processEvents()
-        collapsed_rows = window.grid.n_rows
-
-        window._toggle_right_sidebar_collapsed()
-        qapp.processEvents()
-
-        if initial_rows != collapsed_rows:
-            return initial_rows
-
-    raise AssertionError("Could not find a window size that rebuilds grid rows")
-
-
 def _first_populated_cell(window: MainWindow):
     return next(cell for cell in window.grid.cells if cell.current_data is not None)
 
@@ -175,8 +156,8 @@ def _place_selected_path_on_viewport_row(
     return target_path
 
 
-def test_toggle_sidebar_shortcut_repeats_from_grid_after_rebuild(window, qapp):
-    initial_rows = _configure_window_for_sidebar_rebuild(window, qapp)
+def test_toggle_sidebar_shortcut_repeats_from_grid_after_toggle(window, qapp):
+    initial_rows = window.grid.n_rows
     cell = _first_populated_cell(window)
 
     QTest.mouseClick(cell, Qt.LeftButton)
@@ -188,7 +169,7 @@ def test_toggle_sidebar_shortcut_repeats_from_grid_after_rebuild(window, qapp):
 
     collapsed_sizes = window._main_splitter.sizes()
     assert collapsed_sizes[1] == 0
-    assert window.grid.n_rows != initial_rows
+    assert window.grid.n_rows == initial_rows
     assert qapp.focusWidget() is window.grid
 
     _press_toggle_shortcut(window, qapp)
@@ -216,8 +197,8 @@ def test_toggle_sidebar_shortcut_preserves_panel_focus(window, qapp):
     assert qapp.focusWidget() is window.exif_panel
 
 
-def test_toggle_sidebar_keeps_selected_path_visible_when_rows_change(window, qapp):
-    initial_rows = _configure_window_for_sidebar_rebuild(window, qapp)
+def test_toggle_sidebar_keeps_selected_path_visible(window, qapp):
+    initial_rows = window.grid.n_rows
     target_index = 150
     target_path = window.images_data[target_index].path
 
@@ -229,8 +210,44 @@ def test_toggle_sidebar_keeps_selected_path_visible_when_rows_change(window, qap
     window._toggle_right_sidebar_collapsed()
     qapp.processEvents()
 
-    assert window.grid.n_rows != initial_rows
+    assert window.grid.n_rows == initial_rows
     assert target_path in window.grid.get_viewport_visible_paths()
+
+
+def test_toggle_sidebar_keeps_row_count_and_cell_height_but_expands_width(window, qapp):
+    initial_rows = window.grid.n_rows
+    initial_cell = _first_populated_cell(window)
+    initial_width = initial_cell.width()
+    initial_height = initial_cell.height()
+
+    window._toggle_right_sidebar_collapsed()
+    qapp.processEvents()
+
+    collapsed_cell = _first_populated_cell(window)
+
+    assert window.grid.n_rows == initial_rows
+    assert collapsed_cell.width() > initial_width
+    assert collapsed_cell.height() == initial_height
+
+
+def test_collapsed_sidebar_resize_keeps_fixed_row_count(window, qapp):
+    initial_rows = window.grid.n_rows
+
+    window._toggle_right_sidebar_collapsed()
+    qapp.processEvents()
+
+    collapsed_rows = window.grid.n_rows
+    collapsed_cell_height = _first_populated_cell(window).height()
+
+    assert collapsed_rows == initial_rows
+
+    window.resize(900, 900)
+    qapp.processEvents()
+
+    resized_cell_height = _first_populated_cell(window).height()
+
+    assert window.grid.n_rows == collapsed_rows
+    assert resized_cell_height > collapsed_cell_height
 
 
 @pytest.mark.parametrize(
