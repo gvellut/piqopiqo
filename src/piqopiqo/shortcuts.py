@@ -155,6 +155,23 @@ def build_filter_label_shortcut_bindings(
     )
 
 
+def lookup_shortcut(
+    shortcuts_mapping: Mapping[Shortcut | str, str] | None,
+    shortcut_key: Shortcut,
+) -> str | None:
+    if not shortcuts_mapping:
+        return None
+
+    for candidate in (shortcut_key, shortcut_key.name):
+        value = shortcuts_mapping.get(candidate)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return None
+
+
 def _build_indexed_label_shortcut_bindings(
     shortcuts: Mapping[Shortcut | str, str] | None,
     status_labels: Iterable[StatusLabel] | Iterable[object] | None,
@@ -173,7 +190,7 @@ def _build_indexed_label_shortcut_bindings(
     bindings: list[tuple[str, str | None]] = []
     for index in range(1, 10):
         shortcut_enum = Shortcut[f"{key_prefix}{index}"]
-        shortcut_str = _lookup_shortcut(shortcuts_mapping, shortcut_enum)
+        shortcut_str = lookup_shortcut(shortcuts_mapping, shortcut_enum)
         if not shortcut_str:
             continue
         label_name = labels_by_index.get(index)
@@ -181,25 +198,11 @@ def _build_indexed_label_shortcut_bindings(
             continue
         bindings.append((shortcut_str, label_name))
 
-    label_none_shortcut = _lookup_shortcut(shortcuts_mapping, key_none)
+    label_none_shortcut = lookup_shortcut(shortcuts_mapping, key_none)
     if label_none_shortcut:
         bindings.append((label_none_shortcut, None))
 
     return bindings
-
-
-def _lookup_shortcut(
-    shortcuts_mapping: Mapping[Shortcut | str, str],
-    shortcut_key: Shortcut,
-) -> str | None:
-    for candidate in (shortcut_key, shortcut_key.name):
-        value = shortcuts_mapping.get(candidate)
-        if value is None:
-            continue
-        text = str(value).strip()
-        if text:
-            return text
-    return None
 
 
 def parse_shortcut(shortcut_str: str) -> QKeySequence:

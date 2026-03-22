@@ -1,3 +1,4 @@
+* [Label upload for flickr](Pb_tasks/Xb_Label_upload_for_flickr.md)
 - [Keyword clean on validate](Pb_tasks/Pb_Keyword_clean_on_validate.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
 - [Prescaled down image in fullscreen (Claude made a mess of it; redo)](Ja_tasks/Qa_Prescaled_down_image_in_fullscreen.md)

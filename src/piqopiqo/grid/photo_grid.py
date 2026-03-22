@@ -31,6 +31,7 @@ from piqopiqo.shortcuts import (
     Shortcut,
     build_filter_label_shortcut_bindings,
     build_label_shortcut_bindings,
+    lookup_shortcut,
     match_shortcut_sequence,
     parse_shortcut,
 )
@@ -158,11 +159,7 @@ class PhotoGrid(QWidget):
             return
 
         # Shared grid-view scope shortcuts should work across grid + side panels.
-        select_all_shortcut = (
-            shortcuts.get(Shortcut.SELECT_ALL)
-            or shortcuts.get(Shortcut.SELECT_ALL.value)
-            or shortcuts.get(Shortcut.SELECT_ALL.name)
-        )
+        select_all_shortcut = lookup_shortcut(shortcuts, Shortcut.SELECT_ALL)
         if select_all_shortcut:
             sc_select_all = QShortcut(parse_shortcut(select_all_shortcut), scope)
             sc_select_all.setContext(Qt.WidgetWithChildrenShortcut)
@@ -181,10 +178,8 @@ class PhotoGrid(QWidget):
             )
             self._shared_grid_view_shortcut_objects.append(sc)
 
-        folder_filter_all_shortcut = (
-            shortcuts.get(Shortcut.FILTER_FOLDER_ALL)
-            or shortcuts.get(Shortcut.FILTER_FOLDER_ALL.value)
-            or shortcuts.get(Shortcut.FILTER_FOLDER_ALL.name)
+        folder_filter_all_shortcut = lookup_shortcut(
+            shortcuts, Shortcut.FILTER_FOLDER_ALL
         )
         if folder_filter_all_shortcut:
             sc_folder_all = QShortcut(parse_shortcut(folder_filter_all_shortcut), scope)
@@ -192,10 +187,8 @@ class PhotoGrid(QWidget):
             sc_folder_all.activated.connect(self._activate_folder_filter_all_shortcut)
             self._shared_grid_view_shortcut_objects.append(sc_folder_all)
 
-        folder_filter_next_shortcut = (
-            shortcuts.get(Shortcut.FILTER_FOLDER_NEXT)
-            or shortcuts.get(Shortcut.FILTER_FOLDER_NEXT.value)
-            or shortcuts.get(Shortcut.FILTER_FOLDER_NEXT.name)
+        folder_filter_next_shortcut = lookup_shortcut(
+            shortcuts, Shortcut.FILTER_FOLDER_NEXT
         )
         if folder_filter_next_shortcut:
             sc_folder_next = QShortcut(
@@ -207,10 +200,8 @@ class PhotoGrid(QWidget):
             )
             self._shared_grid_view_shortcut_objects.append(sc_folder_next)
 
-        folder_filter_prev_shortcut = (
-            shortcuts.get(Shortcut.FILTER_FOLDER_PREV)
-            or shortcuts.get(Shortcut.FILTER_FOLDER_PREV.value)
-            or shortcuts.get(Shortcut.FILTER_FOLDER_PREV.name)
+        folder_filter_prev_shortcut = lookup_shortcut(
+            shortcuts, Shortcut.FILTER_FOLDER_PREV
         )
         if folder_filter_prev_shortcut:
             sc_folder_prev = QShortcut(
@@ -222,21 +213,15 @@ class PhotoGrid(QWidget):
             )
             self._shared_grid_view_shortcut_objects.append(sc_folder_prev)
 
-        clear_filter_shortcut = (
-            shortcuts.get(Shortcut.FILTER_CLEAR_ALL)
-            or shortcuts.get(Shortcut.FILTER_CLEAR_ALL.value)
-            or shortcuts.get(Shortcut.FILTER_CLEAR_ALL.name)
-        )
+        clear_filter_shortcut = lookup_shortcut(shortcuts, Shortcut.FILTER_CLEAR_ALL)
         if clear_filter_shortcut:
             sc_clear_filter = QShortcut(parse_shortcut(clear_filter_shortcut), scope)
             sc_clear_filter.setContext(Qt.WidgetWithChildrenShortcut)
             sc_clear_filter.activated.connect(self._activate_clear_filter_shortcut)
             self._shared_grid_view_shortcut_objects.append(sc_clear_filter)
 
-        focus_search_shortcut = (
-            shortcuts.get(Shortcut.FILTER_FOCUS_SEARCH)
-            or shortcuts.get(Shortcut.FILTER_FOCUS_SEARCH.value)
-            or shortcuts.get(Shortcut.FILTER_FOCUS_SEARCH.name)
+        focus_search_shortcut = lookup_shortcut(
+            shortcuts, Shortcut.FILTER_FOCUS_SEARCH
         )
         if focus_search_shortcut:
             sc_focus_search = QShortcut(parse_shortcut(focus_search_shortcut), scope)
@@ -246,10 +231,8 @@ class PhotoGrid(QWidget):
             )
             self._shared_grid_view_shortcut_objects.append(sc_focus_search)
 
-        toggle_sidebar_shortcut = (
-            shortcuts.get(Shortcut.TOGGLE_RIGHT_SIDEBAR)
-            or shortcuts.get(Shortcut.TOGGLE_RIGHT_SIDEBAR.value)
-            or shortcuts.get(Shortcut.TOGGLE_RIGHT_SIDEBAR.name)
+        toggle_sidebar_shortcut = lookup_shortcut(
+            shortcuts, Shortcut.TOGGLE_RIGHT_SIDEBAR
         )
         if toggle_sidebar_shortcut:
             sc_toggle_sidebar = QShortcut(
@@ -363,15 +346,7 @@ class PhotoGrid(QWidget):
         return isinstance(widget, QComboBox) and widget.isEditable()
 
     def _lookup_configured_shortcut(self, shortcut_key: Shortcut) -> str | None:
-        shortcuts = get_user_setting(UserSettingKey.SHORTCUTS)
-        for candidate in (shortcut_key, shortcut_key.value, shortcut_key.name):
-            value = shortcuts.get(candidate)
-            if value is None:
-                continue
-            text = str(value).strip()
-            if text:
-                return text
-        return None
+        return lookup_shortcut(get_user_setting(UserSettingKey.SHORTCUTS), shortcut_key)
 
     def select_all_visible(self) -> None:
         """Select all currently visible items in the grid."""
