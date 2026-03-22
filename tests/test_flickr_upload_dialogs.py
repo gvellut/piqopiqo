@@ -10,8 +10,6 @@ from piqopiqo.tools.flickr_upload.constants import FlickrStage
 from piqopiqo.tools.flickr_upload.dialogs import (
     FlickrPreflightDialog,
     FlickrUploadProgressDialog,
-    UPLOAD_SCOPE_LABEL,
-    UPLOAD_SCOPE_VISIBLE,
 )
 from piqopiqo.tools.flickr_upload.manager import (
     FlickrUploadPhotoFailure,
@@ -60,31 +58,28 @@ def _scope_items(*entries: tuple[str, dict | None] | str) -> list[dict]:
 
 def test_preflight_album_field_visible_only_when_upload_ready(qapp) -> None:  # noqa: ARG001
     upload_dialog = FlickrPreflightDialog(
-        upload_scope_items_by_name={
-            UPLOAD_SCOPE_VISIBLE: _scope_items("/a.jpg", "/b.jpg", "/c.jpg")
-        },
-        token_file_path="/tmp/oauth-tokens.sqlite",
+        visible_upload_items=_scope_items("/a.jpg", "/b.jpg", "/c.jpg"),
         token_exists=True,
     )
     assert upload_dialog.album_input is not None
+    assert upload_dialog.album_info_group is not None
+    assert upload_dialog.album_info_group.isHidden() is False
+    assert upload_dialog.album_input.parent() is upload_dialog.album_info_group
     assert upload_dialog.scope_checkbox is None
+    assert upload_dialog.action_btn.text() == "Upload"
 
     login_dialog = FlickrPreflightDialog(
-        upload_scope_items_by_name={
-            UPLOAD_SCOPE_VISIBLE: _scope_items("/a.jpg", "/b.jpg", "/c.jpg")
-        },
-        token_file_path="/tmp/oauth-tokens.sqlite",
+        visible_upload_items=_scope_items("/a.jpg", "/b.jpg", "/c.jpg"),
         token_exists=False,
     )
     assert login_dialog.album_input is None
+    assert login_dialog.album_info_group is None
+    assert login_dialog.action_btn.text() == "Login to Flickr"
 
 
 def test_preflight_album_error_clears_on_text_change(qapp) -> None:  # noqa: ARG001
     dialog = FlickrPreflightDialog(
-        upload_scope_items_by_name={
-            UPLOAD_SCOPE_VISIBLE: _scope_items("/a.jpg", "/b.jpg", "/c.jpg")
-        },
-        token_file_path="/tmp/oauth-tokens.sqlite",
+        visible_upload_items=_scope_items("/a.jpg", "/b.jpg", "/c.jpg"),
         token_exists=True,
         album_error="Album not found",
     )
@@ -108,14 +103,19 @@ def test_preflight_folder_data_link_visibility(qapp) -> None:  # noqa: ARG001
     )
 
     with_link = FlickrPreflightDialog(
-        upload_scope_items_by_name={
-            UPLOAD_SCOPE_VISIBLE: _scope_items("/a.jpg", "/b.jpg")
-        },
-        token_file_path="/tmp/oauth-tokens.sqlite",
+        visible_upload_items=_scope_items("/a.jpg", "/b.jpg"),
         token_exists=True,
         album_display_plan=plan,
         show_album_link=True,
     )
+    assert with_link.album_info_group is not None
+    assert with_link.album_info_group.isHidden() is False
+    assert with_link.album_name_label is not None
+    assert with_link.album_name_label.text() == "Name: Trip"
+    assert with_link.album_name_label.isHidden() is False
+    assert with_link.album_id_label is not None
+    assert with_link.album_id_label.text() == "ID: 72177720331888267"
+    assert with_link.album_id_label.isHidden() is False
     assert with_link.album_link_label is not None
     assert with_link.album_link_label.isHidden() is False
     assert "flickr.com/photos/22539273@N00/albums/72177720331888267" in (
@@ -123,27 +123,47 @@ def test_preflight_folder_data_link_visibility(qapp) -> None:  # noqa: ARG001
     )
 
     without_link = FlickrPreflightDialog(
-        upload_scope_items_by_name={
-            UPLOAD_SCOPE_VISIBLE: _scope_items("/a.jpg", "/b.jpg")
-        },
-        token_file_path="/tmp/oauth-tokens.sqlite",
+        visible_upload_items=_scope_items("/a.jpg", "/b.jpg"),
         token_exists=True,
         album_display_plan=plan,
         show_album_link=False,
     )
+    assert without_link.album_info_group is not None
+    assert without_link.album_info_group.isHidden() is False
+    assert without_link.album_name_label is not None
+    assert without_link.album_name_label.text() == "Name: Trip"
+    assert without_link.album_name_label.isHidden() is False
+    assert without_link.album_id_label is not None
+    assert without_link.album_id_label.text() == "ID: 72177720331888267"
+    assert without_link.album_id_label.isHidden() is False
     assert without_link.album_link_label is not None
     assert without_link.album_link_label.isHidden() is True
+
+
+def test_preflight_album_group_keeps_input_visible_without_prefill(qapp) -> None:  # noqa: ARG001
+    dialog = FlickrPreflightDialog(
+        visible_upload_items=_scope_items("/a.jpg", "/b.jpg"),
+        token_exists=True,
+    )
+
+    assert dialog.album_info_group is not None
+    assert dialog.album_info_group.isHidden() is False
+    assert dialog.album_input is not None
+    assert dialog.album_input.parent() is dialog.album_info_group
+    assert dialog.album_name_label is not None
+    assert dialog.album_name_label.isHidden() is True
+    assert dialog.album_id_label is not None
+    assert dialog.album_id_label.isHidden() is True
+    assert dialog.album_link_label is not None
+    assert dialog.album_link_label.isHidden() is True
 
 
 def test_preflight_label_scope_defaults_checked_when_label_scope_available(
     qapp,
 ) -> None:  # noqa: ARG001
     dialog = FlickrPreflightDialog(
-        upload_scope_items_by_name={
-            UPLOAD_SCOPE_VISIBLE: _scope_items("/visible.jpg"),
-            UPLOAD_SCOPE_LABEL: _scope_items("/label_a.jpg", "/label_b.jpg"),
-        },
-        token_file_path="/tmp/oauth-tokens.sqlite",
+        visible_upload_items=_scope_items("/visible.jpg"),
+        label_upload_items=_scope_items("/label_a.jpg", "/label_b.jpg"),
         token_exists=True,
         label_override_text="Approved",
     )
@@ -151,16 +171,14 @@ def test_preflight_label_scope_defaults_checked_when_label_scope_available(
     assert dialog.scope_checkbox is not None
     assert dialog.scope_checkbox.isChecked() is True
     assert dialog.count_label.text() == "Photos to upload: 2"
-    assert dialog.selected_scope_name == UPLOAD_SCOPE_LABEL
+    assert dialog.selected_use_label_scope is True
+    assert dialog.layout().itemAt(0).widget() is dialog.scope_checkbox
 
 
 def test_preflight_label_scope_disabled_when_no_label_matches(qapp) -> None:  # noqa: ARG001
     dialog = FlickrPreflightDialog(
-        upload_scope_items_by_name={
-            UPLOAD_SCOPE_VISIBLE: _scope_items("/visible.jpg"),
-            UPLOAD_SCOPE_LABEL: [],
-        },
-        token_file_path="/tmp/oauth-tokens.sqlite",
+        visible_upload_items=_scope_items("/visible.jpg"),
+        label_upload_items=[],
         token_exists=True,
         label_override_text="Approved",
     )
@@ -171,16 +189,13 @@ def test_preflight_label_scope_disabled_when_no_label_matches(qapp) -> None:  # 
     assert dialog.label_scope_warning_label is not None
     assert dialog.label_scope_warning_label.isHidden() is False
     assert dialog.count_label.text() == "Photos to upload: 1"
-    assert dialog.selected_scope_name == UPLOAD_SCOPE_VISIBLE
+    assert dialog.selected_use_label_scope is False
 
 
 def test_preflight_count_switches_with_scope_checkbox(qapp) -> None:  # noqa: ARG001
     dialog = FlickrPreflightDialog(
-        upload_scope_items_by_name={
-            UPLOAD_SCOPE_VISIBLE: _scope_items("/visible.jpg"),
-            UPLOAD_SCOPE_LABEL: _scope_items("/label_a.jpg", "/label_b.jpg"),
-        },
-        token_file_path="/tmp/oauth-tokens.sqlite",
+        visible_upload_items=_scope_items("/visible.jpg"),
+        label_upload_items=_scope_items("/label_a.jpg", "/label_b.jpg"),
         token_exists=True,
         label_override_text="Approved",
     )
@@ -190,7 +205,26 @@ def test_preflight_count_switches_with_scope_checkbox(qapp) -> None:  # noqa: AR
 
     dialog.scope_checkbox.setChecked(False)
     assert dialog.count_label.text() == "Photos to upload: 1"
-    assert dialog.selected_scope_name == UPLOAD_SCOPE_VISIBLE
+    assert dialog.selected_use_label_scope is False
+
+
+def test_preflight_scope_checkbox_is_first_and_warning_stack_has_no_gap(
+    qapp,
+) -> None:  # noqa: ARG001
+    dialog = FlickrPreflightDialog(
+        visible_upload_items=_scope_items("/visible.jpg"),
+        label_upload_items=_scope_items("/label_a.jpg"),
+        token_exists=True,
+        label_override_text="Approved",
+    )
+
+    root_layout = dialog.layout()
+    assert root_layout is not None
+    assert dialog.scope_checkbox is not None
+    assert root_layout.itemAt(0).widget() is dialog.scope_checkbox
+    count_layout = root_layout.itemAt(2).layout()
+    assert count_layout is not None
+    assert count_layout.spacing() == 0
 
 
 def test_preflight_metadata_warning_and_controls_follow_selected_scope(
@@ -203,15 +237,12 @@ def test_preflight_metadata_warning_and_controls_follow_selected_scope(
     )
 
     dialog = FlickrPreflightDialog(
-        upload_scope_items_by_name={
-            UPLOAD_SCOPE_VISIBLE: _scope_items(
-                ("/visible.jpg", {"title": "", "keywords": "one"})
-            ),
-            UPLOAD_SCOPE_LABEL: _scope_items(
-                ("/label.jpg", {"title": "Label", "keywords": "two"})
-            ),
-        },
-        token_file_path="/tmp/oauth-tokens.sqlite",
+        visible_upload_items=_scope_items(
+            ("/visible.jpg", {"title": "", "keywords": "one"})
+        ),
+        label_upload_items=_scope_items(
+            ("/label.jpg", {"title": "Label", "keywords": "two"})
+        ),
         token_exists=True,
         label_override_text="Approved",
         require_metadata=True,
@@ -250,12 +281,9 @@ def test_preflight_disables_upload_while_metadata_validation_is_pending(
     )
 
     dialog = FlickrPreflightDialog(
-        upload_scope_items_by_name={
-            UPLOAD_SCOPE_VISIBLE: _scope_items(
-                ("/visible.jpg", {"title": "Visible", "keywords": "one"})
-            ),
-        },
-        token_file_path="/tmp/oauth-tokens.sqlite",
+        visible_upload_items=_scope_items(
+            ("/visible.jpg", {"title": "Visible", "keywords": "one"})
+        ),
         token_exists=True,
         require_metadata=True,
         db_manager=object(),
@@ -275,15 +303,12 @@ def test_preflight_height_tracks_optional_rows(qapp, monkeypatch) -> None:
     )
 
     dialog = FlickrPreflightDialog(
-        upload_scope_items_by_name={
-            UPLOAD_SCOPE_VISIBLE: _scope_items(
-                ("/visible.jpg", {"title": "", "keywords": "one"})
-            ),
-            UPLOAD_SCOPE_LABEL: _scope_items(
-                ("/label.jpg", {"title": "Label", "keywords": "two"})
-            ),
-        },
-        token_file_path="/tmp/oauth-tokens.sqlite",
+        visible_upload_items=_scope_items(
+            ("/visible.jpg", {"title": "", "keywords": "one"})
+        ),
+        label_upload_items=_scope_items(
+            ("/label.jpg", {"title": "Label", "keywords": "two"})
+        ),
         token_exists=True,
         label_override_text="Approved",
         require_metadata=True,

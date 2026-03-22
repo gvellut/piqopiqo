@@ -116,7 +116,8 @@ def test_launch_flickr_upload_passes_visible_scope_without_blocking_precheck(
         *,
         api_key,
         api_secret,
-        upload_scope_items_by_name,
+        visible_upload_items,
+        label_upload_items,
         label_override_text,
         should_require_metadata,
     ):
@@ -124,7 +125,8 @@ def test_launch_flickr_upload_passes_visible_scope_without_blocking_precheck(
         assert api_secret == "secret"
         launch_calls.append(
             {
-                "upload_scope_items_by_name": upload_scope_items_by_name,
+                "visible_upload_items": visible_upload_items,
+                "label_upload_items": label_upload_items,
                 "label_override_text": label_override_text,
                 "should_require_metadata": should_require_metadata,
             }
@@ -140,12 +142,10 @@ def test_launch_flickr_upload_passes_visible_scope_without_blocking_precheck(
     assert len(launch_calls) == 1
     assert launch_calls[0]["label_override_text"] == ""
     assert launch_calls[0]["should_require_metadata"] is True
-    assert list(launch_calls[0]["upload_scope_items_by_name"]) == [
-        dialogs.UPLOAD_SCOPE_VISIBLE
+    assert [entry["file_path"] for entry in launch_calls[0]["visible_upload_items"]] == [
+        "/a.jpg"
     ]
-    assert launch_calls[0]["upload_scope_items_by_name"][dialogs.UPLOAD_SCOPE_VISIBLE][
-        0
-    ]["file_path"] == "/a.jpg"
+    assert launch_calls[0]["label_upload_items"] == []
 
 
 def test_launch_flickr_upload_builds_label_scope_from_all_photos_in_sort_order(
@@ -177,12 +177,8 @@ def test_launch_flickr_upload_builds_label_scope_from_all_photos_in_sort_order(
     dialogs.launch_flickr_upload(parent)
 
     assert len(launch_calls) == 1
-    visible_scope = launch_calls[0]["upload_scope_items_by_name"][
-        dialogs.UPLOAD_SCOPE_VISIBLE
-    ]
-    label_scope = launch_calls[0]["upload_scope_items_by_name"][
-        dialogs.UPLOAD_SCOPE_LABEL
-    ]
+    visible_scope = launch_calls[0]["visible_upload_items"]
+    label_scope = launch_calls[0]["label_upload_items"]
     assert [entry["file_path"] for entry in visible_scope] == ["/a.jpg"]
     assert [entry["file_path"] for entry in label_scope] == ["/b.jpg", "/c.jpg"]
     assert parent.photo_model.sort_calls == [["/c.jpg", "/b.jpg"]]

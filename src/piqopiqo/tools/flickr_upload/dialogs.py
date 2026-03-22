@@ -11,6 +11,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -57,9 +58,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-UPLOAD_SCOPE_VISIBLE = "visible"
-UPLOAD_SCOPE_LABEL = "label"
-
 
 def _normalize_missing_paths(missing_paths_obj: object) -> list[str]:
     return [
@@ -70,14 +68,14 @@ def _normalize_missing_paths(missing_paths_obj: object) -> list[str]:
 
 
 class FlickrPreflightDialog(QDialog):
-    """Preflight dialog showing upload scope and token-file state."""
+    """Preflight dialog showing upload scope and album state."""
 
     def __init__(
         self,
         *,
-        upload_scope_items_by_name: dict[str, list[dict]],
-        token_file_path: str,
+        visible_upload_items: list[dict],
         token_exists: bool,
+        label_upload_items: list[dict] | None = None,
         label_override_text: str = "",
         initial_use_label_scope: bool | None = None,
         require_metadata: bool = False,
@@ -95,51 +93,30 @@ class FlickrPreflightDialog(QDialog):
 
         self.selected_action: str | None = None
         self.selected_album_text: str = str(album_text or "")
-        self.selected_scope_name = UPLOAD_SCOPE_VISIBLE
+        self.selected_use_label_scope = False
         self._token_exists = bool(token_exists)
         self._require_metadata = bool(require_metadata)
         self._db_manager = db_manager
-        self._scope_items_by_name = {
-            str(name): list(items)
-            for name, items in (upload_scope_items_by_name or {}).items()
-        }
+        self._visible_upload_items = list(visible_upload_items or [])
+        self._label_upload_items = list(label_upload_items or [])
         self._label_override_text = str(label_override_text or "").strip()
-        self._validation_missing_paths_by_scope: dict[str, list[str] | None] = {}
-        self._validation_workers_by_scope: dict[str, FlickrMetadataPrecheckWorker] = {}
+        self._visible_validation_missing_paths: list[str] | None = []
+        self._label_validation_missing_paths: list[str] | None = []
+        self._visible_validation_worker: FlickrMetadataPrecheckWorker | None = None
+        self._label_validation_worker: FlickrMetadataPrecheckWorker | None = None
         self._closed = False
         self._validation_started = False
 
-        visible_items = self._scope_items_by_name.get(UPLOAD_SCOPE_VISIBLE, [])
-        label_items = self._scope_items_by_name.get(UPLOAD_SCOPE_LABEL, [])
-        self._visible_count = len(visible_items)
-        self._label_count = len(label_items)
+        self._visible_count = len(self._visible_upload_items)
+        self._label_count = len(self._label_upload_items)
         self._has_label_scope_toggle = bool(self._label_override_text)
         if self._has_label_scope_toggle and self._label_count > 0:
             if initial_use_label_scope is None:
-                self.selected_scope_name = UPLOAD_SCOPE_LABEL
+                self.selected_use_label_scope = True
             elif bool(initial_use_label_scope):
-                self.selected_scope_name = UPLOAD_SCOPE_LABEL
-        elif self._has_label_scope_toggle and initial_use_label_scope:
-            self.selected_scope_name = UPLOAD_SCOPE_VISIBLE
+                self.selected_use_label_scope = True
 
         layout = QVBoxLayout(self)
-
-        self.count_label = QLabel(self)
-        self.count_label.setWordWrap(True)
-        layout.addWidget(self.count_label)
-
-        self.metadata_warning_label = QLabel(self)
-        self.metadata_warning_label.setStyleSheet("color: red;")
-        self.metadata_warning_label.setWordWrap(True)
-        self.metadata_warning_label.hide()
-        layout.addWidget(self.metadata_warning_label)
-
-        token_status = "present" if token_exists else "missing"
-        token_label = QLabel(
-            f"Token file state: {token_status}\nPath: {token_file_path}"
-        )
-        token_label.setWordWrap(True)
-        layout.addWidget(token_label)
 
         self.scope_checkbox: QCheckBox | None = None
         self.label_scope_warning_label: QLabel | None = None
@@ -151,11 +128,11 @@ class FlickrPreflightDialog(QDialog):
             checkbox.stateChanged.connect(self._on_scope_toggle_changed)
             checkbox.blockSignals(True)
             if self._label_count > 0:
-                checkbox.setChecked(self.selected_scope_name == UPLOAD_SCOPE_LABEL)
+                checkbox.setChecked(self.selected_use_label_scope)
             else:
                 checkbox.setChecked(False)
                 checkbox.setEnabled(False)
-                self.selected_scope_name = UPLOAD_SCOPE_VISIBLE
+                self.selected_use_label_scope = False
             checkbox.blockSignals(False)
             self.scope_checkbox = checkbox
             layout.addWidget(checkbox)
@@ -170,17 +147,37 @@ class FlickrPreflightDialog(QDialog):
             self.label_scope_warning_label = label_scope_warning
             layout.addWidget(label_scope_warning)
 
+        count_section = QVBoxLayout()
+        count_section.setContentsMargins(0, 0, 0, 0)
+        count_section.setSpacing(0)
+
+        self.count_label = QLabel(self)
+        self.count_label.setWordWrap(True)
+        count_section.addWidget(self.count_label)
+
+        self.metadata_warning_label = QLabel(self)
+        self.metadata_warning_label.setStyleSheet("color: red;")
+        self.metadata_warning_label.setWordWrap(True)
+        self.metadata_warning_label.hide()
+        count_section.addWidget(self.metadata_warning_label)
+        layout.addLayout(count_section)
+
         self.album_input: QLineEdit | None = None
-        self.album_info_label: QLabel | None = None
+        self.album_info_group: QGroupBox | None = None
+        self.album_name_label: QLabel | None = None
+        self.album_id_label: QLabel | None = None
         self.album_link_label: QLabel | None = None
         self.album_error_label: QLabel | None = None
 
         if self._token_exists:
+            self.album_info_group = QGroupBox("Album", self)
+            album_info_layout = QVBoxLayout(self.album_info_group)
+
             album_row = QHBoxLayout()
-            album_label = QLabel("Add to album (Optional)")
+            album_label = QLabel("Add to album (Optional)", self.album_info_group)
             album_row.addWidget(album_label)
 
-            help_btn = QToolButton(self)
+            help_btn = QToolButton(self.album_info_group)
             help_btn.setText("?")
             help_btn.setFixedSize(20, 20)
             help_btn.setToolTip(
@@ -193,52 +190,38 @@ class FlickrPreflightDialog(QDialog):
 
             album_row.addWidget(help_btn)
             album_row.addStretch()
-            layout.addLayout(album_row)
+            album_info_layout.addLayout(album_row)
 
-            self.album_input = QLineEdit(self)
+            self.album_input = QLineEdit(self.album_info_group)
             self.album_input.setText(self.selected_album_text)
             self.album_input.textChanged.connect(self._on_album_text_changed)
-            layout.addWidget(self.album_input)
+            album_info_layout.addWidget(self.album_input)
 
-            self.album_info_label = QLabel(self)
-            self.album_info_label.setWordWrap(True)
-            if (
-                album_display_plan is not None
-                and album_display_plan.is_existing_album()
-            ):
-                display_title = album_display_plan.album_title or "<untitled>"
-                self.album_info_label.setText(
-                    f"Album: '{display_title}' (ID: {album_display_plan.album_id})"
-                )
-                self.album_info_label.show()
-            else:
-                self.album_info_label.hide()
-            layout.addWidget(self.album_info_label)
+            self.album_name_label = QLabel(self.album_info_group)
+            self.album_name_label.setWordWrap(True)
+            album_info_layout.addWidget(self.album_name_label)
 
-            self.album_link_label = QLabel(self)
+            self.album_id_label = QLabel(self.album_info_group)
+            self.album_id_label.setWordWrap(True)
+            album_info_layout.addWidget(self.album_id_label)
+
+            self.album_link_label = QLabel(self.album_info_group)
             self.album_link_label.setTextFormat(Qt.TextFormat.RichText)
             self.album_link_label.setTextInteractionFlags(
                 Qt.TextInteractionFlag.TextBrowserInteraction
             )
             self.album_link_label.setOpenExternalLinks(True)
-            if (
-                show_album_link
-                and album_display_plan is not None
-                and album_display_plan.album_url
-            ):
-                url = album_display_plan.album_url
-                self.album_link_label.setText(
-                    f'<a href="{url}" style="color:#1f6feb;">{url}</a>'
-                )
-                self.album_link_label.show()
-            else:
-                self.album_link_label.hide()
-            layout.addWidget(self.album_link_label)
+            album_info_layout.addWidget(self.album_link_label)
 
-            self.album_error_label = QLabel(self)
+            self.album_error_label = QLabel(self.album_info_group)
             self.album_error_label.setStyleSheet("color: red;")
             self.album_error_label.setWordWrap(True)
-            layout.addWidget(self.album_error_label)
+            album_info_layout.addWidget(self.album_error_label)
+            layout.addWidget(self.album_info_group)
+            self._set_album_display_plan(
+                album_display_plan if album_display_plan is not None else None,
+                show_album_link=show_album_link,
+            )
             self._set_album_error(album_error)
 
         button_row = QHBoxLayout()
@@ -259,15 +242,49 @@ class FlickrPreflightDialog(QDialog):
         self._sync_height_to_content()
 
     def selected_upload_scope_items(self) -> list[dict]:
-        return list(self._scope_items_by_name.get(self.selected_scope_name, []))
+        if self.selected_use_label_scope:
+            return list(self._label_upload_items)
+        return list(self._visible_upload_items)
 
-    def _scope_count(self, scope_name: str) -> int:
-        return len(self._scope_items_by_name.get(scope_name, []))
+    def _scope_count(self, use_label_scope: bool) -> int:
+        return len(self._scope_items(use_label_scope))
 
-    def _get_selected_scope_name(self) -> str:
-        if self.scope_checkbox is not None and self.scope_checkbox.isChecked():
-            return UPLOAD_SCOPE_LABEL
-        return UPLOAD_SCOPE_VISIBLE
+    def _scope_items(self, use_label_scope: bool) -> list[dict]:
+        return self._label_upload_items if use_label_scope else self._visible_upload_items
+
+    def _scope_log_name(self, use_label_scope: bool) -> str:
+        return "label" if use_label_scope else "visible"
+
+    def _get_selected_use_label_scope(self) -> bool:
+        return self.scope_checkbox is not None and self.scope_checkbox.isChecked()
+
+    def _get_validation_missing_paths(
+        self,
+        use_label_scope: bool,
+    ) -> list[str] | None:
+        if use_label_scope:
+            return self._label_validation_missing_paths
+        return self._visible_validation_missing_paths
+
+    def _set_validation_missing_paths(
+        self,
+        use_label_scope: bool,
+        missing_paths: list[str] | None,
+    ) -> None:
+        if use_label_scope:
+            self._label_validation_missing_paths = missing_paths
+            return
+        self._visible_validation_missing_paths = missing_paths
+
+    def _set_validation_worker(
+        self,
+        use_label_scope: bool,
+        worker: FlickrMetadataPrecheckWorker | None,
+    ) -> None:
+        if use_label_scope:
+            self._label_validation_worker = worker
+            return
+        self._visible_validation_worker = worker
 
     def _sync_height_to_content(self) -> None:
         layout = self.layout()
@@ -292,6 +309,44 @@ class FlickrPreflightDialog(QDialog):
     def _on_album_text_changed(self, _value: str) -> None:
         self._set_album_error("")
 
+    def _set_album_display_plan(
+        self,
+        plan: FlickrAlbumPlan | None,
+        *,
+        show_album_link: bool,
+    ) -> None:
+        if (
+            self.album_info_group is None
+            or self.album_name_label is None
+            or self.album_id_label is None
+            or self.album_link_label is None
+        ):
+            return
+
+        if plan is None or not plan.is_existing_album():
+            self.album_name_label.clear()
+            self.album_name_label.hide()
+            self.album_id_label.clear()
+            self.album_id_label.hide()
+            self.album_link_label.clear()
+            self.album_link_label.hide()
+            return
+
+        display_title = plan.album_title or "<untitled>"
+        self.album_name_label.setText(f"Name: {display_title}")
+        self.album_name_label.show()
+        self.album_id_label.setText(f"ID: {plan.album_id}")
+        self.album_id_label.show()
+        if show_album_link and plan.album_url:
+            url = plan.album_url
+            self.album_link_label.setText(
+                f'<a href="{url}" style="color:#1f6feb;">{url}</a>'
+            )
+            self.album_link_label.show()
+        else:
+            self.album_link_label.clear()
+            self.album_link_label.hide()
+
     def _set_metadata_warning(self, message: str) -> None:
         text = str(message or "").strip()
         if text:
@@ -306,14 +361,14 @@ class FlickrPreflightDialog(QDialog):
             self.album_input.setEnabled(enabled)
 
     def _refresh_scope_state(self) -> None:
-        self.selected_scope_name = self._get_selected_scope_name()
-        selected_count = self._scope_count(self.selected_scope_name)
+        self.selected_use_label_scope = self._get_selected_use_label_scope()
+        selected_count = self._scope_count(self.selected_use_label_scope)
         self.count_label.setText(f"Photos to upload: {selected_count}")
 
         missing_paths: list[str] | None = None
         if self._require_metadata:
-            missing_paths = self._validation_missing_paths_by_scope.get(
-                self.selected_scope_name
+            missing_paths = self._get_validation_missing_paths(
+                self.selected_use_label_scope
             )
 
         if self._require_metadata and missing_paths:
@@ -343,29 +398,37 @@ class FlickrPreflightDialog(QDialog):
             return
 
         self._validation_started = True
-        for scope_name, upload_items in self._scope_items_by_name.items():
+        for use_label_scope, upload_items in (
+            (False, self._visible_upload_items),
+            (True, self._label_upload_items),
+        ):
+            if use_label_scope and not self._has_label_scope_toggle:
+                self._set_validation_missing_paths(use_label_scope, [])
+                continue
             if not upload_items:
-                self._validation_missing_paths_by_scope[scope_name] = []
+                self._set_validation_missing_paths(use_label_scope, [])
                 continue
 
-            self._validation_missing_paths_by_scope[scope_name] = None
+            self._set_validation_missing_paths(use_label_scope, None)
             worker = FlickrMetadataPrecheckWorker(
                 db_manager=self._db_manager,
                 upload_items=upload_items,
             )
-            self._validation_workers_by_scope[scope_name] = worker
+            self._set_validation_worker(use_label_scope, worker)
             worker.signals.finished.connect(
-                lambda missing_paths_obj, scope=scope_name: self._on_metadata_validation_finished(  # noqa: B023
-                    scope,
+                lambda missing_paths_obj, use_label_scope=use_label_scope: self._on_metadata_validation_finished(  # noqa: B023
+                    use_label_scope,
                     missing_paths_obj,
                 )
             )
             worker.signals.cancelled.connect(
-                lambda scope=scope_name: self._on_metadata_validation_cancelled(scope)  # noqa: B023
+                lambda use_label_scope=use_label_scope: self._on_metadata_validation_cancelled(  # noqa: B023
+                    use_label_scope
+                )
             )
             worker.signals.error.connect(
-                lambda message, scope=scope_name: self._on_metadata_validation_error(  # noqa: B023
-                    scope,
+                lambda message, use_label_scope=use_label_scope: self._on_metadata_validation_error(  # noqa: B023
+                    use_label_scope,
                     message,
                 )
             )
@@ -375,34 +438,35 @@ class FlickrPreflightDialog(QDialog):
 
     def _on_metadata_validation_finished(
         self,
-        scope_name: str,
+        use_label_scope: bool,
         missing_paths_obj: object,
     ) -> None:
-        self._validation_workers_by_scope.pop(scope_name, None)
+        self._set_validation_worker(use_label_scope, None)
         if self._closed:
             return
-        self._validation_missing_paths_by_scope[scope_name] = _normalize_missing_paths(
-            missing_paths_obj
+        self._set_validation_missing_paths(
+            use_label_scope,
+            _normalize_missing_paths(missing_paths_obj),
         )
         self._refresh_scope_state()
 
-    def _on_metadata_validation_cancelled(self, scope_name: str) -> None:
-        self._validation_workers_by_scope.pop(scope_name, None)
+    def _on_metadata_validation_cancelled(self, use_label_scope: bool) -> None:
+        self._set_validation_worker(use_label_scope, None)
         if self._closed:
             return
-        self._validation_missing_paths_by_scope[scope_name] = []
+        self._set_validation_missing_paths(use_label_scope, [])
         self._refresh_scope_state()
 
-    def _on_metadata_validation_error(self, scope_name: str, message: str) -> None:
-        self._validation_workers_by_scope.pop(scope_name, None)
+    def _on_metadata_validation_error(self, use_label_scope: bool, message: str) -> None:
+        self._set_validation_worker(use_label_scope, None)
         logger.warning(
             "Flickr metadata precheck failed for %s scope; allowing upload: %s",
-            scope_name,
+            self._scope_log_name(use_label_scope),
             str(message),
         )
         if self._closed:
             return
-        self._validation_missing_paths_by_scope[scope_name] = []
+        self._set_validation_missing_paths(use_label_scope, [])
         self._refresh_scope_state()
 
     def _on_scope_toggle_changed(self, _state: int) -> None:
@@ -410,16 +474,22 @@ class FlickrPreflightDialog(QDialog):
 
     def _on_action(self) -> None:
         self.selected_action = "upload" if self._token_exists else "login"
-        self.selected_scope_name = self._get_selected_scope_name()
+        self.selected_use_label_scope = self._get_selected_use_label_scope()
         if self.album_input is not None:
             self.selected_album_text = str(self.album_input.text() or "")
         self.accept()
 
     def closeEvent(self, event) -> None:
         self._closed = True
-        for worker in self._validation_workers_by_scope.values():
+        for worker in (
+            self._visible_validation_worker,
+            self._label_validation_worker,
+        ):
+            if worker is None:
+                continue
             worker.request_cancel()
-        self._validation_workers_by_scope.clear()
+        self._visible_validation_worker = None
+        self._label_validation_worker = None
         super().closeEvent(event)
 
 
@@ -1024,7 +1094,8 @@ def _launch_flickr_upload_flow(
     *,
     api_key: str,
     api_secret: str,
-    upload_scope_items_by_name: dict[str, list[dict]],
+    visible_upload_items: list[dict],
+    label_upload_items: list[dict],
     label_override_text: str,
     should_require_metadata: bool,
 ) -> None:
@@ -1052,9 +1123,9 @@ def _launch_flickr_upload_flow(
                 cached_album_from_folder_data = cached_album_plan is not None
 
         preflight = FlickrPreflightDialog(
-            upload_scope_items_by_name=upload_scope_items_by_name,
-            token_file_path=token_path,
+            visible_upload_items=visible_upload_items,
             token_exists=token_exists,
+            label_upload_items=label_upload_items,
             label_override_text=label_override_text,
             initial_use_label_scope=session_use_label_scope,
             require_metadata=should_require_metadata,
@@ -1071,7 +1142,7 @@ def _launch_flickr_upload_flow(
             return
 
         session_album_text = preflight.selected_album_text
-        session_use_label_scope = preflight.selected_scope_name == UPLOAD_SCOPE_LABEL
+        session_use_label_scope = preflight.selected_use_label_scope
 
         if preflight.selected_action == "login":
             worker = FlickrLoginWorker(api_key=api_key, api_secret=api_secret)
@@ -1174,16 +1245,15 @@ def launch_flickr_upload(parent: MainWindow) -> None:
         get_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL) or ""
     ).strip()
 
-    upload_scope_items_by_name: dict[str, list[dict]] = {
-        UPLOAD_SCOPE_VISIBLE: _build_upload_scope_items(visible_items),
-    }
+    visible_upload_items = _build_upload_scope_items(visible_items)
+    label_upload_items: list[dict] = []
     if label_override_text:
-        upload_scope_items_by_name[UPLOAD_SCOPE_LABEL] = _build_label_upload_scope_items(
+        label_upload_items = _build_label_upload_scope_items(
             parent,
             label_override_text=label_override_text,
         )
 
-    if not any(upload_scope_items_by_name.values()):
+    if not visible_upload_items and not label_upload_items:
         QMessageBox.warning(
             parent,
             "Upload to Flickr",
@@ -1195,7 +1265,8 @@ def launch_flickr_upload(parent: MainWindow) -> None:
         parent,
         api_key=api_key,
         api_secret=api_secret,
-        upload_scope_items_by_name=upload_scope_items_by_name,
+        visible_upload_items=visible_upload_items,
+        label_upload_items=label_upload_items,
         label_override_text=label_override_text,
         should_require_metadata=should_require_metadata,
     )
