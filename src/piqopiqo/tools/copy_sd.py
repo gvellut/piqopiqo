@@ -745,13 +745,18 @@ class CopySdProgressDialog(QDialog):
 
 
 def _confirm_copy(
-    parent, volume: PhotoVolume, dates: list, output_folder_base: list[str]
+    parent,
+    volume: PhotoVolume,
+    dates: list,
+    base_name: str,
+    output_folder_base: list[str],
 ):
-    text_folder = ", ".join(output_folder_base)
+    # text_folder = ", ".join(output_folder_base)
     text_date = "- " + "\n- ".join([date_to_str(d) for d in dates])
     confirm_text = (
-        f"The images will be copied from : {volume.name} to {text_folder}. Dates:\n"
-        f"{text_date}\nConfirm?"
+        f"The images will be copied from : {volume.name} to <date>_{base_name}. "
+        f"Dates:\n{text_date}\n"
+        "Confirm?"
     )
     result = QMessageBox.question(
         parent,
@@ -921,7 +926,7 @@ def launch_copy_sd(parent=None):
         dirname_with_date(output_parent_folder, name, f_date) for f_date in dates
     ]
 
-    if not _confirm_copy(parent, volume, dates, output_folder_base):
+    if not _confirm_copy(parent, volume, dates, name, output_folder_base):
         logger.warning("Aborted by user")
         return
 
