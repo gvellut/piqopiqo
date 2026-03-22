@@ -10,6 +10,8 @@ from piqopiqo.tools.flickr_upload.constants import FlickrStage
 from piqopiqo.tools.flickr_upload.dialogs import (
     FlickrPreflightDialog,
     FlickrUploadProgressDialog,
+    UPLOAD_SCOPE_LABEL,
+    UPLOAD_SCOPE_VISIBLE,
 )
 from piqopiqo.tools.flickr_upload.manager import (
     FlickrUploadPhotoFailure,
@@ -26,16 +28,51 @@ def qapp(monkeypatch):
     return app
 
 
+class _ImmediateThreadPool:
+    def start(self, worker) -> None:
+        worker.run()
+
+
+class _PendingThreadPool:
+    def __init__(self) -> None:
+        self.workers: list[object] = []
+
+    def start(self, worker) -> None:
+        self.workers.append(worker)
+
+
+def _scope_items(*entries: tuple[str, dict | None] | str) -> list[dict]:
+    scope_items: list[dict] = []
+    for order, entry in enumerate(entries):
+        if isinstance(entry, tuple):
+            file_path, db_metadata = entry
+        else:
+            file_path, db_metadata = entry, None
+        scope_items.append(
+            {
+                "file_path": file_path,
+                "order": order,
+                "db_metadata": db_metadata,
+            }
+        )
+    return scope_items
+
+
 def test_preflight_album_field_visible_only_when_upload_ready(qapp) -> None:  # noqa: ARG001
     upload_dialog = FlickrPreflightDialog(
-        visible_count=3,
+        upload_scope_items_by_name={
+            UPLOAD_SCOPE_VISIBLE: _scope_items("/a.jpg", "/b.jpg", "/c.jpg")
+        },
         token_file_path="/tmp/oauth-tokens.sqlite",
         token_exists=True,
     )
     assert upload_dialog.album_input is not None
+    assert upload_dialog.scope_checkbox is None
 
     login_dialog = FlickrPreflightDialog(
-        visible_count=3,
+        upload_scope_items_by_name={
+            UPLOAD_SCOPE_VISIBLE: _scope_items("/a.jpg", "/b.jpg", "/c.jpg")
+        },
         token_file_path="/tmp/oauth-tokens.sqlite",
         token_exists=False,
     )
@@ -44,7 +81,9 @@ def test_preflight_album_field_visible_only_when_upload_ready(qapp) -> None:  # 
 
 def test_preflight_album_error_clears_on_text_change(qapp) -> None:  # noqa: ARG001
     dialog = FlickrPreflightDialog(
-        visible_count=3,
+        upload_scope_items_by_name={
+            UPLOAD_SCOPE_VISIBLE: _scope_items("/a.jpg", "/b.jpg", "/c.jpg")
+        },
         token_file_path="/tmp/oauth-tokens.sqlite",
         token_exists=True,
         album_error="Album not found",
@@ -69,7 +108,9 @@ def test_preflight_folder_data_link_visibility(qapp) -> None:  # noqa: ARG001
     )
 
     with_link = FlickrPreflightDialog(
-        visible_count=2,
+        upload_scope_items_by_name={
+            UPLOAD_SCOPE_VISIBLE: _scope_items("/a.jpg", "/b.jpg")
+        },
         token_file_path="/tmp/oauth-tokens.sqlite",
         token_exists=True,
         album_display_plan=plan,
@@ -82,7 +123,9 @@ def test_preflight_folder_data_link_visibility(qapp) -> None:  # noqa: ARG001
     )
 
     without_link = FlickrPreflightDialog(
-        visible_count=2,
+        upload_scope_items_by_name={
+            UPLOAD_SCOPE_VISIBLE: _scope_items("/a.jpg", "/b.jpg")
+        },
         token_file_path="/tmp/oauth-tokens.sqlite",
         token_exists=True,
         album_display_plan=plan,
@@ -90,6 +133,183 @@ def test_preflight_folder_data_link_visibility(qapp) -> None:  # noqa: ARG001
     )
     assert without_link.album_link_label is not None
     assert without_link.album_link_label.isHidden() is True
+
+
+def test_preflight_label_scope_defaults_checked_when_label_scope_available(
+    qapp,
+) -> None:  # noqa: ARG001
+    dialog = FlickrPreflightDialog(
+        upload_scope_items_by_name={
+            UPLOAD_SCOPE_VISIBLE: _scope_items("/visible.jpg"),
+            UPLOAD_SCOPE_LABEL: _scope_items("/label_a.jpg", "/label_b.jpg"),
+        },
+        token_file_path="/tmp/oauth-tokens.sqlite",
+        token_exists=True,
+        label_override_text="Approved",
+    )
+
+    assert dialog.scope_checkbox is not None
+    assert dialog.scope_checkbox.isChecked() is True
+    assert dialog.count_label.text() == "Photos to upload: 2"
+    assert dialog.selected_scope_name == UPLOAD_SCOPE_LABEL
+
+
+def test_preflight_label_scope_disabled_when_no_label_matches(qapp) -> None:  # noqa: ARG001
+    dialog = FlickrPreflightDialog(
+        upload_scope_items_by_name={
+            UPLOAD_SCOPE_VISIBLE: _scope_items("/visible.jpg"),
+            UPLOAD_SCOPE_LABEL: [],
+        },
+        token_file_path="/tmp/oauth-tokens.sqlite",
+        token_exists=True,
+        label_override_text="Approved",
+    )
+
+    assert dialog.scope_checkbox is not None
+    assert dialog.scope_checkbox.isEnabled() is False
+    assert dialog.scope_checkbox.isChecked() is False
+    assert dialog.label_scope_warning_label is not None
+    assert dialog.label_scope_warning_label.isHidden() is False
+    assert dialog.count_label.text() == "Photos to upload: 1"
+    assert dialog.selected_scope_name == UPLOAD_SCOPE_VISIBLE
+
+
+def test_preflight_count_switches_with_scope_checkbox(qapp) -> None:  # noqa: ARG001
+    dialog = FlickrPreflightDialog(
+        upload_scope_items_by_name={
+            UPLOAD_SCOPE_VISIBLE: _scope_items("/visible.jpg"),
+            UPLOAD_SCOPE_LABEL: _scope_items("/label_a.jpg", "/label_b.jpg"),
+        },
+        token_file_path="/tmp/oauth-tokens.sqlite",
+        token_exists=True,
+        label_override_text="Approved",
+    )
+
+    assert dialog.scope_checkbox is not None
+    assert dialog.count_label.text() == "Photos to upload: 2"
+
+    dialog.scope_checkbox.setChecked(False)
+    assert dialog.count_label.text() == "Photos to upload: 1"
+    assert dialog.selected_scope_name == UPLOAD_SCOPE_VISIBLE
+
+
+def test_preflight_metadata_warning_and_controls_follow_selected_scope(
+    qapp,
+    monkeypatch,
+) -> None:  # noqa: ARG001
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.QThreadPool.globalInstance",
+        lambda: _ImmediateThreadPool(),
+    )
+
+    dialog = FlickrPreflightDialog(
+        upload_scope_items_by_name={
+            UPLOAD_SCOPE_VISIBLE: _scope_items(
+                ("/visible.jpg", {"title": "", "keywords": "one"})
+            ),
+            UPLOAD_SCOPE_LABEL: _scope_items(
+                ("/label.jpg", {"title": "Label", "keywords": "two"})
+            ),
+        },
+        token_file_path="/tmp/oauth-tokens.sqlite",
+        token_exists=True,
+        label_override_text="Approved",
+        require_metadata=True,
+        db_manager=object(),
+    )
+
+    assert dialog.scope_checkbox is not None
+    assert dialog.scope_checkbox.isChecked() is True
+    assert dialog.metadata_warning_label.isHidden() is True
+    assert dialog.action_btn.isEnabled() is True
+    assert dialog.album_input is not None
+    assert dialog.album_input.isEnabled() is True
+
+    dialog.scope_checkbox.setChecked(False)
+    assert "1 photo(s) are missing Title or keywords." == (
+        dialog.metadata_warning_label.text()
+    )
+    assert dialog.metadata_warning_label.isHidden() is False
+    assert dialog.action_btn.isEnabled() is False
+    assert dialog.album_input.isEnabled() is False
+
+    dialog.scope_checkbox.setChecked(True)
+    assert dialog.metadata_warning_label.isHidden() is True
+    assert dialog.action_btn.isEnabled() is True
+    assert dialog.album_input.isEnabled() is True
+
+
+def test_preflight_disables_upload_while_metadata_validation_is_pending(
+    qapp,
+    monkeypatch,
+) -> None:  # noqa: ARG001
+    pending_pool = _PendingThreadPool()
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.QThreadPool.globalInstance",
+        lambda: pending_pool,
+    )
+
+    dialog = FlickrPreflightDialog(
+        upload_scope_items_by_name={
+            UPLOAD_SCOPE_VISIBLE: _scope_items(
+                ("/visible.jpg", {"title": "Visible", "keywords": "one"})
+            ),
+        },
+        token_file_path="/tmp/oauth-tokens.sqlite",
+        token_exists=True,
+        require_metadata=True,
+        db_manager=object(),
+    )
+
+    assert pending_pool.workers
+    assert dialog.metadata_warning_label.isHidden() is True
+    assert dialog.action_btn.isEnabled() is False
+    assert dialog.album_input is not None
+    assert dialog.album_input.isEnabled() is False
+
+
+def test_preflight_height_tracks_optional_rows(qapp, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.QThreadPool.globalInstance",
+        lambda: _ImmediateThreadPool(),
+    )
+
+    dialog = FlickrPreflightDialog(
+        upload_scope_items_by_name={
+            UPLOAD_SCOPE_VISIBLE: _scope_items(
+                ("/visible.jpg", {"title": "", "keywords": "one"})
+            ),
+            UPLOAD_SCOPE_LABEL: _scope_items(
+                ("/label.jpg", {"title": "Label", "keywords": "two"})
+            ),
+        },
+        token_file_path="/tmp/oauth-tokens.sqlite",
+        token_exists=True,
+        label_override_text="Approved",
+        require_metadata=True,
+        db_manager=object(),
+    )
+    dialog.show()
+    qapp.processEvents()
+
+    initial_height = dialog.height()
+    assert dialog.minimumHeight() == dialog.maximumHeight() == initial_height
+
+    assert dialog.scope_checkbox is not None
+    dialog.scope_checkbox.setChecked(False)
+    qapp.processEvents()
+
+    warning_height = dialog.height()
+    assert dialog.metadata_warning_label.isHidden() is False
+    assert warning_height != initial_height
+    assert dialog.minimumHeight() == dialog.maximumHeight() == warning_height
+
+    dialog.scope_checkbox.setChecked(True)
+    qapp.processEvents()
+
+    final_height = dialog.height()
+    assert dialog.metadata_warning_label.isHidden() is True
+    assert final_height == initial_height
 
 
 def _mk_upload_dialog() -> FlickrUploadProgressDialog:

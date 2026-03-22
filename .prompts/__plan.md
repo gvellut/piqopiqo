@@ -1,4 +1,4 @@
-* [Label upload for flickr](Pb_tasks/Xb_Label_upload_for_flickr.md)
+- [Change of selection is visible when exiting fullscreen](Yb_tasks/Yb_Change_of_selection_is_visible_when_exiting_full.md)
 - [Keyword clean on validate](Pb_tasks/Pb_Keyword_clean_on_validate.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
 - [Prescaled down image in fullscreen (Claude made a mess of it; redo)](Ja_tasks/Qa_Prescaled_down_image_in_fullscreen.md)
@@ -94,3 +94,4 @@
 ! [When changing the columns keep selected visible](Pb_tasks/Ub_When_changing_the_columns_keep_selected_visible.md)
 ! [when selecting do not loop around to the first](Pb_tasks/Vb_when_selecting_do_not_loop_around_to_the_first.md)
 ! [Undo Label filtered int](Pb_tasks/Wb_Undo_Label_filtered_int.md)
+! [Label upload for flickr](Pb_tasks/Xb_Label_upload_for_flickr.md)

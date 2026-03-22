@@ -250,6 +250,7 @@ def test_time_taken_load_resort_batch_size_default_and_env_override(
 def test_flickr_settings_defaults_and_roundtrip(isolated_settings):
     assert get_user_setting(UserSettingKey.FLICKR_API_KEY) == ""
     assert get_user_setting(UserSettingKey.FLICKR_API_SECRET) == ""
+    assert get_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL) == ""
     assert (
         get_user_setting(UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS)
         is False
@@ -257,10 +258,12 @@ def test_flickr_settings_defaults_and_roundtrip(isolated_settings):
 
     set_user_setting(UserSettingKey.FLICKR_API_KEY, "key123")
     set_user_setting(UserSettingKey.FLICKR_API_SECRET, "secret456")
+    set_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL, "Approved")
     set_user_setting(UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS, True)
 
     assert get_user_setting(UserSettingKey.FLICKR_API_KEY) == "key123"
     assert get_user_setting(UserSettingKey.FLICKR_API_SECRET) == "secret456"
+    assert get_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL) == "Approved"
     assert (
         get_user_setting(UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS)
         is True

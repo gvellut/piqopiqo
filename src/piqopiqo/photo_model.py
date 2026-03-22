@@ -384,6 +384,12 @@ class PhotoListModel(QObject):
 
         return photo.name.lower()
 
+    def sort_photos_for_current_order(self, photos: list[ImageItem]) -> list[ImageItem]:
+        """Return a sorted copy of photos using the current sort order."""
+        sorted_photos = list(photos)
+        sorted_photos.sort(key=self._get_sort_key)
+        return sorted_photos
+
     def _find_sorted_insertion_point(self, photo: ImageItem) -> int:
         """Find the correct insertion point for a photo to maintain sort order."""
         key = self._get_sort_key(photo)
@@ -414,7 +420,7 @@ class PhotoListModel(QObject):
                     p.is_selected = False
 
         # Sort
-        filtered.sort(key=self._get_sort_key)
+        filtered = self.sort_photos_for_current_order(filtered)
 
         # Update indices
         for i, photo in enumerate(filtered):

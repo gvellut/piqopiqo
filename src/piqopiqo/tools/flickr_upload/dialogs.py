@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import Qt, QThreadPool, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QHBoxLayout,
     QLabel,
@@ -25,6 +26,7 @@ from piqopiqo.cache_paths import get_flickr_cache_dir, get_flickr_token_file_pat
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
+from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBUnavailableError
 from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
@@ -55,6 +57,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+UPLOAD_SCOPE_VISIBLE = "visible"
+UPLOAD_SCOPE_LABEL = "label"
+
+
+def _normalize_missing_paths(missing_paths_obj: object) -> list[str]:
+    return [
+        str(path).strip()
+        for path in (missing_paths_obj if isinstance(missing_paths_obj, list) else [])
+        if str(path).strip()
+    ]
+
 
 class FlickrPreflightDialog(QDialog):
     """Preflight dialog showing upload scope and token-file state."""
@@ -62,9 +75,13 @@ class FlickrPreflightDialog(QDialog):
     def __init__(
         self,
         *,
-        visible_count: int,
+        upload_scope_items_by_name: dict[str, list[dict]],
         token_file_path: str,
         token_exists: bool,
+        label_override_text: str = "",
+        initial_use_label_scope: bool | None = None,
+        require_metadata: bool = False,
+        db_manager=None,
         album_text: str = "",
         album_error: str = "",
         album_display_plan: FlickrAlbumPlan | None = None,
@@ -78,13 +95,44 @@ class FlickrPreflightDialog(QDialog):
 
         self.selected_action: str | None = None
         self.selected_album_text: str = str(album_text or "")
+        self.selected_scope_name = UPLOAD_SCOPE_VISIBLE
         self._token_exists = bool(token_exists)
+        self._require_metadata = bool(require_metadata)
+        self._db_manager = db_manager
+        self._scope_items_by_name = {
+            str(name): list(items)
+            for name, items in (upload_scope_items_by_name or {}).items()
+        }
+        self._label_override_text = str(label_override_text or "").strip()
+        self._validation_missing_paths_by_scope: dict[str, list[str] | None] = {}
+        self._validation_workers_by_scope: dict[str, FlickrMetadataPrecheckWorker] = {}
+        self._closed = False
+        self._validation_started = False
+
+        visible_items = self._scope_items_by_name.get(UPLOAD_SCOPE_VISIBLE, [])
+        label_items = self._scope_items_by_name.get(UPLOAD_SCOPE_LABEL, [])
+        self._visible_count = len(visible_items)
+        self._label_count = len(label_items)
+        self._has_label_scope_toggle = bool(self._label_override_text)
+        if self._has_label_scope_toggle and self._label_count > 0:
+            if initial_use_label_scope is None:
+                self.selected_scope_name = UPLOAD_SCOPE_LABEL
+            elif bool(initial_use_label_scope):
+                self.selected_scope_name = UPLOAD_SCOPE_LABEL
+        elif self._has_label_scope_toggle and initial_use_label_scope:
+            self.selected_scope_name = UPLOAD_SCOPE_VISIBLE
 
         layout = QVBoxLayout(self)
 
-        count_label = QLabel(f"Visible photos to upload: {int(visible_count)}")
-        count_label.setWordWrap(True)
-        layout.addWidget(count_label)
+        self.count_label = QLabel(self)
+        self.count_label.setWordWrap(True)
+        layout.addWidget(self.count_label)
+
+        self.metadata_warning_label = QLabel(self)
+        self.metadata_warning_label.setStyleSheet("color: red;")
+        self.metadata_warning_label.setWordWrap(True)
+        self.metadata_warning_label.hide()
+        layout.addWidget(self.metadata_warning_label)
 
         token_status = "present" if token_exists else "missing"
         token_label = QLabel(
@@ -92,6 +140,35 @@ class FlickrPreflightDialog(QDialog):
         )
         token_label.setWordWrap(True)
         layout.addWidget(token_label)
+
+        self.scope_checkbox: QCheckBox | None = None
+        self.label_scope_warning_label: QLabel | None = None
+        if self._has_label_scope_toggle:
+            checkbox = QCheckBox(
+                f"Upload all the {self._label_override_text} images",
+                self,
+            )
+            checkbox.stateChanged.connect(self._on_scope_toggle_changed)
+            checkbox.blockSignals(True)
+            if self._label_count > 0:
+                checkbox.setChecked(self.selected_scope_name == UPLOAD_SCOPE_LABEL)
+            else:
+                checkbox.setChecked(False)
+                checkbox.setEnabled(False)
+                self.selected_scope_name = UPLOAD_SCOPE_VISIBLE
+            checkbox.blockSignals(False)
+            self.scope_checkbox = checkbox
+            layout.addWidget(checkbox)
+
+            label_scope_warning = QLabel("No image with label", self)
+            label_scope_warning.setStyleSheet("color: red;")
+            label_scope_warning.setWordWrap(True)
+            if self._label_count <= 0:
+                label_scope_warning.show()
+            else:
+                label_scope_warning.hide()
+            self.label_scope_warning_label = label_scope_warning
+            layout.addWidget(label_scope_warning)
 
         self.album_input: QLineEdit | None = None
         self.album_info_label: QLabel | None = None
@@ -177,6 +254,29 @@ class FlickrPreflightDialog(QDialog):
         button_row.addWidget(self.action_btn)
 
         layout.addLayout(button_row)
+        self._refresh_scope_state()
+        self._start_metadata_validation_if_needed()
+        self._sync_height_to_content()
+
+    def selected_upload_scope_items(self) -> list[dict]:
+        return list(self._scope_items_by_name.get(self.selected_scope_name, []))
+
+    def _scope_count(self, scope_name: str) -> int:
+        return len(self._scope_items_by_name.get(scope_name, []))
+
+    def _get_selected_scope_name(self) -> str:
+        if self.scope_checkbox is not None and self.scope_checkbox.isChecked():
+            return UPLOAD_SCOPE_LABEL
+        return UPLOAD_SCOPE_VISIBLE
+
+    def _sync_height_to_content(self) -> None:
+        layout = self.layout()
+        if layout is not None:
+            layout.activate()
+        self.adjustSize()
+        target_height = self.sizeHint().height()
+        if target_height > 0:
+            self.setFixedHeight(target_height)
 
     def _set_album_error(self, message: str) -> None:
         if self.album_error_label is None:
@@ -192,11 +292,135 @@ class FlickrPreflightDialog(QDialog):
     def _on_album_text_changed(self, _value: str) -> None:
         self._set_album_error("")
 
+    def _set_metadata_warning(self, message: str) -> None:
+        text = str(message or "").strip()
+        if text:
+            self.metadata_warning_label.setText(text)
+            self.metadata_warning_label.show()
+            return
+        self.metadata_warning_label.clear()
+        self.metadata_warning_label.hide()
+
+    def _set_album_input_enabled(self, enabled: bool) -> None:
+        if self.album_input is not None:
+            self.album_input.setEnabled(enabled)
+
+    def _refresh_scope_state(self) -> None:
+        self.selected_scope_name = self._get_selected_scope_name()
+        selected_count = self._scope_count(self.selected_scope_name)
+        self.count_label.setText(f"Photos to upload: {selected_count}")
+
+        missing_paths: list[str] | None = None
+        if self._require_metadata:
+            missing_paths = self._validation_missing_paths_by_scope.get(
+                self.selected_scope_name
+            )
+
+        if self._require_metadata and missing_paths:
+            self._set_metadata_warning(
+                f"{len(missing_paths)} photo(s) are missing Title or keywords."
+            )
+        else:
+            self._set_metadata_warning("")
+
+        can_upload = selected_count > 0
+        if self._require_metadata:
+            can_upload = can_upload and missing_paths is not None and not missing_paths
+
+        if self._token_exists:
+            self.action_btn.setEnabled(can_upload)
+            self._set_album_input_enabled(can_upload)
+        else:
+            self.action_btn.setEnabled(True)
+        self._sync_height_to_content()
+
+    def _start_metadata_validation_if_needed(self) -> None:
+        if (
+            self._validation_started
+            or not self._require_metadata
+            or self._db_manager is None
+        ):
+            return
+
+        self._validation_started = True
+        for scope_name, upload_items in self._scope_items_by_name.items():
+            if not upload_items:
+                self._validation_missing_paths_by_scope[scope_name] = []
+                continue
+
+            self._validation_missing_paths_by_scope[scope_name] = None
+            worker = FlickrMetadataPrecheckWorker(
+                db_manager=self._db_manager,
+                upload_items=upload_items,
+            )
+            self._validation_workers_by_scope[scope_name] = worker
+            worker.signals.finished.connect(
+                lambda missing_paths_obj, scope=scope_name: self._on_metadata_validation_finished(  # noqa: B023
+                    scope,
+                    missing_paths_obj,
+                )
+            )
+            worker.signals.cancelled.connect(
+                lambda scope=scope_name: self._on_metadata_validation_cancelled(scope)  # noqa: B023
+            )
+            worker.signals.error.connect(
+                lambda message, scope=scope_name: self._on_metadata_validation_error(  # noqa: B023
+                    scope,
+                    message,
+                )
+            )
+            QThreadPool.globalInstance().start(worker)
+
+        self._refresh_scope_state()
+
+    def _on_metadata_validation_finished(
+        self,
+        scope_name: str,
+        missing_paths_obj: object,
+    ) -> None:
+        self._validation_workers_by_scope.pop(scope_name, None)
+        if self._closed:
+            return
+        self._validation_missing_paths_by_scope[scope_name] = _normalize_missing_paths(
+            missing_paths_obj
+        )
+        self._refresh_scope_state()
+
+    def _on_metadata_validation_cancelled(self, scope_name: str) -> None:
+        self._validation_workers_by_scope.pop(scope_name, None)
+        if self._closed:
+            return
+        self._validation_missing_paths_by_scope[scope_name] = []
+        self._refresh_scope_state()
+
+    def _on_metadata_validation_error(self, scope_name: str, message: str) -> None:
+        self._validation_workers_by_scope.pop(scope_name, None)
+        logger.warning(
+            "Flickr metadata precheck failed for %s scope; allowing upload: %s",
+            scope_name,
+            str(message),
+        )
+        if self._closed:
+            return
+        self._validation_missing_paths_by_scope[scope_name] = []
+        self._refresh_scope_state()
+
+    def _on_scope_toggle_changed(self, _state: int) -> None:
+        self._refresh_scope_state()
+
     def _on_action(self) -> None:
         self.selected_action = "upload" if self._token_exists else "login"
+        self.selected_scope_name = self._get_selected_scope_name()
         if self.album_input is not None:
             self.selected_album_text = str(self.album_input.text() or "")
         self.accept()
+
+    def closeEvent(self, event) -> None:
+        self._closed = True
+        for worker in self._validation_workers_by_scope.values():
+            worker.request_cancel()
+        self._validation_workers_by_scope.clear()
+        super().closeEvent(event)
 
 
 class FlickrLoginProgressDialog(QDialog):
@@ -654,11 +878,11 @@ class FlickrUploadProgressDialog(QDialog):
         super().closeEvent(event)
 
 
-def _build_upload_scope_items(visible_items: list[ImageItem]) -> list[dict]:
-    """Build a deterministic upload scope snapshot from the current visible list."""
+def _build_upload_scope_items(items: list[ImageItem]) -> list[dict]:
+    """Build a deterministic upload scope snapshot from the given ordered items."""
     scope_items: list[dict] = []
 
-    for order, item in enumerate(visible_items):
+    for order, item in enumerate(items):
         metadata = item.db_metadata
         scope_items.append(
             {
@@ -669,6 +893,38 @@ def _build_upload_scope_items(visible_items: list[ImageItem]) -> list[dict]:
         )
 
     return scope_items
+
+
+def _ensure_item_db_metadata(parent: MainWindow, item: ImageItem) -> dict | None:
+    metadata = item.db_metadata
+    if metadata is not None:
+        return metadata if isinstance(metadata, dict) else None
+
+    metadata = parent.db_manager.get_db_for_image(item.path).get_metadata(item.path)
+    if isinstance(metadata, dict):
+        item.db_metadata = metadata.copy()
+        return item.db_metadata
+
+    item.db_metadata = metadata
+    return None
+
+
+def _build_label_upload_scope_items(
+    parent: MainWindow,
+    *,
+    label_override_text: str,
+) -> list[dict]:
+    matching_items: list[ImageItem] = []
+    for item in parent.photo_model.all_photos:
+        metadata = _ensure_item_db_metadata(parent, item)
+        if not isinstance(metadata, dict):
+            continue
+        if str(metadata.get(DBFields.LABEL) or "") != label_override_text:
+            continue
+        matching_items.append(item)
+
+    ordered_items = parent.photo_model.sort_photos_for_current_order(matching_items)
+    return _build_upload_scope_items(ordered_items)
 
 
 def _build_upload_items(
@@ -763,42 +1019,21 @@ def _resolve_prefill_album_plan(
     )
 
 
-def _show_missing_required_metadata_dialog(
-    parent: MainWindow,
-    missing_paths: list[str],
-) -> None:
-    missing_count = len(missing_paths)
-    QMessageBox.warning(
-        parent,
-        "Upload to Flickr",
-        "Upload rejected: Title or keywords are missing for "
-        f"{missing_count} photo(s).\n\n"
-        "Selection has been updated to those photos so you can fix them quickly.",
-    )
-
-    if not missing_paths:
-        return
-
-    anchor_path = missing_paths[0]
-    parent.select_paths_in_grid(
-        missing_paths,
-        anchor_path=anchor_path,
-        reveal_path=anchor_path,
-    )
-
-
 def _launch_flickr_upload_flow(
     parent: MainWindow,
     *,
     api_key: str,
     api_secret: str,
-    upload_scope_items: list[dict],
+    upload_scope_items_by_name: dict[str, list[dict]],
+    label_override_text: str,
+    should_require_metadata: bool,
 ) -> None:
     source_folders = list(parent.photo_model.source_folders)
     token_path = str(get_flickr_token_file_path())
 
     session_album_text = ""
     session_album_error = ""
+    session_use_label_scope: bool | None = None
     cached_album_plan: FlickrAlbumPlan | None = None
     cached_album_from_folder_data = False
 
@@ -817,9 +1052,13 @@ def _launch_flickr_upload_flow(
                 cached_album_from_folder_data = cached_album_plan is not None
 
         preflight = FlickrPreflightDialog(
-            visible_count=len(upload_scope_items),
+            upload_scope_items_by_name=upload_scope_items_by_name,
             token_file_path=token_path,
             token_exists=token_exists,
+            label_override_text=label_override_text,
+            initial_use_label_scope=session_use_label_scope,
+            require_metadata=should_require_metadata,
+            db_manager=parent.db_manager if should_require_metadata else None,
             album_text=session_album_text,
             album_error=session_album_error,
             album_display_plan=(
@@ -832,6 +1071,7 @@ def _launch_flickr_upload_flow(
             return
 
         session_album_text = preflight.selected_album_text
+        session_use_label_scope = preflight.selected_scope_name == UPLOAD_SCOPE_LABEL
 
         if preflight.selected_action == "login":
             worker = FlickrLoginWorker(api_key=api_key, api_secret=api_secret)
@@ -851,7 +1091,7 @@ def _launch_flickr_upload_flow(
 
         # Upload flow
         session_album_error = ""
-        upload_items = _build_upload_items(parent, upload_scope_items)
+        upload_items = _build_upload_items(parent, preflight.selected_upload_scope_items())
         exiftool_path = str(get_user_setting(UserSettingKey.EXIFTOOL_PATH) or "")
 
         cached_plan_for_upload = None
@@ -927,83 +1167,35 @@ def launch_flickr_upload(parent: MainWindow) -> None:
         return
 
     visible_items = list(parent.images_data)
-    if not visible_items:
-        QMessageBox.warning(
-            parent,
-            "Upload to Flickr",
-            "No visible photos to upload.",
-        )
-        return
-
-    upload_scope_items = _build_upload_scope_items(visible_items)
     should_require_metadata = bool(
         get_user_setting(UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS)
     )
-    if not should_require_metadata:
-        _launch_flickr_upload_flow(
-            parent,
-            api_key=api_key,
-            api_secret=api_secret,
-            upload_scope_items=upload_scope_items,
-        )
-        return
+    label_override_text = str(
+        get_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL) or ""
+    ).strip()
 
-    active_worker = getattr(parent, "_active_flickr_metadata_precheck_worker", None)
-    if active_worker is not None:
+    upload_scope_items_by_name: dict[str, list[dict]] = {
+        UPLOAD_SCOPE_VISIBLE: _build_upload_scope_items(visible_items),
+    }
+    if label_override_text:
+        upload_scope_items_by_name[UPLOAD_SCOPE_LABEL] = _build_label_upload_scope_items(
+            parent,
+            label_override_text=label_override_text,
+        )
+
+    if not any(upload_scope_items_by_name.values()):
         QMessageBox.warning(
             parent,
             "Upload to Flickr",
-            "A Flickr upload metadata check is already running.",
+            "No photos to upload.",
         )
         return
 
-    worker = FlickrMetadataPrecheckWorker(
-        db_manager=parent.db_manager,
-        upload_items=upload_scope_items,
+    _launch_flickr_upload_flow(
+        parent,
+        api_key=api_key,
+        api_secret=api_secret,
+        upload_scope_items_by_name=upload_scope_items_by_name,
+        label_override_text=label_override_text,
+        should_require_metadata=should_require_metadata,
     )
-    parent._active_flickr_metadata_precheck_worker = worker
-
-    def _clear_active_precheck() -> None:
-        if getattr(parent, "_active_flickr_metadata_precheck_worker", None) is worker:
-            parent._active_flickr_metadata_precheck_worker = None
-
-    def _on_precheck_finished(missing_paths_obj: object) -> None:
-        _clear_active_precheck()
-        missing_paths = [
-            str(path).strip()
-            for path in (
-                missing_paths_obj if isinstance(missing_paths_obj, list) else []
-            )
-            if str(path).strip()
-        ]
-        if missing_paths:
-            _show_missing_required_metadata_dialog(parent, missing_paths)
-            return
-
-        _launch_flickr_upload_flow(
-            parent,
-            api_key=api_key,
-            api_secret=api_secret,
-            upload_scope_items=upload_scope_items,
-        )
-
-    def _on_precheck_cancelled() -> None:
-        _clear_active_precheck()
-
-    def _on_precheck_error(message: str) -> None:
-        _clear_active_precheck()
-        logger.warning(
-            "Flickr metadata precheck failed; continuing without precheck: %s",
-            str(message),
-        )
-        _launch_flickr_upload_flow(
-            parent,
-            api_key=api_key,
-            api_secret=api_secret,
-            upload_scope_items=upload_scope_items,
-        )
-
-    worker.signals.finished.connect(_on_precheck_finished)
-    worker.signals.cancelled.connect(_on_precheck_cancelled)
-    worker.signals.error.connect(_on_precheck_error)
-    QThreadPool.globalInstance().start(worker)

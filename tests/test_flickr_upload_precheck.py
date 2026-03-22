@@ -1,4 +1,4 @@
-"""Tests for Flickr upload required-metadata precheck orchestration."""
+"""Tests for Flickr upload launch-flow scope selection."""
 
 from __future__ import annotations
 
@@ -25,61 +25,71 @@ class _FakeItem:
 
 
 class _FakeDb:
-    def __init__(self, by_path: dict[str, dict | None], *, fail: bool):
+    def __init__(self, by_path: dict[str, dict | None]):
         self._by_path = by_path
-        self._fail = fail
 
-    def get_metadata(self, _file_path: str):
-        if self._fail:
-            raise RuntimeError("db error")
-        return self._by_path.get(_file_path)
+    def get_metadata(self, file_path: str):
+        return self._by_path.get(file_path)
 
 
 class _FakeDbManager:
-    def __init__(
-        self, by_path: dict[str, dict | None] | None = None, *, fail: bool = False
-    ):
+    def __init__(self, by_path: dict[str, dict | None] | None = None):
         self._by_path = by_path or {}
-        self._fail = fail
 
     def get_db_for_image(self, _file_path: str):
-        return _FakeDb(self._by_path, fail=self._fail)
+        return _FakeDb(self._by_path)
+
+
+class _FakePhotoModel:
+    def __init__(
+        self,
+        all_photos: list[_FakeItem],
+        *,
+        sorted_paths: list[str] | None = None,
+        source_folders: list[str] | None = None,
+    ):
+        self.all_photos = list(all_photos)
+        self.source_folders = list(source_folders or ["/photos"])
+        self._sorted_paths = list(sorted_paths or [item.path for item in all_photos])
+        self.sort_calls: list[list[str]] = []
+
+    def sort_photos_for_current_order(self, photos: list[_FakeItem]) -> list[_FakeItem]:
+        self.sort_calls.append([item.path for item in photos])
+        order = {path: index for index, path in enumerate(self._sorted_paths)}
+        return sorted(photos, key=lambda item: order.get(item.path, len(order)))
 
 
 class _FakeParent:
-    def __init__(self, items: list[_FakeItem], db_manager):
-        self.images_data = items
-        self.db_manager = db_manager
-        self._active_flickr_metadata_precheck_worker = None
-        self.selection_calls: list[tuple[list[str], str | None, str | None]] = []
-        self.open_settings_calls: list[UserSettingKey] = []
-
-    def select_paths_in_grid(
+    def __init__(
         self,
-        paths: list[str],
         *,
-        anchor_path: str | None = None,
-        reveal_path: str | None = None,
-    ) -> None:
-        self.selection_calls.append((list(paths), anchor_path, reveal_path))
+        visible_items: list[_FakeItem],
+        all_items: list[_FakeItem],
+        db_manager: _FakeDbManager,
+        sorted_paths: list[str] | None = None,
+    ):
+        self.images_data = list(visible_items)
+        self.db_manager = db_manager
+        self.photo_model = _FakePhotoModel(
+            all_items,
+            sorted_paths=sorted_paths,
+        )
+        self.open_settings_calls: list[UserSettingKey] = []
 
     def open_settings_for_key(self, key: UserSettingKey) -> None:
         self.open_settings_calls.append(key)
-
-
-class _ImmediateThreadPool:
-    def start(self, worker) -> None:
-        worker.run()
 
 
 def _patch_settings(
     monkeypatch,
     *,
     require_metadata: bool,
+    label_override: str = "",
 ) -> None:
     values = {
         UserSettingKey.FLICKR_API_KEY: "key",
         UserSettingKey.FLICKR_API_SECRET: "secret",
+        UserSettingKey.FLICKR_UPLOAD_LABEL: label_override,
         UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS: require_metadata,
     }
     monkeypatch.setattr(
@@ -88,24 +98,37 @@ def _patch_settings(
     )
 
 
-def test_launch_flickr_upload_skips_precheck_when_setting_disabled(qapp, monkeypatch):  # noqa: ARG001
+def test_launch_flickr_upload_passes_visible_scope_without_blocking_precheck(
+    qapp,
+    monkeypatch,
+) -> None:  # noqa: ARG001
     parent = _FakeParent(
-        [
-            _FakeItem(
-                "/a.jpg",
-                {"title": "A", "keywords": "one"},
-            )
-        ],
-        _FakeDbManager(),
+        visible_items=[_FakeItem("/a.jpg", {"title": "", "keywords": "one"})],
+        all_items=[_FakeItem("/a.jpg", {"title": "", "keywords": "one"})],
+        db_manager=_FakeDbManager(),
     )
-    _patch_settings(monkeypatch, require_metadata=False)
+    _patch_settings(monkeypatch, require_metadata=True)
 
-    launch_calls: list[list[dict]] = []
+    launch_calls: list[dict] = []
 
-    def _capture_launch(_parent, *, api_key, api_secret, upload_scope_items):
+    def _capture_launch(
+        _parent,
+        *,
+        api_key,
+        api_secret,
+        upload_scope_items_by_name,
+        label_override_text,
+        should_require_metadata,
+    ):
         assert api_key == "key"
         assert api_secret == "secret"
-        launch_calls.append(list(upload_scope_items))
+        launch_calls.append(
+            {
+                "upload_scope_items_by_name": upload_scope_items_by_name,
+                "label_override_text": label_override_text,
+                "should_require_metadata": should_require_metadata,
+            }
+        )
 
     monkeypatch.setattr(
         "piqopiqo.tools.flickr_upload.dialogs._launch_flickr_upload_flow",
@@ -115,30 +138,67 @@ def test_launch_flickr_upload_skips_precheck_when_setting_disabled(qapp, monkeyp
     dialogs.launch_flickr_upload(parent)
 
     assert len(launch_calls) == 1
-    assert launch_calls[0][0]["file_path"] == "/a.jpg"
-    assert parent._active_flickr_metadata_precheck_worker is None
+    assert launch_calls[0]["label_override_text"] == ""
+    assert launch_calls[0]["should_require_metadata"] is True
+    assert list(launch_calls[0]["upload_scope_items_by_name"]) == [
+        dialogs.UPLOAD_SCOPE_VISIBLE
+    ]
+    assert launch_calls[0]["upload_scope_items_by_name"][dialogs.UPLOAD_SCOPE_VISIBLE][
+        0
+    ]["file_path"] == "/a.jpg"
 
 
-def test_launch_flickr_upload_rejects_and_selects_missing_paths(qapp, monkeypatch):  # noqa: ARG001
+def test_launch_flickr_upload_builds_label_scope_from_all_photos_in_sort_order(
+    qapp,
+    monkeypatch,
+) -> None:  # noqa: ARG001
+    hidden_from_db = _FakeItem("/c.jpg", None)
+    visible_nonmatch = _FakeItem("/a.jpg", {"label": "Rejected"})
+    hidden_match = _FakeItem("/b.jpg", {"label": "Approved"})
     parent = _FakeParent(
-        [
-            _FakeItem(
-                "/a.jpg",
-                {"title": "", "keywords": "one"},
-            ),
-            _FakeItem(
-                "/b.jpg",
-                {"title": "B", "keywords": "two"},
-            ),
-        ],
-        _FakeDbManager(),
+        visible_items=[visible_nonmatch],
+        all_items=[hidden_from_db, visible_nonmatch, hidden_match],
+        db_manager=_FakeDbManager(
+            {
+                "/c.jpg": {"label": "Approved"},
+            }
+        ),
+        sorted_paths=["/b.jpg", "/c.jpg", "/a.jpg"],
     )
-    _patch_settings(monkeypatch, require_metadata=True)
+    _patch_settings(monkeypatch, require_metadata=False, label_override="Approved")
+
+    launch_calls: list[dict] = []
 
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.QThreadPool.globalInstance",
-        lambda: _ImmediateThreadPool(),
+        "piqopiqo.tools.flickr_upload.dialogs._launch_flickr_upload_flow",
+        lambda _parent, **kwargs: launch_calls.append(kwargs),
     )
+
+    dialogs.launch_flickr_upload(parent)
+
+    assert len(launch_calls) == 1
+    visible_scope = launch_calls[0]["upload_scope_items_by_name"][
+        dialogs.UPLOAD_SCOPE_VISIBLE
+    ]
+    label_scope = launch_calls[0]["upload_scope_items_by_name"][
+        dialogs.UPLOAD_SCOPE_LABEL
+    ]
+    assert [entry["file_path"] for entry in visible_scope] == ["/a.jpg"]
+    assert [entry["file_path"] for entry in label_scope] == ["/b.jpg", "/c.jpg"]
+    assert parent.photo_model.sort_calls == [["/c.jpg", "/b.jpg"]]
+    assert hidden_from_db.db_metadata == {"label": "Approved"}
+
+
+def test_launch_flickr_upload_warns_when_both_scopes_are_empty(
+    qapp,
+    monkeypatch,
+) -> None:  # noqa: ARG001
+    parent = _FakeParent(
+        visible_items=[],
+        all_items=[],
+        db_manager=_FakeDbManager(),
+    )
+    _patch_settings(monkeypatch, require_metadata=False, label_override="Approved")
 
     warnings: list[str] = []
     monkeypatch.setattr(
@@ -155,93 +215,22 @@ def test_launch_flickr_upload_rejects_and_selects_missing_paths(qapp, monkeypatc
     dialogs.launch_flickr_upload(parent)
 
     assert launch_calls == []
-    assert len(warnings) == 1
-    assert "Upload rejected" in warnings[0]
-    assert parent.selection_calls == [(["/a.jpg"], "/a.jpg", "/a.jpg")]
-    assert parent._active_flickr_metadata_precheck_worker is None
+    assert warnings == ["No photos to upload."]
 
 
-def test_launch_flickr_upload_continues_when_precheck_passes(qapp, monkeypatch):  # noqa: ARG001
+def test_launch_flickr_upload_missing_credentials_opens_settings(
+    qapp,
+    monkeypatch,
+) -> None:  # noqa: ARG001
     parent = _FakeParent(
-        [
-            _FakeItem(
-                "/a.jpg",
-                {"title": "A", "keywords": "one"},
-            )
-        ],
-        _FakeDbManager(),
-    )
-    _patch_settings(monkeypatch, require_metadata=True)
-
-    monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.QThreadPool.globalInstance",
-        lambda: _ImmediateThreadPool(),
-    )
-
-    warnings: list[str] = []
-    monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.QMessageBox.warning",
-        lambda _parent, _title, text: warnings.append(text),
-    )
-
-    launch_calls: list[list[dict]] = []
-    monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs._launch_flickr_upload_flow",
-        lambda _parent, *, api_key, api_secret, upload_scope_items: launch_calls.append(
-            list(upload_scope_items)
-        ),
-    )
-
-    dialogs.launch_flickr_upload(parent)
-
-    assert len(launch_calls) == 1
-    assert warnings == []
-    assert parent.selection_calls == []
-    assert parent._active_flickr_metadata_precheck_worker is None
-
-
-def test_launch_flickr_upload_fails_open_when_precheck_errors(qapp, monkeypatch):  # noqa: ARG001
-    parent = _FakeParent(
-        [_FakeItem("/a.jpg", None)],
-        _FakeDbManager(fail=True),
-    )
-    _patch_settings(monkeypatch, require_metadata=True)
-
-    monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.QThreadPool.globalInstance",
-        lambda: _ImmediateThreadPool(),
-    )
-
-    warnings: list[str] = []
-    monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.QMessageBox.warning",
-        lambda _parent, _title, text: warnings.append(text),
-    )
-
-    launch_calls: list[list[dict]] = []
-    monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs._launch_flickr_upload_flow",
-        lambda _parent, *, api_key, api_secret, upload_scope_items: launch_calls.append(
-            list(upload_scope_items)
-        ),
-    )
-
-    dialogs.launch_flickr_upload(parent)
-
-    assert len(launch_calls) == 1
-    assert warnings == []
-    assert parent.selection_calls == []
-    assert parent._active_flickr_metadata_precheck_worker is None
-
-
-def test_launch_flickr_upload_missing_credentials_opens_settings(qapp, monkeypatch):  # noqa: ARG001
-    parent = _FakeParent(
-        [_FakeItem("/a.jpg", {"title": "A", "keywords": "one"})],
-        _FakeDbManager(),
+        visible_items=[_FakeItem("/a.jpg", {"title": "A", "keywords": "one"})],
+        all_items=[_FakeItem("/a.jpg", {"title": "A", "keywords": "one"})],
+        db_manager=_FakeDbManager(),
     )
     values = {
         UserSettingKey.FLICKR_API_KEY: "",
         UserSettingKey.FLICKR_API_SECRET: "",
+        UserSettingKey.FLICKR_UPLOAD_LABEL: "",
         UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS: False,
     }
     monkeypatch.setattr(
