@@ -1067,6 +1067,9 @@ class PhotoGrid(QWidget):
             self._loaded_embedded_indices.discard(idx)
 
     def refresh_item(self, global_index):
+        if not (0 <= global_index < len(self.items_data)):
+            return
+
         # Efficiently update only if visible
         start_row = self.scrollbar.value()
         start_idx = start_row * self.n_cols

@@ -528,6 +528,12 @@ class MainWindow(QMainWindow):
             item.path: label_name for item in items
         }
 
+    def _refresh_grid_item_if_visible(self, file_path: str) -> None:
+        index = self.grid.get_index_for_path(file_path)
+        if index is None:
+            return
+        self.grid.refresh_item(index)
+
     def _apply_label_to_items(
         self,
         selected_items: list[ImageItem],
@@ -590,7 +596,7 @@ class MainWindow(QMainWindow):
                 )
 
             # Refresh grid cell immediately
-            self.grid.refresh_item(item._global_index)
+            self._refresh_grid_item_if_visible(item.path)
 
         # Update fullscreen overlay swatch if open
         if self._fullscreen_overlay is not None:
@@ -722,7 +728,7 @@ class MainWindow(QMainWindow):
                     )
 
                 # Refresh grid cell immediately
-                self.grid.refresh_item(item._global_index)
+                self._refresh_grid_item_if_visible(item.path)
 
         # Update fullscreen overlay swatch if open
         if self._fullscreen_overlay is not None:

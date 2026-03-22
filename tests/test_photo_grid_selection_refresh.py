@@ -88,3 +88,14 @@ def test_select_paths_refreshes_visible_selection_before_signal_handler_runs(qap
     assert observed_cell_states == [(False, True)]
     assert grid.cells[0].is_selected is False
     assert grid.cells[1].is_selected is True
+
+
+def test_refresh_item_ignores_out_of_range_index(qapp):
+    init_qsettings_store(dyn=True)
+    grid = PhotoGrid()
+    grid._rebuild_grid(1, 1)
+
+    grid.set_data([_item("/tmp/a.jpg")])
+    qapp.processEvents()
+
+    grid.refresh_item(5)

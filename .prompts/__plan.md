@@ -6,6 +6,7 @@
 - [GPKG export on top of KML](Db_tasks/Gb_GPKG_export_on_top_of_KML.md)
 - [Hide right column does not change number of rows](Yb_tasks/Bc_Hide_right_column_does_not_change_number_of_rows.md)
 - [Flickr max workers diff for upload and set date public](Yb_tasks/Cc_Flickr_max_workers_diff_for_upload_and_set_date_.md)
+- [Flick upload arrange dialog](Yb_tasks/Ec_Flick_upload_arrange_dialog.md)
 ! [Fix date read delay if since:last](A_tasks/A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](A_tasks/B_Eject_SD_after_user_OK.md)
     !? [GUI lag](A_tasks/B.A_GUI_lag.md)
@@ -99,3 +100,4 @@
 ! [Label upload for flickr](Pb_tasks/Xb_Label_upload_for_flickr.md)
 ! [Change of selection is visible when exiting fullscreen](Yb_tasks/Yb_Change_of_selection_is_visible_when_exiting_full.md)
 ! [Grid fullscreen sync](Yb_tasks/Ac_Grid_fullscreen_sync.md)
+! [Undo label issue](Yb_tasks/Dc_Undo_label_issue.md)

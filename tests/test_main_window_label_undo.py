@@ -117,7 +117,9 @@ class _FakeGrid:
         return None
 
     def refresh_item(self, _index: int) -> None:
-        return
+        if _index < 0:
+            return
+        self.items_data[_index]
 
     def select_paths(
         self,
@@ -413,6 +415,9 @@ class _LabelUndoWindow:
             label_undo_anchor_path=label_undo_anchor_path,
         )
 
+    def _refresh_grid_item_if_visible(self, file_path: str) -> None:
+        MainWindow._refresh_grid_item_if_visible(self, file_path)
+
     def _on_undo_redo_label(self) -> None:
         MainWindow._on_undo_redo_label(self)
 
@@ -523,6 +528,36 @@ def test_grid_undo_restores_filtered_item_selection_and_reveal(monkeypatch):
     ]
     assert _selected_paths(window.images_data) == ["/photos/a.jpg"]
     assert window.grid.ensure_visible_paths[-1] == "/photos/a.jpg"
+    assert window._undo_label_action.text == "Redo label"
+
+
+def test_grid_undo_restores_last_visible_filtered_out_item_without_stale_index_crash(
+    monkeypatch,
+):
+    _patch_label_undo_environment(monkeypatch)
+
+    model = PhotoListModel(MetadataDBManager())
+    first = _item("/photos/a.jpg", label="Approved")
+    last = _item("/photos/b.jpg", label="Approved", selected=True)
+    model.set_photos([first, last], ["/photos"])
+    model.set_filter(FilterCriteria(labels={"Approved"}))
+
+    window = _LabelUndoWindow(model)
+
+    window._apply_label_to_grid_selection("Rejected")
+
+    assert [item.path for item in window.images_data] == ["/photos/a.jpg"]
+    assert window._label_undo_entry is not None
+    assert window._label_undo_entry.anchor_path == "/photos/b.jpg"
+
+    window._on_undo_redo_label()
+
+    assert [item.path for item in window.images_data] == [
+        "/photos/a.jpg",
+        "/photos/b.jpg",
+    ]
+    assert _selected_paths(window.images_data) == ["/photos/b.jpg"]
+    assert window.grid.ensure_visible_paths[-1] == "/photos/b.jpg"
     assert window._undo_label_action.text == "Redo label"
 
 
