@@ -152,6 +152,7 @@ class FlickrPreflightDialog(QDialog):
         count_section.setSpacing(0)
 
         self.count_label = QLabel(self)
+        self.count_label.setTextFormat(Qt.TextFormat.RichText)
         self.count_label.setWordWrap(True)
         count_section.addWidget(self.count_label)
 
@@ -363,7 +364,9 @@ class FlickrPreflightDialog(QDialog):
     def _refresh_scope_state(self) -> None:
         self.selected_use_label_scope = self._get_selected_use_label_scope()
         selected_count = self._scope_count(self.selected_use_label_scope)
-        self.count_label.setText(f"Photos to upload: {selected_count}")
+        self.count_label.setText(
+            f"Photos to upload:<br><b>{selected_count}</b>"
+        )
 
         missing_paths: list[str] | None = None
         if self._require_metadata:
