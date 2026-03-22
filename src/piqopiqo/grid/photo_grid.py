@@ -478,6 +478,10 @@ class PhotoGrid(QWidget):
                 anchor_index = -1
 
         self._set_selection_anchor(anchor_index)
+        # Refresh visible selection highlights before downstream selection-change
+        # handlers run so covered/revealed grid transitions do not briefly show
+        # stale selection state from the previous viewport.
+        self.refresh_visible_selection_only()
         self.selection_changed.emit(selected_indices)
         self._render_current_view()
         return selected_indices

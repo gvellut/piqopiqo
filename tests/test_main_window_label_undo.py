@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from piqopiqo.main_window import MainWindow, _FullscreenGridHandoffState
+from piqopiqo.main_window import MainWindow
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBManager
 from piqopiqo.model import (
@@ -27,6 +27,10 @@ def _item(
         is_selected=selected,
         db_metadata={DBFields.LABEL: label},
     )
+
+
+def _selected_paths(items: list[ImageItem]) -> list[str]:
+    return [item.path for item in items if item.is_selected]
 
 
 class _FakeAction:
@@ -81,7 +85,7 @@ class _FakeFullscreenOverlay:
 
 
 class _FakeGrid:
-    def __init__(self, owner: "_LabelUndoWindow") -> None:
+    def __init__(self, owner) -> None:
         self._owner = owner
         self.items_data: list[ImageItem] = []
         self._last_selected_index = -1
@@ -90,6 +94,7 @@ class _FakeGrid:
         self.focus_calls = 0
 
     def set_data(self, items, *, fast_first_paint: bool = False):
+        del fast_first_paint
         previous_anchor_path = self._last_selected_path
         self.items_data = list(items)
         for index, item in enumerate(self.items_data):
@@ -100,12 +105,8 @@ class _FakeGrid:
             anchor_idx = self.get_index_for_path(previous_anchor_path)
             if anchor_idx is not None and self.items_data[anchor_idx].is_selected:
                 self._set_selection_anchor(anchor_idx)
-            else:
-                self._set_selection_anchor(selected[-1])
-        elif selected:
-            self._set_selection_anchor(selected[-1])
-        else:
-            self._set_selection_anchor(-1)
+                return
+        self._set_selection_anchor(selected[-1] if selected else -1)
 
     def get_index_for_path(self, path: str | None) -> int | None:
         if path is None:
@@ -176,6 +177,7 @@ class _FakeGrid:
         return selected[-1] if selected else -1
 
     def _ensure_visible(self, index: int, *, navigation_activity: bool = True) -> None:
+        del navigation_activity
         if 0 <= index < len(self.items_data):
             self.ensure_visible_paths.append(self.items_data[index].path)
 
@@ -216,11 +218,7 @@ class _LabelUndoWindow:
         self._fullscreen_started_with_multi_selection = (
             started_with_multi_selection
         )
-        self._pending_model_sync_after_fullscreen = False
-        self._pending_model_sync_fields: set[str] = set()
         self._pending_metadata_reselection_context = None
-        self._pending_fullscreen_grid_sync_snapshot = None
-        self._fullscreen_grid_handoff = _FullscreenGridHandoffState()
         self._next_model_change_fast_first_paint = False
         self._last_model_change_grid_ms = None
         self._undo_label_action = _FakeAction()
@@ -239,7 +237,9 @@ class _LabelUndoWindow:
         self._selected_paths_cache = {item.path for item in selected_items}
         self._selected_count_cache = len(selected_items)
 
-        self.photo_model.photos_changed.connect(lambda: MainWindow._on_model_changed(self))
+        self.photo_model.photos_changed.connect(
+            lambda: MainWindow._on_model_changed(self)
+        )
 
     @property
     def images_data(self) -> list[ImageItem]:
@@ -331,6 +331,62 @@ class _LabelUndoWindow:
             allow_fullscreen_filter=allow_fullscreen_filter,
         )
 
+    def _capture_fullscreen_selection_state(
+        self,
+        overlay: _FakeFullscreenOverlay,
+        *,
+        current_path_override: str | None = None,
+    ) -> dict:
+        return MainWindow._capture_fullscreen_selection_state(
+            self,
+            overlay,
+            current_path_override=current_path_override,
+        )
+
+    def _resolve_grid_selection_for_fullscreen_state(
+        self,
+        state: dict | None,
+        *,
+        keep_multi_selection: bool,
+    ) -> tuple[list[str], str | None]:
+        return MainWindow._resolve_grid_selection_for_fullscreen_state(
+            self,
+            state,
+            keep_multi_selection=keep_multi_selection,
+        )
+
+    def _apply_live_grid_selection_from_fullscreen(
+        self,
+        state: dict | None = None,
+    ) -> None:
+        MainWindow._apply_live_grid_selection_from_fullscreen(self, state)
+
+    def _pick_next_path_in_loop(
+        self,
+        loop_paths: list[str],
+        valid_paths: set[str],
+        current_path: str | None,
+    ) -> str | None:
+        return MainWindow._pick_next_path_in_loop(
+            self,
+            loop_paths,
+            valid_paths,
+            current_path,
+        )
+
+    def _pick_previous_path_in_list(
+        self,
+        ordered_paths: list[str],
+        valid_paths: set[str],
+        current_path: str | None,
+    ) -> str | None:
+        return MainWindow._pick_previous_path_in_list(
+            self,
+            ordered_paths,
+            valid_paths,
+            current_path,
+        )
+
     def _apply_label_to_grid_selection(self, label_name: str | None) -> None:
         MainWindow._apply_label_to_grid_selection(self, label_name)
 
@@ -369,108 +425,11 @@ class _LabelUndoWindow:
     def _refresh_undo_label_action_enabled_for_context(self) -> None:
         MainWindow._refresh_undo_label_action_enabled_for_context(self)
 
-    def _capture_fullscreen_exit_snapshot(
-        self,
-        overlay: _FakeFullscreenOverlay,
-        *,
-        current_path_override: str | None = None,
-    ) -> dict:
-        return MainWindow._capture_fullscreen_exit_snapshot(
-            self,
-            overlay,
-            current_path_override=current_path_override,
-        )
-
-    def _take_fullscreen_exit_snapshot(
-        self,
-        overlay: _FakeFullscreenOverlay,
-    ) -> dict:
-        return MainWindow._take_fullscreen_exit_snapshot(self, overlay)
-
-    def _resolve_grid_selection_for_fullscreen_snapshot(
-        self,
-        snapshot: dict | None,
-        *,
-        keep_multi_selection: bool,
-    ) -> tuple[list[str], str | None]:
-        return MainWindow._resolve_grid_selection_for_fullscreen_snapshot(
-            self,
-            snapshot,
-            keep_multi_selection=keep_multi_selection,
-        )
-
-    def _pick_next_path_in_loop(
-        self,
-        loop_paths: list[str],
-        valid_paths: set[str],
-        current_path: str | None,
-    ) -> str | None:
-        return MainWindow._pick_next_path_in_loop(
-            self,
-            loop_paths,
-            valid_paths,
-            current_path,
-        )
-
-    def _pick_previous_path_in_list(
-        self,
-        ordered_paths: list[str],
-        valid_paths: set[str],
-        current_path: str | None,
-    ) -> str | None:
-        return MainWindow._pick_previous_path_in_list(
-            self,
-            ordered_paths,
-            valid_paths,
-            current_path,
-        )
-
-    def _resolve_grid_selection_for_fullscreen_exit(
-        self,
-        snapshot: dict | None,
-        *,
-        keep_multi_selection: bool,
-    ) -> tuple[list[str], str | None]:
-        return MainWindow._resolve_grid_selection_for_fullscreen_exit(
-            self,
-            snapshot,
-            keep_multi_selection=keep_multi_selection,
-        )
-
-    def _sync_grid_selection_with_fullscreen(
-        self,
-        snapshot: dict | None = None,
-    ) -> None:
-        MainWindow._sync_grid_selection_with_fullscreen(self, snapshot=snapshot)
-
-    def _restore_grid_after_fullscreen_exit(self, snapshot: dict | None) -> None:
-        MainWindow._restore_grid_after_fullscreen_exit(self, snapshot)
-
     def _on_fullscreen_overlay_about_to_close(
         self,
         overlay: _FakeFullscreenOverlay,
     ) -> None:
         MainWindow._on_fullscreen_overlay_about_to_close(self, overlay)
-
-    def _clear_grid_selection(self) -> None:
-        MainWindow._clear_grid_selection(self)
-
-    def _reset_fullscreen_grid_handoff_state(self) -> None:
-        MainWindow._reset_fullscreen_grid_handoff_state(self)
-
-    def _remember_fullscreen_grid_handoff(
-        self,
-        selection_paths: list[str],
-        target_path: str | None,
-    ) -> None:
-        MainWindow._remember_fullscreen_grid_handoff(
-            self,
-            selection_paths,
-            target_path,
-        )
-
-    def _apply_fullscreen_grid_handoff(self) -> None:
-        MainWindow._apply_fullscreen_grid_handoff(self)
 
     def select_paths_in_grid(
         self,
@@ -498,15 +457,14 @@ class _LabelUndoWindow:
         ]
         MainWindow._set_selected_cache_from_items(self, selected_items)
 
+    def _set_selected_cache_from_items(self, items: list[ImageItem]) -> None:
+        MainWindow._set_selected_cache_from_items(self, items)
+
     def _reconcile_selection_and_panels(self) -> None:
-        selected_items = self.photo_model.get_selected_photos()
-        selected_paths = {item.path for item in selected_items}
-        if (
-            len(selected_items) != self._selected_count_cache
-            or selected_paths != self._selected_paths_cache
-        ):
-            self._selection_changed_since_edit = True
-        MainWindow._set_selected_cache_from_items(self, selected_items)
+        MainWindow._set_selected_cache_from_items(
+            self,
+            self.photo_model.get_selected_photos(),
+        )
 
     def _update_status_bar_count(self) -> None:
         return
@@ -516,10 +474,6 @@ class _LabelUndoWindow:
 
     def _set_fullscreen_menu_action_policy(self, enabled: bool) -> None:
         self.menu_policy_enabled_states.append(enabled)
-
-
-def _selected_paths(items: list[ImageItem]) -> list[str]:
-    return [item.path for item in items if item.is_selected]
 
 
 def _patch_label_undo_environment(monkeypatch) -> None:
@@ -660,6 +614,7 @@ def test_fullscreen_undo_redo_restores_filtered_photo_after_exit(monkeypatch):
         "/photos/a.jpg",
         "/photos/c.jpg",
     ]
+    assert _selected_paths(window.images_data) == ["/photos/c.jpg"]
 
     window._on_fullscreen_overlay_about_to_close(overlay)
     assert window._undo_label_action.enabled is True

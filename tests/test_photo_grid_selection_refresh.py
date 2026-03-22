@@ -63,3 +63,28 @@ def test_refresh_visible_selection_only_updates_cells_without_full_render(
     assert render_calls["count"] == 0
     assert grid.cells[0].is_selected is True
     assert grid.cells[1].is_selected is False
+
+
+def test_select_paths_refreshes_visible_selection_before_signal_handler_runs(qapp):
+    init_qsettings_store(dyn=True)
+    grid = PhotoGrid()
+    grid._rebuild_grid(1, 2)
+
+    items = [_item("/tmp/a.jpg", selected=True), _item("/tmp/b.jpg")]
+    grid.set_data(items)
+    qapp.processEvents()
+
+    observed_cell_states: list[tuple[bool, bool]] = []
+
+    def _record_selection(*_args) -> None:
+        observed_cell_states.append(
+            (grid.cells[0].is_selected, grid.cells[1].is_selected)
+        )
+
+    grid.selection_changed.connect(_record_selection)
+
+    grid.select_paths(["/tmp/b.jpg"], anchor_path="/tmp/b.jpg")
+
+    assert observed_cell_states == [(False, True)]
+    assert grid.cells[0].is_selected is False
+    assert grid.cells[1].is_selected is True
