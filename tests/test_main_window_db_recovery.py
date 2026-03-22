@@ -140,7 +140,9 @@ class _FakeRecoveryWindow:
     _on_db_fault_reported = MainWindow._on_db_fault_reported
     _schedule_db_recovery_probe = MainWindow._schedule_db_recovery_probe
     _replay_pending_metadata_saves = MainWindow._replay_pending_metadata_saves
-    _refresh_workspace_after_db_recovery = MainWindow._refresh_workspace_after_db_recovery
+    _refresh_workspace_after_db_recovery = (
+        MainWindow._refresh_workspace_after_db_recovery
+    )
     _show_pending_db_redo_warning = MainWindow._show_pending_db_redo_warning
     _finish_db_recovery = MainWindow._finish_db_recovery
     _probe_db_recovery = MainWindow._probe_db_recovery

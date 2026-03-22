@@ -319,7 +319,9 @@ class PhotoListModel(QObject):
             if photo.db_metadata:
                 photo_label = photo.db_metadata.get(DBFields.LABEL)
 
-            matches_explicit_label = bool(photo_label) and photo_label in self._filter.labels
+            matches_explicit_label = (
+                bool(photo_label) and photo_label in self._filter.labels
+            )
             matches_no_label = self._filter.include_no_label and (
                 not photo_label
                 or (

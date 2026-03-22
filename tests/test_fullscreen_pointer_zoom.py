@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import uuid
 from types import SimpleNamespace
+import uuid
 
 from PySide6.QtCore import QCoreApplication, QPointF
 from PySide6.QtGui import QColor, QPixmap

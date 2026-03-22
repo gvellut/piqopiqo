@@ -51,7 +51,9 @@ class FilterCriteria:
     folder: str | None = None  # None means all folders
     labels: set[str] = attr.Factory(set)  # Label names to show (OR). Empty = no filter.
     include_no_label: bool = False  # Whether to include photos with no/unknown label
-    explicit_labels: set[str] = attr.Factory(set)  # Known label choices from settings/UI.
+    explicit_labels: set[str] = attr.Factory(
+        set
+    )  # Known label choices from settings/UI.
     search_text: str = ""  # Search in keywords + title (case insensitive)
 
 

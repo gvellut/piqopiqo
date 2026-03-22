@@ -142,9 +142,9 @@ def test_launch_flickr_upload_passes_visible_scope_without_blocking_precheck(
     assert len(launch_calls) == 1
     assert launch_calls[0]["label_override_text"] == ""
     assert launch_calls[0]["should_require_metadata"] is True
-    assert [entry["file_path"] for entry in launch_calls[0]["visible_upload_items"]] == [
-        "/a.jpg"
-    ]
+    assert [
+        entry["file_path"] for entry in launch_calls[0]["visible_upload_items"]
+    ] == ["/a.jpg"]
     assert launch_calls[0]["label_upload_items"] == []
 
 

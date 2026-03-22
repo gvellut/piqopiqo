@@ -217,9 +217,7 @@ class _LabelUndoWindow:
         self.grid = _FakeGrid(self)
         self.grid.set_data(photo_model.photos)
         self._fullscreen_overlay = overlay
-        self._fullscreen_started_with_multi_selection = (
-            started_with_multi_selection
-        )
+        self._fullscreen_started_with_multi_selection = started_with_multi_selection
         self._pending_metadata_reselection_context = None
         self._next_model_change_fast_first_paint = False
         self._last_model_change_grid_ms = None
@@ -591,9 +589,7 @@ def test_fullscreen_label_edit_replaces_stale_grid_redo_state(monkeypatch):
 
     assert window._label_undo_entry is not None
     assert [item.path for item in window._label_undo_entry.items] == ["/photos/b.jpg"]
-    assert window._label_undo_entry.previous_labels == {
-        "/photos/b.jpg": "Approved"
-    }
+    assert window._label_undo_entry.previous_labels == {"/photos/b.jpg": "Approved"}
     assert window._label_undo_entry.new_labels == {"/photos/b.jpg": "Rejected"}
     assert window._label_undo_entry.anchor_path == "/photos/b.jpg"
     assert window._label_undo_entry.origin == "fullscreen"

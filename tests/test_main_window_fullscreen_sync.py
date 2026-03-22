@@ -215,9 +215,7 @@ class _FullscreenSyncWindow:
         self.grid = _FakeGrid(self)
         self.grid.set_data(photo_model.photos)
         self._fullscreen_overlay = overlay
-        self._fullscreen_started_with_multi_selection = (
-            started_with_multi_selection
-        )
+        self._fullscreen_started_with_multi_selection = started_with_multi_selection
         self._pending_metadata_reselection_context = None
         self._next_model_change_fast_first_paint = False
         self._last_model_change_grid_ms = None

@@ -1,5 +1,6 @@
 """Metadata database management for photo metadata."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 import logging
@@ -8,9 +9,10 @@ from pathlib import Path
 import re
 import sqlite3
 import threading
-from typing import Any, Callable
+from typing import Any
 
 from PySide6.QtCore import QObject, Signal
+
 from piqopiqo.cache_paths import get_cache_dir_for_folder
 
 from .db_fields import DBFields
@@ -445,7 +447,9 @@ class MetadataDB:
                 exc_info=True,
             )
 
-    def _quick_check_connection(self, connection: sqlite3.Connection) -> tuple[bool, str]:
+    def _quick_check_connection(
+        self, connection: sqlite3.Connection
+    ) -> tuple[bool, str]:
         row = connection.execute("PRAGMA quick_check").fetchone()
         if row is None:
             return False, "PRAGMA quick_check returned no result"
@@ -488,7 +492,9 @@ class MetadataDB:
         self._close_connection_for_thread()
 
         db_exists = self.db_path.exists()
-        path_available = self.db_path.parent.exists() and (db_exists or not expected_existing)
+        path_available = self.db_path.parent.exists() and (
+            db_exists or not expected_existing
+        )
         open_create = create and not expected_existing
         if not path_available and not open_create:
             return None, MetadataDBFault(
@@ -593,7 +599,8 @@ class MetadataDB:
                     operation=operation,
                     exc=retry_exc,
                     during_write=during_write,
-                    path_available=self.db_path.parent.exists() and self.db_path.exists(),
+                    path_available=self.db_path.parent.exists()
+                    and self.db_path.exists(),
                 )
                 self._close_connection_for_thread()
 
@@ -613,7 +620,9 @@ class MetadataDB:
             raise MetadataDBUnavailableError(fault)
         return default
 
-    def probe_health(self, *, allow_create: bool = False) -> tuple[bool, MetadataDBFault | None]:
+    def probe_health(
+        self, *, allow_create: bool = False
+    ) -> tuple[bool, MetadataDBFault | None]:
         """Probe whether the DB can be re-opened and passes quick_check."""
         self.close()
         reopened, fault = self._attempt_reopen_after_failure(
@@ -635,6 +644,7 @@ class MetadataDB:
         Returns:
             Dictionary with metadata or None if not found.
         """
+
         def _load(conn: sqlite3.Connection) -> dict | None:
             cursor = conn.execute(
                 "SELECT * FROM photo_metadata WHERE file_path = ?", (file_path,)
@@ -709,6 +719,7 @@ class MetadataDB:
             file_path: Full path to the image file.
             data: Dictionary with metadata fields.
         """
+
         def _save(conn: sqlite3.Connection) -> None:
             now = datetime.now().isoformat()
             file_name = os.path.basename(file_path)
@@ -833,6 +844,7 @@ class MetadataDB:
         Returns:
             True if metadata exists.
         """
+
         def _check(conn: sqlite3.Connection) -> bool:
             cursor = conn.execute(
                 "SELECT 1 FROM photo_metadata WHERE file_path = ? LIMIT 1", (file_path,)
@@ -886,6 +898,7 @@ class MetadataDB:
         Returns:
             Stored value or None.
         """
+
         def _load(conn: sqlite3.Connection) -> str | None:
             row = conn.execute(
                 "SELECT value FROM folder_metadata WHERE data = ?",
@@ -913,6 +926,7 @@ class MetadataDB:
             data: Folder metadata key.
             value: Value to store, or None to delete.
         """
+
         def _save(conn: sqlite3.Connection) -> None:
             key = str(data)
             if value is None:
@@ -946,6 +960,7 @@ class MetadataDB:
 
         Returns a mapping of field_key -> field_value (may be None).
         """
+
         def _load(conn: sqlite3.Connection) -> dict[str, str | None] | None:
             if not field_keys:
                 return {}
@@ -1007,6 +1022,7 @@ class MetadataDB:
 
         If keys is None, deletes all stored keys for the file.
         """
+
         def _delete(conn: sqlite3.Connection) -> None:
             if not keys:
                 conn.execute(
@@ -1037,8 +1053,11 @@ class MetadataDB:
         Args:
             file_path: Full path to the image file.
         """
+
         def _delete(conn: sqlite3.Connection) -> None:
-            conn.execute("DELETE FROM photo_exif_fields WHERE file_path = ?", (file_path,))
+            conn.execute(
+                "DELETE FROM photo_exif_fields WHERE file_path = ?", (file_path,)
+            )
             conn.execute("DELETE FROM photo_metadata WHERE file_path = ?", (file_path,))
             conn.commit()
 
@@ -1052,6 +1071,7 @@ class MetadataDB:
 
     def delete_all_metadata(self) -> None:
         """Delete all metadata entries from the database."""
+
         def _delete_all(conn: sqlite3.Connection) -> None:
             conn.execute("DELETE FROM photo_exif_fields")
             conn.execute("DELETE FROM photo_metadata")
@@ -1148,7 +1168,9 @@ class MetadataDBManager:
         *,
         allow_create: bool = False,
     ) -> tuple[bool, MetadataDBFault | None]:
-        return self.get_db_for_folder(folder_path).probe_health(allow_create=allow_create)
+        return self.get_db_for_folder(folder_path).probe_health(
+            allow_create=allow_create
+        )
 
     def close_all(self) -> None:
         """Close all database connections."""

@@ -105,9 +105,7 @@ def _image(path: str, name: str) -> dict:
     }
 
 
-def test_startup_load_uses_cached_metadata_for_first_time_taken_sort(
-    qapp, monkeypatch
-):
+def test_startup_load_uses_cached_metadata_for_first_time_taken_sort(qapp, monkeypatch):
     init_qsettings_store(dyn=True)
     set_state_value(StateKey.SORT_ORDER, SortOrder.TIME_TAKEN.name)
 
@@ -230,7 +228,9 @@ def test_loading_complete_runs_final_resort_and_clears_state():
 
 class _FakeRunDeferredWindow:
     def __init__(self):
-        self.photo_model = type("PhotoModel", (), {"sort_order": SortOrder.TIME_TAKEN})()
+        self.photo_model = type(
+            "PhotoModel", (), {"sort_order": SortOrder.TIME_TAKEN}
+        )()
         self.calls: list[object] = []
 
     def _capture_grid_viewport_snapshot(self) -> dict:
@@ -305,7 +305,9 @@ class _FakeEditableReadyWindow:
         self.grid = _FakeGrid()
         self.edit_panel = None
         self._selected_paths_cache: set[str] = set()
-        self.photo_model = type("PhotoModel", (), {"sort_order": SortOrder.TIME_TAKEN})()
+        self.photo_model = type(
+            "PhotoModel", (), {"sort_order": SortOrder.TIME_TAKEN}
+        )()
         self._current_filter = None
         self._pending_scheduled_sync_fields: set[str] = set()
         self._model_refresh_scheduled = False

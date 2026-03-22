@@ -192,7 +192,9 @@ class MainWindow(QMainWindow):
         self._launch_command = list(launch_command or [])
         self._db_recovery_active = False
         self._db_recovery_affected_folders: set[str] = set()
-        self._db_recovery_pending_metadata_saves: dict[str, _PendingMetadataSaveReplay] = {}
+        self._db_recovery_pending_metadata_saves: dict[
+            str, _PendingMetadataSaveReplay
+        ] = {}
         self._db_recovery_pending_redo_messages: list[str] = []
         self._db_recovery_rebuild_attempted = False
         self._db_recovery_probe_timer = QTimer(self)
@@ -524,9 +526,7 @@ class MainWindow(QMainWindow):
 
         if self._label_undo_entry is None:
             return
-        self._label_undo_entry.new_labels = {
-            item.path: label_name for item in items
-        }
+        self._label_undo_entry.new_labels = {item.path: label_name for item in items}
 
     def _refresh_grid_item_if_visible(self, file_path: str) -> None:
         index = self.grid.get_index_for_path(file_path)
@@ -842,12 +842,10 @@ class MainWindow(QMainWindow):
         if not missing_paths:
             return
 
-        self._deferred_time_taken_load_resort_state = (
-            _DeferredTimeTakenLoadResortState(
-                pending_paths=missing_paths,
-                processed_since_last_resort=0,
-                batch_size=self._get_time_taken_load_resort_batch_size(),
-            )
+        self._deferred_time_taken_load_resort_state = _DeferredTimeTakenLoadResortState(
+            pending_paths=missing_paths,
+            processed_since_last_resort=0,
+            batch_size=self._get_time_taken_load_resort_batch_size(),
         )
 
     def _prepare_photos_for_folder_load(
@@ -1349,11 +1347,13 @@ class MainWindow(QMainWindow):
         merged_changed_fields = {str(field) for field in changed_fields if field}
         if existing is not None:
             merged_changed_fields.update(existing.changed_fields)
-        self._db_recovery_pending_metadata_saves[file_path] = _PendingMetadataSaveReplay(
-            file_path=file_path,
-            data=data.copy(),
-            changed_fields=merged_changed_fields,
-            source=str(source),
+        self._db_recovery_pending_metadata_saves[file_path] = (
+            _PendingMetadataSaveReplay(
+                file_path=file_path,
+                data=data.copy(),
+                changed_fields=merged_changed_fields,
+                source=str(source),
+            )
         )
 
     def _record_db_redo_warning(self, message: str) -> None:
@@ -1420,7 +1420,9 @@ class MainWindow(QMainWindow):
 
     def _replay_pending_metadata_saves(self) -> tuple[bool, set[str]]:
         changed_fields: set[str] = set()
-        for file_path, pending in list(self._db_recovery_pending_metadata_saves.items()):
+        for file_path, pending in list(
+            self._db_recovery_pending_metadata_saves.items()
+        ):
             try:
                 db = self.db_manager.get_db_for_image(file_path)
                 db.save_metadata(file_path, pending.data)
@@ -2729,9 +2731,7 @@ class MainWindow(QMainWindow):
         self,
     ) -> OnFullscreenExitMultipleSelected:
         try:
-            mode = get_user_setting(
-                UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE
-            )
+            mode = get_user_setting(UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE)
         except RuntimeError:
             return OnFullscreenExitMultipleSelected.KEEP_SELECTION
 
@@ -2809,11 +2809,7 @@ class MainWindow(QMainWindow):
         }
         started_with_multi = bool(state.get("started_with_multi_selection"))
         selectable_path_set = current_path_set.difference(ejected_paths)
-        visible_path_set = {
-            path
-            for path in loop_paths
-            if path in selectable_path_set
-        }
+        visible_path_set = {path for path in loop_paths if path in selectable_path_set}
         last_all_path = all_paths[-1] if all_paths else None
 
         if not started_with_multi:

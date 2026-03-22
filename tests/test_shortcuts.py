@@ -143,9 +143,15 @@ def test_build_filter_label_shortcut_bindings_skips_missing_and_empty():
 
 
 def test_lookup_shortcut_resolves_enum_and_name_keys_but_not_enum_values():
-    assert lookup_shortcut({Shortcut.SELECT_ALL: "Ctrl+A"}, Shortcut.SELECT_ALL) == "Ctrl+A"
+    assert (
+        lookup_shortcut({Shortcut.SELECT_ALL: "Ctrl+A"}, Shortcut.SELECT_ALL)
+        == "Ctrl+A"
+    )
     assert (
         lookup_shortcut({Shortcut.SELECT_ALL.name: "Ctrl+A"}, Shortcut.SELECT_ALL)
         == "Ctrl+A"
     )
-    assert lookup_shortcut({Shortcut.SELECT_ALL.value: "Ctrl+A"}, Shortcut.SELECT_ALL) is None
+    assert (
+        lookup_shortcut({Shortcut.SELECT_ALL.value: "Ctrl+A"}, Shortcut.SELECT_ALL)
+        is None
+    )

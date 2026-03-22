@@ -251,7 +251,9 @@ class FlickrPreflightDialog(QDialog):
         return len(self._scope_items(use_label_scope))
 
     def _scope_items(self, use_label_scope: bool) -> list[dict]:
-        return self._label_upload_items if use_label_scope else self._visible_upload_items
+        return (
+            self._label_upload_items if use_label_scope else self._visible_upload_items
+        )
 
     def _scope_log_name(self, use_label_scope: bool) -> str:
         return "label" if use_label_scope else "visible"
@@ -364,9 +366,7 @@ class FlickrPreflightDialog(QDialog):
     def _refresh_scope_state(self) -> None:
         self.selected_use_label_scope = self._get_selected_use_label_scope()
         selected_count = self._scope_count(self.selected_use_label_scope)
-        self.count_label.setText(
-            f"Photos to upload:<br><b>{selected_count}</b>"
-        )
+        self.count_label.setText(f"Photos to upload:<br><b>{selected_count}</b>")
 
         missing_paths: list[str] | None = None
         if self._require_metadata:
@@ -419,20 +419,26 @@ class FlickrPreflightDialog(QDialog):
             )
             self._set_validation_worker(use_label_scope, worker)
             worker.signals.finished.connect(
-                lambda missing_paths_obj, use_label_scope=use_label_scope: self._on_metadata_validation_finished(  # noqa: B023
-                    use_label_scope,
-                    missing_paths_obj,
+                lambda missing_paths_obj, use_label_scope=use_label_scope: (
+                    self._on_metadata_validation_finished(  # noqa: B023
+                        use_label_scope,
+                        missing_paths_obj,
+                    )
                 )
             )
             worker.signals.cancelled.connect(
-                lambda use_label_scope=use_label_scope: self._on_metadata_validation_cancelled(  # noqa: B023
-                    use_label_scope
+                lambda use_label_scope=use_label_scope: (
+                    self._on_metadata_validation_cancelled(  # noqa: B023
+                        use_label_scope
+                    )
                 )
             )
             worker.signals.error.connect(
-                lambda message, use_label_scope=use_label_scope: self._on_metadata_validation_error(  # noqa: B023
-                    use_label_scope,
-                    message,
+                lambda message, use_label_scope=use_label_scope: (
+                    self._on_metadata_validation_error(  # noqa: B023
+                        use_label_scope,
+                        message,
+                    )
                 )
             )
             QThreadPool.globalInstance().start(worker)
@@ -460,7 +466,9 @@ class FlickrPreflightDialog(QDialog):
         self._set_validation_missing_paths(use_label_scope, [])
         self._refresh_scope_state()
 
-    def _on_metadata_validation_error(self, use_label_scope: bool, message: str) -> None:
+    def _on_metadata_validation_error(
+        self, use_label_scope: bool, message: str
+    ) -> None:
         self._set_validation_worker(use_label_scope, None)
         logger.warning(
             "Flickr metadata precheck failed for %s scope; allowing upload: %s",
@@ -764,7 +772,7 @@ class FlickrUploadProgressDialog(QDialog):
             exiftool_path=self._exiftool_path,
             token_cache_dir=str(get_flickr_cache_dir()),
             max_workers=int(
-                get_runtime_setting(RuntimeSettingKey.FLICKR_UPLOAD_MAX_WORKERS)
+                get_runtime_setting(RuntimeSettingKey.FLICKR_UPLOAD_MAX_WORKERS)  # type: ignore
             ),
             album_plan=album_plan,
             on_album_id_resolved=self._set_folder_album_id_callback,
@@ -1165,7 +1173,9 @@ def _launch_flickr_upload_flow(
 
         # Upload flow
         session_album_error = ""
-        upload_items = _build_upload_items(parent, preflight.selected_upload_scope_items())
+        upload_items = _build_upload_items(
+            parent, preflight.selected_upload_scope_items()
+        )
         exiftool_path = str(get_user_setting(UserSettingKey.EXIFTOOL_PATH) or "")
 
         cached_plan_for_upload = None

@@ -222,9 +222,7 @@ class PhotoGrid(QWidget):
             sc_clear_filter.activated.connect(self._activate_clear_filter_shortcut)
             self._shared_grid_view_shortcut_objects.append(sc_clear_filter)
 
-        focus_search_shortcut = lookup_shortcut(
-            shortcuts, Shortcut.FILTER_FOCUS_SEARCH
-        )
+        focus_search_shortcut = lookup_shortcut(shortcuts, Shortcut.FILTER_FOCUS_SEARCH)
         if focus_search_shortcut:
             sc_focus_search = QShortcut(parse_shortcut(focus_search_shortcut), scope)
             sc_focus_search.setContext(Qt.WidgetWithChildrenShortcut)
@@ -564,8 +562,8 @@ class PhotoGrid(QWidget):
 
         app = QApplication.instance()
         focus_widget = app.focusWidget() if app is not None else None
-        restore_grid_focus = (
-            focus_widget is not None and self._widget_is_within_scope(focus_widget, self)
+        restore_grid_focus = focus_widget is not None and self._widget_is_within_scope(
+            focus_widget, self
         )
 
         # Clear existing cells
@@ -1340,9 +1338,7 @@ class PhotoGrid(QWidget):
             0,
             min(target_row - clamped_viewport_row, int(self.scrollbar.maximum())),
         )
-        self._set_scrollbar_value(
-            desired_top, navigation_activity=navigation_activity
-        )
+        self._set_scrollbar_value(desired_top, navigation_activity=navigation_activity)
         return True
 
     def _ensure_visible(self, index, *, navigation_activity: bool = True):

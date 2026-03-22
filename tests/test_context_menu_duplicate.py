@@ -362,6 +362,8 @@ def test_edit_in_external_app_keeps_best_effort_on_partial_copy_failure(
     assert opened == [
         ("/Applications/TestEditor.app", [duplicated_first]),
     ]
-    assert duplicated_second not in [item.path for item in window.photo_model.all_photos]
+    assert duplicated_second not in [
+        item.path for item in window.photo_model.all_photos
+    ]
 
     window.db_manager.close_all()

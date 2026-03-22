@@ -136,7 +136,14 @@ def test_escape_shortcut_reveals_anchor_when_it_is_offscreen(qapp):
     grid.keyPressEvent(event)
     qapp.processEvents()
 
-    assert [item.is_selected for item in items] == [False, False, False, False, False, True]
+    assert [item.is_selected for item in items] == [
+        False,
+        False,
+        False,
+        False,
+        False,
+        True,
+    ]
     assert grid._last_selected_index == 5
     assert grid.scrollbar.value() == 5
 

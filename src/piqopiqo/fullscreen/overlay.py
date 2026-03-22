@@ -932,9 +932,7 @@ class FullscreenOverlay(QWidget):
             self._zoom_to_base_view()
         elif match_shortcut_sequence(
             event,
-            get_user_setting(UserSettingKey.SHORTCUTS).get(
-                Shortcut.EJECT_FROM_LOOP
-            ),
+            get_user_setting(UserSettingKey.SHORTCUTS).get(Shortcut.EJECT_FROM_LOOP),
         ):
             self.eject_from_loop_requested.emit()
         else:

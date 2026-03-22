@@ -785,7 +785,7 @@ class QSettingsStore:
         if full_key in self._memory:
             return self._memory[full_key]
 
-        if self._dyn:
+        if self._settings is None:
             return deepcopy(entry.default)
 
         if not self._settings.contains(full_key):
@@ -814,7 +814,7 @@ class QSettingsStore:
         if full_key in self._memory:
             return self._memory[full_key]
 
-        if self._dyn:
+        if self._settings is None:
             return deepcopy(entry.default)
 
         if not self._settings.contains(full_key):
@@ -857,8 +857,9 @@ class QSettingsStore:
         return f"{SettingsGroup.SETTINGS.value}/{key.value}"
 
     def _read_persisted_value(self, full_key: str, entry: StateDef | SettingDef):
+        assert self._settings is not None
         if entry.json_storage:
-            raw = self._settings.value(full_key, type=str)
+            raw: str = self._settings.value(full_key, type=str)  # type: ignore
             try:
                 decoded = json.loads(raw)
                 return self._deserialize(entry, decoded)
@@ -875,6 +876,8 @@ class QSettingsStore:
         entry: StateDef | SettingDef,
         value: object,
     ) -> None:
+        assert self._settings is not None
+
         if entry.json_storage:
             encoded = self._serialize(entry, value)
             self._settings.setValue(full_key, json.dumps(encoded))
@@ -903,6 +906,7 @@ class QSettingsStore:
         return deserializer(value)
 
     def _read_with_type(self, full_key: str, read_type: type) -> object:
+        assert self._settings is not None
         if read_type is QByteArray:
             return self._settings.value(full_key, type=QByteArray)
         if read_type is bool:
@@ -982,8 +986,8 @@ def get_effective_exif_panel_fields() -> list[ExifField]:
     User custom fields are appended, deduped by key, and use default label/formatter
     behavior (label=None, format=None).
     """
-    base_fields = list(get_runtime_setting(RuntimeSettingKey.EXIF_FIELDS))
-    custom_keys = list(get_user_setting(UserSettingKey.CUSTOM_EXIF_FIELDS) or [])
+    base_fields = list(get_runtime_setting(RuntimeSettingKey.EXIF_FIELDS))  # type: ignore
+    custom_keys = list(get_user_setting(UserSettingKey.CUSTOM_EXIF_FIELDS) or [])  # type: ignore
 
     out: list[ExifField] = []
     seen_keys: set[str] = set()
