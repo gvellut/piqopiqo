@@ -67,6 +67,8 @@ def test_preflight_album_field_visible_only_when_upload_ready(qapp) -> None:  # 
     assert upload_dialog.album_input.parent() is upload_dialog.album_info_group
     assert upload_dialog.scope_checkbox is None
     assert upload_dialog.action_btn.text() == "Upload"
+    assert upload_dialog.action_btn.isDefault() is True
+    assert upload_dialog.cancel_btn.isDefault() is False
 
     login_dialog = FlickrPreflightDialog(
         visible_upload_items=_scope_items("/a.jpg", "/b.jpg", "/c.jpg"),

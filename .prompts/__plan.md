@@ -101,3 +101,4 @@
 ! [Undo label issue](Yb_tasks/Dc_Undo_label_issue.md)
 ! [Flick upload arrange dialog](Yb_tasks/Ec_Flick_upload_arrange_dialog.md)
 ! [Hide right column does not change number of rows](Yb_tasks/Bc_Hide_right_column_does_not_change_number_of_rows.md)
+! [Flickr upload default upload](Yb_tasks/Fc_Flickr_upload_default_upload.md)

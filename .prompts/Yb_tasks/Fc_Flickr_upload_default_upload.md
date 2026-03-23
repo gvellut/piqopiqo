@@ -1,0 +1,1 @@
+in the Flickr upload dialog Make the default button  (in blue ) the upload button

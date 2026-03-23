@@ -229,11 +229,15 @@ class FlickrPreflightDialog(QDialog):
         button_row.addStretch(1)
 
         self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setDefault(False)
+        self.cancel_btn.setAutoDefault(False)
         self.cancel_btn.clicked.connect(self.reject)
         button_row.addWidget(self.cancel_btn)
 
         action_label = "Upload" if token_exists else "Login to Flickr"
         self.action_btn = QPushButton(action_label)
+        self.action_btn.setDefault(True)
+        self.action_btn.setAutoDefault(True)
         self.action_btn.clicked.connect(self._on_action)
         button_row.addWidget(self.action_btn)
 
