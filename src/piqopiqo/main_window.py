@@ -2103,21 +2103,6 @@ class MainWindow(QMainWindow):
 
         previous_rows = int(getattr(grid, "n_rows", 0))
         visible_paths = list(grid.get_viewport_visible_paths())
-        items_data = getattr(grid, "items_data", [])
-        anchor_index = grid._choose_anchor_from_current_selection()
-        if 0 <= anchor_index < len(items_data):
-            target_path = items_data[anchor_index].path
-            preferred_row = None
-            if (
-                target_path in visible_paths
-                and int(getattr(grid, "n_cols", 0)) > 0
-                and getattr(grid, "scrollbar", None) is not None
-            ):
-                preferred_row = (anchor_index // grid.n_cols) - int(
-                    grid.scrollbar.value()
-                )
-            return (previous_rows, target_path, preferred_row)
-
         if visible_paths:
             return (previous_rows, visible_paths[0], 0)
 

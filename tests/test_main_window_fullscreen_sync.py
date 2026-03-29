@@ -446,11 +446,13 @@ def test_single_selection_navigation_updates_grid_selection_live(monkeypatch):
 
     window._apply_live_grid_selection_from_fullscreen()
     assert _selected_paths(window.images_data) == ["/photos/b.jpg"]
+    assert window.grid._last_selected_path == "/photos/b.jpg"
 
     overlay.current_path = "/photos/c.jpg"
     window._on_fullscreen_index_changed(2)
 
     assert _selected_paths(window.images_data) == ["/photos/c.jpg"]
+    assert window.grid._last_selected_path == "/photos/c.jpg"
     assert window.grid.ensure_visible_paths[-1] == "/photos/c.jpg"
 
 
@@ -714,6 +716,7 @@ def test_multi_selection_select_last_viewed_tracks_only_current_item_live(
     window._apply_live_grid_selection_from_fullscreen()
 
     assert _selected_paths(window.images_data) == ["/photos/c.jpg"]
+    assert window.grid._last_selected_path == "/photos/c.jpg"
     assert window.grid.ensure_visible_paths[-1] == "/photos/c.jpg"
 
 

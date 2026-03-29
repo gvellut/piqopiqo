@@ -51,6 +51,7 @@ def test_refresh_visible_selection_only_updates_cells_without_full_render(
 
     items[0].is_selected = True
     items[1].is_selected = False
+    grid._set_selection_anchor(0)
 
     render_calls = {"count": 0}
 
@@ -62,10 +63,14 @@ def test_refresh_visible_selection_only_updates_cells_without_full_render(
 
     assert render_calls["count"] == 0
     assert grid.cells[0].is_selected is True
+    assert grid.cells[0].is_last_selected is True
     assert grid.cells[1].is_selected is False
+    assert grid.cells[1].is_last_selected is False
 
 
-def test_select_paths_refreshes_visible_selection_before_signal_handler_runs(qapp):
+def test_select_paths_refreshes_visible_selection_and_anchor_before_signal_handler_runs(
+    qapp,
+):
     init_qsettings_store(dyn=True)
     grid = PhotoGrid()
     grid._rebuild_grid(1, 2)
@@ -74,20 +79,25 @@ def test_select_paths_refreshes_visible_selection_before_signal_handler_runs(qap
     grid.set_data(items)
     qapp.processEvents()
 
-    observed_cell_states: list[tuple[bool, bool]] = []
+    observed_cell_states: list[tuple[tuple[bool, bool], tuple[bool, bool]]] = []
 
     def _record_selection(*_args) -> None:
         observed_cell_states.append(
-            (grid.cells[0].is_selected, grid.cells[1].is_selected)
+            (
+                (grid.cells[0].is_selected, grid.cells[0].is_last_selected),
+                (grid.cells[1].is_selected, grid.cells[1].is_last_selected),
+            )
         )
 
     grid.selection_changed.connect(_record_selection)
 
     grid.select_paths(["/tmp/b.jpg"], anchor_path="/tmp/b.jpg")
 
-    assert observed_cell_states == [(False, True)]
+    assert observed_cell_states == [((False, False), (True, True))]
     assert grid.cells[0].is_selected is False
+    assert grid.cells[0].is_last_selected is False
     assert grid.cells[1].is_selected is True
+    assert grid.cells[1].is_last_selected is True
 
 
 def test_refresh_item_ignores_out_of_range_index(qapp):

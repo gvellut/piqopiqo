@@ -356,9 +356,9 @@ class PhotoGrid(QWidget):
         for item in self.items_data:
             item.is_selected = True
 
-        self._set_selection_anchor(len(self.items_data) - 1)
-        self.selection_changed.emit(set(range(len(self.items_data))))
+        self._set_selection_anchor(0)
         self.refresh_visible_selection_only()
+        self.selection_changed.emit(set(range(len(self.items_data))))
 
     def set_data(self, items, *, fast_first_paint: bool = False):
         perf_enabled = logger.isEnabledFor(logging.DEBUG)
@@ -434,16 +434,22 @@ class PhotoGrid(QWidget):
 
     def refresh_visible_selection_only(self) -> None:
         """Refresh only visible cell selection highlights."""
-        if not self.cells or not self.items_data:
+        if not self.cells:
+            return
+
+        anchor_index = self._choose_anchor_from_current_selection()
+        if not self.items_data:
+            for cell in self.cells:
+                cell.set_selected_state(False, False)
             return
 
         start_idx = int(self.scrollbar.value()) * self.n_cols
         for i, cell in enumerate(self.cells):
-            data_index = start_idx + i
-            if 0 <= data_index < len(self.items_data):
-                cell.set_selected_state(bool(self.items_data[data_index].is_selected))
-            else:
-                cell.set_selected_state(False)
+            self._sync_cell_selection_state(
+                cell,
+                start_idx + i,
+                anchor_index=anchor_index,
+            )
 
     def select_paths(
         self,
@@ -493,6 +499,23 @@ class PhotoGrid(QWidget):
         else:
             self._last_selected_index = -1
             self._last_selected_path = None
+
+    def _sync_cell_selection_state(
+        self,
+        cell: PhotoCell,
+        data_index: int,
+        *,
+        anchor_index: int,
+    ) -> None:
+        if 0 <= data_index < len(self.items_data):
+            is_selected = bool(self.items_data[data_index].is_selected)
+            cell.set_selected_state(
+                is_selected,
+                is_selected and data_index == anchor_index,
+            )
+            return
+
+        cell.set_selected_state(False, False)
 
     def _choose_anchor_from_current_selection(self) -> int:
         if not self.items_data:
@@ -792,6 +815,7 @@ class PhotoGrid(QWidget):
             started = time.perf_counter()
 
         start_data_index = start_row * self.n_cols
+        anchor_index = self._choose_anchor_from_current_selection()
         buffer_start_idx, buffer_end_idx = self._buffer_index_range(start_row)
         visible_end_idx = min(
             len(self.items_data), start_data_index + (self.n_rows * self.n_cols)
@@ -820,13 +844,17 @@ class PhotoGrid(QWidget):
             if data_index < len(self.items_data):
                 item = self.items_data[data_index]
                 self._ensure_display_pixmap_loaded(item, allow_hq=allow_hq)
-                cell.set_content(item, item.is_selected)
+                cell.set_content(
+                    item,
+                    item.is_selected,
+                    item.is_selected and data_index == anchor_index,
+                )
                 cell.show()
 
                 if item.state == 0:
                     self.request_thumb.emit(data_index)
             else:
-                cell.set_content(None, False)
+                cell.set_content(None, False, False)
                 # Ensure complete cells are displayed even if empty
                 cell.show()
         if perf_enabled:
@@ -1108,9 +1136,14 @@ class PhotoGrid(QWidget):
             if 0 <= cell_pool_index < len(self.cells):
                 cell = self.cells[cell_pool_index]
                 item = self.items_data[global_index]
+                anchor_index = self._choose_anchor_from_current_selection()
                 self._sync_item_state_from_cache(item)
                 self._ensure_display_pixmap_loaded(item, allow_hq=self._allow_hq_now())
-                cell.set_content(item, item.is_selected)
+                cell.set_content(
+                    item,
+                    item.is_selected,
+                    item.is_selected and global_index == anchor_index,
+                )
 
     def invalidate_all_pixmap_caches(self) -> None:
         """Clear all loaded source/display pixmaps so they reload with new settings."""

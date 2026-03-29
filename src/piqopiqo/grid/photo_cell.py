@@ -31,6 +31,7 @@ class PhotoCell(QFrame):
         self.index_in_grid = index_in_grid
         self.current_data = None
         self.is_selected = False
+        self.is_last_selected = False
         self.layout_info = {}
 
         # Mimic the behavior of the delegate: accept focus, handle mouse
@@ -43,15 +44,30 @@ class PhotoCell(QFrame):
             get_runtime_setting(RuntimeSettingKey.GRID_BORDER_COLOR)
         )
 
-    def set_content(self, data: dict | None, is_selected: bool):
+    def set_content(
+        self,
+        data: dict | None,
+        is_selected: bool,
+        is_last_selected: bool = False,
+    ):
         self.current_data = data
         self.is_selected = is_selected
+        self.is_last_selected = bool(is_selected and is_last_selected)
         self.update()
 
-    def set_selected_state(self, is_selected: bool) -> None:
-        if self.is_selected == is_selected:
+    def set_selected_state(
+        self,
+        is_selected: bool,
+        is_last_selected: bool = False,
+    ) -> None:
+        normalized_is_last_selected = bool(is_selected and is_last_selected)
+        if (
+            self.is_selected == is_selected
+            and self.is_last_selected == normalized_is_last_selected
+        ):
             return
         self.is_selected = is_selected
+        self.is_last_selected = normalized_is_last_selected
         self.update()
 
     def set_layout_info(self, info: dict):
@@ -91,6 +107,12 @@ class PhotoCell(QFrame):
                     else QColor("#0078d7")
                 )
                 painter.fillRect(rect, highlight_color)
+
+            if self.is_selected and self.is_last_selected:
+                anchor_border_rect = rect.adjusted(3, 3, -4, -4)
+                if anchor_border_rect.width() > 0 and anchor_border_rect.height() > 0:
+                    painter.setPen(QPen(QColor("#0b3d91"), 2))
+                    painter.drawRect(anchor_border_rect)
 
             if self.current_data is None:
                 return

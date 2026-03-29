@@ -56,7 +56,8 @@ def test_select_all_visible_selects_all_items_and_emits_selection(qapp):
     grid.select_all_visible()
 
     assert [item.is_selected for item in items] == [True, True, True]
-    assert grid._last_selected_index == 2
+    assert grid._last_selected_index == 0
+    assert grid._last_selected_path == "/tmp/a.jpg"
     assert emitted == [{0, 1, 2}]
 
 

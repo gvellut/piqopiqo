@@ -197,21 +197,32 @@ def test_toggle_sidebar_shortcut_preserves_panel_focus(window, qapp):
     assert qapp.focusWidget() is window.exif_panel
 
 
-def test_toggle_sidebar_keeps_selected_path_visible(window, qapp):
+def test_toggle_sidebar_keeps_visible_items_when_selected_anchor_is_offscreen(
+    window,
+    qapp,
+):
     initial_rows = window.grid.n_rows
     target_index = 150
     target_path = window.images_data[target_index].path
+    initial_visible_paths = window.grid.get_viewport_visible_paths()
 
     window.grid.on_cell_clicked(target_index, False, False)
     qapp.processEvents()
 
     assert target_path not in window.grid.get_viewport_visible_paths()
+    assert window.grid.get_viewport_visible_paths() == initial_visible_paths
 
     window._toggle_right_sidebar_collapsed()
     qapp.processEvents()
 
     assert window.grid.n_rows == initial_rows
-    assert target_path in window.grid.get_viewport_visible_paths()
+    assert target_path not in window.grid.get_viewport_visible_paths()
+    assert window.grid.get_viewport_visible_paths() == initial_visible_paths
+
+    window._toggle_right_sidebar_collapsed()
+    qapp.processEvents()
+
+    assert window.grid.get_viewport_visible_paths() == initial_visible_paths
 
 
 def test_toggle_sidebar_keeps_row_count_and_cell_height_but_expands_width(window, qapp):

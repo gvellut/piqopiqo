@@ -564,7 +564,7 @@ def test_toggle_right_sidebar_restores_from_manual_collapsed_state():
     assert fake_window._main_splitter.set_sizes_calls == [[820, 180]]
 
 
-def test_capture_sidebar_toggle_viewport_context_prefers_selected_anchor():
+def test_capture_sidebar_toggle_viewport_context_keeps_first_visible_when_anchor_exists():
     fake_window = _FakeSidebarToggleViewportWindow(
         _FakeSidebarToggleGrid(
             ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],
@@ -577,7 +577,7 @@ def test_capture_sidebar_toggle_viewport_context_prefers_selected_anchor():
 
     context = MainWindow._capture_sidebar_toggle_viewport_restore_context(fake_window)
 
-    assert context == (2, "/b.jpg", 1)
+    assert context == (2, "/a.jpg", 0)
 
 
 def test_capture_sidebar_toggle_viewport_context_falls_back_to_first_visible():

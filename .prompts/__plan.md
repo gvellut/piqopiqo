@@ -104,3 +104,4 @@
 ! [Flickr upload default upload](Yb_tasks/Fc_Flickr_upload_default_upload.md)
 ! [State config identical](Yb_tasks/Gc_State_config_identical.md)
 ! [Archive tool](Yb_tasks/Hc_Archive_tool.md)
+! [add indicator last selected](Yb_tasks/Ic_add_indicator_last_selected.md)
