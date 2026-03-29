@@ -1,4 +1,4 @@
-"""Tests for Copy SD bulk-copy integration in MainWindow."""
+"""Tests for Copy SD wiring in MainWindow."""
 
 from __future__ import annotations
 
@@ -65,6 +65,9 @@ class _MediaManagerStub:
     def regenerate_thumbnails(self, _file_paths: list[str]) -> None:
         return None
 
+    def refresh_files(self, _file_paths: list[str]) -> None:
+        return None
+
     def reload_exif(self, _file_paths: list[str]) -> None:
         return None
 
@@ -103,128 +106,22 @@ def window(qapp, monkeypatch):  # noqa: ARG001
     )
 
     main_window = MainWindow([], [], None)
-    main_window.root_folder = "/photos/root"
     yield main_window
     main_window.close()
 
 
-def test_workspace_bulk_refresh_overlap_reloads_once_when_files_copied(
-    window: MainWindow, monkeypatch
-):
-    stop_calls: list[str] = []
-    load_calls: list[tuple[str, bool]] = []
-    start_calls: list[str] = []
+def test_on_copy_from_sd_passes_workspace_watcher_control(window: MainWindow, monkeypatch):
+    captured: list[object] = []
 
-    monkeypatch.setattr(window, "_stop_folder_watcher", lambda: stop_calls.append("stop"))
+    def _fake_launch(parent=None, *, watcher_control=None):
+        captured.append(parent)
+        captured.append(watcher_control)
+
     monkeypatch.setattr(
-        window,
-        "_load_folder",
-        lambda folder, *, reset_grid_to_top=False: load_calls.append(
-            (folder, reset_grid_to_top)
-        ),
-    )
-    monkeypatch.setattr(
-        window, "_start_folder_watcher", lambda: start_calls.append("start")
+        "piqopiqo.tools.copy_sd.launch_copy_sd",
+        _fake_launch,
     )
 
-    target_dir = "/photos/root/20260329_trip/CARD"
-    window._begin_workspace_bulk_refresh([target_dir])
-    window._finish_workspace_bulk_refresh([target_dir], copied_count=5)
+    window._on_copy_from_sd()
 
-    assert stop_calls == ["stop"]
-    assert load_calls == [("/photos/root", False)]
-    assert start_calls == []
-    assert window._bulk_workspace_watcher_suspended is False
-
-
-def test_workspace_bulk_refresh_overlap_zero_files_restarts_watcher_without_reload(
-    window: MainWindow, monkeypatch
-):
-    stop_calls: list[str] = []
-    load_calls: list[tuple[str, bool]] = []
-    start_calls: list[str] = []
-    scroll_calls: list[int] = []
-
-    monkeypatch.setattr(window, "_stop_folder_watcher", lambda: stop_calls.append("stop"))
-    monkeypatch.setattr(
-        window,
-        "_load_folder",
-        lambda folder, *, reset_grid_to_top=False: load_calls.append(
-            (folder, reset_grid_to_top)
-        ),
-    )
-    monkeypatch.setattr(
-        window, "_start_folder_watcher", lambda: start_calls.append("start")
-    )
-    monkeypatch.setattr(window.grid, "on_scroll", lambda value: scroll_calls.append(value))
-
-    target_dir = "/photos/root/20260329_trip/CARD"
-    window._begin_workspace_bulk_refresh([target_dir])
-    window._finish_workspace_bulk_refresh([target_dir], copied_count=0)
-
-    assert stop_calls == ["stop"]
-    assert load_calls == []
-    assert start_calls == ["start"]
-    assert scroll_calls == []
-    assert window._bulk_workspace_watcher_suspended is False
-
-
-def test_workspace_bulk_refresh_non_overlapping_targets_do_not_touch_workspace(
-    window: MainWindow, monkeypatch
-):
-    stop_calls: list[str] = []
-    load_calls: list[tuple[str, bool]] = []
-    start_calls: list[str] = []
-    scroll_calls: list[int] = []
-
-    monkeypatch.setattr(window, "_stop_folder_watcher", lambda: stop_calls.append("stop"))
-    monkeypatch.setattr(
-        window,
-        "_load_folder",
-        lambda folder, *, reset_grid_to_top=False: load_calls.append(
-            (folder, reset_grid_to_top)
-        ),
-    )
-    monkeypatch.setattr(
-        window, "_start_folder_watcher", lambda: start_calls.append("start")
-    )
-    monkeypatch.setattr(window.grid, "on_scroll", lambda value: scroll_calls.append(value))
-
-    target_dir = "/outside/root/20260329_trip/CARD"
-    window._begin_workspace_bulk_refresh([target_dir])
-    window._finish_workspace_bulk_refresh([target_dir], copied_count=4)
-
-    assert stop_calls == []
-    assert load_calls == []
-    assert start_calls == []
-    assert scroll_calls == []
-    assert window._bulk_workspace_watcher_suspended is False
-
-
-def test_workspace_bulk_refresh_reload_forces_current_viewport_render_pass(
-    window: MainWindow, monkeypatch
-):
-    stop_calls: list[str] = []
-    load_calls: list[tuple[str, bool]] = []
-    scroll_calls: list[int] = []
-
-    window.grid.scrollbar.setRange(0, 10)
-    window.grid.scrollbar.setValue(4)
-
-    monkeypatch.setattr(window, "_stop_folder_watcher", lambda: stop_calls.append("stop"))
-    monkeypatch.setattr(
-        window,
-        "_load_folder",
-        lambda folder, *, reset_grid_to_top=False: load_calls.append(
-            (folder, reset_grid_to_top)
-        ),
-    )
-    monkeypatch.setattr(window.grid, "on_scroll", lambda value: scroll_calls.append(value))
-
-    target_dir = "/photos/root/20260329_trip/CARD"
-    window._begin_workspace_bulk_refresh([target_dir])
-    window._finish_workspace_bulk_refresh([target_dir], copied_count=2)
-
-    assert stop_calls == ["stop"]
-    assert load_calls == [("/photos/root", False)]
-    assert scroll_calls == [4]
+    assert captured == [window, window._workspace_watcher]

@@ -33,6 +33,7 @@ class _MediaManagerStub:
         self.all_completed = _SignalStub()
         self.reset_calls: list[tuple[list[str], list[str]]] = []
         self.add_files_calls: list[list[str]] = []
+        self.refresh_files_calls: list[list[str]] = []
         self.visible_calls: list[list[str]] = []
 
     def reset_for_folder(
@@ -70,6 +71,9 @@ class _MediaManagerStub:
 
     def regenerate_thumbnails(self, _file_paths: list[str]) -> None:
         return None
+
+    def refresh_files(self, file_paths: list[str]) -> None:
+        self.refresh_files_calls.append(list(file_paths))
 
     def reload_exif(self, _file_paths: list[str]) -> None:
         return None
@@ -220,3 +224,25 @@ def test_watcher_add_batch_restores_viewport_without_revealing_new_top_item(
     assert anchor_path in visible_after
     assert _viewport_row_for_path(window, anchor_path) == anchor_row
     assert new_image["path"] not in visible_after
+
+
+def test_watcher_modified_batch_uses_combined_media_refresh_once(
+    window: MainWindow, monkeypatch
+):
+    refresh_item_calls: list[int] = []
+    window.media_manager.refresh_files_calls.clear()
+    monkeypatch.setattr(
+        window.grid,
+        "refresh_item",
+        lambda index: refresh_item_calls.append(index),
+    )
+
+    modified_paths = [
+        window.photo_model.all_photos[5].path,
+        window.photo_model.all_photos[8].path,
+    ]
+
+    window._on_folder_changes([("modified", path) for path in modified_paths])
+
+    assert window.media_manager.refresh_files_calls == [modified_paths]
+    assert len(refresh_item_calls) == 2

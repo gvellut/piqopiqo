@@ -132,11 +132,24 @@ class _FakeCheckbox:
         return self._checked
 
 
-def test_launch_copy_sd_notifies_parent_callbacks_with_target_dirs(monkeypatch, tmp_path):
+class _WatcherControlSpy:
+    def __init__(self) -> None:
+        self.suspend_calls = 0
+        self.resume_calls = 0
+
+    def suspend(self) -> None:
+        self.suspend_calls += 1
+
+    def resume_and_refresh(self) -> None:
+        self.resume_calls += 1
+
+
+def test_launch_copy_sd_suspends_and_resumes_watcher_control(monkeypatch, tmp_path):
     output_root = tmp_path / "exports"
     output_root.mkdir()
     state = _FakeState()
     volume = PhotoVolume("CARD", "/Volumes/CARD")
+    watcher_control = _WatcherControlSpy()
 
     class _FakeInputDialog:
         def __init__(self, *args, **kwargs) -> None:  # noqa: ARG002
@@ -169,17 +182,6 @@ def test_launch_copy_sd_notifies_parent_callbacks_with_target_dirs(monkeypatch, 
         def exec(self) -> int:
             return QDialog.DialogCode.Accepted
 
-    parent = SimpleNamespace()
-
-    def _on_started(target_dirs: list[str]) -> None:
-        start_calls.append(list(target_dirs))
-
-    def _on_finished(target_dirs: list[str], copied_count: int) -> None:
-        finish_calls.append((list(target_dirs), copied_count))
-
-    start_calls: list[list[str]] = []
-    finish_calls: list[tuple[list[str], int]] = []
-
     monkeypatch.setattr(
         "piqopiqo.tools.copy_sd.get_sd_volume",
         lambda: volume,
@@ -207,26 +209,22 @@ def test_launch_copy_sd_notifies_parent_callbacks_with_target_dirs(monkeypatch, 
     )
 
     launch_copy_sd(
-        parent,
-        on_bulk_copy_started=_on_started,
-        on_bulk_copy_finished=_on_finished,
+        SimpleNamespace(),
+        watcher_control=watcher_control,
     )
 
-    expected_target_dirs = [
-        str(output_root / "20260301_annecy" / volume.name),
-        str(output_root / "20260302_annecy" / volume.name),
-    ]
-    assert start_calls == [expected_target_dirs]
-    assert finish_calls == [(expected_target_dirs, 3)]
+    assert watcher_control.suspend_calls == 1
+    assert watcher_control.resume_calls == 1
 
 
-def test_launch_copy_sd_notifies_finish_callback_for_partial_cancel(
+def test_launch_copy_sd_resumes_watcher_control_for_partial_cancel(
     monkeypatch, tmp_path
 ):
     output_root = tmp_path / "exports"
     output_root.mkdir()
     state = _FakeState()
     volume = PhotoVolume("CARD", "/Volumes/CARD")
+    watcher_control = _WatcherControlSpy()
 
     class _FakeInputDialog:
         def __init__(self, *args, **kwargs) -> None:  # noqa: ARG002
@@ -259,13 +257,6 @@ def test_launch_copy_sd_notifies_finish_callback_for_partial_cancel(
         def exec(self) -> int:
             return QDialog.DialogCode.Accepted
 
-    parent = SimpleNamespace()
-
-    finish_calls: list[tuple[list[str], int]] = []
-
-    def _on_finished(target_dirs: list[str], copied_count: int) -> None:
-        finish_calls.append((list(target_dirs), copied_count))
-
     monkeypatch.setattr(
         "piqopiqo.tools.copy_sd.get_sd_volume",
         lambda: volume,
@@ -292,7 +283,7 @@ def test_launch_copy_sd_notifies_finish_callback_for_partial_cancel(
         _FakeProgressDialog,
     )
 
-    launch_copy_sd(parent, on_bulk_copy_finished=_on_finished)
+    launch_copy_sd(SimpleNamespace(), watcher_control=watcher_control)
 
-    expected_target_dirs = [str(output_root / "20260303_trip" / volume.name)]
-    assert finish_calls == [(expected_target_dirs, 2)]
+    assert watcher_control.suspend_calls == 1
+    assert watcher_control.resume_calls == 1

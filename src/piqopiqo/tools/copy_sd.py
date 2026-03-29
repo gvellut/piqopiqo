@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
+from piqopiqo.folder_watcher import WorkspaceWatcherControl
 from piqopiqo.ssf.settings_state import (
     StateKey,
     UserSettingKey,
@@ -854,8 +855,7 @@ def _resolve_dates_with_progress(parent, date_spec: str, volume: PhotoVolume):
 def launch_copy_sd(
     parent=None,
     *,
-    on_bulk_copy_started=None,
-    on_bulk_copy_finished=None,
+    watcher_control: WorkspaceWatcherControl | None = None,
 ):
     sdcard_names = get_user_setting(UserSettingKey.SDCARD_NAMES)
     if sdcard_names:
@@ -951,15 +951,12 @@ def launch_copy_sd(
     )
 
     try:
-        if callable(on_bulk_copy_started):
-            on_bulk_copy_started(list(target_dirs))
+        if watcher_control is not None:
+            watcher_control.suspend()
         progress_dialog.exec()
     finally:
-        if callable(on_bulk_copy_finished):
-            on_bulk_copy_finished(
-                list(target_dirs),
-                progress_dialog.copied_count,
-            )
+        if watcher_control is not None:
+            watcher_control.resume_and_refresh()
 
     # Save user choices for next session
     state.set(StateKey.COPY_SD_NAME_SUFFIX, name)

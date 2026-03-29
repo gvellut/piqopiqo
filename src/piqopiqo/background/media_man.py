@@ -400,6 +400,50 @@ class MediaManager(QObject):
                 to_visible=file_path in self._visible_paths,
             )
 
+    def refresh_files(self, file_paths: list[str]) -> None:
+        """Refresh existing files after an on-disk change.
+
+        This clears thumbnail caches and re-queues one combined reload for:
+        - editable metadata
+        - EXIF panel fields
+        - embedded thumbnail extraction
+
+        HQ thumbnails continue through the normal follow-up queue.
+        """
+        for file_path in file_paths:
+            info = self._file_infos.get(file_path)
+            if info is None:
+                continue
+
+            self._migrate_legacy_thumbs(info)
+
+            if file_path in self._thumb_done:
+                self._thumb_done.remove(file_path)
+                self._thumb_completed = max(0, self._thumb_completed - 1)
+                self.thumb_progress_updated.emit(
+                    self._thumb_completed, self._thumb_total
+                )
+
+            for path in (
+                info.embedded_cache_path,
+                info.hq_cache_path,
+                info.legacy_embedded_cache_path,
+                info.legacy_hq_cache_path,
+            ):
+                try:
+                    Path(path).unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+            self._queue_combined(
+                file_path,
+                want_embedded=True,
+                want_editable=True,
+                want_panel=True,
+                to_visible=file_path in self._visible_paths,
+                force=True,
+            )
+
     def reload_exif(self, file_paths: list[str]) -> None:
         """Re-read EXIF for editable + panel fields and overwrite DB values."""
         for file_path in file_paths:

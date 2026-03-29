@@ -39,7 +39,7 @@ from .dialogs.workspace_properties_dialog import (
     WorkspacePropertiesDialog,
 )
 from .folder_scan import scan_folder
-from .folder_watcher import FolderWatcher
+from .folder_watcher import WorkspaceWatcherController, normalize_workspace_changes
 from .fullscreen import FullscreenOverlay
 from .grid.photo_grid import PhotoGrid
 from .metadata.db_fields import DBFields
@@ -160,9 +160,10 @@ class MainWindow(QMainWindow):
         self._pending_scheduled_sync_fields: set[str] = set()
         self._pending_metadata_reselection_context: dict | None = None
         self._fullscreen_started_with_multi_selection = False
-        self._folder_watcher: FolderWatcher | None = None
-        self._watcher_suppressed: dict[str, float] = {}
-        self._bulk_workspace_watcher_suspended = False
+        self._workspace_watcher = WorkspaceWatcherController(
+            self._on_folder_changes,
+            parent=self,
+        )
         self._active_apply_gpx_worker = None
         self._active_flickr_upload_manager = None
         self._active_flickr_metadata_precheck_worker = None
@@ -362,6 +363,7 @@ class MainWindow(QMainWindow):
         photos = self._prepare_photos_for_folder_load(images, source_folders)
         self.photo_model.set_photos(photos, source_folders)
         self._items_by_path = {item.path: item for item in self.photo_model.all_photos}
+        self._configure_workspace_watcher()
 
         # Connect model signals
         self.photo_model.photos_changed.connect(self._on_model_changed)
@@ -2246,58 +2248,8 @@ class MainWindow(QMainWindow):
 
         launch_copy_sd(
             self,
-            on_bulk_copy_started=self._begin_workspace_bulk_refresh,
-            on_bulk_copy_finished=self._finish_workspace_bulk_refresh,
+            watcher_control=self._workspace_watcher,
         )
-
-    def _is_path_within_loaded_root(self, path: str) -> bool:
-        if not self.root_folder:
-            return False
-
-        try:
-            root_path = os.path.realpath(self.root_folder)
-            candidate_path = os.path.realpath(path)
-            return os.path.commonpath([root_path, candidate_path]) == root_path
-        except (TypeError, ValueError):
-            return False
-
-    def _begin_workspace_bulk_refresh(self, target_dirs: list[str]) -> None:
-        workspace_targets = [
-            path for path in target_dirs if self._is_path_within_loaded_root(path)
-        ]
-        if not workspace_targets:
-            self._bulk_workspace_watcher_suspended = False
-            return
-
-        self._bulk_workspace_watcher_suspended = True
-        self._stop_folder_watcher()
-
-    def _finish_workspace_bulk_refresh(
-        self,
-        target_dirs: list[str],
-        copied_count: int,
-    ) -> None:
-        if not self._bulk_workspace_watcher_suspended:
-            return
-
-        workspace_targets = [
-            path for path in target_dirs if self._is_path_within_loaded_root(path)
-        ]
-        self._bulk_workspace_watcher_suspended = False
-
-        if not self.root_folder:
-            return
-
-        if not workspace_targets:
-            self._start_folder_watcher()
-            return
-
-        if int(copied_count) > 0:
-            self._load_folder(self.root_folder)
-            self.grid.on_scroll(self.grid.scrollbar.value())
-            return
-
-        self._start_folder_watcher()
 
     def _on_archive(self):
         from .tools.archive import launch_archive
@@ -2488,7 +2440,7 @@ class MainWindow(QMainWindow):
 
     def _prepare_workspace_for_archive_move(self) -> None:
         self._stop_folder_watcher()
-        self._watcher_suppressed.clear()
+        self._workspace_watcher.clear_suppressed()
         self._background_db_save_pool.clear()
         if self.edit_panel is not None:
             self.edit_panel.shutdown_background_saves(0, clear_queued=True)
@@ -2502,7 +2454,7 @@ class MainWindow(QMainWindow):
         file_paths = [item.path for item in self.photo_model.all_photos]
         source_folders = list(self.photo_model.source_folders)
 
-        self._watcher_suppressed.clear()
+        self._workspace_watcher.clear_suppressed()
         self.db_manager.close_all()
         self.status_bar.clearMessage()
         self.status_bar.reset()
@@ -2515,11 +2467,11 @@ class MainWindow(QMainWindow):
         self.media_manager.resume_processing()
         self.grid.on_scroll(self.grid.scrollbar.value())
         self._reconcile_selection_and_panels()
+        self._configure_workspace_watcher()
         self._start_folder_watcher()
 
     def _unload_workspace(self, *, clear_last_folder: bool = False) -> None:
-        self._stop_folder_watcher()
-        self._watcher_suppressed.clear()
+        self._workspace_watcher.clear_workspace()
         self._cancel_deferred_selection_panel_refresh()
         self.media_manager.pause_processing()
         self.media_manager.reset_for_folder([], [])
@@ -2585,6 +2537,7 @@ class MainWindow(QMainWindow):
         photos = self._prepare_photos_for_folder_load(images, source_folders)
         self.photo_model.set_photos(photos, source_folders)
         self._items_by_path = {item.path: item for item in self.photo_model.all_photos}
+        self._configure_workspace_watcher()
 
         # Update filter panel
         self.filter_panel.set_folders(source_folders)
@@ -2610,70 +2563,43 @@ class MainWindow(QMainWindow):
 
     # --- Folder watching ---
 
-    def _start_folder_watcher(self) -> None:
+    def _configure_workspace_watcher(self) -> None:
         if not self.root_folder:
+            self._workspace_watcher.clear_workspace()
             return
 
-        self._stop_folder_watcher()
+        self._workspace_watcher.set_workspace(
+            self.root_folder,
+            [item.path for item in self.photo_model.all_photos],
+        )
 
-        watcher = FolderWatcher(self.root_folder, parent=self)
-        watcher.changes_detected.connect(self._on_folder_changes)
-        watcher.start()
-        self._folder_watcher = watcher
+    def _start_folder_watcher(self) -> None:
+        self._workspace_watcher.start()
 
     def _stop_folder_watcher(self) -> None:
-        watcher = self._folder_watcher
-        self._folder_watcher = None
-        if watcher is None:
-            return
-
-        try:
-            watcher.changes_detected.disconnect(self._on_folder_changes)
-        except RuntimeError:
-            pass
-
-        watcher.stop(timeout_s=1.0)
+        self._workspace_watcher.stop()
 
     def _suppress_watcher_paths(
         self, paths: list[str], duration_s: float = 2.0
     ) -> None:
-        expiry = time.monotonic() + max(0.0, float(duration_s))
-        for path in paths:
-            self._watcher_suppressed[path] = expiry
+        self._workspace_watcher.suppress_paths(paths, duration_s=duration_s)
 
     def _on_folder_changes(self, changes: list[tuple[str, str]]) -> None:
         if not changes:
             return
 
-        now = time.monotonic()
-        self._watcher_suppressed = {
-            path: until
-            for path, until in self._watcher_suppressed.items()
-            if until > now
-        }
-
-        added: set[str] = set()
-        deleted: set[str] = set()
-        modified: set[str] = set()
-
-        for kind, path in changes:
-            kind_lower = str(kind).lower()
-            if path in self._watcher_suppressed:
-                continue
-            if "added" in kind_lower:
-                added.add(path)
-            elif "deleted" in kind_lower or "removed" in kind_lower:
-                deleted.add(path)
-            elif "modified" in kind_lower:
-                modified.add(path)
+        normalized_changes = normalize_workspace_changes(changes)
+        deleted = [path for kind, path in normalized_changes if kind == "deleted"]
+        added = [path for kind, path in normalized_changes if kind == "added"]
+        modified = [path for kind, path in normalized_changes if kind == "modified"]
 
         # Deletions first to handle renames (delete+add)
-        for path in sorted(deleted):
+        for path in deleted:
             self.photo_model.remove_photo(path)
 
         added_items: list[ImageItem] = []
         added_paths: list[str] = []
-        for path in sorted(added):
+        for path in added:
             if path in self._items_by_path:
                 continue
             if not os.path.isfile(path):
@@ -2706,8 +2632,8 @@ class MainWindow(QMainWindow):
             self.filter_panel.set_folders(self.photo_model.source_folders)
             self._restore_grid_viewport_from_snapshot(snapshot)
 
-        effective_modified = modified - added - deleted
-        for path in sorted(effective_modified):
+        modified_paths: list[str] = []
+        for path in modified:
             item = self._items_by_path.get(path)
             if item is None:
                 continue
@@ -2717,8 +2643,11 @@ class MainWindow(QMainWindow):
             item.embedded_pixmap = None
             item.hq_pixmap = None
             item.pixmap = None
-            self.media_manager.regenerate_thumbnails([path])
+            modified_paths.append(path)
             self.grid.refresh_item(item._global_index)
+
+        if modified_paths:
+            self.media_manager.refresh_files(modified_paths)
 
     def on_reload_exif(self):
         """Reload EXIF (editable + panel fields) for selected or all filtered."""

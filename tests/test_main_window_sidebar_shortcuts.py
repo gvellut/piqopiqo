@@ -60,6 +60,9 @@ class _MediaManagerStub:
     def regenerate_thumbnails(self, _file_paths: list[str]) -> None:
         return None
 
+    def refresh_files(self, _file_paths: list[str]) -> None:
+        return None
+
     def reload_exif(self, _file_paths: list[str]) -> None:
         return None
 
