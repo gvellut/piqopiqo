@@ -162,6 +162,7 @@ class MainWindow(QMainWindow):
         self._fullscreen_started_with_multi_selection = False
         self._folder_watcher: FolderWatcher | None = None
         self._watcher_suppressed: dict[str, float] = {}
+        self._bulk_workspace_watcher_suspended = False
         self._active_apply_gpx_worker = None
         self._active_flickr_upload_manager = None
         self._active_flickr_metadata_precheck_worker = None
@@ -2243,7 +2244,60 @@ class MainWindow(QMainWindow):
     def _on_copy_from_sd(self):
         from .tools.copy_sd import launch_copy_sd
 
-        launch_copy_sd(self)
+        launch_copy_sd(
+            self,
+            on_bulk_copy_started=self._begin_workspace_bulk_refresh,
+            on_bulk_copy_finished=self._finish_workspace_bulk_refresh,
+        )
+
+    def _is_path_within_loaded_root(self, path: str) -> bool:
+        if not self.root_folder:
+            return False
+
+        try:
+            root_path = os.path.realpath(self.root_folder)
+            candidate_path = os.path.realpath(path)
+            return os.path.commonpath([root_path, candidate_path]) == root_path
+        except (TypeError, ValueError):
+            return False
+
+    def _begin_workspace_bulk_refresh(self, target_dirs: list[str]) -> None:
+        workspace_targets = [
+            path for path in target_dirs if self._is_path_within_loaded_root(path)
+        ]
+        if not workspace_targets:
+            self._bulk_workspace_watcher_suspended = False
+            return
+
+        self._bulk_workspace_watcher_suspended = True
+        self._stop_folder_watcher()
+
+    def _finish_workspace_bulk_refresh(
+        self,
+        target_dirs: list[str],
+        copied_count: int,
+    ) -> None:
+        if not self._bulk_workspace_watcher_suspended:
+            return
+
+        workspace_targets = [
+            path for path in target_dirs if self._is_path_within_loaded_root(path)
+        ]
+        self._bulk_workspace_watcher_suspended = False
+
+        if not self.root_folder:
+            return
+
+        if not workspace_targets:
+            self._start_folder_watcher()
+            return
+
+        if int(copied_count) > 0:
+            self._load_folder(self.root_folder)
+            self.grid.on_scroll(self.grid.scrollbar.value())
+            return
+
+        self._start_folder_watcher()
 
     def _on_archive(self):
         from .tools.archive import launch_archive
@@ -2617,7 +2671,11 @@ class MainWindow(QMainWindow):
         for path in sorted(deleted):
             self.photo_model.remove_photo(path)
 
+        added_items: list[ImageItem] = []
+        added_paths: list[str] = []
         for path in sorted(added):
+            if path in self._items_by_path:
+                continue
             if not os.path.isfile(path):
                 continue
 
@@ -2636,7 +2694,17 @@ class MainWindow(QMainWindow):
                 source_folder=source_folder,
                 state=0,
             )
-            self.photo_model.add_photo(item)
+            added_items.append(item)
+            added_paths.append(path)
+
+        if added_items:
+            snapshot = self._capture_grid_viewport_snapshot()
+            for item in added_items:
+                self._items_by_path[item.path] = item
+            self.media_manager.add_files(added_paths)
+            self.photo_model.add_photos(added_items)
+            self.filter_panel.set_folders(self.photo_model.source_folders)
+            self._restore_grid_viewport_from_snapshot(snapshot)
 
         effective_modified = modified - added - deleted
         for path in sorted(effective_modified):

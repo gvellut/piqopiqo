@@ -1,3 +1,6 @@
+* [suspend refresh when copy sd](Yb_tasks/Jc_suspend_refresh_when_copy_sd.md)
+    ? [Regenerate thumbnail should use the same buffering as the original open folder](Yb_tasks/Jc.A_Regenerate_thumbnail_should_use_the_same_bufferi.md)
+    ? [susped watcher on copy sd](Yb_tasks/Jc.B_susped_watcher_on_copy_sd.md)
 - [When exiting fullscreen do not wrap around](Yb_tasks/Zb_When_exiting_fullscreen_do_not_wrap_around.md)
 - [Keyword clean on validate](Pb_tasks/Pb_Keyword_clean_on_validate.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)

@@ -132,6 +132,48 @@ class PhotoListModel(QObject):
         self.photo_added.emit(photo.path, -1)
         return -1
 
+    def add_photos(self, photos: list[ImageItem]) -> list[str]:
+        """Add multiple photos to the model with one refresh.
+
+        Args:
+            photos: Candidate ImageItems to add.
+
+        Returns:
+            Paths that were actually added.
+        """
+        if not photos:
+            return []
+
+        existing_paths = {photo.path for photo in self._all_photos}
+        added_paths: list[str] = []
+        added_photos: list[ImageItem] = []
+
+        for photo in photos:
+            path = getattr(photo, "path", None)
+            if not path or path in existing_paths:
+                continue
+            existing_paths.add(path)
+            added_photos.append(photo)
+            added_paths.append(path)
+
+        if not added_photos:
+            return []
+
+        self._all_photos.extend(added_photos)
+
+        new_source_folders = {
+            photo.source_folder
+            for photo in added_photos
+            if photo.source_folder and photo.source_folder not in self._source_folders
+        }
+        if new_source_folders:
+            self._source_folders.extend(sorted(new_source_folders))
+            self._source_folders.sort()
+
+        self._apply_filter_and_sort()
+        self.photos_changed.emit()
+        return added_paths
+
     def remove_photo(self, file_path: str) -> int:
         """Remove a photo from the model.
 

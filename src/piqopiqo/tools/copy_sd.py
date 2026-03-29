@@ -410,12 +410,12 @@ class CopySdWorker(QRunnable):
         self,
         volume: PhotoVolume,
         dates: list,
-        output_folder_base: list[str],
+        target_dirs: list[str],
     ):
         super().__init__()
         self._volume = volume
         self._dates = dates
-        self._output_folder_base = output_folder_base
+        self._target_dirs = target_dirs
         self._cancel_requested = threading.Event()
         self.signals = CopySdWorkerSignals()
 
@@ -432,17 +432,13 @@ class CopySdWorker(QRunnable):
         tasks: list[tuple[str, str]] = []
 
         try:
-            for f_date, folder_base in zip(
-                self._dates, self._output_folder_base, strict=False
-            ):
+            for f_date, target_dir in zip(self._dates, self._target_dirs, strict=False):
                 if self._is_cancelled():
                     break
                 logger.info(
-                    "Copy to %s (date: %s) ...", folder_base, date_to_str(f_date)
+                    "Copy to %s (date: %s) ...", target_dir, date_to_str(f_date)
                 )
-                os.makedirs(folder_base, exist_ok=True)
-                output_folder = os.path.join(folder_base, self._volume.name)
-                os.makedirs(output_folder, exist_ok=True)
+                os.makedirs(target_dir, exist_ok=True)
 
                 self.signals.status.emit(
                     f"Scanning for {date_to_str(f_date)} in {self._volume.name}..."
@@ -450,7 +446,7 @@ class CopySdWorker(QRunnable):
                 for file_path in iter_files_for_date(self._volume, f_date):
                     if self._is_cancelled():
                         break
-                    tasks.append((file_path, output_folder))
+                    tasks.append((file_path, target_dir))
 
             total = len(tasks)
             self.signals.plan_ready.emit(total)
@@ -559,7 +555,7 @@ class CopySdProgressDialog(QDialog):
         self,
         volume: PhotoVolume,
         dates: list,
-        output_folder_base: list[str],
+        target_dirs: list[str],
         should_eject: bool,
         parent=None,
     ):
@@ -570,10 +566,12 @@ class CopySdProgressDialog(QDialog):
 
         self._volume = volume
         self._should_eject = should_eject
-        self._worker = CopySdWorker(volume, dates, output_folder_base)
+        self._worker = CopySdWorker(volume, dates, target_dirs)
         self._finished = False
         self._error_count = 0
         self._started = False
+        self._copied_count = 0
+        self._was_cancelled = False
 
         layout = QVBoxLayout(self)
 
@@ -632,6 +630,14 @@ class CopySdProgressDialog(QDialog):
         self._worker.signals.finished.connect(self._on_finished)
         self._eject_done.connect(self._on_eject_done)
 
+    @property
+    def copied_count(self) -> int:
+        return int(self._copied_count)
+
+    @property
+    def was_cancelled(self) -> bool:
+        return bool(self._was_cancelled)
+
     def start(self):
         if self._started:
             return
@@ -680,6 +686,8 @@ class CopySdProgressDialog(QDialog):
 
     def _on_finished(self, copied: int, total: int, cancelled: bool, error_count: int):
         self._finished = True
+        self._copied_count = max(0, int(copied))
+        self._was_cancelled = bool(cancelled)
         if total == 0:
             status = "No images found for the selected date(s)."
         elif cancelled:
@@ -749,9 +757,7 @@ def _confirm_copy(
     volume: PhotoVolume,
     dates: list,
     base_name: str,
-    output_folder_base: list[str],
 ):
-    # text_folder = ", ".join(output_folder_base)
     text_date = "- " + "\n- ".join([date_to_str(d) for d in dates])
     confirm_text = (
         f"The images will be copied from : {volume.name} to <date>_{base_name}. "
@@ -845,7 +851,12 @@ def _resolve_dates_with_progress(parent, date_spec: str, volume: PhotoVolume):
     return result_holder[0] if result_holder else None
 
 
-def launch_copy_sd(parent=None):
+def launch_copy_sd(
+    parent=None,
+    *,
+    on_bulk_copy_started=None,
+    on_bulk_copy_finished=None,
+):
     sdcard_names = get_user_setting(UserSettingKey.SDCARD_NAMES)
     if sdcard_names:
         volume = get_volume(sdcard_names)
@@ -922,19 +933,33 @@ def launch_copy_sd(parent=None):
         dates = _sort_dates(dates)
         break
 
-    output_folder_base = [
-        dirname_with_date(output_parent_folder, name, f_date) for f_date in dates
+    target_dirs = [
+        os.path.join(
+            dirname_with_date(output_parent_folder, name, f_date),
+            volume.name,
+        )
+        for f_date in dates
     ]
 
-    if not _confirm_copy(parent, volume, dates, name, output_folder_base):
+    if not _confirm_copy(parent, volume, dates, name):
         logger.warning("Aborted by user")
         return
 
     should_eject = state.get(StateKey.COPY_SD_EJECT)
     progress_dialog = CopySdProgressDialog(
-        volume, dates, output_folder_base, should_eject=should_eject, parent=parent
+        volume, dates, target_dirs, should_eject=should_eject, parent=parent
     )
-    progress_dialog.exec()
+
+    try:
+        if callable(on_bulk_copy_started):
+            on_bulk_copy_started(list(target_dirs))
+        progress_dialog.exec()
+    finally:
+        if callable(on_bulk_copy_finished):
+            on_bulk_copy_finished(
+                list(target_dirs),
+                progress_dialog.copied_count,
+            )
 
     # Save user choices for next session
     state.set(StateKey.COPY_SD_NAME_SUFFIX, name)
