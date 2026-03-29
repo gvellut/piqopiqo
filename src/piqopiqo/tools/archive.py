@@ -288,14 +288,14 @@ class ArchiveDialog(QDialog):
         button_row = QHBoxLayout()
         button_row.addStretch(1)
 
+        self.cancel_btn = QPushButton("Cancel", self)
+        self.cancel_btn.clicked.connect(self.reject)
+        button_row.addWidget(self.cancel_btn)
+
         self.ok_btn = QPushButton("OK", self)
         self.ok_btn.setDefault(True)
         self.ok_btn.clicked.connect(self._on_ok_clicked)
         button_row.addWidget(self.ok_btn)
-
-        self.cancel_btn = QPushButton("Cancel", self)
-        self.cancel_btn.clicked.connect(self.reject)
-        button_row.addWidget(self.cancel_btn)
 
         layout.addLayout(button_row)
 
@@ -458,7 +458,7 @@ class ArchiveDialog(QDialog):
                 error_text = "Archive completed with a cache cleanup warning."
                 details = [result.cleanup_error]
             self._show_finished_result(
-                text=f"Archive complete.\n\nMoved to:\n{result.archive_path}",
+                text=f"Archive complete.\nMoved to:\n{result.archive_path}",
                 error_text=error_text,
                 details=details,
             )
