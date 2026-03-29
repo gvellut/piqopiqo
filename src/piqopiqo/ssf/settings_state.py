@@ -54,6 +54,7 @@ class StateKey(StrEnum):
     # AppState group
     LAST_FOLDER = "lastFolder"
     LAST_GPX_FOLDER = "lastGpxFolder"
+    ARCHIVE_SAVE_EXIF = "archiveSaveExif"
     SORT_ORDER = "sortOrder"
     COPY_SD_EJECT = "copySDEject"
     COPY_SD_NAME_SUFFIX = "copySdNameSuffix"
@@ -83,6 +84,7 @@ class UserSettingKey(StrEnum):
     SHORTCUTS = "shortcuts"
     FILTER_IN_FULLSCREEN = "filterInFullscreen"
     COPY_SD_BASE_EXTERNAL_FOLDER = "copySdBaseExternalFolder"
+    ARCHIVE_DESTINATION = "archiveDestination"
     SDCARD_NAMES = "sdcardNames"
     GPX_TIMEZONE = "gpxTimezone"
     GPX_IGNORE_OFFSET = "gpxIgnoreOffset"
@@ -413,6 +415,11 @@ def _parse_enum(env_value: str, enum_type: type[Enum], fallback: Enum) -> Enum:
 _STATE_REGISTRY: dict[StateKey, SettingDef] = {
     StateKey.LAST_FOLDER: SettingDef(group=StateGroup.APP_STATE, read_type=str),
     StateKey.LAST_GPX_FOLDER: SettingDef(group=StateGroup.APP_STATE, read_type=str),
+    StateKey.ARCHIVE_SAVE_EXIF: SettingDef(
+        group=StateGroup.APP_STATE,
+        default=False,
+        read_type=bool,
+    ),
     StateKey.SORT_ORDER: SettingDef(
         group=StateGroup.APP_STATE,
         read_type=str,
@@ -578,6 +585,11 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         read_type=bool,
     ),
     UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default="",
+        read_type=str,
+    ),
+    UserSettingKey.ARCHIVE_DESTINATION: SettingDef(
         group=SettingsGroup.SETTINGS,
         default="",
         read_type=str,

@@ -237,6 +237,16 @@ SETTINGS_TABS: list[TabSpec] = [
                 ],
             ),
             GroupSpec(
+                title="Archive",
+                fields=[
+                    FieldSpec(
+                        key=UserSettingKey.ARCHIVE_DESTINATION,
+                        label="Destination",
+                        editor=EditorKind.PATH_DIR,
+                    ),
+                ],
+            ),
+            GroupSpec(
                 title="GPX",
                 fields=[
                     FieldSpec(

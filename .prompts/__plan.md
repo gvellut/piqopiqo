@@ -1,4 +1,3 @@
-* [State config identical](Yb_tasks/Gc_State_config_identical.md)
 - [When exiting fullscreen do not wrap around](Yb_tasks/Zb_When_exiting_fullscreen_do_not_wrap_around.md)
 - [Keyword clean on validate](Pb_tasks/Pb_Keyword_clean_on_validate.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
@@ -103,3 +102,5 @@
 ! [Flick upload arrange dialog](Yb_tasks/Ec_Flick_upload_arrange_dialog.md)
 ! [Hide right column does not change number of rows](Yb_tasks/Bc_Hide_right_column_does_not_change_number_of_rows.md)
 ! [Flickr upload default upload](Yb_tasks/Fc_Flickr_upload_default_upload.md)
+! [State config identical](Yb_tasks/Gc_State_config_identical.md)
+! [Archive tool](Yb_tasks/Hc_Archive_tool.md)

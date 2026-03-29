@@ -56,6 +56,10 @@ def test_interface_tab_layout_matches_expected_groups_and_fields():
 def test_external_tools_tab_contains_manual_lens_group():
     external_tab = next(tab for tab in SETTINGS_TABS if tab.title == "External/Tools")
     group_by_title = {group.title: group for group in external_tab.groups}
+    assert "Archive" in group_by_title
+    assert [field.key for field in group_by_title["Archive"].fields] == [
+        UserSettingKey.ARCHIVE_DESTINATION
+    ]
     assert "Manual Lens" in group_by_title
     assert [field.key for field in group_by_title["Manual Lens"].fields] == [
         UserSettingKey.MANUAL_LENSES
@@ -93,6 +97,9 @@ def test_settings_tab_title_lookup_maps_external_tools_keys():
     assert (
         get_settings_tab_title_for_key(UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER)
         == "External/Tools"
+    )
+    assert get_settings_tab_title_for_key(UserSettingKey.ARCHIVE_DESTINATION) == (
+        "External/Tools"
     )
     assert get_settings_tab_title_for_key(UserSettingKey.MANUAL_LENSES) == (
         "External/Tools"

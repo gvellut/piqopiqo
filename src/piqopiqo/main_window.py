@@ -1954,6 +1954,12 @@ class MainWindow(QMainWindow):
 
         tools_menu.addSeparator()
 
+        archive_action = QAction("Archive...", self)
+        archive_action.triggered.connect(self._on_archive)
+        tools_menu.addAction(archive_action)
+
+        tools_menu.addSeparator()
+
         save_exif_action = QAction("Save EXIF...", self)
         save_exif_action.triggered.connect(self._on_save_exif)
         tools_menu.addAction(save_exif_action)
@@ -2254,6 +2260,11 @@ class MainWindow(QMainWindow):
 
         launch_copy_sd(self)
 
+    def _on_archive(self):
+        from .tools.archive import launch_archive
+
+        launch_archive(self)
+
     def _on_apply_gpx(self):
         from .tools.gpx2exif.actions import launch_apply_gpx
 
@@ -2435,6 +2446,72 @@ class MainWindow(QMainWindow):
                 "Workspace Property",
                 f"Cleanup completed with an error:\n\n{error_message}",
             )
+
+    def _prepare_workspace_for_archive_move(self) -> None:
+        self._stop_folder_watcher()
+        self._watcher_suppressed.clear()
+        self._background_db_save_pool.clear()
+        if self.edit_panel is not None:
+            self.edit_panel.shutdown_background_saves(0, clear_queued=True)
+        self.db_manager.close_all()
+        self.media_manager.pause_processing()
+        self.media_manager.reset_for_folder([], [])
+        self.status_bar.clearMessage()
+        self.status_bar.reset()
+
+    def _resume_workspace_after_archive_failure(self) -> None:
+        file_paths = [item.path for item in self.photo_model.all_photos]
+        source_folders = list(self.photo_model.source_folders)
+
+        self._watcher_suppressed.clear()
+        self.db_manager.close_all()
+        self.status_bar.clearMessage()
+        self.status_bar.reset()
+        self._invalidate_workspace_items_for_reload()
+        self.media_manager.pause_processing()
+        priming = self.media_manager.reset_for_folder(file_paths, source_folders)
+        self._apply_cached_editable_metadata_for_items(self._items_by_path, priming)
+        if self._last_visible_paths:
+            self.media_manager.update_visible(self._last_visible_paths)
+        self.media_manager.resume_processing()
+        self.grid.on_scroll(self.grid.scrollbar.value())
+        self._reconcile_selection_and_panels()
+        self._start_folder_watcher()
+
+    def _unload_workspace(self, *, clear_last_folder: bool = False) -> None:
+        self._stop_folder_watcher()
+        self._watcher_suppressed.clear()
+        self._cancel_deferred_selection_panel_refresh()
+        self.media_manager.pause_processing()
+        self.media_manager.reset_for_folder([], [])
+        self.db_manager.close_all()
+        self.status_bar.clearMessage()
+        self.status_bar.reset()
+
+        self.root_folder = None
+        self.source_folders = []
+        self._current_filter = None
+        self._pending_filter_criteria = None
+        self._pending_filter_snapshot = None
+        self._filter_apply_scheduled = False
+        self._model_refresh_scheduled = False
+        self._pending_scheduled_sync_fields.clear()
+        self._pending_metadata_reselection_context = None
+        self._deferred_time_taken_load_resort_state = None
+        self._last_visible_paths = []
+        self._items_by_path = {}
+        self._selected_paths_cache = set()
+        self._selected_count_cache = 0
+        self._selection_changed_since_edit = True
+        self._label_undo_entry = None
+        self._label_undo_is_redo = False
+        self._refresh_undo_label_action_enabled_for_context()
+
+        self.filter_panel.set_no_folders()
+        self.photo_model.set_photos([], [])
+
+        if clear_last_folder:
+            get_state().set(StateKey.LAST_FOLDER, "")
 
     def _clear_filters_before_folder_load(self) -> None:
         """Clear active filters before loading a new folder via Open Folder."""
