@@ -10,8 +10,7 @@ from piqopiqo.ssf.settings_state import UserSettingKey
 
 def test_every_user_setting_is_present_in_schema():
     schema_keys = {field.key for field in iter_all_field_specs()}
-    hidden_keys = {UserSettingKey.NUM_COLUMNS}
-    assert schema_keys == (set(UserSettingKey) - hidden_keys)
+    assert schema_keys == set(UserSettingKey)
 
 
 def test_schema_field_keys_are_unique():

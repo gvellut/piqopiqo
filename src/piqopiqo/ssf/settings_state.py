@@ -60,6 +60,7 @@ class StateKey(StrEnum):
     COPY_SD_DATE_SPEC = "copySdDateSpec"
     LAST_TIMESHIFT_BY_FOLDERS = "lastTimeshiftByFolders"
     LAST_TIMESHIFT = "lastTimeshift"
+    NUM_COLUMNS = "numColumns"
     # AppState/Qt group
     WINDOW_GEOMETRY = "windowGeometry"
     WINDOW_STATE = "windowState"
@@ -71,7 +72,6 @@ class UserSettingKey(StrEnum):
     CACHE_BASE_DIR = "cacheBaseDir"
     EXIFTOOL_PATH = "exiftoolPath"
     CUSTOM_EXIF_FIELDS = "customExifFields"
-    NUM_COLUMNS = "numColumns"
     ON_FULLSCREEN_EXIT_SELECTION_MODE = "onFullscreenExit"
     FORCE_SRGB = "forceSrgb"
     SCREEN_COLOR_PROFILE = "screenColorProfile"
@@ -149,21 +149,14 @@ class RuntimeSettingKey(StrEnum):
 
 
 @define(frozen=True)
-class StateDef:
-    group: StateGroup
-    read_type: type
-    default: object = None
-    json_storage: bool = False
-
-
-@define(frozen=True)
 class SettingDef:
-    default: object
+    default: object = None
     read_type: type = str
     json_storage: bool = False
     serializer: Callable[[Any], Any] | None = None
     deserializer: Callable[[Any], Any] | None = None
     env_parser: Callable[[str], Any] | None = None
+    group: StateGroup | SettingsGroup | None = None
 
 
 class MandatorySettingInputKind(Enum):
@@ -417,54 +410,81 @@ def _parse_enum(env_value: str, enum_type: type[Enum], fallback: Enum) -> Enum:
         return fallback
 
 
-_STATE_REGISTRY: dict[StateKey, StateDef] = {
-    StateKey.LAST_FOLDER: StateDef(StateGroup.APP_STATE, str),
-    StateKey.LAST_GPX_FOLDER: StateDef(StateGroup.APP_STATE, str),
-    StateKey.SORT_ORDER: StateDef(StateGroup.APP_STATE, str, SortOrder.FILE_NAME.name),
-    StateKey.COPY_SD_EJECT: StateDef(StateGroup.APP_STATE, bool, True),
-    StateKey.COPY_SD_NAME_SUFFIX: StateDef(StateGroup.APP_STATE, str),
-    StateKey.COPY_SD_DATE_SPEC: StateDef(StateGroup.APP_STATE, str),
-    StateKey.LAST_TIMESHIFT_BY_FOLDERS: StateDef(
-        StateGroup.APP_STATE,
-        str,
-        {},
+_STATE_REGISTRY: dict[StateKey, SettingDef] = {
+    StateKey.LAST_FOLDER: SettingDef(group=StateGroup.APP_STATE, read_type=str),
+    StateKey.LAST_GPX_FOLDER: SettingDef(group=StateGroup.APP_STATE, read_type=str),
+    StateKey.SORT_ORDER: SettingDef(
+        group=StateGroup.APP_STATE,
+        read_type=str,
+        default=SortOrder.FILE_NAME.name,
+    ),
+    StateKey.COPY_SD_EJECT: SettingDef(
+        group=StateGroup.APP_STATE,
+        read_type=bool,
+        default=True,
+    ),
+    StateKey.COPY_SD_NAME_SUFFIX: SettingDef(
+        group=StateGroup.APP_STATE,
+        read_type=str,
+    ),
+    StateKey.COPY_SD_DATE_SPEC: SettingDef(
+        group=StateGroup.APP_STATE,
+        read_type=str,
+    ),
+    StateKey.LAST_TIMESHIFT_BY_FOLDERS: SettingDef(
+        group=StateGroup.APP_STATE,
+        read_type=str,
+        default={},
         json_storage=True,
     ),
-    StateKey.LAST_TIMESHIFT: StateDef(StateGroup.APP_STATE, str),
-    StateKey.WINDOW_GEOMETRY: StateDef(StateGroup.QT, QByteArray),
-    StateKey.WINDOW_STATE: StateDef(StateGroup.QT, QByteArray),
-    StateKey.MAIN_SPLITTER: StateDef(StateGroup.QT, QByteArray),
-    StateKey.RIGHT_SPLITTER: StateDef(StateGroup.QT, QByteArray),
+    StateKey.NUM_COLUMNS: SettingDef(
+        group=StateGroup.APP_STATE,
+        read_type=int,
+        default=6,
+    ),
+    StateKey.LAST_TIMESHIFT: SettingDef(group=StateGroup.APP_STATE, read_type=str),
+    StateKey.WINDOW_GEOMETRY: SettingDef(group=StateGroup.QT, read_type=QByteArray),
+    StateKey.WINDOW_STATE: SettingDef(group=StateGroup.QT, read_type=QByteArray),
+    StateKey.MAIN_SPLITTER: SettingDef(group=StateGroup.QT, read_type=QByteArray),
+    StateKey.RIGHT_SPLITTER: SettingDef(group=StateGroup.QT, read_type=QByteArray),
 }
 
 
 _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
     UserSettingKey.CACHE_BASE_DIR: SettingDef(
+        group=SettingsGroup.SETTINGS,
         default=None,
         read_type=str,
     ),
     UserSettingKey.EXIFTOOL_PATH: SettingDef(
+        group=SettingsGroup.SETTINGS,
         default=None,
         read_type=str,
     ),
     # for now : just a list of exiffields : no fomatting or change of label beyond
     # default transformation
     UserSettingKey.CUSTOM_EXIF_FIELDS: SettingDef(
+        group=SettingsGroup.SETTINGS,
         default=[],
         **_list_of_strings_params,
     ),
     # actually a State (not set in settings : but in GUI) but states and settings
     # are conceptually the same (just states are implicit)
-    UserSettingKey.NUM_COLUMNS: SettingDef(default=6, read_type=int),
     UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE: SettingDef(
+        group=SettingsGroup.SETTINGS,
         default=OnFullscreenExitMultipleSelected.KEEP_SELECTION,
         read_type=str,
         serializer=_serialize_on_fullscreen_exit_selection_mode,
         deserializer=_deserialize_on_fullscreen_exit_selection_mode,
         env_parser=_deserialize_on_fullscreen_exit_selection_mode,
     ),
-    UserSettingKey.FORCE_SRGB: SettingDef(default=False, read_type=bool),
+    UserSettingKey.FORCE_SRGB: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default=False,
+        read_type=bool,
+    ),
     UserSettingKey.SCREEN_COLOR_PROFILE: SettingDef(
+        group=SettingsGroup.SETTINGS,
         default=ScreenColorProfileMode.FROM_MAIN_SCREEN,
         read_type=str,
         serializer=_serialize_screen_color_profile_mode,
@@ -475,12 +495,18 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
             ScreenColorProfileMode.FROM_MAIN_SCREEN,
         ),
     ),
-    UserSettingKey.SHOW_DESCRIPTION_FIELD: SettingDef(default=True, read_type=bool),
+    UserSettingKey.SHOW_DESCRIPTION_FIELD: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default=True,
+        read_type=bool,
+    ),
     UserSettingKey.PROTECT_NON_TEXT_METADATA: SettingDef(
+        group=SettingsGroup.SETTINGS,
         default=True,
         read_type=bool,
     ),
     UserSettingKey.STATUS_LABELS: SettingDef(
+        group=SettingsGroup.SETTINGS,
         default=[
             StatusLabel("Approved", "#FF0000", 1),
             StatusLabel("Rejected", "#FFFF00", 2),
@@ -494,9 +520,18 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         deserializer=_deserialize_status_labels,
         env_parser=lambda raw: _deserialize_status_labels(_parse_json(raw)),
     ),
-    UserSettingKey.EXTERNAL_VIEWER: SettingDef(default="", read_type=str),
-    UserSettingKey.EXTERNAL_EDITOR: SettingDef(default="", read_type=str),
+    UserSettingKey.EXTERNAL_VIEWER: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default="",
+        read_type=str,
+    ),
+    UserSettingKey.EXTERNAL_EDITOR: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default="",
+        read_type=str,
+    ),
     UserSettingKey.SHORTCUTS: SettingDef(
+        group=SettingsGroup.SETTINGS,
         default={
             Shortcut.ZOOM_IN: "=",
             Shortcut.ZOOM_OUT: "-",
@@ -537,29 +572,73 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         deserializer=_deserialize_shortcuts,
         env_parser=lambda raw: _deserialize_shortcuts(_parse_json(raw)),
     ),
-    UserSettingKey.FILTER_IN_FULLSCREEN: SettingDef(default=False, read_type=bool),
-    UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER: SettingDef(default="", read_type=str),
+    UserSettingKey.FILTER_IN_FULLSCREEN: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default=False,
+        read_type=bool,
+    ),
+    UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default="",
+        read_type=str,
+    ),
     UserSettingKey.SDCARD_NAMES: SettingDef(
+        group=SettingsGroup.SETTINGS,
         default=[],
         **_list_of_strings_params,
     ),
-    UserSettingKey.GPX_TIMEZONE: SettingDef(default="", read_type=str),
-    UserSettingKey.GPX_IGNORE_OFFSET: SettingDef(default=False, read_type=bool),
-    UserSettingKey.GPX_KML_FOLDER: SettingDef(default="", read_type=str),
+    UserSettingKey.GPX_TIMEZONE: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default="",
+        read_type=str,
+    ),
+    UserSettingKey.GPX_IGNORE_OFFSET: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default=False,
+        read_type=bool,
+    ),
+    UserSettingKey.GPX_KML_FOLDER: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default="",
+        read_type=str,
+    ),
     UserSettingKey.TIME_SHIFT_UNKNOWN_FOLDER_IGNORE: SettingDef(
+        group=SettingsGroup.SETTINGS,
         default=True,
         read_type=bool,
     ),
-    UserSettingKey.GCP_PROJECT: SettingDef(default="", read_type=str),
-    UserSettingKey.GCP_SA_KEY_PATH: SettingDef(default="", read_type=str),
-    UserSettingKey.FLICKR_API_KEY: SettingDef(default="", read_type=str),
-    UserSettingKey.FLICKR_API_SECRET: SettingDef(default="", read_type=str),
-    UserSettingKey.FLICKR_UPLOAD_LABEL: SettingDef(default="", read_type=str),
+    UserSettingKey.GCP_PROJECT: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default="",
+        read_type=str,
+    ),
+    UserSettingKey.GCP_SA_KEY_PATH: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default="",
+        read_type=str,
+    ),
+    UserSettingKey.FLICKR_API_KEY: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default="",
+        read_type=str,
+    ),
+    UserSettingKey.FLICKR_API_SECRET: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default="",
+        read_type=str,
+    ),
+    UserSettingKey.FLICKR_UPLOAD_LABEL: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default="",
+        read_type=str,
+    ),
     UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS: SettingDef(
+        group=SettingsGroup.SETTINGS,
         default=False,
         read_type=bool,
     ),
     UserSettingKey.MANUAL_LENSES: SettingDef(
+        group=SettingsGroup.SETTINGS,
         default=[],
         read_type=str,
         json_storage=True,
@@ -761,7 +840,7 @@ def evaluate_pending_mandatory_settings() -> list[PendingMandatorySetting]:
 
 
 class QSettingsStore:
-    """Typed abstraction over QSettings with state/settings separation by convention."""
+    """Typed abstraction over QSettings with explicit groups for states/settings."""
 
     def __init__(self, dyn: bool = False):
         self._dyn = bool(dyn)
@@ -780,6 +859,14 @@ class QSettingsStore:
 
     def get_state_value(self, key: StateKey):
         entry = _STATE_REGISTRY[key]
+        env_value = (
+            self._read_env_override(key.name, entry)
+            if entry.group == StateGroup.APP_STATE
+            else None
+        )
+        if env_value is not None:
+            return env_value
+
         full_key = self._state_full_key(key)
 
         if full_key in self._memory:
@@ -810,7 +897,7 @@ class QSettingsStore:
         if env_value is not None:
             return env_value
 
-        full_key = self._user_full_key(key)
+        full_key = self._user_setting_full_key(key)
         if full_key in self._memory:
             return self._memory[full_key]
 
@@ -824,7 +911,7 @@ class QSettingsStore:
 
     def set_user_setting(self, key: UserSettingKey, value: object) -> None:
         entry = _USER_SETTING_REGISTRY[key]
-        full_key = self._user_full_key(key)
+        full_key = self._user_setting_full_key(key)
 
         normalized_value = self._normalize_value(entry, value)
         self._memory[full_key] = normalized_value
@@ -851,12 +938,16 @@ class QSettingsStore:
 
     def _state_full_key(self, key: StateKey) -> str:
         entry = _STATE_REGISTRY[key]
-        return f"{entry.group.value}/{key.value}"
+        return self._persisted_full_key(key.value, entry)
 
-    def _user_full_key(self, key: UserSettingKey) -> str:
-        return f"{SettingsGroup.SETTINGS.value}/{key.value}"
+    def _user_setting_full_key(self, key: UserSettingKey) -> str:
+        entry = _USER_SETTING_REGISTRY[key]
+        return self._persisted_full_key(key.value, entry)
 
-    def _read_persisted_value(self, full_key: str, entry: StateDef | SettingDef):
+    def _persisted_full_key(self, key_value: str, entry: SettingDef) -> str:
+        return f"{entry.group.value}/{key_value}"
+
+    def _read_persisted_value(self, full_key: str, entry: SettingDef):
         assert self._settings is not None
         if entry.json_storage:
             raw: str = self._settings.value(full_key, type=str)  # type: ignore
@@ -873,7 +964,7 @@ class QSettingsStore:
     def _write_persisted_value(
         self,
         full_key: str,
-        entry: StateDef | SettingDef,
+        entry: SettingDef,
         value: object,
     ) -> None:
         assert self._settings is not None
@@ -893,17 +984,15 @@ class QSettingsStore:
             return self._deserialize(entry, encoded)
         return self._deserialize(entry, self._serialize(entry, value))
 
-    def _serialize(self, entry: StateDef | SettingDef, value: object) -> object:
-        serializer = getattr(entry, "serializer", None)
-        if serializer is None:
+    def _serialize(self, entry: SettingDef, value: object) -> object:
+        if entry.serializer is None:
             return value
-        return serializer(value)
+        return entry.serializer(value)
 
-    def _deserialize(self, entry: StateDef | SettingDef, value: object) -> object:
-        deserializer = getattr(entry, "deserializer", None)
-        if deserializer is None:
+    def _deserialize(self, entry: SettingDef, value: object) -> object:
+        if entry.deserializer is None:
             return value
-        return deserializer(value)
+        return entry.deserializer(value)
 
     def _read_with_type(self, full_key: str, read_type: type) -> object:
         assert self._settings is not None

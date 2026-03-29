@@ -37,8 +37,10 @@ from piqopiqo.shortcuts import (
 )
 from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
+    StateKey,
     UserSettingKey,
     get_runtime_setting,
+    get_state_value,
     get_user_setting,
 )
 
@@ -75,9 +77,7 @@ class PhotoGrid(QWidget):
         bg_color = get_runtime_setting(RuntimeSettingKey.GRID_BACKGROUND_COLOR)
         self.setStyleSheet(f"#photo_grid {{ background-color: {bg_color}; }}")
 
-        self.n_cols = self._clamp_num_columns(
-            get_user_setting(UserSettingKey.NUM_COLUMNS)
-        )
+        self.n_cols = self._clamp_num_columns(get_state_value(StateKey.NUM_COLUMNS))
         self.n_rows = 1
         self.items_data = []
         self._last_selected_index = -1

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import uuid
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QByteArray, QSettings
 from PySide6.QtWidgets import QApplication
 import pytest
 
@@ -57,6 +57,8 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_CACHE_BASE_DIR",
         "PIQO_EXIFTOOL_PATH",
         "PIQO_NUM_COLUMNS",
+        "PIQO_COPY_SD_EJECT",
+        "PIQO_WINDOW_GEOMETRY",
         "PIQO_GRID_NUM_COLUMNS_MIN",
         "PIQO_GRID_NUM_COLUMNS_MAX",
         "PIQO_STATUS_BAR_SIDE_PADDING",
@@ -118,6 +120,37 @@ def test_gpx_timeshift_state_ordered_json_roundtrip(isolated_settings):
     roundtrip = get_state_value(StateKey.LAST_TIMESHIFT_BY_FOLDERS)
     assert roundtrip == value
     assert list(roundtrip.items()) == list(value.items())
+
+
+def test_num_columns_state_env_override_takes_priority_over_persisted_value(
+    isolated_settings, monkeypatch
+):
+    set_state_value(StateKey.NUM_COLUMNS, 7)
+    assert get_state_value(StateKey.NUM_COLUMNS) == 7
+
+    monkeypatch.setenv("PIQO_NUM_COLUMNS", "4")
+
+    assert get_state_value(StateKey.NUM_COLUMNS) == 4
+
+
+def test_app_state_bool_env_override_takes_priority_over_persisted_value(
+    isolated_settings, monkeypatch
+):
+    set_state_value(StateKey.COPY_SD_EJECT, False)
+    assert get_state_value(StateKey.COPY_SD_EJECT) is False
+
+    monkeypatch.setenv("PIQO_COPY_SD_EJECT", "1")
+
+    assert get_state_value(StateKey.COPY_SD_EJECT) is True
+
+
+def test_qt_state_env_override_is_ignored(isolated_settings, monkeypatch):
+    geometry = QByteArray(b"persisted-geometry")
+    set_state_value(StateKey.WINDOW_GEOMETRY, geometry)
+
+    monkeypatch.setenv("PIQO_WINDOW_GEOMETRY", "ignored")
+
+    assert get_state_value(StateKey.WINDOW_GEOMETRY) == geometry
 
 
 def test_json_roundtrip_for_complex_user_settings(isolated_settings):
@@ -190,11 +223,11 @@ def test_manual_lenses_roundtrip(isolated_settings):
 def test_env_override_takes_priority_over_persisted_values(
     isolated_settings, monkeypatch
 ):
-    set_user_setting(UserSettingKey.NUM_COLUMNS, 12)
-    assert get_user_setting(UserSettingKey.NUM_COLUMNS) == 12
+    set_user_setting(UserSettingKey.FORCE_SRGB, True)
+    assert get_user_setting(UserSettingKey.FORCE_SRGB) is True
 
-    monkeypatch.setenv("PIQO_NUM_COLUMNS", "7")
-    assert get_user_setting(UserSettingKey.NUM_COLUMNS) == 7
+    monkeypatch.setenv("PIQO_FORCE_SRGB", "0")
+    assert get_user_setting(UserSettingKey.FORCE_SRGB) is False
 
 
 def test_grid_column_runtime_bounds_and_status_bar_padding_defaults_and_env_override(
@@ -393,6 +426,25 @@ def test_dyn_mode_is_memory_only(qcore_app):
     # Nothing persisted to QSettings.
     settings = QSettings()
     assert not settings.contains("Settings/externalEditor")
+
+
+def test_dyn_mode_app_state_env_override_still_applies(qcore_app, monkeypatch):
+    qcore_app.setOrganizationName("PiqoPiqoTests")
+    qcore_app.setOrganizationDomain("tests.local")
+    qcore_app.setApplicationName(
+        f"piqopiqo-test-dyn-state-env-{uuid.uuid4().hex}"
+    )
+
+    monkeypatch.setenv("PIQO_NUM_COLUMNS", "8")
+
+    init_qsettings_store(dyn=True)
+    assert get_state_value(StateKey.NUM_COLUMNS) == 8
+
+    set_state_value(StateKey.NUM_COLUMNS, 3)
+    assert get_state_value(StateKey.NUM_COLUMNS) == 8
+
+    settings = QSettings()
+    assert not settings.contains("AppState/numColumns")
 
 
 def test_deserialize_exif_fields_accepts_optional_format():

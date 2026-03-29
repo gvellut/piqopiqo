@@ -69,7 +69,6 @@ from .ssf.settings_state import (
     get_runtime_setting,
     get_state,
     get_user_setting,
-    set_user_setting,
     sync_qsettings_store,
 )
 
@@ -372,7 +371,7 @@ class MainWindow(QMainWindow):
         self.filter_panel.set_folders(source_folders)
 
         self._apply_grid_num_columns(
-            get_user_setting(UserSettingKey.NUM_COLUMNS),
+            state.get(StateKey.NUM_COLUMNS),
             persist=False,
         )
         self.grid.set_data(self.photo_model.photos)
@@ -2068,7 +2067,7 @@ class MainWindow(QMainWindow):
         self.grid.set_num_columns(columns)
         self.column_selector.set_value(columns, min_cols, max_cols)
         if persist:
-            set_user_setting(UserSettingKey.NUM_COLUMNS, columns)
+            get_state().set(StateKey.NUM_COLUMNS, columns)
         if restore_snapshot is not None:
             self._restore_grid_viewport_from_snapshot(restore_snapshot)
 
@@ -2194,12 +2193,6 @@ class MainWindow(QMainWindow):
     def _apply_settings_changes(self, changed_keys: set[UserSettingKey]) -> None:
         if not changed_keys:
             return
-
-        if UserSettingKey.NUM_COLUMNS in changed_keys:
-            self._apply_grid_num_columns(
-                get_user_setting(UserSettingKey.NUM_COLUMNS),
-                persist=False,
-            )
 
         if UserSettingKey.CUSTOM_EXIF_FIELDS in changed_keys:
             self.media_manager.refresh_exif_field_keys(
