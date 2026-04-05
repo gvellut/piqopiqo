@@ -576,10 +576,6 @@ class CopySdProgressDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        self.stage_label = QLabel("Stage: Copy")
-        self.stage_label.setWordWrap(True)
-        layout.addWidget(self.stage_label)
-
         status_row = QHBoxLayout()
         self.status_label = QLabel("Preparing copy...")
         self.status_label.setWordWrap(True)
@@ -697,7 +693,7 @@ class CopySdProgressDialog(QDialog):
             status = f"Copy complete. {copied} file(s) copied."
         if error_count:
             status += f" {error_count} error(s)."
-        self.stage_label.setText("Stage: Completed")
+
         self.status_label.setText(status)
         self.progress_bar.setValue(min(copied, total) if total else 0)
         self._set_progress_counter(min(copied, total) if total else 0, total)

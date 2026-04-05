@@ -1,0 +1,1 @@
+Fix the issue : After archive has been called on a folder, Open Folder no longer works. The software does not load any photo on the grid.

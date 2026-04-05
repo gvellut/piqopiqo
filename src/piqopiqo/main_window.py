@@ -1124,6 +1124,35 @@ class MainWindow(QMainWindow):
         }
 
     @staticmethod
+    def _pick_replacement_path_in_order(
+        ordered_paths: list[str],
+        valid_paths: set[str],
+        base_path: str | None,
+    ) -> str | None:
+        if not ordered_paths or not valid_paths:
+            return None
+
+        if base_path not in ordered_paths:
+            for path in ordered_paths:
+                if path in valid_paths:
+                    return path
+            return None
+
+        base_index = ordered_paths.index(base_path)
+
+        for i in range(base_index + 1, len(ordered_paths)):
+            path = ordered_paths[i]
+            if path in valid_paths:
+                return path
+
+        for i in range(base_index - 1, -1, -1):
+            path = ordered_paths[i]
+            if path in valid_paths:
+                return path
+
+        return None
+
+    @staticmethod
     def _pick_metadata_reselection_path(
         old_photo_list_paths: list[str],
         new_photo_list_paths: list[str],
@@ -1134,20 +1163,11 @@ class MainWindow(QMainWindow):
         if base_path not in old_photo_list_paths:
             return None
 
-        valid_paths = set(new_photo_list_paths)
-        base_index = old_photo_list_paths.index(base_path)
-
-        for i in range(base_index + 1, len(old_photo_list_paths)):
-            path = old_photo_list_paths[i]
-            if path in valid_paths:
-                return path
-
-        for i in range(base_index - 1, -1, -1):
-            path = old_photo_list_paths[i]
-            if path in valid_paths:
-                return path
-
-        return None
+        return MainWindow._pick_replacement_path_in_order(
+            old_photo_list_paths,
+            set(new_photo_list_paths),
+            base_path,
+        )
 
     def _apply_pending_metadata_reselection(self, context: dict) -> None:
         selected_before = context.get("selected_paths")
@@ -2862,24 +2882,15 @@ class MainWindow(QMainWindow):
         started_with_multi = bool(state.get("started_with_multi_selection"))
         selectable_path_set = current_path_set.difference(ejected_paths)
         visible_path_set = {path for path in loop_paths if path in selectable_path_set}
-        last_all_path = all_paths[-1] if all_paths else None
-
         if not started_with_multi:
             if current_path in visible_path_set:
                 return ([current_path], current_path)
 
-            if current_path == last_all_path:
-                target_path = self._pick_previous_path_in_list(
-                    all_paths,
-                    selectable_path_set,
-                    current_path,
-                )
-            else:
-                target_path = self._pick_next_path_in_loop(
-                    all_paths,
-                    selectable_path_set,
-                    current_path,
-                )
+            target_path = MainWindow._pick_replacement_path_in_order(
+                all_paths,
+                selectable_path_set,
+                current_path,
+            )
             if target_path is None:
                 return ([], None)
             return ([target_path], target_path)
@@ -2890,25 +2901,18 @@ class MainWindow(QMainWindow):
         if current_path in visible_path_set:
             target_path = current_path
         else:
-            target_path = self._pick_next_path_in_loop(
+            target_path = MainWindow._pick_replacement_path_in_order(
                 loop_paths,
                 set(surviving_loop_paths),
                 current_path,
             )
 
         if target_path is None:
-            if current_path == last_all_path:
-                target_path = self._pick_previous_path_in_list(
-                    all_paths,
-                    selectable_path_set,
-                    current_path,
-                )
-            else:
-                target_path = self._pick_next_path_in_loop(
-                    all_paths,
-                    selectable_path_set,
-                    current_path,
-                )
+            target_path = MainWindow._pick_replacement_path_in_order(
+                all_paths,
+                selectable_path_set,
+                current_path,
+            )
             if target_path is None:
                 return ([], None)
             return ([target_path], target_path)

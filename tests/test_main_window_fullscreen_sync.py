@@ -689,6 +689,67 @@ def test_multi_selection_keep_selection_tracks_surviving_loop_members_live(
     assert _selected_paths(window.images_data) == ["/photos/b.jpg"]
 
 
+def test_multi_selection_keep_selection_uses_previous_survivor_without_wrap(
+    monkeypatch,
+):
+    _patch_settings(
+        monkeypatch,
+        filter_in_fullscreen=False,
+        exit_mode=OnFullscreenExitMultipleSelected.KEEP_SELECTION,
+    )
+
+    first = _item("/photos/a.jpg", label="Approved", selected=True)
+    second = _item("/photos/b.jpg", label="Approved")
+    third = _item("/photos/c.jpg", label="Approved", selected=True)
+    fourth = _item("/photos/d.jpg", label="Approved", selected=True)
+    model = _make_model(first, second, third, fourth)
+    model.set_filter(FilterCriteria(labels={"Approved"}))
+
+    overlay = _FakeFullscreenOverlay(
+        current_path="/photos/d.jpg",
+        loop_paths=["/photos/a.jpg", "/photos/c.jpg", "/photos/d.jpg"],
+        all_paths=[
+            "/photos/a.jpg",
+            "/photos/b.jpg",
+            "/photos/c.jpg",
+            "/photos/d.jpg",
+        ],
+    )
+    window = _FullscreenSyncWindow(
+        model,
+        overlay,
+        started_with_multi_selection=True,
+    )
+
+    window._apply_live_grid_selection_from_fullscreen()
+    assert _selected_paths(window.images_data) == [
+        "/photos/a.jpg",
+        "/photos/c.jpg",
+        "/photos/d.jpg",
+    ]
+    assert window.grid._last_selected_path == "/photos/d.jpg"
+
+    fourth.db_metadata[DBFields.LABEL] = "Rejected"
+    window.sync_model_after_metadata_update(
+        {DBFields.LABEL},
+        source="test",
+        allow_fullscreen_filter=True,
+    )
+
+    assert [item.path for item in window.images_data] == [
+        "/photos/a.jpg",
+        "/photos/b.jpg",
+        "/photos/c.jpg",
+    ]
+    assert overlay.get_current_path() == "/photos/d.jpg"
+    assert _selected_paths(window.images_data) == [
+        "/photos/a.jpg",
+        "/photos/c.jpg",
+    ]
+    assert window.grid._last_selected_path == "/photos/c.jpg"
+    assert window.grid.ensure_visible_paths[-1] == "/photos/c.jpg"
+
+
 def test_multi_selection_select_last_viewed_tracks_only_current_item_live(
     monkeypatch,
 ):
@@ -719,6 +780,59 @@ def test_multi_selection_select_last_viewed_tracks_only_current_item_live(
     assert window.grid._last_selected_path == "/photos/c.jpg"
     assert window.grid.ensure_visible_paths[-1] == "/photos/c.jpg"
 
+
+def test_multi_selection_select_last_viewed_uses_previous_survivor_without_wrap(
+    monkeypatch,
+):
+    _patch_settings(
+        monkeypatch,
+        filter_in_fullscreen=False,
+        exit_mode=OnFullscreenExitMultipleSelected.SELECT_LAST_VIEWED,
+    )
+
+    first = _item("/photos/a.jpg", label="Approved", selected=True)
+    second = _item("/photos/b.jpg", label="Approved")
+    third = _item("/photos/c.jpg", label="Approved", selected=True)
+    fourth = _item("/photos/d.jpg", label="Approved", selected=True)
+    model = _make_model(first, second, third, fourth)
+    model.set_filter(FilterCriteria(labels={"Approved"}))
+
+    overlay = _FakeFullscreenOverlay(
+        current_path="/photos/d.jpg",
+        loop_paths=["/photos/a.jpg", "/photos/c.jpg", "/photos/d.jpg"],
+        all_paths=[
+            "/photos/a.jpg",
+            "/photos/b.jpg",
+            "/photos/c.jpg",
+            "/photos/d.jpg",
+        ],
+    )
+    window = _FullscreenSyncWindow(
+        model,
+        overlay,
+        started_with_multi_selection=True,
+    )
+
+    window._apply_live_grid_selection_from_fullscreen()
+    assert _selected_paths(window.images_data) == ["/photos/d.jpg"]
+    assert window.grid._last_selected_path == "/photos/d.jpg"
+
+    fourth.db_metadata[DBFields.LABEL] = "Rejected"
+    window.sync_model_after_metadata_update(
+        {DBFields.LABEL},
+        source="test",
+        allow_fullscreen_filter=True,
+    )
+
+    assert [item.path for item in window.images_data] == [
+        "/photos/a.jpg",
+        "/photos/b.jpg",
+        "/photos/c.jpg",
+    ]
+    assert overlay.get_current_path() == "/photos/d.jpg"
+    assert _selected_paths(window.images_data) == ["/photos/c.jpg"]
+    assert window.grid._last_selected_path == "/photos/c.jpg"
+    assert window.grid.ensure_visible_paths[-1] == "/photos/c.jpg"
 
 def test_eject_updates_grid_immediately_without_waiting_for_close(monkeypatch):
     _patch_settings(monkeypatch)
