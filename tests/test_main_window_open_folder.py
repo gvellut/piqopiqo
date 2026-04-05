@@ -8,9 +8,23 @@ from piqopiqo.main_window import MainWindow
 
 
 class _FakeMainWindow:
-    def __init__(self):
-        self.root_folder = "/previous"
+    def __init__(self, *, root_folder: str | None = "/previous", hint: str = ""):
+        self.root_folder = root_folder
+        self._folder_dialog_directory_hint = hint
         self.events: list[object] = []
+
+    @staticmethod
+    def _parent_directory_for_folder_dialog(folder_path: str | None) -> str:
+        return MainWindow._parent_directory_for_folder_dialog(folder_path)
+
+    def _set_folder_dialog_directory_hint_from_folder(
+        self,
+        folder_path: str | None,
+    ) -> None:
+        MainWindow._set_folder_dialog_directory_hint_from_folder(self, folder_path)
+
+    def _get_folder_dialog_start_directory(self) -> str:
+        return MainWindow._get_folder_dialog_start_directory(self)
 
     def _clear_filters_before_folder_load(self) -> None:
         self.events.append("clear")
@@ -338,6 +352,48 @@ def test_on_open_does_nothing_when_dialog_cancelled(monkeypatch):
     MainWindow.on_open(fake_window)
 
     assert fake_window.events == []
+
+
+def test_on_open_starts_at_parent_of_current_folder(monkeypatch, tmp_path):
+    root = tmp_path / "current" / "folder"
+    root.mkdir(parents=True)
+    captured: list[str] = []
+    fake_window = _FakeMainWindow(root_folder=str(root))
+
+    def _get_existing_directory(_parent, _title, start_dir, _options):
+        captured.append(start_dir)
+        return ""
+
+    monkeypatch.setattr(
+        "piqopiqo.main_window.QFileDialog.getExistingDirectory",
+        _get_existing_directory,
+    )
+
+    MainWindow.on_open(fake_window)
+
+    assert captured == [str(root.parent)]
+
+
+def test_on_open_uses_archive_hint_when_no_folder_loaded(monkeypatch, tmp_path):
+    archive_parent = tmp_path / "archive"
+    archived_folder = archive_parent / "20250502_annecy"
+    archived_folder.mkdir(parents=True)
+    captured: list[str] = []
+    fake_window = _FakeMainWindow(root_folder=None)
+    fake_window._set_folder_dialog_directory_hint_from_folder(str(archived_folder))
+
+    def _get_existing_directory(_parent, _title, start_dir, _options):
+        captured.append(start_dir)
+        return ""
+
+    monkeypatch.setattr(
+        "piqopiqo.main_window.QFileDialog.getExistingDirectory",
+        _get_existing_directory,
+    )
+
+    MainWindow.on_open(fake_window)
+
+    assert captured == [str(archive_parent)]
 
 
 def test_ensure_grid_path_visible_uses_non_navigation_scroll():

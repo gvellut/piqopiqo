@@ -167,7 +167,7 @@ def validate_archive_destination(
 
 
 def launch_archive(window: MainWindow) -> None:
-    root_folder = str(getattr(window, "root_folder", "") or "").strip()
+    root_folder = str(window.root_folder or "").strip()
     if not root_folder:
         QMessageBox.information(
             window,
@@ -195,9 +195,7 @@ def launch_archive(window: MainWindow) -> None:
             text=validation.settings_message,
         )
         if should_open_settings:
-            open_settings = getattr(window, "open_settings_for_key", None)
-            if callable(open_settings):
-                open_settings(UserSettingKey.ARCHIVE_DESTINATION)
+            window.open_settings_for_key(UserSettingKey.ARCHIVE_DESTINATION)
         return
 
     if validation.conflict_message:

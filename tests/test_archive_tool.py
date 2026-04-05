@@ -149,6 +149,7 @@ class _FakeArchiveWindow(QWidget):
         self.prepare_calls = 0
         self.resume_calls = 0
         self.unload_calls: list[bool] = []
+        self.folder_dialog_hint_updates: list[str] = []
 
     def _prepare_workspace_for_archive_move(self) -> None:
         self.prepare_calls += 1
@@ -158,6 +159,12 @@ class _FakeArchiveWindow(QWidget):
 
     def _unload_workspace(self, *, clear_last_folder: bool = False) -> None:
         self.unload_calls.append(bool(clear_last_folder))
+
+    def _set_folder_dialog_directory_hint_from_folder(
+        self,
+        folder_path: str | None,
+    ) -> None:
+        self.folder_dialog_hint_updates.append(str(folder_path or ""))
 
 
 @pytest.fixture
@@ -502,6 +509,30 @@ def test_archive_dialog_move_failure_restores_workspace_when_source_still_exists
     assert window.resume_calls == 1
     assert window.unload_calls == []
     assert dialog._finished is True
+
+
+def test_archive_dialog_success_does_not_override_folder_dialog_hint(
+    qapp, settings_store  # noqa: ARG001
+):
+    window = _FakeArchiveWindow()
+    dialog = ArchiveDialog(
+        window,
+        root_folder="/photos/root",
+        archive_path="/archive/root",
+        items=[],
+        source_folders=[],
+    )
+
+    dialog._on_move_finished(
+        ArchiveMoveResult(
+            success=True,
+            archive_path="/archive/root",
+            cleanup_error="",
+        )
+    )
+
+    assert window.folder_dialog_hint_updates == []
+    assert window.unload_calls == [True]
 
 
 def test_unload_workspace_clears_current_folder_state(main_window, settings_store):

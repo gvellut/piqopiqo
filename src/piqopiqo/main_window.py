@@ -147,6 +147,9 @@ class MainWindow(QMainWindow):
         self._fullscreen_overlay = None
         self.root_folder = root_folder
         self.source_folders = source_folders
+        self._folder_dialog_directory_hint = self._parent_directory_for_folder_dialog(
+            root_folder
+        )
         self._current_filter: FilterCriteria | None = None  # Current filter criteria
         self._filter_apply_scheduled = False
         self._pending_filter_criteria: FilterCriteria | None = None
@@ -2312,12 +2315,46 @@ class MainWindow(QMainWindow):
 
         launch_flickr_upload(self)
 
+    @staticmethod
+    def _parent_directory_for_folder_dialog(folder_path: str | None) -> str:
+        folder_text = str(folder_path or "").strip()
+        if not folder_text:
+            return ""
+
+        normalized = os.path.realpath(
+            os.path.abspath(os.path.expanduser(folder_text))
+        )
+        parent = os.path.dirname(normalized) or normalized
+        if os.path.isdir(parent):
+            return parent
+        return ""
+
+    def _set_folder_dialog_directory_hint_from_folder(
+        self,
+        folder_path: str | None,
+    ) -> None:
+        hint = self._parent_directory_for_folder_dialog(folder_path)
+        if hint:
+            self._folder_dialog_directory_hint = hint
+
+    def _get_folder_dialog_start_directory(self) -> str:
+        if self.root_folder:
+            current_parent = self._parent_directory_for_folder_dialog(self.root_folder)
+            if current_parent:
+                self._folder_dialog_directory_hint = current_parent
+                return current_parent
+
+        hint = str(self._folder_dialog_directory_hint or "").strip()
+        if hint and os.path.isdir(hint):
+            return hint
+        return ""
+
     def on_open(self):
         """Open a folder using a file dialog."""
         folder = QFileDialog.getExistingDirectory(
             self,
             "Open Folder",
-            self.root_folder or "",
+            self._get_folder_dialog_start_directory(),
             QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.ReadOnly,
         )
         if folder:
@@ -2543,6 +2580,7 @@ class MainWindow(QMainWindow):
 
         # Save as last folder
         get_state().set(StateKey.LAST_FOLDER, folder)
+        self._set_folder_dialog_directory_hint_from_folder(folder)
 
         # Update state
         self.root_folder = folder

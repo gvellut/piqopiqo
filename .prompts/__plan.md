@@ -6,6 +6,7 @@
     ~ [Correction](Ja_tasks/Qa.A_Correction.md)
 - [GPKG export on top of KML](Db_tasks/Gb_GPKG_export_on_top_of_KML.md)
 - [Flickr max workers diff for upload and set date public](Yb_tasks/Cc_Flickr_max_workers_diff_for_upload_and_set_date_.md)
+- [Add favorite folder](Kc_tasks/Nc_Add_favorite_folder.md)
 ! [Fix date read delay if since:last](A_tasks/A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](A_tasks/B_Eject_SD_after_user_OK.md)
     !? [GUI lag](A_tasks/B.A_GUI_lag.md)
