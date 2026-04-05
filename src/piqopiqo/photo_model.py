@@ -327,14 +327,20 @@ class PhotoListModel(QObject):
             search_text=search_text,
         )
 
-    def set_filter(self, criteria: FilterCriteria | None) -> bool:
+    def set_filter(
+        self,
+        criteria: FilterCriteria | None,
+        *,
+        emit_signals: bool = True,
+    ) -> bool:
         """Set the filter criteria.
 
         Args:
             criteria: Filter criteria, or None for no filter.
+            emit_signals: Emit photos_changed when True.
 
         Returns:
-            True when the active filter changed and photos_changed was emitted.
+            True when the active filter changed.
         """
         normalized = self.normalize_filter_criteria(criteria)
         if normalized == self._filter:
@@ -342,7 +348,8 @@ class PhotoListModel(QObject):
 
         self._filter = normalized
         self._apply_filter_and_sort()
-        self.photos_changed.emit()
+        if emit_signals:
+            self.photos_changed.emit()
         return True
 
     def _passes_filter(self, photo: ImageItem) -> bool:

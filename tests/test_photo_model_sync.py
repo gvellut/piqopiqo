@@ -107,6 +107,27 @@ def test_set_filter_normalizes_empty_criteria_and_skips_unchanged_updates():
     assert emitted == [1]
 
 
+def test_set_filter_can_update_silently_without_emitting():
+    model = PhotoListModel(MetadataDBManager())
+    model.set_photos([_item("/photos/a.jpg", title="Sunset")], ["/photos"])
+
+    emitted: list[int] = []
+    model.photos_changed.connect(lambda: emitted.append(1))
+
+    changed = model.set_filter(FilterCriteria(search_text="sunset"), emit_signals=False)
+
+    assert changed is True
+    assert model._filter == FilterCriteria(
+        folder=None,
+        labels=set(),
+        include_no_label=False,
+        explicit_labels=set(),
+        search_text="sunset",
+    )
+    assert [item.path for item in model.photos] == ["/photos/a.jpg"]
+    assert emitted == []
+
+
 def test_no_label_filter_includes_unknown_labels_from_old_settings():
     model = PhotoListModel(MetadataDBManager())
     renamed = _item("/photos/a.jpg", label="Renamed")

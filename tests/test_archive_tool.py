@@ -10,7 +10,7 @@ import pytest
 
 from piqopiqo.background.media_man import FolderPrimingResult
 from piqopiqo.main_window import MainWindow
-from piqopiqo.model import ImageItem
+from piqopiqo.model import FilterCriteria, ImageItem
 from piqopiqo.ssf.settings_state import (
     StateKey,
     UserSettingKey,
@@ -488,14 +488,68 @@ def test_archive_dialog_move_failure_restores_workspace_when_source_still_exists
 def test_unload_workspace_clears_current_folder_state(main_window, settings_store):
     get_state().set(StateKey.LAST_FOLDER, str(main_window.root_folder))
     main_window._last_visible_paths = [main_window.photo_model.all_photos[0].path]
+    active_filter = FilterCriteria(search_text="missing")
+    main_window._current_filter = main_window.photo_model.normalize_filter_criteria(
+        active_filter
+    )
+    main_window.photo_model.set_filter(active_filter)
 
     main_window._unload_workspace(clear_last_folder=True)
 
     assert main_window.root_folder is None
     assert main_window.source_folders == []
+    assert main_window._current_filter is None
+    assert main_window.photo_model._filter is None
     assert main_window.photo_model.all_photos == []
     assert main_window.photo_model.source_folders == []
     assert main_window.filter_panel.folder_combo.isEnabled() is False
     assert main_window._items_by_path == {}
     assert main_window._last_visible_paths == []
     assert get_state_value(StateKey.LAST_FOLDER) == ""
+
+
+def test_open_folder_after_unload_does_not_keep_stale_filter(
+    main_window,
+    tmp_path,
+    monkeypatch,
+):
+    active_filter = FilterCriteria(search_text="missing")
+    main_window._current_filter = main_window.photo_model.normalize_filter_criteria(
+        active_filter
+    )
+    main_window.photo_model.set_filter(active_filter)
+    assert main_window.photo_model.photos == []
+
+    main_window._unload_workspace(clear_last_folder=True)
+
+    new_root = tmp_path / "new-root"
+    new_root.mkdir()
+    new_image = new_root / "visible.jpg"
+    new_image.write_bytes(b"jpg")
+
+    monkeypatch.setattr(
+        "piqopiqo.main_window.scan_folder",
+        lambda folder: (
+            [
+                {
+                    "path": str(new_image),
+                    "name": new_image.name,
+                    "state": 0,
+                    "created": "2026-01-02 10:00:00",
+                    "source_folder": str(new_root),
+                }
+            ],
+            [str(new_root)],
+        ),
+    )
+
+    main_window._clear_filters_before_folder_load()
+    main_window._load_folder(str(new_root), reset_grid_to_top=True)
+
+    assert [item.path for item in main_window.photo_model.photos] == [str(new_image)]
+
+    main_window.filter_panel.clear_filter()
+    if main_window._filter_apply_scheduled:
+        main_window._apply_pending_filter_change()
+
+    assert [item.path for item in main_window.photo_model.photos] == [str(new_image)]

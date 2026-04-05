@@ -2519,6 +2519,7 @@ class MainWindow(QMainWindow):
         self._refresh_undo_label_action_enabled_for_context()
 
         self.filter_panel.set_no_folders()
+        self.photo_model.set_filter(None, emit_signals=False)
         self.photo_model.set_photos([], [])
 
         if clear_last_folder:
