@@ -22,6 +22,7 @@ dependencies = [
     "flickrapi>=2.4.0",
     "lxml>=6.0.2",
     "fastkml>=1.4.0",
+    "pyobjc-framework-vision>=12.1",
 ]
 
 [project.scripts]

@@ -329,6 +329,25 @@ def test_archive_dialog_checkbox_state_round_trip(qapp, settings_store):  # noqa
     assert get_state_value(StateKey.ARCHIVE_SAVE_EXIF) is False
 
 
+def test_archive_dialog_initial_focus_is_ok_button(qapp, settings_store):  # noqa: ARG001
+    window = _FakeArchiveWindow()
+    dialog = ArchiveDialog(
+        window,
+        root_folder="/photos/root",
+        archive_path="/archive/root",
+        items=[],
+        source_folders=[],
+    )
+
+    dialog.show()
+    qapp.processEvents()
+
+    assert dialog.ok_btn.hasFocus() is True
+    assert dialog.save_exif_checkbox.hasFocus() is False
+
+    dialog.close()
+
+
 def test_archive_dialog_unchecked_exif_starts_move_immediately(qapp, settings_store):  # noqa: ARG001
     window = _FakeArchiveWindow()
     dialog = ArchiveDialog(

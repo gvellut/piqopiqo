@@ -507,6 +507,7 @@ dependencies = [
     { name = "pyexiftool" },
     { name = "pyobjc-framework-cocoa" },
     { name = "pyobjc-framework-quartz" },
+    { name = "pyobjc-framework-vision" },
     { name = "pyside6" },
     { name = "send2trash" },
     { name = "show-in-file-manager" },
@@ -537,6 +538,7 @@ requires-dist = [
     { name = "pyexiftool", specifier = ">=0.5.6" },
     { name = "pyobjc-framework-cocoa", specifier = ">=12.1" },
     { name = "pyobjc-framework-quartz", specifier = ">=12.1" },
+    { name = "pyobjc-framework-vision", specifier = ">=12.1" },
     { name = "pyside6", specifier = ">=6.10.1" },
     { name = "send2trash", specifier = ">=1.8.0" },
     { name = "show-in-file-manager", specifier = ">=1.1.2" },
@@ -549,7 +551,7 @@ dev = [
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "taskipy", specifier = ">=1.14.1" },
 ]
-pyqtauto = [{ name = "pyqtauto", directory = "../pyqtauto" }]
+pyqtauto = [{ name = "pyqtauto", directory = "/Users/guilhem/Documents/projects/github/pyqtauto" }]
 
 [[package]]
 name = "pluggy"
@@ -727,6 +729,20 @@ wheels = [
 ]
 
 [[package]]
+name = "pyobjc-framework-coreml"
+version = "12.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyobjc-core" },
+    { name = "pyobjc-framework-cocoa" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/30/2d/baa9ea02cbb1c200683cb7273b69b4bee5070e86f2060b77e6a27c2a9d7e/pyobjc_framework_coreml-12.1.tar.gz", hash = "sha256:0d1a4216891a18775c9e0170d908714c18e4f53f9dc79fb0f5263b2aa81609ba", size = 40465, upload-time = "2025-11-14T10:14:02.265Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bc/5c/510ae8e3663238d32e653ed6a09ac65611dd045a7241f12633c1ab48bb9b/pyobjc_framework_coreml-12.1-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:a04a96e512ecf6999aa9e1f60ad5635cb9d1cd839be470341d8d1541797baef6", size = 11418, upload-time = "2025-11-14T09:45:57.75Z" },
+    { url = "https://files.pythonhosted.org/packages/d3/1a/b7367819381b07c440fa5797d2b0487e31f09aa72079a693ceab6875fa0a/pyobjc_framework_coreml-12.1-cp314-cp314t-macosx_10_15_universal2.whl", hash = "sha256:7762b3dd2de01565b7cf3049ce1e4c27341ba179d97016b0b7607448e1c39865", size = 11593, upload-time = "2025-11-14T09:45:59.623Z" },
+]
+
+[[package]]
 name = "pyobjc-framework-quartz"
 version = "12.1"
 source = { registry = "https://pypi.org/simple" }
@@ -741,9 +757,25 @@ wheels = [
 ]
 
 [[package]]
+name = "pyobjc-framework-vision"
+version = "12.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyobjc-core" },
+    { name = "pyobjc-framework-cocoa" },
+    { name = "pyobjc-framework-coreml" },
+    { name = "pyobjc-framework-quartz" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c2/5a/08bb3e278f870443d226c141af14205ff41c0274da1e053b72b11dfc9fb2/pyobjc_framework_vision-12.1.tar.gz", hash = "sha256:a30959100e85dcede3a786c544e621ad6eb65ff6abf85721f805822b8c5fe9b0", size = 59538, upload-time = "2025-11-14T10:23:21.979Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a7/a4/ee1ef14d6e1df6617e64dbaaa0ecf8ecb9e0af1425613fa633f6a94049c1/pyobjc_framework_vision-12.1-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:631add775ed1dafb221a6116137cdcd78432addc16200ca434571c2a039c0e03", size = 16614, upload-time = "2025-11-14T10:06:50.852Z" },
+    { url = "https://files.pythonhosted.org/packages/af/53/187743d9244becd4499a77f8ee699ae286e2f6ade7c0c7ad2975ae60f187/pyobjc_framework_vision-12.1-cp314-cp314t-macosx_10_15_universal2.whl", hash = "sha256:fe41a1a70cc91068aee7b5293fa09dc66d1c666a8da79fdf948900988b439df6", size = 16771, upload-time = "2025-11-14T10:06:53.04Z" },
+]
+
+[[package]]
 name = "pyqtauto"
 version = "0.1.0"
-source = { directory = "../pyqtauto" }
+source = { directory = "/Users/guilhem/Documents/projects/github/pyqtauto" }
 dependencies = [
     { name = "click" },
     { name = "pyside6" },

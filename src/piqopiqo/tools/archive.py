@@ -8,7 +8,7 @@ from pathlib import Path
 import shutil
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -253,6 +253,10 @@ class ArchiveDialog(QDialog):
         self._setup_ui()
         self._update_confirmation_text()
 
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        QTimer.singleShot(0, self._focus_ok_button)
+
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
 
@@ -298,6 +302,12 @@ class ArchiveDialog(QDialog):
         button_row.addWidget(self.ok_btn)
 
         layout.addLayout(button_row)
+
+    def _focus_ok_button(self) -> None:
+        if not self.ok_btn.isEnabled() or not self.ok_btn.isVisible():
+            return
+        self.ok_btn.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+        self.ok_btn.setDefault(True)
 
     def _update_confirmation_text(self) -> None:
         item_count = len(self._items)
