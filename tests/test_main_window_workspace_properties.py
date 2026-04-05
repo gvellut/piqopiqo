@@ -12,7 +12,12 @@ import pytest
 from piqopiqo.background.media_man import FolderPrimingResult
 from piqopiqo.main_window import MainWindow
 from piqopiqo.model import ImageItem
-from piqopiqo.ssf.settings_state import APP_NAME, init_qsettings_store
+from piqopiqo.ssf.settings_state import (
+    APP_NAME,
+    UserSettingKey,
+    init_qsettings_store,
+    set_user_setting,
+)
 
 
 class _SignalStub:
@@ -125,6 +130,18 @@ def _menu_by_title(window: MainWindow, title: str):
     return None
 
 
+def _action_by_text(
+    window: MainWindow, menu_title: str, action_text: str
+) -> QAction | None:
+    menu = _menu_by_title(window, menu_title)
+    if menu is None:
+        return None
+    for action in menu.actions():
+        if action.text() == action_text:
+            return action
+    return None
+
+
 def test_file_menu_contains_property_and_not_clear_all_data(window):
     file_menu = _menu_by_title(window, "File")
     assert file_menu is not None
@@ -132,6 +149,34 @@ def test_file_menu_contains_property_and_not_clear_all_data(window):
     action_texts = [action.text() for action in file_menu.actions()]
     assert "Property..." in action_texts
     assert "Clear All Data" not in action_texts
+
+
+def test_favorite_folder_action_is_hidden_when_setting_is_empty(window):
+    action = _action_by_text(
+        window,
+        "File",
+        "Open Favorite Folder...",
+    )
+
+    assert action is not None
+    assert action.isVisible() is False
+
+
+def test_favorite_folder_action_updates_visibility_when_setting_changes(window):
+    action = _action_by_text(
+        window,
+        "File",
+        "Open Favorite Folder...",
+    )
+    assert action is not None
+
+    set_user_setting(UserSettingKey.FAVORITE_FOLDER, "/favorite")
+    window._apply_settings_changes({UserSettingKey.FAVORITE_FOLDER})
+    assert action.isVisible() is True
+
+    set_user_setting(UserSettingKey.FAVORITE_FOLDER, "")
+    window._apply_settings_changes({UserSettingKey.FAVORITE_FOLDER})
+    assert action.isVisible() is False
 
 
 def test_about_action_uses_about_role_and_stays_in_help(window):

@@ -77,6 +77,7 @@ class UserSettingKey(StrEnum):
     ON_FULLSCREEN_EXIT_SELECTION_MODE = "onFullscreenExit"
     FORCE_SRGB = "forceSrgb"
     SCREEN_COLOR_PROFILE = "screenColorProfile"
+    FAVORITE_FOLDER = "favoriteFolder"
     SHOW_DESCRIPTION_FIELD = "showDescriptionField"
     PROTECT_NON_TEXT_METADATA = "protectNonTextMetadata"
     STATUS_LABELS = "statusLabels"
@@ -511,6 +512,11 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
             ScreenColorProfileMode,
             ScreenColorProfileMode.FROM_MAIN_SCREEN,
         ),
+    ),
+    UserSettingKey.FAVORITE_FOLDER: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default="",
+        read_type=str,
     ),
     UserSettingKey.SHOW_DESCRIPTION_FIELD: SettingDef(
         group=SettingsGroup.SETTINGS,

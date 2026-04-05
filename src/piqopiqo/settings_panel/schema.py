@@ -157,6 +157,16 @@ SETTINGS_TABS: list[TabSpec] = [
                 ],
             ),
             GroupSpec(
+                title="Folders",
+                fields=[
+                    FieldSpec(
+                        key=UserSettingKey.FAVORITE_FOLDER,
+                        label="Favorite Folder",
+                        editor=EditorKind.PATH_DIR,
+                    ),
+                ],
+            ),
+            GroupSpec(
                 title="EXIF Panel",
                 fields=[
                     FieldSpec(

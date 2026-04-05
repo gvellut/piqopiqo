@@ -106,8 +106,17 @@ def test_autosave_choice_enum_setting_roundtrip(qapp, monkeypatch):
     assert UserSettingKey.SCREEN_COLOR_PROFILE in dialog.changed_keys
 
 
-def test_settings_dialog_shows_gcp_fields_in_default_mode(qapp, monkeypatch):
-    monkeypatch.delenv("PIQO_OCR_TIME_SHIFT_PROVIDER", raising=False)
+def test_settings_dialog_builds_favorite_folder_editor(qapp, monkeypatch):
+    monkeypatch.delenv("PIQO_SETTINGS_PANEL_SAVE_MODE", raising=False)
+    init_qsettings_store(dyn=True)
+
+    dialog = SettingsDialog(initial_tab_title="Interface")
+
+    assert UserSettingKey.FAVORITE_FOLDER in dialog._editors
+
+
+def test_settings_dialog_shows_gcp_fields_in_gcp_mode(qapp, monkeypatch):
+    monkeypatch.setenv("PIQO_OCR_TIME_SHIFT_PROVIDER", "GCP_VISION")
     init_qsettings_store(dyn=True)
 
     dialog = SettingsDialog(initial_tab_title="External/Tools")

@@ -36,7 +36,8 @@ class AppleVisionClockOcr:
             completion_handler
         )
         request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
-        request.setRecognitionLanguages_(["en-US", "es-ES"])
+        # TODO set in settings
+        request.setRecognitionLanguages_(["fr-FR", "en-US"])
 
         handler = Vision.VNImageRequestHandler.alloc().initWithURL_options_(
             input_url, None

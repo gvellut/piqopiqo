@@ -78,6 +78,7 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_PROTECT_NON_TEXT_METADATA",
         "PIQO_FORCE_SRGB",
         "PIQO_SCREEN_COLOR_PROFILE",
+        "PIQO_FAVORITE_FOLDER",
         "PIQO_COLOR_MANAGE_EMBEDDED_THUMBNAILS",
         "PIQO_COLOR_MANAGE_HQ_THUMBNAILS",
         "PIQO_PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE",
@@ -351,6 +352,16 @@ def test_show_description_field_default_and_roundtrip(isolated_settings):
 
     set_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD, True)
     assert get_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD) is True
+
+
+def test_favorite_folder_default_and_roundtrip(isolated_settings, tmp_path):
+    assert get_user_setting(UserSettingKey.FAVORITE_FOLDER) == ""
+
+    favorite_folder = tmp_path / "favorite"
+    favorite_folder.mkdir()
+
+    set_user_setting(UserSettingKey.FAVORITE_FOLDER, str(favorite_folder))
+    assert get_user_setting(UserSettingKey.FAVORITE_FOLDER) == str(favorite_folder)
 
 
 def test_protect_non_text_metadata_default_and_roundtrip(isolated_settings):

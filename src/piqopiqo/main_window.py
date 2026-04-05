@@ -1863,6 +1863,12 @@ class MainWindow(QMainWindow):
         menubar = self.menuBar()
         file_menu = menubar.addMenu("File")
 
+        favorite_open_action = QAction("Open Favorite Folder...", self)
+        favorite_open_action.triggered.connect(self._on_open_from_favorite_folder)
+        file_menu.addAction(favorite_open_action)
+        self._open_from_favorite_action = favorite_open_action
+        self._refresh_open_from_favorite_action_visibility()
+
         open_action = QAction("Open Folder...", self)
         open_action.setShortcut("Ctrl+O")
         open_action.triggered.connect(self.on_open)
@@ -1870,7 +1876,7 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
-        workspace_property_action = QAction("Property...", self)
+        workspace_property_action = QAction("Workspace Poperty...", self)
         workspace_property_action.triggered.connect(self._on_open_workspace_properties)
         file_menu.addAction(workspace_property_action)
 
@@ -2211,6 +2217,9 @@ class MainWindow(QMainWindow):
         if not changed_keys:
             return
 
+        if UserSettingKey.FAVORITE_FOLDER in changed_keys:
+            self._refresh_open_from_favorite_action_visibility()
+
         if UserSettingKey.CUSTOM_EXIF_FIELDS in changed_keys:
             self.media_manager.refresh_exif_field_keys(
                 get_effective_exif_panel_field_keys()
@@ -2321,9 +2330,7 @@ class MainWindow(QMainWindow):
         if not folder_text:
             return ""
 
-        normalized = os.path.realpath(
-            os.path.abspath(os.path.expanduser(folder_text))
-        )
+        normalized = os.path.realpath(os.path.abspath(os.path.expanduser(folder_text)))
         parent = os.path.dirname(normalized) or normalized
         if os.path.isdir(parent):
             return parent
@@ -2349,17 +2356,44 @@ class MainWindow(QMainWindow):
             return hint
         return ""
 
-    def on_open(self):
-        """Open a folder using a file dialog."""
+    def _refresh_open_from_favorite_action_visibility(self) -> None:
+        action = getattr(self, "_open_from_favorite_action", None)
+        if action is None:
+            return
+        action.setVisible(bool(self._get_configured_favorite_folder()))
+
+    def _get_configured_favorite_folder(self) -> str:
+        return str(get_user_setting(UserSettingKey.FAVORITE_FOLDER) or "").strip()
+
+    def _get_favorite_folder_dialog_start_directory(self) -> str:
+        favorite_folder = MainWindow._get_configured_favorite_folder(self)
+        if favorite_folder and os.path.isdir(favorite_folder):
+            return favorite_folder
+        return MainWindow._get_folder_dialog_start_directory(self)
+
+    def _open_folder_dialog_from_start_directory(self, start_directory: str) -> None:
         folder = QFileDialog.getExistingDirectory(
             self,
             "Open Folder",
-            self._get_folder_dialog_start_directory(),
+            start_directory,
             QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.ReadOnly,
         )
         if folder:
             self._clear_filters_before_folder_load()
             self._load_folder(folder, reset_grid_to_top=True)
+
+    def on_open(self):
+        """Open a folder using a file dialog."""
+        MainWindow._open_folder_dialog_from_start_directory(
+            self,
+            MainWindow._get_folder_dialog_start_directory(self),
+        )
+
+    def _on_open_from_favorite_folder(self) -> None:
+        MainWindow._open_folder_dialog_from_start_directory(
+            self,
+            MainWindow._get_favorite_folder_dialog_start_directory(self),
+        )
 
     def _to_relative_folder_label(self, folder_path: str) -> str:
         if not self.root_folder:

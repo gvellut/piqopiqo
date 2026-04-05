@@ -396,6 +396,99 @@ def test_on_open_uses_archive_hint_when_no_folder_loaded(monkeypatch, tmp_path):
     assert captured == [str(archive_parent)]
 
 
+def test_open_from_favorite_starts_in_configured_favorite_folder(monkeypatch, tmp_path):
+    favorite_folder = tmp_path / "favorite"
+    favorite_folder.mkdir()
+    captured: list[str] = []
+    fake_window = _FakeMainWindow(root_folder=None)
+
+    monkeypatch.setattr(
+        "piqopiqo.main_window.get_user_setting",
+        lambda _key: str(favorite_folder),
+    )
+
+    def _get_existing_directory(_parent, _title, start_dir, _options):
+        captured.append(start_dir)
+        return ""
+
+    monkeypatch.setattr(
+        "piqopiqo.main_window.QFileDialog.getExistingDirectory",
+        _get_existing_directory,
+    )
+
+    MainWindow._on_open_from_favorite_folder(fake_window)
+
+    assert captured == [str(favorite_folder)]
+
+
+def test_open_from_favorite_falls_back_to_default_start_dir_when_missing(
+    monkeypatch, tmp_path
+):
+    archive_parent = tmp_path / "archive"
+    archived_folder = archive_parent / "20250502_annecy"
+    archived_folder.mkdir(parents=True)
+    missing_favorite = tmp_path / "missing-favorite"
+    captured: list[str] = []
+    fake_window = _FakeMainWindow(root_folder=None)
+    fake_window._set_folder_dialog_directory_hint_from_folder(str(archived_folder))
+
+    monkeypatch.setattr(
+        "piqopiqo.main_window.get_user_setting",
+        lambda _key: str(missing_favorite),
+    )
+
+    def _get_existing_directory(_parent, _title, start_dir, _options):
+        captured.append(start_dir)
+        return ""
+
+    monkeypatch.setattr(
+        "piqopiqo.main_window.QFileDialog.getExistingDirectory",
+        _get_existing_directory,
+    )
+
+    MainWindow._on_open_from_favorite_folder(fake_window)
+
+    assert captured == [str(archive_parent)]
+
+
+def test_open_from_favorite_clears_filters_before_loading_folder(monkeypatch, tmp_path):
+    favorite_folder = tmp_path / "favorite"
+    favorite_folder.mkdir()
+    fake_window = _FakeMainWindow(root_folder=None)
+
+    monkeypatch.setattr(
+        "piqopiqo.main_window.get_user_setting",
+        lambda _key: str(favorite_folder),
+    )
+    monkeypatch.setattr(
+        "piqopiqo.main_window.QFileDialog.getExistingDirectory",
+        lambda *_args, **_kwargs: "/new-folder",
+    )
+
+    MainWindow._on_open_from_favorite_folder(fake_window)
+
+    assert fake_window.events == ["clear", ("load", "/new-folder", True)]
+
+
+def test_open_from_favorite_does_nothing_when_dialog_cancelled(monkeypatch, tmp_path):
+    favorite_folder = tmp_path / "favorite"
+    favorite_folder.mkdir()
+    fake_window = _FakeMainWindow(root_folder=None)
+
+    monkeypatch.setattr(
+        "piqopiqo.main_window.get_user_setting",
+        lambda _key: str(favorite_folder),
+    )
+    monkeypatch.setattr(
+        "piqopiqo.main_window.QFileDialog.getExistingDirectory",
+        lambda *_args, **_kwargs: "",
+    )
+
+    MainWindow._on_open_from_favorite_folder(fake_window)
+
+    assert fake_window.events == []
+
+
 def test_ensure_grid_path_visible_uses_non_navigation_scroll():
     fake_window = _FakeEnsureVisibleWindow()
 
