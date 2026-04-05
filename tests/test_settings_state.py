@@ -10,7 +10,12 @@ from PySide6.QtWidgets import QApplication
 import pytest
 
 from piqopiqo.color_management import ScreenColorProfileMode
-from piqopiqo.model import ExifField, ManualLensPreset, StatusLabel
+from piqopiqo.model import (
+    ExifField,
+    ManualLensPreset,
+    StatusLabel,
+    TimeShiftOcrProvider,
+)
 from piqopiqo.shortcuts import Shortcut
 import piqopiqo.ssf.settings_state as settings_state
 from piqopiqo.ssf.settings_state import (
@@ -76,6 +81,7 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_COLOR_MANAGE_EMBEDDED_THUMBNAILS",
         "PIQO_COLOR_MANAGE_HQ_THUMBNAILS",
         "PIQO_PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE",
+        "PIQO_OCR_TIME_SHIFT_PROVIDER",
     ):
         monkeypatch.delenv(env_name, raising=False)
 
@@ -253,16 +259,37 @@ def test_gpx_settings_defaults_and_env_override(isolated_settings, monkeypatch):
     assert get_user_setting(UserSettingKey.GPX_KML_FOLDER) == ""
     assert get_user_setting(UserSettingKey.TIME_SHIFT_UNKNOWN_FOLDER_IGNORE) is True
     assert get_runtime_setting(RuntimeSettingKey.TIMESHIFT_CACHE_NUM) == 10
+    assert (
+        get_runtime_setting(RuntimeSettingKey.OCR_TIME_SHIFT_PROVIDER)
+        == TimeShiftOcrProvider.APPLE_VISION
+    )
 
     monkeypatch.setenv("PIQO_GPX_IGNORE_OFFSET", "true")
     monkeypatch.setenv("PIQO_GPX_TIMEZONE", "Europe/Paris")
     monkeypatch.setenv("PIQO_TIME_SHIFT_UNKNOWN_FOLDER_IGNORE", "false")
     monkeypatch.setenv("PIQO_TIMESHIFT_CACHE_NUM", "3")
+    monkeypatch.setenv("PIQO_OCR_TIME_SHIFT_PROVIDER", "GCP_VISION")
     init_qsettings_store(dyn=False)
     assert get_user_setting(UserSettingKey.GPX_IGNORE_OFFSET) is True
     assert get_user_setting(UserSettingKey.GPX_TIMEZONE) == "Europe/Paris"
     assert get_user_setting(UserSettingKey.TIME_SHIFT_UNKNOWN_FOLDER_IGNORE) is False
     assert get_runtime_setting(RuntimeSettingKey.TIMESHIFT_CACHE_NUM) == 3
+    assert (
+        get_runtime_setting(RuntimeSettingKey.OCR_TIME_SHIFT_PROVIDER)
+        == TimeShiftOcrProvider.GCP_VISION
+    )
+
+
+def test_ocr_time_shift_provider_invalid_env_falls_back_to_gcp(
+    isolated_settings, monkeypatch
+):
+    monkeypatch.setenv("PIQO_OCR_TIME_SHIFT_PROVIDER", "INVALID_PROVIDER")
+    init_qsettings_store(dyn=False)
+
+    assert (
+        get_runtime_setting(RuntimeSettingKey.OCR_TIME_SHIFT_PROVIDER)
+        == TimeShiftOcrProvider.APPLE_VISION
+    )
 
 
 def test_time_taken_load_resort_batch_size_default_and_env_override(
@@ -431,9 +458,7 @@ def test_dyn_mode_is_memory_only(qcore_app):
 def test_dyn_mode_app_state_env_override_still_applies(qcore_app, monkeypatch):
     qcore_app.setOrganizationName("PiqoPiqoTests")
     qcore_app.setOrganizationDomain("tests.local")
-    qcore_app.setApplicationName(
-        f"piqopiqo-test-dyn-state-env-{uuid.uuid4().hex}"
-    )
+    qcore_app.setApplicationName(f"piqopiqo-test-dyn-state-env-{uuid.uuid4().hex}")
 
     monkeypatch.setenv("PIQO_NUM_COLUMNS", "8")
 
@@ -476,7 +501,9 @@ def test_effective_exif_panel_fields_merge_custom_fields_dedupes(isolated_settin
     fields = get_effective_exif_panel_fields()
     keys = [field.key for field in fields]
 
-    assert keys[:7] == [
+    assert keys[:9] == [
+        "EXIF:Model",
+        "EXIF:LensModel",
         "EXIF:FocalLength",
         "EXIF:FocalLengthIn35mmFormat",
         "Composite:ShutterSpeed",
@@ -485,8 +512,8 @@ def test_effective_exif_panel_fields_merge_custom_fields_dedupes(isolated_settin
         "EXIF:ExposureCompensation",
         "File:FileName",
     ]
-    assert keys[7:] == ["File:FileSize", "EXIF:LensModel"]
-    assert all(field.format is None for field in fields[7:])
+    assert keys[9:] == ["File:FileSize"]
+    assert all(field.format is None for field in fields[9:])
 
 
 def test_mandatory_setting_registry_contains_cache_and_exiftool():

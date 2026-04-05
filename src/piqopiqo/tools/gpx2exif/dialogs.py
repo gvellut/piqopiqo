@@ -29,6 +29,7 @@ from .constants import (
     NOT_SET_TIME_SHIFT_LABEL,
 )
 from .gpx_processing import to_relative_folder
+from .ocr_time_shift import get_time_shift_ocr_provider_display_name
 from .service import ApplyGpxResult
 from .time_shift import is_valid_time_shift
 
@@ -109,7 +110,8 @@ class ExtractGpsTimeShiftProgressDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        self.status_label = QLabel("Extracting clock time with Google Cloud Vision...")
+        provider_name = get_time_shift_ocr_provider_display_name()
+        self.status_label = QLabel(f"Extracting clock time with {provider_name}...")
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 

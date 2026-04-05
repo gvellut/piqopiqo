@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.model import TimeShiftOcrProvider
 from piqopiqo.ssf.settings_state import (
     MandatorySettingInputKind,
     RuntimeSettingKey,
@@ -33,6 +34,11 @@ from piqopiqo.ssf.settings_state import (
 
 from .editors import BaseEditor, build_editor
 from .schema import SETTINGS_TABS, EditorKind, FieldSpec
+
+_GCP_OCR_FIELD_KEYS = {
+    UserSettingKey.GCP_PROJECT,
+    UserSettingKey.GCP_SA_KEY_PATH,
+}
 
 
 class SettingsDialog(QDialog):
@@ -75,6 +81,14 @@ class SettingsDialog(QDialog):
             tab_layout = QVBoxLayout(tab)
 
             for group_spec in tab_spec.groups:
+                visible_fields = [
+                    field
+                    for field in group_spec.fields
+                    if self._should_include_field(field)
+                ]
+                if not visible_fields:
+                    continue
+
                 group_box = QGroupBox(group_spec.title, tab)
                 group_layout = QFormLayout(group_box)
                 group_layout.setFieldGrowthPolicy(
@@ -85,7 +99,7 @@ class SettingsDialog(QDialog):
                     Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
                 )
 
-                for field in group_spec.fields:
+                for field in visible_fields:
                     editor = build_editor(
                         field.editor,
                         choices=field.choices,
@@ -135,6 +149,13 @@ class SettingsDialog(QDialog):
         self._button_box.accepted.connect(self._on_save)
         self._button_box.rejected.connect(self._on_cancel)
         root.addWidget(self._button_box)
+
+    def _should_include_field(self, field: FieldSpec) -> bool:
+        if field.key not in _GCP_OCR_FIELD_KEYS:
+            return True
+
+        provider = get_runtime_setting(RuntimeSettingKey.OCR_TIME_SHIFT_PROVIDER)
+        return provider != TimeShiftOcrProvider.APPLE_VISION
 
     def eventFilter(self, watched, event):  # noqa: N802
         if (

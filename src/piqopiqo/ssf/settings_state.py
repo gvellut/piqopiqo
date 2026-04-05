@@ -21,6 +21,7 @@ from piqopiqo.model import (
     ManualLensPreset,
     OnFullscreenExitMultipleSelected,
     StatusLabel,
+    TimeShiftOcrProvider,
 )
 from piqopiqo.photo_model import SortOrder
 from piqopiqo.shortcuts import Shortcut
@@ -102,6 +103,7 @@ class UserSettingKey(StrEnum):
 class RuntimeSettingKey(StrEnum):
     DETACHED_KEYWORD_TREE = "detachedKeywordTree"
     INITIAL_RESOLUTION = "initialResolution"
+    OCR_TIME_SHIFT_PROVIDER = "ocrTimeShiftProvider"
     TIME_TAKEN_LOAD_RESORT_BATCH_SIZE = "timeTakenLoadResortBatchSize"
     EXIF_PANEL_COLUMN_STRETCH = "exifPanelColumnStretch"
     EXIF_PANEL_ROW_SPACING = "exifPanelRowSpacing"
@@ -397,6 +399,14 @@ def _deserialize_screen_color_profile_mode(data: Any) -> ScreenColorProfileMode:
         return ScreenColorProfileMode.FROM_MAIN_SCREEN
 
 
+def _deserialize_time_shift_ocr_provider(data: Any) -> TimeShiftOcrProvider:
+    raw = str(data)
+    try:
+        return TimeShiftOcrProvider[raw]
+    except KeyError:
+        return TimeShiftOcrProvider.APPLE_VISION
+
+
 def _deserialize_column_stretch(data: Any) -> tuple[int, int]:
     if isinstance(data, list) and len(data) >= 2:
         return (int(data[0]), int(data[1]))
@@ -668,6 +678,12 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
         default=None,
         read_type=str,
         env_parser=lambda raw: raw,
+    ),
+    RuntimeSettingKey.OCR_TIME_SHIFT_PROVIDER: SettingDef(
+        default=TimeShiftOcrProvider.APPLE_VISION,
+        read_type=str,
+        env_parser=_deserialize_time_shift_ocr_provider,
+        deserializer=_deserialize_time_shift_ocr_provider,
     ),
     RuntimeSettingKey.TIME_TAKEN_LOAD_RESORT_BATCH_SIZE: SettingDef(
         default=100,

@@ -229,8 +229,6 @@ def extract_gps_time_shift_for_item(window: MainWindow, item: ImageItem) -> None
     worker = ExtractGpsTimeShiftWorker(
         photo_path=item.path,
         exif_time=time_taken,
-        gcp_project=str(get_user_setting(UserSettingKey.GCP_PROJECT) or ""),
-        gcp_sa_key_path=str(get_user_setting(UserSettingKey.GCP_SA_KEY_PATH) or ""),
     )
 
     progress = ExtractGpsTimeShiftProgressDialog(parent=window)

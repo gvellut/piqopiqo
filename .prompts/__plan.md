@@ -1,4 +1,4 @@
-- [Add Apple vision](Kc_tasks/Mc_Add_Apple_vision.md)
+- [Add favorite folder](Kc_tasks/Nc_Add_favorite_folder.md)
 - [Keyword tree should display half chcekd](Kc_tasks/Kc_Keyword_tree_should_display_half_chcekd.md)
 - [Keyword clean on validate](Pb_tasks/Pb_Keyword_clean_on_validate.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
@@ -6,7 +6,6 @@
     ~ [Correction](Ja_tasks/Qa.A_Correction.md)
 - [GPKG export on top of KML](Db_tasks/Gb_GPKG_export_on_top_of_KML.md)
 - [Flickr max workers diff for upload and set date public](Yb_tasks/Cc_Flickr_max_workers_diff_for_upload_and_set_date_.md)
-- [Add favorite folder](Kc_tasks/Nc_Add_favorite_folder.md)
 ! [Fix date read delay if since:last](A_tasks/A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](A_tasks/B_Eject_SD_after_user_OK.md)
     !? [GUI lag](A_tasks/B.A_GUI_lag.md)
@@ -112,3 +111,4 @@
     ? [susped watcher on copy sd](Yb_tasks/Jc.B_susped_watcher_on_copy_sd.md)
 ! [When exiting fullscreen do not wrap around](Yb_tasks/Zb_When_exiting_fullscreen_do_not_wrap_around.md)
 ! [After archive cannot open folder](Kc_tasks/Lc_After_archive_cannot_open_folder.md)
+! [Add Apple vision](Kc_tasks/Mc_Add_Apple_vision.md)

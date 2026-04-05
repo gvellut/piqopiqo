@@ -22,14 +22,10 @@ class ExtractGpsTimeShiftWorker(QRunnable):
         *,
         photo_path: str,
         exif_time: datetime,
-        gcp_project: str,
-        gcp_sa_key_path: str,
     ):
         super().__init__()
         self._photo_path = photo_path
         self._exif_time = exif_time
-        self._gcp_project = gcp_project
-        self._gcp_sa_key_path = gcp_sa_key_path
         self._cancel_requested = threading.Event()
         self.signals = ExtractGpsTimeShiftWorkerSignals()
 
@@ -44,8 +40,6 @@ class ExtractGpsTimeShiftWorker(QRunnable):
             extracted_clock, shift = extract_time_shift_from_photo(
                 photo_path=self._photo_path,
                 exif_time=self._exif_time,
-                gcp_project=self._gcp_project,
-                gcp_sa_key_path=self._gcp_sa_key_path,
             )
         except Exception as ex:  # pragma: no cover - external API failure
             if not self._cancel_requested.is_set():

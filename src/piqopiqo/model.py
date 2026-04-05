@@ -88,6 +88,11 @@ class OnFullscreenExitMultipleSelected(Enum):
     SELECT_LAST_VIEWED = auto()
 
 
+class TimeShiftOcrProvider(Enum):
+    GCP_VISION = auto()
+    APPLE_VISION = auto()
+
+
 @define
 class LabelUndoEntry:
     """Stores the state for a single label undo/redo operation.

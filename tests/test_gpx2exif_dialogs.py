@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QApplication, QFileDialog
 import pytest
 
+from piqopiqo.ssf.settings_state import init_qsettings_store
 from piqopiqo.tools.gpx2exif.dialogs import (
     ApplyGpxDialog,
     ApplyGpxProgressDialog,
@@ -251,6 +252,7 @@ def test_apply_gpx_dialog_browse_accept_updates_field_and_calls_callback(
 
 
 def test_extract_time_shift_progress_success_shows_clock_and_shift_lines(qapp):
+    init_qsettings_store(dyn=True)
     dialog = ExtractGpsTimeShiftProgressDialog()
 
     dialog._on_success("12:34:56", "-1m4s")
@@ -264,6 +266,28 @@ def test_extract_time_shift_progress_success_shows_clock_and_shift_lines(qapp):
     assert dialog.progress_bar.minimum() == 0
     assert dialog.progress_bar.maximum() == 1
     assert dialog.progress_bar.value() == 1
+
+
+def test_extract_time_shift_progress_uses_gcp_status_text_by_default(
+    qapp, monkeypatch
+):
+    monkeypatch.delenv("PIQO_OCR_TIME_SHIFT_PROVIDER", raising=False)
+    init_qsettings_store(dyn=True)
+
+    dialog = ExtractGpsTimeShiftProgressDialog()
+
+    assert dialog.status_label.text() == "Extracting clock time with Google Cloud Vision..."
+
+
+def test_extract_time_shift_progress_uses_apple_status_text_when_selected(
+    qapp, monkeypatch
+):
+    monkeypatch.setenv("PIQO_OCR_TIME_SHIFT_PROVIDER", "APPLE_VISION")
+    init_qsettings_store(dyn=True)
+
+    dialog = ExtractGpsTimeShiftProgressDialog()
+
+    assert dialog.status_label.text() == "Extracting clock time with Apple Vision..."
 
 
 def test_apply_gpx_progress_folder_label_hidden_until_first_folder(qapp):
