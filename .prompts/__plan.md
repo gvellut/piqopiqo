@@ -112,3 +112,4 @@
 ! [After archive cannot open folder](Kc_tasks/Lc_After_archive_cannot_open_folder.md)
 ! [Add Apple vision](Kc_tasks/Mc_Add_Apple_vision.md)
 ! [Add favorite folder](Kc_tasks/Nc_Add_favorite_folder.md)
+! [Archive fix](Kc_tasks/Oc_Archive_fix.md)

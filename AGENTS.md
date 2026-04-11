@@ -397,6 +397,8 @@ Do not use .. for relative imports (in parent folder). Use the fully qualified n
 
 Do not use PyqtAuto and do not suggest its use.
 
+Do not use too much abstraction: This software is not a library. Also do not try to maintain compatibility in the code (it is not a library).
+
 ## Update of AGENTS.md
 
 After completing a feature, update this file AGENTS.md with the updated project structure. Also add considerations for reference for future work.

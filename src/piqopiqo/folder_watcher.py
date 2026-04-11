@@ -7,7 +7,6 @@ import logging
 import os
 import threading
 import time
-from typing import Protocol
 
 from attrs import define
 from PySide6.QtCore import QObject, Signal
@@ -22,12 +21,6 @@ _IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
 class WorkspaceFileState:
     mtime_ns: int
     size: int
-
-
-class WorkspaceWatcherControl(Protocol):
-    def suspend(self) -> None: ...
-
-    def resume_and_refresh(self) -> None: ...
 
 
 def _is_image_path(path: str) -> bool:

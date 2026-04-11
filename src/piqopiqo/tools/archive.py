@@ -9,6 +9,7 @@ import shutil
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTextEdit,
     QVBoxLayout,
+    QWidget,
 )
 
 from piqopiqo.cache_paths import (
@@ -39,6 +41,7 @@ from piqopiqo.ssf.settings_state import (
 )
 
 if TYPE_CHECKING:
+    from piqopiqo.folder_watcher import WorkspaceWatcherController
     from piqopiqo.main_window import MainWindow
 
 
@@ -213,6 +216,7 @@ def launch_archive(window: MainWindow) -> None:
         archive_path=archive_path,
         items=list(window.photo_model.all_photos),
         source_folders=list(window.photo_model.source_folders),
+        watcher_control=window.workspace_watcher_control,
         parent=window,
     )
     dialog.exec()
@@ -229,6 +233,7 @@ class ArchiveDialog(QDialog):
         archive_path: str,
         items: list[ImageItem],
         source_folders: list[str],
+        watcher_control: WorkspaceWatcherController | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -241,15 +246,19 @@ class ArchiveDialog(QDialog):
         self._archive_path = str(archive_path)
         self._items = list(items)
         self._source_folders = list(source_folders)
+        self._watcher_control = watcher_control
+        self._watcher_suspended = False
         self._media_manager = window.media_manager
         self._move_worker: ArchiveMoveWorker | None = None
         self._running = False
+        self._running_stage: str | None = None
         self._finished = False
         self._write_error_count = 0
         self._write_errors: list[str] = []
 
         self._setup_ui()
         self._update_confirmation_text()
+        self._sync_height_to_content()
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -264,6 +273,26 @@ class ArchiveDialog(QDialog):
             Qt.TextInteractionFlag.TextSelectableByMouse
         )
         layout.addWidget(self.summary_label)
+
+        self.progress_header_widget = QWidget(self)
+        progress_header_layout = QHBoxLayout(self.progress_header_widget)
+        progress_header_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.progress_stage_label = QLabel(self.progress_header_widget)
+        self.progress_stage_label.setWordWrap(True)
+        progress_header_layout.addWidget(self.progress_stage_label, 1)
+
+        self.progress_count_label = QLabel(self.progress_header_widget)
+        self.progress_count_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        mono = QFont("menlo")
+        mono.setStyleHint(QFont.StyleHint.Monospace)
+        self.progress_count_label.setFont(mono)
+        progress_header_layout.addWidget(self.progress_count_label)
+        self.progress_header_widget.hide()
+        self.progress_count_label.hide()
+        layout.addWidget(self.progress_header_widget)
 
         self.save_exif_checkbox = QCheckBox("Save EXIF before archive", self)
         self.save_exif_checkbox.setChecked(
@@ -301,6 +330,15 @@ class ArchiveDialog(QDialog):
 
         layout.addLayout(button_row)
 
+    def _sync_height_to_content(self) -> None:
+        layout = self.layout()
+        if layout is not None:
+            layout.activate()
+        self.adjustSize()
+        target_height = self.sizeHint().height()
+        if target_height > 0:
+            self.setFixedHeight(target_height)
+
     def _focus_ok_button(self) -> None:
         if not self.ok_btn.isEnabled() or not self.ok_btn.isVisible():
             return
@@ -322,6 +360,8 @@ class ArchiveDialog(QDialog):
 
     def _on_ok_clicked(self) -> None:
         if self._running:
+            if self._running_stage == "exif":
+                self._cancel_exif_stage()
             return
         if self._finished:
             self.accept()
@@ -355,19 +395,69 @@ class ArchiveDialog(QDialog):
 
     def _set_running_ui(self, *, text: str) -> None:
         self._running = True
+        self._running_stage = "move"
         self.error_label.hide()
         self.details_text.hide()
         self.details_text.clear()
-        self.summary_label.setText(text)
+        self.summary_label.hide()
+        self.progress_header_widget.show()
+        self.progress_stage_label.setText(text)
+        self.progress_count_label.hide()
+        self.progress_count_label.clear()
         self.save_exif_checkbox.setEnabled(False)
+        self.save_exif_checkbox.hide()
+        self.ok_btn.setText("OK")
         self.ok_btn.setEnabled(False)
         self.cancel_btn.hide()
         self.progress_bar.show()
+        self._sync_height_to_content()
+
+    def _set_exif_running_ui(self, total: int) -> None:
+        self._running = True
+        self._running_stage = "exif"
+        self.error_label.hide()
+        self.details_text.hide()
+        self.details_text.clear()
+        self.summary_label.hide()
+        self.progress_header_widget.show()
+        self.progress_stage_label.setText("Saving EXIF metadata before archive...")
+        self.save_exif_checkbox.setEnabled(False)
+        self.save_exif_checkbox.hide()
+        self.cancel_btn.hide()
+        self.ok_btn.setText("Cancel")
+        self.ok_btn.setEnabled(True)
+        self.ok_btn.setDefault(True)
+        self.progress_bar.show()
+        self._update_progress_count(0, total)
+        self._sync_height_to_content()
+
+    def _update_progress_count(self, completed: int, total: int) -> None:
+        total_value = max(0, int(total))
+        completed_value = max(0, min(int(completed), total_value))
+        if total_value <= 0:
+            self.progress_count_label.clear()
+            self.progress_count_label.hide()
+            return
+        self.progress_count_label.setText(f"{completed_value}/{total_value}")
+        self.progress_count_label.show()
+
+    def _suspend_watcher_for_exif(self) -> None:
+        if self._watcher_control is None or self._watcher_suspended:
+            return
+        self._watcher_control.suspend()
+        self._watcher_suspended = True
+
+    def _resume_watcher_after_exif_stop(self) -> None:
+        if self._watcher_control is None or not self._watcher_suspended:
+            return
+        self._watcher_control.resume_and_refresh()
+        self._watcher_suspended = False
 
     def _start_exif_stage(self, items_with_tags: list[tuple[str, dict]]) -> None:
         self._write_error_count = 0
         self._write_errors = []
-        self._set_running_ui(text="Saving EXIF metadata before archive...")
+        self._suspend_watcher_for_exif()
+        self._set_exif_running_ui(len(items_with_tags))
         self.progress_bar.setRange(0, len(items_with_tags))
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat(f"0/{len(items_with_tags)}")
@@ -396,9 +486,12 @@ class ArchiveDialog(QDialog):
             pass
 
     def _on_write_progress(self, completed: int, total: int) -> None:
-        self.progress_bar.setRange(0, max(0, int(total)))
-        self.progress_bar.setValue(max(0, int(completed)))
-        self.progress_bar.setFormat(f"{completed}/{total}")
+        total_value = max(0, int(total))
+        completed_value = max(0, int(completed))
+        self.progress_bar.setRange(0, total_value)
+        self.progress_bar.setValue(completed_value)
+        self.progress_bar.setFormat(f"{completed_value}/{total_value}")
+        self._update_progress_count(completed_value, total_value)
 
     def _on_write_file_completed(
         self,
@@ -415,6 +508,7 @@ class ArchiveDialog(QDialog):
     def _on_write_all_completed(self) -> None:
         self._disconnect_write_signals()
         if self._write_error_count > 0:
+            self._resume_watcher_after_exif_stop()
             self._show_finished_result(
                 text=(
                     "Archive stopped because saving EXIF failed. "
@@ -427,16 +521,28 @@ class ArchiveDialog(QDialog):
 
         self._start_move_stage()
 
+    def _cancel_exif_stage(self) -> None:
+        if not self._running or self._running_stage != "exif":
+            return
+        self._disconnect_write_signals()
+        self._media_manager.stop_write()
+        self._resume_watcher_after_exif_stop()
+        self._show_finished_result(
+            text="Archive cancelled. The folder was not moved.",
+        )
+
     def _start_move_stage(self) -> None:
         try:
             self._window._prepare_workspace_for_archive_move()
         except Exception as exc:
+            self._resume_watcher_after_exif_stop()
             self._show_finished_result(
                 text="Archive could not start.",
                 error_text=str(exc),
             )
             return
 
+        self._watcher_suspended = False
         self._set_running_ui(text="Archiving folder...")
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setFormat("")
@@ -492,12 +598,19 @@ class ArchiveDialog(QDialog):
         details: list[str] | None = None,
     ) -> None:
         self._running = False
+        self._running_stage = None
         self._finished = True
         self.summary_label.setText(text)
+        self.summary_label.show()
+        self.progress_header_widget.hide()
+        self.progress_count_label.clear()
+        self.progress_count_label.hide()
         self.progress_bar.hide()
+        self.ok_btn.setText("OK")
         self.ok_btn.setEnabled(True)
         self.ok_btn.setFocus(Qt.FocusReason.OtherFocusReason)
         self.ok_btn.setDefault(True)
+        self.cancel_btn.hide()
         self.save_exif_checkbox.hide()
 
         detail_lines = [line for line in (details or []) if str(line).strip()]
@@ -514,7 +627,7 @@ class ArchiveDialog(QDialog):
         else:
             self.details_text.hide()
 
-        self.adjustSize()
+        self._sync_height_to_content()
 
     def closeEvent(self, event) -> None:  # noqa: N802
         if self._running:

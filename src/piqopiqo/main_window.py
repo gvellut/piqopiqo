@@ -39,7 +39,10 @@ from .dialogs.workspace_properties_dialog import (
     WorkspacePropertiesDialog,
 )
 from .folder_scan import scan_folder
-from .folder_watcher import WorkspaceWatcherController, normalize_workspace_changes
+from .folder_watcher import (
+    WorkspaceWatcherController,
+    normalize_workspace_changes,
+)
 from .fullscreen import FullscreenOverlay
 from .grid.photo_grid import PhotoGrid
 from .metadata.db_fields import DBFields
@@ -2655,6 +2658,10 @@ class MainWindow(QMainWindow):
         self._start_folder_watcher()
 
     # --- Folder watching ---
+
+    @property
+    def workspace_watcher_control(self) -> WorkspaceWatcherController:
+        return self._workspace_watcher
 
     def _configure_workspace_watcher(self) -> None:
         if not self.root_folder:

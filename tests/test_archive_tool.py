@@ -103,9 +103,25 @@ class _FakeArchiveMediaManager(QObject):
     def __init__(self):
         super().__init__()
         self.write_calls: list[list[tuple[str, dict]]] = []
+        self.stop_write_calls = 0
 
     def write_exif(self, items: list[tuple[str, dict]]) -> None:
         self.write_calls.append(list(items))
+
+    def stop_write(self) -> None:
+        self.stop_write_calls += 1
+
+
+class _WatcherControlSpy:
+    def __init__(self) -> None:
+        self.suspend_calls = 0
+        self.resume_calls = 0
+
+    def suspend(self) -> None:
+        self.suspend_calls += 1
+
+    def resume_and_refresh(self) -> None:
+        self.resume_calls += 1
 
 
 class _FakeArchiveDbManager:
@@ -131,11 +147,17 @@ class _FakeLaunchWindow(QWidget):
         root_folder: str | None,
         all_photos: list[ImageItem] | None = None,
         source_folders: list[str] | None = None,
+        watcher_control=None,
     ):
         super().__init__()
         self.root_folder = root_folder
         self.photo_model = _FakeLaunchPhotoModel(all_photos or [], source_folders or [])
         self.open_settings_calls: list[UserSettingKey] = []
+        self._workspace_watcher = watcher_control
+
+    @property
+    def workspace_watcher_control(self):
+        return self._workspace_watcher
 
     def open_settings_for_key(self, key: UserSettingKey) -> None:
         self.open_settings_calls.append(key)
@@ -318,6 +340,37 @@ def test_launch_archive_uses_all_photos_not_visible_photos(
     assert captured["source_folders"] == ["/photos/root"]
 
 
+def test_launch_archive_passes_workspace_watcher_control(
+    qapp, settings_store, tmp_path, monkeypatch  # noqa: ARG001
+):
+    root_folder = tmp_path / "20250502_annecy"
+    root_folder.mkdir()
+    destination = tmp_path / "archive"
+    destination.mkdir()
+    set_user_setting(UserSettingKey.ARCHIVE_DESTINATION, str(destination))
+
+    watcher_control = _WatcherControlSpy()
+    window = _FakeLaunchWindow(
+        root_folder=str(root_folder),
+        watcher_control=watcher_control,
+    )
+
+    captured: dict[str, object] = {}
+
+    class _DialogStub:
+        def __init__(self, _window, **kwargs) -> None:
+            captured.update(kwargs)
+
+        def exec(self) -> int:
+            return 0
+
+    monkeypatch.setattr("piqopiqo.tools.archive.ArchiveDialog", _DialogStub)
+
+    launch_archive(window)
+
+    assert captured["watcher_control"] is watcher_control
+
+
 def test_archive_dialog_checkbox_state_round_trip(qapp, settings_store):  # noqa: ARG001
     get_state().set(StateKey.ARCHIVE_SAVE_EXIF, True)
     window = _FakeArchiveWindow()
@@ -355,6 +408,73 @@ def test_archive_dialog_initial_focus_is_ok_button(qapp, settings_store):  # noq
     dialog.close()
 
 
+def test_archive_dialog_exif_stage_shows_compact_progress_and_suspends_watcher(
+    qapp, settings_store  # noqa: ARG001
+):
+    watcher_control = _WatcherControlSpy()
+    window = _FakeArchiveWindow()
+    item = _item("/photos/root/a.jpg")
+    item.db_metadata = {"title": "Title"}
+    dialog = ArchiveDialog(
+        window,
+        root_folder="/photos/root",
+        archive_path="/archive/root",
+        items=[item],
+        source_folders=["/photos/root"],
+        watcher_control=watcher_control,
+    )
+
+    dialog.show()
+    qapp.processEvents()
+    initial_height = dialog.height()
+
+    dialog.save_exif_checkbox.setChecked(True)
+    dialog._start_archive()
+    qapp.processEvents()
+
+    assert watcher_control.suspend_calls == 1
+    assert dialog.summary_label.isHidden() is True
+    assert dialog.progress_header_widget.isHidden() is False
+    assert dialog.progress_count_label.text() == "0/1"
+    assert dialog.ok_btn.text() == "Cancel"
+    assert dialog.ok_btn.isEnabled() is True
+    assert dialog.cancel_btn.isHidden() is True
+    assert dialog.save_exif_checkbox.isHidden() is True
+    assert dialog.height() < initial_height
+
+    dialog._cancel_exif_stage()
+    dialog.close()
+
+
+def test_archive_dialog_exif_progress_updates_counter_and_bar(
+    qapp, settings_store  # noqa: ARG001
+):
+    watcher_control = _WatcherControlSpy()
+    window = _FakeArchiveWindow()
+    items = [_item("/photos/root/a.jpg"), _item("/photos/root/b.jpg"), _item("/photos/root/c.jpg")]
+    for index, item in enumerate(items):
+        item.db_metadata = {"title": f"Title {index}"}
+
+    dialog = ArchiveDialog(
+        window,
+        root_folder="/photos/root",
+        archive_path="/archive/root",
+        items=items,
+        source_folders=["/photos/root"],
+        watcher_control=watcher_control,
+    )
+
+    dialog.save_exif_checkbox.setChecked(True)
+    dialog._start_archive()
+    window.media_manager.write_progress.emit(1, 3)
+
+    assert dialog.progress_bar.value() == 1
+    assert dialog.progress_bar.format() == "1/3"
+    assert dialog.progress_count_label.text() == "1/3"
+
+    dialog._cancel_exif_stage()
+
+
 def test_archive_dialog_unchecked_exif_starts_move_immediately(qapp, settings_store):  # noqa: ARG001
     window = _FakeArchiveWindow()
     dialog = ArchiveDialog(
@@ -374,7 +494,10 @@ def test_archive_dialog_unchecked_exif_starts_move_immediately(qapp, settings_st
     assert window.media_manager.write_calls == []
 
 
-def test_archive_dialog_exif_failure_stops_before_move(qapp, settings_store):  # noqa: ARG001
+def test_archive_dialog_exif_cancel_stops_before_move_and_resumes_watcher(
+    qapp, settings_store  # noqa: ARG001
+):
+    watcher_control = _WatcherControlSpy()
     window = _FakeArchiveWindow()
     item = _item("/photos/root/a.jpg")
     item.db_metadata = {"title": "Title"}
@@ -384,6 +507,36 @@ def test_archive_dialog_exif_failure_stops_before_move(qapp, settings_store):  #
         archive_path="/archive/root",
         items=[item],
         source_folders=["/photos/root"],
+        watcher_control=watcher_control,
+    )
+    started: list[bool] = []
+    dialog._start_move_stage = lambda: started.append(True)
+
+    dialog.save_exif_checkbox.setChecked(True)
+    dialog._start_archive()
+    dialog._on_ok_clicked()
+    window.media_manager.write_all_completed.emit()
+
+    assert window.media_manager.stop_write_calls == 1
+    assert watcher_control.suspend_calls == 1
+    assert watcher_control.resume_calls == 1
+    assert started == []
+    assert dialog._finished is True
+    assert dialog.summary_label.text() == "Archive cancelled. The folder was not moved."
+
+
+def test_archive_dialog_exif_failure_stops_before_move(qapp, settings_store):  # noqa: ARG001
+    window = _FakeArchiveWindow()
+    watcher_control = _WatcherControlSpy()
+    item = _item("/photos/root/a.jpg")
+    item.db_metadata = {"title": "Title"}
+    dialog = ArchiveDialog(
+        window,
+        root_folder="/photos/root",
+        archive_path="/archive/root",
+        items=[item],
+        source_folders=["/photos/root"],
+        watcher_control=watcher_control,
     )
     dialog.save_exif_checkbox.setChecked(True)
     started: list[bool] = []
@@ -394,9 +547,70 @@ def test_archive_dialog_exif_failure_stops_before_move(qapp, settings_store):  #
     window.media_manager.write_all_completed.emit()
 
     assert len(window.media_manager.write_calls) == 1
+    assert watcher_control.suspend_calls == 1
+    assert watcher_control.resume_calls == 1
     assert started == []
     assert dialog._finished is True
     assert "The folder was not moved" in dialog.summary_label.text()
+
+
+def test_archive_dialog_exif_success_keeps_watcher_suspended_until_move(
+    qapp, settings_store  # noqa: ARG001
+):
+    watcher_control = _WatcherControlSpy()
+    window = _FakeArchiveWindow()
+    item = _item("/photos/root/a.jpg")
+    item.db_metadata = {"title": "Title"}
+    dialog = ArchiveDialog(
+        window,
+        root_folder="/photos/root",
+        archive_path="/archive/root",
+        items=[item],
+        source_folders=["/photos/root"],
+        watcher_control=watcher_control,
+    )
+    started: list[bool] = []
+    dialog._start_move_stage = lambda: started.append(True)
+
+    dialog.save_exif_checkbox.setChecked(True)
+    dialog._start_archive()
+    window.media_manager.write_all_completed.emit()
+
+    assert watcher_control.suspend_calls == 1
+    assert watcher_control.resume_calls == 0
+    assert started == [True]
+
+
+def test_archive_dialog_move_prepare_failure_after_exif_success_resumes_watcher(
+    qapp, settings_store  # noqa: ARG001
+):
+    watcher_control = _WatcherControlSpy()
+    window = _FakeArchiveWindow()
+    item = _item("/photos/root/a.jpg")
+    item.db_metadata = {"title": "Title"}
+    dialog = ArchiveDialog(
+        window,
+        root_folder="/photos/root",
+        archive_path="/archive/root",
+        items=[item],
+        source_folders=["/photos/root"],
+        watcher_control=watcher_control,
+    )
+
+    def _raise_prepare() -> None:
+        raise RuntimeError("boom")
+
+    window._prepare_workspace_for_archive_move = _raise_prepare
+
+    dialog.save_exif_checkbox.setChecked(True)
+    dialog._start_archive()
+    window.media_manager.write_all_completed.emit()
+
+    assert watcher_control.suspend_calls == 1
+    assert watcher_control.resume_calls == 1
+    assert dialog._finished is True
+    assert dialog.summary_label.text() == "Archive could not start."
+    assert dialog.error_label.text() == "boom"
 
 
 def test_archive_dialog_move_stage_uses_current_root_and_source_folders(
