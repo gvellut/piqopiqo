@@ -475,6 +475,38 @@ def test_archive_dialog_exif_progress_updates_counter_and_bar(
     dialog._cancel_exif_stage()
 
 
+def test_archive_dialog_finished_state_keeps_current_width(
+    qapp, settings_store  # noqa: ARG001
+):
+    window = _FakeArchiveWindow()
+    item = _item("/photos/root/a.jpg")
+    item.db_metadata = {"title": "Title"}
+    dialog = ArchiveDialog(
+        window,
+        root_folder="/photos/root",
+        archive_path="/archive/root",
+        items=[item],
+        source_folders=["/photos/root"],
+    )
+
+    dialog.show()
+    qapp.processEvents()
+    dialog.resize(760, dialog.height())
+    qapp.processEvents()
+
+    dialog._show_finished_result(
+        text=(
+            "Archive complete.\nMoved to:\n"
+            "/Volumes/CrucialX8/photos/__uploaded/20260308_croixstecatherine"
+        ),
+    )
+    qapp.processEvents()
+
+    assert dialog.width() == 760
+
+    dialog.close()
+
+
 def test_archive_dialog_unchecked_exif_starts_move_immediately(qapp, settings_store):  # noqa: ARG001
     window = _FakeArchiveWindow()
     dialog = ArchiveDialog(

@@ -332,12 +332,16 @@ class ArchiveDialog(QDialog):
 
     def _sync_height_to_content(self) -> None:
         layout = self.layout()
+        current_width = max(self.width(), self.minimumWidth())
         if layout is not None:
             layout.activate()
-        self.adjustSize()
         target_height = self.sizeHint().height()
+        if layout is not None and layout.hasHeightForWidth():
+            height_for_width = layout.totalHeightForWidth(current_width)
+            if height_for_width > 0:
+                target_height = height_for_width
         if target_height > 0:
-            self.setFixedHeight(target_height)
+            self.resize(current_width, target_height)
 
     def _focus_ok_button(self) -> None:
         if not self.ok_btn.isEnabled() or not self.ok_btn.isVisible():
