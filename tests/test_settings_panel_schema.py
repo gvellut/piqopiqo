@@ -31,26 +31,27 @@ def test_interface_tab_layout_matches_expected_groups_and_fields():
     interface_tab = next(tab for tab in SETTINGS_TABS if tab.title == "Interface")
 
     assert [group.title for group in interface_tab.groups] == [
-        "Folders",
         "Fullscreen",
         "Color",
         "Metadata Panel",
+        "Folders",
         "EXIF Panel",
     ]
 
     assert [field.key for field in interface_tab.groups[0].fields] == [
-        UserSettingKey.FAVORITE_FOLDER
-    ]
-    assert [field.key for field in interface_tab.groups[1].fields] == [
         UserSettingKey.ON_FULLSCREEN_EXIT_SELECTION_MODE
     ]
-    assert [field.key for field in interface_tab.groups[2].fields] == [
+    assert [field.key for field in interface_tab.groups[1].fields] == [
         UserSettingKey.FORCE_SRGB,
         UserSettingKey.SCREEN_COLOR_PROFILE,
     ]
-    assert [field.key for field in interface_tab.groups[3].fields] == [
+    assert [field.key for field in interface_tab.groups[2].fields] == [
         UserSettingKey.SHOW_DESCRIPTION_FIELD,
         UserSettingKey.PROTECT_NON_TEXT_METADATA,
+        UserSettingKey.MAP_LINKS,
+    ]
+    assert [field.key for field in interface_tab.groups[3].fields] == [
+        UserSettingKey.FAVORITE_FOLDER
     ]
     assert [field.key for field in interface_tab.groups[4].fields] == [
         UserSettingKey.CUSTOM_EXIF_FIELDS
@@ -98,6 +99,7 @@ def test_labels_and_shortcuts_tabs_layout_matches_expected_groups_and_fields():
 
 
 def test_settings_tab_title_lookup_maps_external_tools_keys():
+    assert get_settings_tab_title_for_key(UserSettingKey.MAP_LINKS) == "Interface"
     assert (
         get_settings_tab_title_for_key(UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER)
         == "External/Tools"

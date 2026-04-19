@@ -23,6 +23,7 @@ class EditorKind(Enum):
     STATUS_LABELS = auto()
     SHORTCUTS = auto()
     MANUAL_LENSES = auto()
+    MAP_LINKS = auto()
 
 
 @define(frozen=True)
@@ -153,6 +154,11 @@ SETTINGS_TABS: list[TabSpec] = [
                         key=UserSettingKey.PROTECT_NON_TEXT_METADATA,
                         label="Protect non-text metadata fields",
                         editor=EditorKind.BOOL,
+                    ),
+                    FieldSpec(
+                        key=UserSettingKey.MAP_LINKS,
+                        label="Map links",
+                        editor=EditorKind.MAP_LINKS,
                     ),
                 ],
             ),

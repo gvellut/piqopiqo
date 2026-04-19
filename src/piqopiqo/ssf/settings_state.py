@@ -19,6 +19,7 @@ from piqopiqo.color_management import ScreenColorProfileMode
 from piqopiqo.model import (
     ExifField,
     ManualLensPreset,
+    MapLinkOption,
     OnFullscreenExitMultipleSelected,
     StatusLabel,
     TimeShiftOcrProvider,
@@ -80,6 +81,7 @@ class UserSettingKey(StrEnum):
     FAVORITE_FOLDER = "favoriteFolder"
     SHOW_DESCRIPTION_FIELD = "showDescriptionField"
     PROTECT_NON_TEXT_METADATA = "protectNonTextMetadata"
+    MAP_LINKS = "mapLinks"
     STATUS_LABELS = "statusLabels"
     EXTERNAL_VIEWER = "externalViewer"
     EXTERNAL_EDITOR = "externalEditor"
@@ -311,6 +313,35 @@ def _deserialize_manual_lenses(data: Any) -> list[ManualLensPreset]:
     return out
 
 
+def _serialize_map_links(value: list[MapLinkOption]) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    for option in value:
+        out.append(
+            {
+                "name": str(option.name).strip(),
+                "url_template": str(option.url_template).strip(),
+            }
+        )
+    return out
+
+
+def _deserialize_map_links(data: Any) -> list[MapLinkOption]:
+    if not isinstance(data, list):
+        raise ValueError("Expected a list for map links")
+
+    out: list[MapLinkOption] = []
+    for row in data:
+        if not isinstance(row, dict):
+            continue
+        out.append(
+            MapLinkOption(
+                name=str(row.get("name", "")).strip(),
+                url_template=str(row.get("url_template", "")).strip(),
+            )
+        )
+    return out
+
+
 def _deserialize_exif_fields(data: Any) -> list[ExifField]:
     if not isinstance(data, list):
         raise ValueError("Expected a list for exif fields")
@@ -527,6 +558,15 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         group=SettingsGroup.SETTINGS,
         default=True,
         read_type=bool,
+    ),
+    UserSettingKey.MAP_LINKS: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default=[],
+        read_type=str,
+        json_storage=True,
+        serializer=_serialize_map_links,
+        deserializer=_deserialize_map_links,
+        env_parser=lambda raw: _deserialize_map_links(_parse_json(raw)),
     ),
     UserSettingKey.STATUS_LABELS: SettingDef(
         group=SettingsGroup.SETTINGS,

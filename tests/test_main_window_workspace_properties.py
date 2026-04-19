@@ -11,7 +11,7 @@ import pytest
 
 from piqopiqo.background.media_man import FolderPrimingResult
 from piqopiqo.main_window import MainWindow
-from piqopiqo.model import ImageItem
+from piqopiqo.model import ImageItem, MapLinkOption
 from piqopiqo.ssf.settings_state import (
     APP_NAME,
     UserSettingKey,
@@ -177,6 +177,28 @@ def test_favorite_folder_action_updates_visibility_when_setting_changes(window):
     set_user_setting(UserSettingKey.FAVORITE_FOLDER, "")
     window._apply_settings_changes({UserSettingKey.FAVORITE_FOLDER})
     assert action.isVisible() is False
+
+
+def test_map_links_setting_updates_edit_panel_visibility_live(window):
+    assert window.edit_panel.map_btn.isHidden() is True
+
+    set_user_setting(
+        UserSettingKey.MAP_LINKS,
+        [
+            MapLinkOption(
+                name="Google Maps",
+                url_template=(
+                    "https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+                ),
+            )
+        ],
+    )
+    window._apply_settings_changes({UserSettingKey.MAP_LINKS})
+    assert window.edit_panel.map_btn.isHidden() is False
+
+    set_user_setting(UserSettingKey.MAP_LINKS, [])
+    window._apply_settings_changes({UserSettingKey.MAP_LINKS})
+    assert window.edit_panel.map_btn.isHidden() is True
 
 
 def test_about_action_uses_about_role_and_stays_in_help(window):

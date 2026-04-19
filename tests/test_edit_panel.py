@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import uuid
 
-from PySide6.QtCore import QCoreApplication
+from PySide6.QtCore import QCoreApplication, QPoint
 from PySide6.QtWidgets import QApplication
 import pytest
 
 from piqopiqo.metadata.db_fields import DBFields
-from piqopiqo.model import ImageItem
+from piqopiqo.model import ImageItem, MapLinkOption
 from piqopiqo.panels.edit_panel import EditPanel
+from piqopiqo.panels.edit_widgets import MULTIPLE_VALUES
 from piqopiqo.ssf.settings_state import (
     UserSettingKey,
     init_qsettings_store,
@@ -82,18 +83,20 @@ def test_keywords_height_change_keeps_edit_panel_rows_stable(qapp):
     assert keyword_label_item is not None
     keyword_label = keyword_label_item.widget()
     assert keyword_label is not None
+    container = panel.layout.parentWidget()
+    assert container is not None
 
     def snapshot() -> dict[str, int]:
         return {
-            "title_y": panel.title_edit.y(),
-            "description_y": panel.description_edit.y(),
-            "lat_y": panel.lat_edit.y(),
-            "lon_y": panel.lon_edit.y(),
-            "keywords_y": panel.keywords_edit.y(),
+            "title_y": panel.title_edit.mapTo(container, QPoint(0, 0)).y(),
+            "description_y": panel.description_edit.mapTo(container, QPoint(0, 0)).y(),
+            "lat_y": panel.lat_edit.mapTo(container, QPoint(0, 0)).y(),
+            "lon_y": panel.lon_edit.mapTo(container, QPoint(0, 0)).y(),
+            "keywords_y": panel.keywords_edit.mapTo(container, QPoint(0, 0)).y(),
             "keywords_h": panel.keywords_edit.height(),
-            "keyword_tree_y": panel.keyword_tree_btn.y(),
-            "time_y": panel.time_edit.y(),
-            "keyword_label_y": keyword_label.y(),
+            "keyword_tree_y": panel.keyword_tree_btn.mapTo(container, QPoint(0, 0)).y(),
+            "time_y": panel.time_edit.mapTo(container, QPoint(0, 0)).y(),
+            "keyword_label_y": keyword_label.mapTo(container, QPoint(0, 0)).y(),
             "keyword_label_h": keyword_label.height(),
         }
 
@@ -325,3 +328,223 @@ def test_non_text_protection_blocks_gui_save_for_locked_fields(qapp, monkeypatch
 
     assert saved_fields == [DBFields.TITLE]
     assert emitted == [DBFields.TITLE]
+
+
+def test_map_button_hidden_when_no_options_are_configured(qapp):
+    init_qsettings_store(dyn=True)
+    set_user_setting(UserSettingKey.MAP_LINKS, [])
+
+    panel = EditPanel(_StubDBManager())
+
+    assert panel.map_btn.isHidden() is True
+
+
+def test_map_button_state_follows_selection_and_coordinate_validity(qapp):
+    init_qsettings_store(dyn=True)
+    set_user_setting(
+        UserSettingKey.MAP_LINKS,
+        [
+            MapLinkOption(
+                name="Google Maps",
+                url_template=(
+                    "https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+                ),
+            )
+        ],
+    )
+
+    panel = EditPanel(_StubDBManager())
+    assert panel.map_btn.isHidden() is False
+    assert panel.map_btn.isEnabled() is False
+
+    item = ImageItem(
+        path="/tmp/map.jpg",
+        name="map.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={
+            DBFields.LATITUDE: "48.8566",
+            DBFields.LONGITUDE: "2.3522",
+        },
+    )
+    panel.update_for_selection([item])
+    assert panel.map_btn.isEnabled() is True
+
+    panel.lon_edit.setText("")
+    assert panel.map_btn.isEnabled() is False
+
+    panel.lon_edit.setText("invalid")
+    assert panel.map_btn.isEnabled() is False
+
+    panel.lon_edit.setText("2.3522")
+    assert panel.map_btn.isEnabled() is True
+
+    panel.show_selection_pending(2)
+    assert panel.map_btn.isEnabled() is False
+
+    item2 = ImageItem(
+        path="/tmp/map-2.jpg",
+        name="map-2.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={
+            DBFields.LATITUDE: "50.0000",
+            DBFields.LONGITUDE: "10.0000",
+        },
+    )
+    panel.update_for_selection([item, item2])
+    assert panel.lat_edit.text() == MULTIPLE_VALUES
+    assert panel.lon_edit.text() == MULTIPLE_VALUES
+    assert panel.map_btn.isEnabled() is False
+
+
+def test_map_button_sits_below_longitude_and_keeps_fields_aligned(qapp):
+    init_qsettings_store(dyn=True)
+    set_user_setting(
+        UserSettingKey.MAP_LINKS,
+        [
+            MapLinkOption(
+                name="Google Maps",
+                url_template=(
+                    "https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+                ),
+            )
+        ],
+    )
+
+    panel = EditPanel(_StubDBManager())
+    panel.resize(420, 700)
+    item = ImageItem(
+        path="/tmp/map-layout.jpg",
+        name="map-layout.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={
+            DBFields.LATITUDE: "48.8566",
+            DBFields.LONGITUDE: "2.3522",
+        },
+    )
+    panel.update_for_selection([item])
+    panel.show()
+    qapp.processEvents()
+
+    container = panel.layout.parentWidget()
+    assert container is not None
+
+    keywords_pos = panel.keywords_edit.mapTo(container, QPoint(0, 0))
+    keyword_btn_pos = panel.keyword_tree_btn.mapTo(container, QPoint(0, 0))
+    lat_pos = panel.lat_edit.mapTo(container, QPoint(0, 0))
+    lon_pos = panel.lon_edit.mapTo(container, QPoint(0, 0))
+    map_btn_pos = panel.map_btn.mapTo(container, QPoint(0, 0))
+
+    assert panel.map_btn.isVisible() is True
+    assert keyword_btn_pos.x() == lon_pos.x()
+    assert lat_pos.x() == lon_pos.x()
+    assert map_btn_pos.x() == lon_pos.x()
+    assert panel.lat_edit.width() == panel.lon_edit.width()
+    assert panel.lat_edit.height() == panel.lat_edit.sizeHint().height()
+    assert panel.lon_edit.height() == panel.lon_edit.sizeHint().height()
+    assert panel.keyword_tree_btn.height() == panel.keyword_tree_btn.sizeHint().height()
+    assert panel.map_btn.height() == panel.map_btn.sizeHint().height()
+    assert (
+        keyword_btn_pos.y() - (keywords_pos.y() + panel.keywords_edit.height())
+        == panel.layout.spacing()
+    )
+    assert (
+        lat_pos.y() - (keyword_btn_pos.y() + panel.keyword_tree_btn.height())
+        == panel.layout.spacing()
+    )
+    assert (
+        lon_pos.y() - (lat_pos.y() + panel.lat_edit.height())
+        == panel.layout.spacing()
+    )
+    assert (
+        map_btn_pos.y() - (lon_pos.y() + panel.lon_edit.height())
+        == panel.layout.spacing()
+    )
+
+
+def test_map_button_opens_single_option_directly(monkeypatch, qapp):
+    init_qsettings_store(dyn=True)
+    set_user_setting(
+        UserSettingKey.MAP_LINKS,
+        [
+            MapLinkOption(
+                name="OpenStreetMap",
+                url_template="https://www.openstreetmap.org/#map=15/{lat}/{lon}",
+            )
+        ],
+    )
+
+    panel = EditPanel(_StubDBManager())
+    item = ImageItem(
+        path="/tmp/map.jpg",
+        name="map.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={
+            DBFields.LATITUDE: "48.8566",
+            DBFields.LONGITUDE: "2.3522",
+        },
+    )
+    panel.update_for_selection([item])
+
+    opened_urls: list[str] = []
+    monkeypatch.setattr(
+        "piqopiqo.panels.edit_panel.webbrowser.open_new_tab",
+        lambda url: opened_urls.append(url) or True,
+    )
+
+    panel._on_open_map()
+
+    assert opened_urls == ["https://www.openstreetmap.org/#map=15/48.8566/2.3522"]
+
+
+def test_map_button_builds_menu_for_multiple_options(monkeypatch, qapp):
+    init_qsettings_store(dyn=True)
+    set_user_setting(
+        UserSettingKey.MAP_LINKS,
+        [
+            MapLinkOption(
+                name="Google Maps",
+                url_template=(
+                    "https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+                ),
+            ),
+            MapLinkOption(
+                name="OpenStreetMap",
+                url_template="https://www.openstreetmap.org/#map=15/{lat}/{lon}",
+            ),
+        ],
+    )
+
+    panel = EditPanel(_StubDBManager())
+    item = ImageItem(
+        path="/tmp/map.jpg",
+        name="map.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={
+            DBFields.LATITUDE: "48.8566",
+            DBFields.LONGITUDE: "2.3522",
+        },
+    )
+    panel.update_for_selection([item])
+
+    opened_urls: list[str] = []
+    monkeypatch.setattr(
+        "piqopiqo.panels.edit_panel.webbrowser.open_new_tab",
+        lambda url: opened_urls.append(url) or True,
+    )
+
+    panel._on_open_map()
+
+    assert panel._map_menu is not None
+    assert [action.text() for action in panel._map_menu.actions()] == [
+        "Google Maps",
+        "OpenStreetMap",
+    ]
+
+    panel._map_menu.actions()[1].trigger()
+
+    assert opened_urls == ["https://www.openstreetmap.org/#map=15/48.8566/2.3522"]

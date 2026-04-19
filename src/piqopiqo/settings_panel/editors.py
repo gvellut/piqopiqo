@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .map_links_editor import MapLinksEditor
 from .manual_lenses_editor import ManualLensesEditor
 from .schema import ChoiceOption, EditorKind
 from .shortcuts_editor import ShortcutsEditor
@@ -382,6 +383,26 @@ class ManualLensesEditorAdapter(BaseEditor):
         return self._editor.is_valid()
 
 
+class MapLinksEditorAdapter(BaseEditor):
+    def __init__(self):
+        super().__init__()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self._editor = MapLinksEditor()
+        self._editor.value_changed.connect(self.value_changed)
+        layout.addWidget(self._editor)
+
+    def set_value(self, value):
+        self._editor.set_value(value)
+
+    def get_value(self):
+        return self._editor.get_value()
+
+    def is_valid(self) -> bool:
+        return self._editor.is_valid()
+
+
 def build_editor(kind: EditorKind, **kwargs) -> BaseEditor:
     if kind == EditorKind.TEXT:
         return TextEditor()
@@ -408,5 +429,7 @@ def build_editor(kind: EditorKind, **kwargs) -> BaseEditor:
         return ShortcutsEditorAdapter()
     if kind == EditorKind.MANUAL_LENSES:
         return ManualLensesEditorAdapter()
+    if kind == EditorKind.MAP_LINKS:
+        return MapLinksEditorAdapter()
 
     raise ValueError(f"Unsupported editor kind: {kind}")

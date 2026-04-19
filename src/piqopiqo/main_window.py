@@ -1879,7 +1879,7 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
-        workspace_property_action = QAction("Workspace Poperty...", self)
+        workspace_property_action = QAction("Property...", self)
         workspace_property_action.triggered.connect(self._on_open_workspace_properties)
         file_menu.addAction(workspace_property_action)
 
@@ -2254,6 +2254,9 @@ class MainWindow(QMainWindow):
             self.edit_panel.set_non_text_metadata_protection(
                 bool(get_user_setting(UserSettingKey.PROTECT_NON_TEXT_METADATA))
             )
+
+        if UserSettingKey.MAP_LINKS in changed_keys and self.edit_panel is not None:
+            self.edit_panel.reload_map_links()
 
         if (
             UserSettingKey.FORCE_SRGB in changed_keys

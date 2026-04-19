@@ -1,6 +1,7 @@
 """Editable metadata panel for photo metadata."""
 
 import logging
+import webbrowser
 
 from PySide6.QtCore import Qt, QThreadPool, Signal
 from PySide6.QtWidgets import (
@@ -8,6 +9,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -19,7 +21,7 @@ from piqopiqo.keyword_utils import format_keywords, parse_keywords
 from piqopiqo.metadata.db_fields import EDITABLE_FIELDS, FIELD_DISPLAY_LABELS, DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBManager
 from piqopiqo.metadata.save_workers import MetadataSaveWorker, drain_qthread_pool
-from piqopiqo.model import ImageItem
+from piqopiqo.model import ImageItem, MapLinkOption
 from piqopiqo.ssf.settings_state import UserSettingKey, get_user_setting
 
 from .edit_widgets import (
@@ -59,6 +61,8 @@ class EditPanel(QWidget):
         self._db_writer_pool = QThreadPool()
         self._keyword_tree_manager = KeywordTreeManager()
         self._protect_non_text_metadata = True
+        self._map_links: list[MapLinkOption] = []
+        self._map_menu: QMenu | None = None
 
         self._setup_ui()
         self.set_description_field_visible(
@@ -67,6 +71,7 @@ class EditPanel(QWidget):
         self.set_non_text_metadata_protection(
             bool(get_user_setting(UserSettingKey.PROTECT_NON_TEXT_METADATA))
         )
+        self.reload_map_links()
 
     def _setup_ui(self):
         """Create the panel UI."""
@@ -163,10 +168,25 @@ class EditPanel(QWidget):
         row += 1
 
         # Keyword tree button
+        self._keyword_tree_row_widget = QWidget(container)
+        self._keyword_tree_row_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        self._keyword_tree_row_layout = QHBoxLayout(self._keyword_tree_row_widget)
+        self._keyword_tree_row_layout.setContentsMargins(0, 0, 0, 0)
+        self._keyword_tree_row_layout.setSpacing(0)
+
         self.keyword_tree_btn = QPushButton("Open Keyword Tree")
         self.keyword_tree_btn.setEnabled(False)
         self.keyword_tree_btn.clicked.connect(self._on_open_keyword_tree)
-        self.layout.addWidget(self.keyword_tree_btn, row, 1)
+        self.keyword_tree_btn.setSizePolicy(
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Fixed,
+        )
+        self._keyword_tree_row_layout.addWidget(self.keyword_tree_btn, 0)
+        self._keyword_tree_row_layout.addStretch(1)
+        self.layout.addWidget(self._keyword_tree_row_widget, row, 1)
         row += 1
 
         # Latitude
@@ -178,6 +198,7 @@ class EditPanel(QWidget):
         self.lat_edit.edit_finished_explicit.connect(self.interaction_finished.emit)
         self.lat_edit.edit_cancelled.connect(self._on_edit_cancelled)
         self.lat_edit.edit_cancelled.connect(self.interaction_finished.emit)
+        self.lat_edit.textChanged.connect(self._update_map_button_state)
         self.layout.addWidget(self.lat_edit, row, 1)
         row += 1
 
@@ -190,7 +211,30 @@ class EditPanel(QWidget):
         self.lon_edit.edit_finished_explicit.connect(self.interaction_finished.emit)
         self.lon_edit.edit_cancelled.connect(self._on_edit_cancelled)
         self.lon_edit.edit_cancelled.connect(self.interaction_finished.emit)
+        self.lon_edit.textChanged.connect(self._update_map_button_state)
         self.layout.addWidget(self.lon_edit, row, 1)
+        row += 1
+
+        self._map_row_widget = QWidget(container)
+        self._map_row_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        self._map_row_layout = QHBoxLayout(self._map_row_widget)
+        self._map_row_layout.setContentsMargins(0, 0, 0, 0)
+        self._map_row_layout.setSpacing(0)
+
+        self.map_btn = QPushButton("Map", self._map_row_widget)
+        self.map_btn.setObjectName("metadata_map_button")
+        self.map_btn.clicked.connect(self._on_open_map)
+        self.map_btn.setSizePolicy(
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Fixed,
+        )
+        self.map_btn.hide()
+        self._map_row_layout.addWidget(self.map_btn, 0)
+        self._map_row_layout.addStretch(1)
+        self.layout.addWidget(self._map_row_widget, row, 1)
         row += 1
 
         self._field_edit_widgets = {
@@ -217,6 +261,7 @@ class EditPanel(QWidget):
             widget.setEnabled(enabled)
         self.keyword_tree_btn.setEnabled(enabled)
         self._apply_metadata_read_only_state()
+        self._update_map_button_state()
 
     def set_description_field_visible(self, visible: bool) -> None:
         visible = bool(visible)
@@ -230,6 +275,12 @@ class EditPanel(QWidget):
     def set_non_text_metadata_protection(self, enabled: bool) -> None:
         self._protect_non_text_metadata = bool(enabled)
         self._apply_metadata_read_only_state()
+
+    def reload_map_links(self) -> None:
+        self._map_links = list(get_user_setting(UserSettingKey.MAP_LINKS) or [])
+        has_map_links = bool(self._map_links)
+        self.map_btn.setVisible(has_map_links)
+        self._update_map_button_state()
 
     def _is_field_gui_editable(self, field_name: str) -> bool:
         if field_name not in self._field_edit_widgets:
@@ -271,6 +322,7 @@ class EditPanel(QWidget):
         noun = "photo" if count == 1 else "photos"
         self.reading_label.setText(f"{count} {noun} selected (updating...)")
         self.reading_label.show()
+        self._update_map_button_state()
 
     def clear_selection_pending(self) -> None:
         self.reading_label.hide()
@@ -288,6 +340,7 @@ class EditPanel(QWidget):
         if not items:
             self._clear_fields()
             self._set_editing_enabled(False)
+            self._update_map_button_state()
             return
 
         # Check if any items are still missing DB data (EXIF not read yet)
@@ -301,6 +354,7 @@ class EditPanel(QWidget):
             self._set_editing_enabled(False)
             self.reading_label.setText("Reading...")
             self.reading_label.show()
+            self._update_map_button_state()
             return
 
         self.reading_label.hide()
@@ -330,6 +384,7 @@ class EditPanel(QWidget):
         self._update_field(
             DBFields.TIME_TAKEN, field_values[DBFields.TIME_TAKEN], self.time_edit
         )
+        self._update_map_button_state()
 
     def _gather_field_values(self, items: list[ImageItem]) -> dict:
         """Gather field values from items, preferring cached db_metadata.
@@ -396,6 +451,61 @@ class EditPanel(QWidget):
         self.lon_edit.set_value(None)
         self.keywords_edit.set_value("")
         self.time_edit.set_value("")
+        self._update_map_button_state()
+
+    def _map_coordinates(self) -> tuple[float | None, float | None]:
+        return self.lat_edit.get_value(), self.lon_edit.get_value()
+
+    def _update_map_button_state(self) -> None:
+        if not hasattr(self, "map_btn"):
+            return
+        if self.map_btn.isHidden():
+            self.map_btn.setEnabled(False)
+            return
+
+        lat, lon = self._map_coordinates()
+        can_open = (
+            len(self._current_items) == 1
+            and not self._is_multi_select
+            and not self._has_missing_data
+            and lat is not None
+            and lon is not None
+        )
+        self.map_btn.setEnabled(can_open)
+
+    def _open_map_option(self, option: MapLinkOption) -> None:
+        lat, lon = self._map_coordinates()
+        if lat is None or lon is None:
+            return
+        try:
+            url = option.url_template.format(lat=lat, lon=lon)
+        except Exception:
+            logger.warning("Invalid map link template for option %r", option.name)
+            return
+        webbrowser.open_new_tab(url)
+
+    def _on_open_map(self) -> None:
+        if not self.map_btn.isEnabled() or not self._map_links:
+            return
+
+        if len(self._map_links) == 1:
+            self._map_menu = None
+            self._open_map_option(self._map_links[0])
+            return
+
+        if self._map_menu is not None:
+            self._map_menu.deleteLater()
+
+        menu = QMenu(self.map_btn)
+        for option in self._map_links:
+            action = menu.addAction(option.name)
+            action.triggered.connect(
+                lambda _checked=False, current_option=option: self._open_map_option(
+                    current_option
+                )
+            )
+        self._map_menu = menu
+        menu.popup(self.map_btn.mapToGlobal(self.map_btn.rect().bottomLeft()))
 
     def _on_field_saved(self, field_name: str):
         """Handle field save event."""

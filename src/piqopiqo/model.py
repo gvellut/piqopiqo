@@ -40,6 +40,12 @@ class ManualLensPreset:
     focal_length_35mm: str
 
 
+@define(frozen=True)
+class MapLinkOption:
+    name: str
+    url_template: str
+
+
 @define
 class FilterCriteria:
     """Filter criteria for the photo model.

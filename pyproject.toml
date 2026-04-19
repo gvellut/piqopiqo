@@ -23,6 +23,7 @@ dependencies = [
     "lxml>=6.0.2",
     "fastkml>=1.4.0",
     "pyobjc-framework-vision>=12.1",
+    "requests>=2.32.5",
 ]
 
 [project.scripts]
@@ -35,7 +36,7 @@ pyqtauto = { path = "/Users/guilhem/Documents/projects/github/pyqtauto" }
 # pyqtauto = { git = "https://github.com/gvellut/pyqtauto.git" }
 
 [build-system]
-requires = ["uv_build>=0.9.11,<0.10.0"]
+requires = ["uv-build>=0.10.10,<0.11.0"]
 build-backend = "uv_build"
 
 [dependency-groups]

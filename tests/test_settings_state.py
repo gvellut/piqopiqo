@@ -13,6 +13,7 @@ from piqopiqo.color_management import ScreenColorProfileMode
 from piqopiqo.model import (
     ExifField,
     ManualLensPreset,
+    MapLinkOption,
     StatusLabel,
     TimeShiftOcrProvider,
 )
@@ -83,6 +84,7 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_COLOR_MANAGE_HQ_THUMBNAILS",
         "PIQO_PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE",
         "PIQO_OCR_TIME_SHIFT_PROVIDER",
+        "PIQO_MAP_LINKS",
     ):
         monkeypatch.delenv(env_name, raising=False)
 
@@ -225,6 +227,49 @@ def test_manual_lenses_roundtrip(isolated_settings):
     set_user_setting(UserSettingKey.MANUAL_LENSES, presets)
 
     assert get_user_setting(UserSettingKey.MANUAL_LENSES) == presets
+
+
+def test_map_links_default_and_roundtrip(isolated_settings):
+    assert get_user_setting(UserSettingKey.MAP_LINKS) == []
+
+    options = [
+        MapLinkOption(
+            name="Google Maps",
+            url_template=(
+                "https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+            ),
+        ),
+        MapLinkOption(
+            name="OpenStreetMap",
+            url_template="https://www.openstreetmap.org/#map=15/{lat}/{lon}",
+        ),
+    ]
+
+    set_user_setting(UserSettingKey.MAP_LINKS, options)
+
+    assert get_user_setting(UserSettingKey.MAP_LINKS) == options
+
+
+def test_map_links_env_override(isolated_settings, monkeypatch):
+    monkeypatch.setenv(
+        "PIQO_MAP_LINKS",
+        (
+            '[{"name":"Map A","url_template":"https://example.com/{lat}/{lon}"},'
+            '{"name":"Map B","url_template":"https://maps.example/?q={lat},{lon}"}]'
+        ),
+    )
+    init_qsettings_store(dyn=False)
+
+    assert get_user_setting(UserSettingKey.MAP_LINKS) == [
+        MapLinkOption(
+            name="Map A",
+            url_template="https://example.com/{lat}/{lon}",
+        ),
+        MapLinkOption(
+            name="Map B",
+            url_template="https://maps.example/?q={lat},{lon}",
+        ),
+    ]
 
 
 def test_env_override_takes_priority_over_persisted_values(
