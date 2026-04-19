@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 
 from PySide6.QtCore import QCoreApplication
@@ -14,8 +15,11 @@ from piqopiqo.main_window import MainWindow
 from piqopiqo.model import ImageItem, MapLinkOption
 from piqopiqo.ssf.settings_state import (
     APP_NAME,
+    StateKey,
     UserSettingKey,
+    get_state_value,
     init_qsettings_store,
+    set_state_value,
     set_user_setting,
 )
 
@@ -142,6 +146,37 @@ def _action_by_text(
     return None
 
 
+def _submenu_by_text(
+    window: MainWindow, menu_title: str, submenu_text: str
+):
+    action = _action_by_text(window, menu_title, submenu_text)
+    if action is None:
+        return None
+    return action.menu()
+
+
+def _submenu_action_texts(
+    window: MainWindow,
+    menu_title: str,
+    submenu_text: str,
+) -> list[str]:
+    submenu = _submenu_by_text(window, menu_title, submenu_text)
+    if submenu is None:
+        return []
+    return [action.text() for action in submenu.actions()]
+
+
+def _submenu_action_tooltips(
+    window: MainWindow,
+    menu_title: str,
+    submenu_text: str,
+) -> list[str]:
+    submenu = _submenu_by_text(window, menu_title, submenu_text)
+    if submenu is None:
+        return []
+    return [action.toolTip() for action in submenu.actions()]
+
+
 def test_file_menu_contains_property_and_not_clear_all_data(window):
     file_menu = _menu_by_title(window, "File")
     assert file_menu is not None
@@ -149,6 +184,26 @@ def test_file_menu_contains_property_and_not_clear_all_data(window):
     action_texts = [action.text() for action in file_menu.actions()]
     assert "Property..." in action_texts
     assert "Clear All Data" not in action_texts
+
+
+def test_file_menu_contains_open_recent_between_open_folder_and_property(window):
+    file_menu = _menu_by_title(window, "File")
+    assert file_menu is not None
+
+    action_texts = [action.text() for action in file_menu.actions()]
+
+    assert "Open Recent" in action_texts
+    assert action_texts.index("Open Folder...") < action_texts.index("Open Recent")
+    assert action_texts.index("Open Recent") < action_texts.index("Property...")
+
+
+def test_open_recent_menu_is_disabled_when_empty(window):
+    action = _action_by_text(window, "File", "Open Recent")
+
+    assert action is not None
+    assert action.isEnabled() is False
+    assert action.menu() is not None
+    assert action.menu().isEnabled() is False
 
 
 def test_favorite_folder_action_is_hidden_when_setting_is_empty(window):
@@ -177,6 +232,160 @@ def test_favorite_folder_action_updates_visibility_when_setting_changes(window):
     set_user_setting(UserSettingKey.FAVORITE_FOLDER, "")
     window._apply_settings_changes({UserSettingKey.FAVORITE_FOLDER})
     assert action.isVisible() is False
+
+
+def test_open_recent_menu_excludes_current_folder(window, tmp_path):
+    current_folder = tmp_path / "current"
+    other_a = tmp_path / "other-a"
+    other_b = tmp_path / "other-b"
+    window.root_folder = str(current_folder)
+
+    window._set_recent_folder_history(
+        [str(current_folder), str(other_a), str(other_b)]
+    )
+
+    assert _submenu_action_tooltips(window, "File", "Open Recent") == [
+        MainWindow._canonicalize_recent_folder_path(str(other_a)),
+        MainWindow._canonicalize_recent_folder_path(str(other_b)),
+    ]
+
+
+def test_recent_folder_history_moves_reopened_folder_to_top_without_duplication(window):
+    folder_a = "/Volumes/Archive/folder-a"
+    folder_b = "/Volumes/Archive/folder-b"
+
+    window._remember_recent_folder_in_history(folder_a)
+    window._remember_recent_folder_in_history(folder_b)
+    window._remember_recent_folder_in_history(folder_a)
+
+    assert get_state_value(StateKey.RECENT_FOLDERS) == [
+        MainWindow._canonicalize_recent_folder_path(folder_a),
+        MainWindow._canonicalize_recent_folder_path(folder_b),
+    ]
+    assert _submenu_action_tooltips(window, "File", "Open Recent") == [
+        MainWindow._canonicalize_recent_folder_path(folder_a),
+        MainWindow._canonicalize_recent_folder_path(folder_b),
+    ]
+
+
+def test_open_recent_menu_relabels_when_favorite_folder_changes(window, tmp_path):
+    favorite_folder = tmp_path / "favorite"
+    recent_folder = favorite_folder / "trip" / "shoot"
+
+    set_user_setting(UserSettingKey.FAVORITE_FOLDER, "")
+    window._set_recent_folder_history([str(recent_folder)])
+
+    assert _submenu_action_texts(window, "File", "Open Recent") == [
+        MainWindow._canonicalize_recent_folder_path(str(recent_folder))
+    ]
+
+    set_user_setting(UserSettingKey.FAVORITE_FOLDER, str(favorite_folder))
+    window._apply_settings_changes({UserSettingKey.FAVORITE_FOLDER})
+
+    assert _submenu_action_texts(window, "File", "Open Recent") == ["trip/shoot"]
+
+
+def test_format_recent_folder_label_prefers_favorite_relative(window, tmp_path):
+    favorite_folder = tmp_path / "favorite"
+    recent_folder = favorite_folder / "trip" / "shoot"
+    set_user_setting(UserSettingKey.FAVORITE_FOLDER, str(favorite_folder))
+
+    assert window._format_recent_folder_label(str(recent_folder)) == "trip/shoot"
+
+
+def test_format_recent_folder_label_uses_home_tilde(window):
+    set_user_setting(UserSettingKey.FAVORITE_FOLDER, "")
+    recent_folder = os.path.join(os.path.expanduser("~"), "photos", "trip")
+
+    assert window._format_recent_folder_label(recent_folder) == "~/photos/trip"
+
+
+def test_format_recent_folder_label_falls_back_to_full_path_without_trailing_slash(
+    window,
+):
+    set_user_setting(UserSettingKey.FAVORITE_FOLDER, "")
+
+    assert (
+        window._format_recent_folder_label("/Volumes/Archive/photos/")
+        == "/Volumes/Archive/photos"
+    )
+
+
+def test_open_recent_folder_clears_filters_and_loads(window, monkeypatch, tmp_path):
+    recent_folder = tmp_path / "recent"
+    recent_folder.mkdir()
+    calls: list[object] = []
+
+    monkeypatch.setattr(
+        window,
+        "_clear_filters_before_folder_load",
+        lambda: calls.append("clear"),
+    )
+    monkeypatch.setattr(
+        window,
+        "_load_folder",
+        lambda folder, *, reset_grid_to_top=False: calls.append(
+            ("load", folder, reset_grid_to_top)
+        ),
+    )
+
+    window._on_open_recent_folder(str(recent_folder))
+
+    assert calls == [
+        "clear",
+        (
+            "load",
+            MainWindow._canonicalize_recent_folder_path(str(recent_folder)),
+            True,
+        ),
+    ]
+
+
+def test_open_recent_folder_missing_keeps_workspace_and_removes_history(
+    window,
+    monkeypatch,
+    tmp_path,
+):
+    current_folder = tmp_path / "current"
+    current_folder.mkdir()
+    missing_folder = tmp_path / "missing"
+    window.root_folder = str(current_folder)
+    set_state_value(StateKey.RECENT_FOLDERS, [str(missing_folder)])
+    window._refresh_open_recent_menu()
+
+    warning_calls: list[tuple[str, str]] = []
+    clear_calls: list[bool] = []
+    load_calls: list[tuple[str, bool]] = []
+    monkeypatch.setattr(
+        "piqopiqo.main_window.QMessageBox.warning",
+        lambda _parent, title, text: warning_calls.append((title, text)),
+    )
+    monkeypatch.setattr(
+        window,
+        "_clear_filters_before_folder_load",
+        lambda: clear_calls.append(True),
+    )
+    monkeypatch.setattr(
+        window,
+        "_load_folder",
+        lambda folder, *, reset_grid_to_top=False: load_calls.append(
+            (folder, reset_grid_to_top)
+        ),
+    )
+
+    window._on_open_recent_folder(str(missing_folder))
+
+    assert warning_calls == [
+        (
+            "Open Recent",
+            "The selected recent folder could not be found.\n\n"
+            f"{MainWindow._canonicalize_recent_folder_path(str(missing_folder))}",
+        )
+    ]
+    assert window.root_folder == str(current_folder)
+    assert clear_calls == []
+    assert load_calls == []
+    assert get_state_value(StateKey.RECENT_FOLDERS) == []
 
 
 def test_map_links_setting_updates_edit_panel_visibility_live(window):

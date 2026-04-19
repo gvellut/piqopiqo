@@ -63,6 +63,8 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_CACHE_BASE_DIR",
         "PIQO_EXIFTOOL_PATH",
         "PIQO_NUM_COLUMNS",
+        "PIQO_RECENT_FOLDERS",
+        "PIQO_RECENT_FOLDERS_MENU_LIMIT",
         "PIQO_COPY_SD_EJECT",
         "PIQO_WINDOW_GEOMETRY",
         "PIQO_GRID_NUM_COLUMNS_MIN",
@@ -111,6 +113,15 @@ def test_sort_order_state_default_and_roundtrip(isolated_settings):
 
     set_state_value(StateKey.SORT_ORDER, "FILE_NAME_BY_FOLDER")
     assert get_state_value(StateKey.SORT_ORDER) == "FILE_NAME_BY_FOLDER"
+
+
+def test_recent_folders_state_default_and_roundtrip(isolated_settings):
+    assert get_state_value(StateKey.RECENT_FOLDERS) == []
+
+    value = ["/photos/a", "/photos/b"]
+    set_state_value(StateKey.RECENT_FOLDERS, value)
+
+    assert get_state_value(StateKey.RECENT_FOLDERS) == value
 
 
 def test_gpx_timeshift_state_defaults(isolated_settings):
@@ -297,6 +308,17 @@ def test_grid_column_runtime_bounds_and_status_bar_padding_defaults_and_env_over
     assert get_runtime_setting(RuntimeSettingKey.GRID_NUM_COLUMNS_MIN) == 4
     assert get_runtime_setting(RuntimeSettingKey.GRID_NUM_COLUMNS_MAX) == 12
     assert get_runtime_setting(RuntimeSettingKey.STATUS_BAR_SIDE_PADDING) == 16
+
+
+def test_recent_folders_menu_limit_default_and_env_override(
+    isolated_settings, monkeypatch
+):
+    assert get_runtime_setting(RuntimeSettingKey.RECENT_FOLDERS_MENU_LIMIT) == 10
+
+    monkeypatch.setenv("PIQO_RECENT_FOLDERS_MENU_LIMIT", "6")
+    init_qsettings_store(dyn=False)
+
+    assert get_runtime_setting(RuntimeSettingKey.RECENT_FOLDERS_MENU_LIMIT) == 6
 
 
 def test_gpx_settings_defaults_and_env_override(isolated_settings, monkeypatch):

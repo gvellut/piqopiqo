@@ -55,6 +55,7 @@ class SettingsGroup(StrEnum):
 class StateKey(StrEnum):
     # AppState group
     LAST_FOLDER = "lastFolder"
+    RECENT_FOLDERS = "recentFolders"
     LAST_GPX_FOLDER = "lastGpxFolder"
     ARCHIVE_SAVE_EXIF = "archiveSaveExif"
     SORT_ORDER = "sortOrder"
@@ -106,6 +107,7 @@ class UserSettingKey(StrEnum):
 class RuntimeSettingKey(StrEnum):
     DETACHED_KEYWORD_TREE = "detachedKeywordTree"
     INITIAL_RESOLUTION = "initialResolution"
+    RECENT_FOLDERS_MENU_LIMIT = "recentFoldersMenuLimit"
     OCR_TIME_SHIFT_PROVIDER = "ocrTimeShiftProvider"
     TIME_TAKEN_LOAD_RESORT_BATCH_SIZE = "timeTakenLoadResortBatchSize"
     EXIF_PANEL_COLUMN_STRETCH = "exifPanelColumnStretch"
@@ -456,6 +458,11 @@ def _parse_enum(env_value: str, enum_type: type[Enum], fallback: Enum) -> Enum:
 
 _STATE_REGISTRY: dict[StateKey, SettingDef] = {
     StateKey.LAST_FOLDER: SettingDef(group=StateGroup.APP_STATE, read_type=str),
+    StateKey.RECENT_FOLDERS: SettingDef(
+        group=StateGroup.APP_STATE,
+        default=[],
+        **_list_of_strings_params,
+    ),
     StateKey.LAST_GPX_FOLDER: SettingDef(group=StateGroup.APP_STATE, read_type=str),
     StateKey.ARCHIVE_SAVE_EXIF: SettingDef(
         group=StateGroup.APP_STATE,
@@ -724,6 +731,10 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
         default=None,
         read_type=str,
         env_parser=lambda raw: raw,
+    ),
+    RuntimeSettingKey.RECENT_FOLDERS_MENU_LIMIT: SettingDef(
+        default=10,
+        read_type=int,
     ),
     RuntimeSettingKey.OCR_TIME_SHIFT_PROVIDER: SettingDef(
         default=TimeShiftOcrProvider.APPLE_VISION,

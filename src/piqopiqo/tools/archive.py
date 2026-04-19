@@ -569,6 +569,7 @@ class ArchiveDialog(QDialog):
             return
 
         if result.success:
+            self._window._remove_recent_folder_from_history(self._root_folder)
             self._window._unload_workspace(clear_last_folder=True)
             error_text = ""
             details: list[str] | None = None

@@ -117,3 +117,4 @@
 ! [Archive fix](Kc_tasks/Oc_Archive_fix.md)
 ! [Navigate from lat lon](Kc_tasks/Rc_Navigate_from_lat_lon.md)
     !? [Add dialog](Kc_tasks/Rc.A_Add_dialog.md)
+! [State Recent folders](Kc_tasks/Sc_State_Recent_folders.md)

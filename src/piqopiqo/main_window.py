@@ -215,6 +215,7 @@ class MainWindow(QMainWindow):
         self._workspace_cleanup_pool.setMaxThreadCount(1)
 
         self._create_menu_bar()
+        self._remember_recent_folder_in_history(self.root_folder)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -1877,6 +1878,11 @@ class MainWindow(QMainWindow):
         open_action.triggered.connect(self.on_open)
         file_menu.addAction(open_action)
 
+        open_recent_menu = file_menu.addMenu("Open Recent")
+        open_recent_menu.setToolTipsVisible(True)
+        self._open_recent_menu = open_recent_menu
+        self._refresh_open_recent_menu()
+
         file_menu.addSeparator()
 
         workspace_property_action = QAction("Property...", self)
@@ -2222,6 +2228,7 @@ class MainWindow(QMainWindow):
 
         if UserSettingKey.FAVORITE_FOLDER in changed_keys:
             self._refresh_open_from_favorite_action_visibility()
+            self._refresh_open_recent_menu()
 
         if UserSettingKey.CUSTOM_EXIF_FIELDS in changed_keys:
             self.media_manager.refresh_exif_field_keys(
@@ -2329,6 +2336,157 @@ class MainWindow(QMainWindow):
         from .tools.flickr_upload import launch_flickr_upload
 
         launch_flickr_upload(self)
+
+    @staticmethod
+    def _canonicalize_recent_folder_path(folder_path: str | None) -> str:
+        folder_text = str(folder_path or "").strip()
+        if not folder_text:
+            return ""
+        return os.path.realpath(os.path.abspath(os.path.expanduser(folder_text)))
+
+    @staticmethod
+    def _normalize_recent_folder_entries(entries: object) -> list[str]:
+        if isinstance(entries, tuple):
+            entries = list(entries)
+        if not isinstance(entries, list):
+            return []
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for entry in entries:
+            path = MainWindow._canonicalize_recent_folder_path(str(entry or ""))
+            if not path or path in seen:
+                continue
+            seen.add(path)
+            normalized.append(path)
+        return normalized
+
+    @staticmethod
+    def _is_strict_descendant_path(path: str, ancestor: str) -> bool:
+        candidate = MainWindow._canonicalize_recent_folder_path(path)
+        parent = MainWindow._canonicalize_recent_folder_path(ancestor)
+        if not candidate or not parent or candidate == parent:
+            return False
+        try:
+            return os.path.commonpath([candidate, parent]) == parent
+        except ValueError:
+            return False
+
+    def _get_recent_folder_menu_limit(self) -> int:
+        try:
+            limit = int(get_runtime_setting(RuntimeSettingKey.RECENT_FOLDERS_MENU_LIMIT))
+        except (TypeError, ValueError):
+            return 10
+        return max(0, limit)
+
+    def _get_recent_folder_history(self) -> list[str]:
+        return MainWindow._normalize_recent_folder_entries(
+            get_state().get(StateKey.RECENT_FOLDERS)
+        )
+
+    def _set_recent_folder_history(self, entries: list[str]) -> None:
+        normalized = MainWindow._normalize_recent_folder_entries(entries)
+        normalized = normalized[: self._get_recent_folder_menu_limit() + 1]
+        get_state().set(StateKey.RECENT_FOLDERS, normalized)
+        self._refresh_open_recent_menu()
+
+    def _remember_recent_folder_in_history(self, folder_path: str | None) -> None:
+        canonical = MainWindow._canonicalize_recent_folder_path(folder_path)
+        if not canonical:
+            return
+
+        entries = [canonical]
+        entries.extend(
+            entry for entry in self._get_recent_folder_history() if entry != canonical
+        )
+        self._set_recent_folder_history(entries)
+
+    def _remove_recent_folder_from_history(self, folder_path: str | None) -> None:
+        canonical = MainWindow._canonicalize_recent_folder_path(folder_path)
+        if not canonical:
+            return
+
+        entries = [
+            entry for entry in self._get_recent_folder_history() if entry != canonical
+        ]
+        self._set_recent_folder_history(entries)
+
+    def _get_visible_recent_folder_history(self) -> list[str]:
+        current_folder = MainWindow._canonicalize_recent_folder_path(self.root_folder)
+        visible_entries: list[str] = []
+        for entry in self._get_recent_folder_history():
+            if current_folder and entry == current_folder:
+                continue
+            visible_entries.append(entry)
+            if len(visible_entries) >= self._get_recent_folder_menu_limit():
+                break
+        return visible_entries
+
+    def _format_recent_folder_label(self, folder_path: str) -> str:
+        canonical = MainWindow._canonicalize_recent_folder_path(folder_path)
+        if not canonical:
+            return ""
+
+        favorite_folder = MainWindow._canonicalize_recent_folder_path(
+            self._get_configured_favorite_folder()
+        )
+        if favorite_folder and MainWindow._is_strict_descendant_path(
+            canonical,
+            favorite_folder,
+        ):
+            return os.path.relpath(canonical, favorite_folder)
+
+        home_folder = MainWindow._canonicalize_recent_folder_path(
+            os.path.expanduser("~")
+        )
+        if home_folder and MainWindow._is_strict_descendant_path(
+            canonical,
+            home_folder,
+        ):
+            return f"~/{os.path.relpath(canonical, home_folder)}"
+
+        if canonical == os.sep:
+            return canonical
+        return canonical.rstrip(os.sep)
+
+    def _refresh_open_recent_menu(self) -> None:
+        menu = getattr(self, "_open_recent_menu", None)
+        if menu is None:
+            return
+
+        menu.clear()
+        recent_folders = self._get_visible_recent_folder_history()
+        for folder_path in recent_folders:
+            label = self._format_recent_folder_label(folder_path)
+            action = QAction(label, self)
+            action.setToolTip(folder_path)
+            action.setStatusTip(folder_path)
+            action.triggered.connect(
+                lambda _checked=False, path=folder_path: self._on_open_recent_folder(
+                    path
+                )
+            )
+            menu.addAction(action)
+
+        enabled = bool(recent_folders)
+        menu.setEnabled(enabled)
+        menu.menuAction().setEnabled(enabled)
+
+    def _on_open_recent_folder(self, folder_path: str) -> None:
+        canonical = MainWindow._canonicalize_recent_folder_path(folder_path)
+        if not canonical or not os.path.isdir(canonical):
+            missing_path = canonical or str(folder_path or "").strip()
+            self._remove_recent_folder_from_history(folder_path)
+            QMessageBox.warning(
+                self,
+                "Open Recent",
+                "The selected recent folder could not be found.\n\n"
+                f"{missing_path}",
+            )
+            return
+
+        self._clear_filters_before_folder_load()
+        self._load_folder(canonical, reset_grid_to_top=True)
 
     @staticmethod
     def _parent_directory_for_folder_dialog(folder_path: str | None) -> str:
@@ -2601,6 +2759,7 @@ class MainWindow(QMainWindow):
 
         if clear_last_folder:
             get_state().set(StateKey.LAST_FOLDER, "")
+        self._refresh_open_recent_menu()
 
     def _clear_filters_before_folder_load(self) -> None:
         """Clear active filters before loading a new folder via Open Folder."""
@@ -2625,6 +2784,7 @@ class MainWindow(QMainWindow):
         # Update state
         self.root_folder = folder
         self.source_folders = source_folders
+        self._remember_recent_folder_in_history(folder)
 
         # Close old database connections and create new manager
         self.db_manager.close_all()

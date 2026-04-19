@@ -172,6 +172,7 @@ class _FakeArchiveWindow(QWidget):
         self.resume_calls = 0
         self.unload_calls: list[bool] = []
         self.folder_dialog_hint_updates: list[str] = []
+        self.removed_recent_folders: list[str] = []
 
     def _prepare_workspace_for_archive_move(self) -> None:
         self.prepare_calls += 1
@@ -187,6 +188,9 @@ class _FakeArchiveWindow(QWidget):
         folder_path: str | None,
     ) -> None:
         self.folder_dialog_hint_updates.append(str(folder_path or ""))
+
+    def _remove_recent_folder_from_history(self, folder_path: str | None) -> None:
+        self.removed_recent_folders.append(str(folder_path or ""))
 
 
 @pytest.fixture
@@ -778,6 +782,7 @@ def test_archive_dialog_success_does_not_override_folder_dialog_hint(
     )
 
     assert window.folder_dialog_hint_updates == []
+    assert window.removed_recent_folders == ["/photos/root"]
     assert window.unload_calls == [True]
 
 
