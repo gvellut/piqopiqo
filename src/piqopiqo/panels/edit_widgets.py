@@ -21,6 +21,18 @@ from piqopiqo.ssf.settings_state import RuntimeSettingKey, get_runtime_setting
 MULTIPLE_VALUES = "<Multiple Values>"
 
 
+def _set_line_edit_text_if_changed(widget: QLineEdit, text: str) -> None:
+    """Avoid no-op rewrites that reset cursor/selection state in Qt."""
+    if widget.text() != text:
+        widget.setText(text)
+
+
+def _set_plain_text_if_changed(widget: QPlainTextEdit, text: str) -> None:
+    """Avoid no-op rewrites that reset cursor/selection state in Qt."""
+    if widget.toPlainText() != text:
+        widget.setPlainText(text)
+
+
 class TitleEdit(QLineEdit):
     """Single-line title editor with special key handling."""
 
@@ -36,7 +48,7 @@ class TitleEdit(QLineEdit):
     def set_value(self, value: str):
         """Set the field value and store as original."""
         self._original_value = value or ""
-        self.setText(self._original_value)
+        _set_line_edit_text_if_changed(self, self._original_value)
 
     def focusInEvent(self, event):
         """Clear Multiple Values placeholder on focus."""
@@ -97,7 +109,7 @@ class DescriptionEdit(QPlainTextEdit):
     def set_value(self, value: str):
         """Set the field value and store as original."""
         self._original_value = value or ""
-        self.setPlainText(self._original_value)
+        _set_plain_text_if_changed(self, self._original_value)
 
     def focusInEvent(self, event):
         """Clear Multiple Values placeholder on focus."""
@@ -161,7 +173,7 @@ class CoordinateEdit(QLineEdit):
             self._original_value = f"{value:.6f}"
         else:
             self._original_value = ""
-        self.setText(self._original_value)
+        _set_line_edit_text_if_changed(self, self._original_value)
         self._validate()
 
     def focusInEvent(self, event):
@@ -318,7 +330,7 @@ class KeywordsEdit(QPlainTextEdit):
     def set_value(self, value: str):
         """Set the field value and store as original."""
         self._original_value = value or ""
-        self.setPlainText(self._original_value)
+        _set_plain_text_if_changed(self, self._original_value)
         self._adjust_height()
         self._validate()
 
@@ -391,7 +403,7 @@ class TimeEdit(QLineEdit):
             self._original_value = value.strftime("%Y-%m-%d %H:%M:%S")
         else:
             self._original_value = value or ""
-        self.setText(self._original_value)
+        _set_line_edit_text_if_changed(self, self._original_value)
         self._validate()
 
     def focusInEvent(self, event):

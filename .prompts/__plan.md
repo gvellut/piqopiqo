@@ -118,3 +118,4 @@
 ! [Navigate from lat lon](Kc_tasks/Rc_Navigate_from_lat_lon.md)
     !? [Add dialog](Kc_tasks/Rc.A_Add_dialog.md)
 ! [State Recent folders](Kc_tasks/Sc_State_Recent_folders.md)
+! [Editor switches to the end](Kc_tasks/Tc_Editor_switches_to_the_end.md)

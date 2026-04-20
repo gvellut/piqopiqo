@@ -330,6 +330,62 @@ def test_non_text_protection_blocks_gui_save_for_locked_fields(qapp, monkeypatch
     assert emitted == [DBFields.TITLE]
 
 
+def test_title_refresh_with_same_saved_value_preserves_cursor_position(qapp):
+    init_qsettings_store(dyn=True)
+
+    panel = EditPanel(_StubDBManager())
+    panel.show()
+    item = ImageItem(
+        path="/tmp/cursor-title.jpg",
+        name="cursor-title.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={DBFields.TITLE: "Before"},
+    )
+    panel.update_for_selection([item])
+    qapp.processEvents()
+
+    panel.title_edit.setFocus()
+    panel.title_edit.setText("Edited title")
+    panel.title_edit.setCursorPosition(3)
+
+    item.db_metadata[DBFields.TITLE] = "Edited title"
+    panel.update_for_selection([item])
+
+    assert panel.title_edit.text() == "Edited title"
+    assert panel.title_edit.cursorPosition() == 3
+    assert panel.title_edit._original_value == "Edited title"
+
+
+def test_description_refresh_with_same_saved_value_preserves_cursor_position(qapp):
+    init_qsettings_store(dyn=True)
+
+    panel = EditPanel(_StubDBManager())
+    panel.show()
+    item = ImageItem(
+        path="/tmp/cursor-description.jpg",
+        name="cursor-description.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={DBFields.DESCRIPTION: "Before"},
+    )
+    panel.update_for_selection([item])
+    qapp.processEvents()
+
+    panel.description_edit.setFocus()
+    panel.description_edit.setPlainText("Edited description")
+    cursor = panel.description_edit.textCursor()
+    cursor.setPosition(4)
+    panel.description_edit.setTextCursor(cursor)
+
+    item.db_metadata[DBFields.DESCRIPTION] = "Edited description"
+    panel.update_for_selection([item])
+
+    assert panel.description_edit.toPlainText() == "Edited description"
+    assert panel.description_edit.textCursor().position() == 4
+    assert panel.description_edit._original_value == "Edited description"
+
+
 def test_map_button_hidden_when_no_options_are_configured(qapp):
     init_qsettings_store(dyn=True)
     set_user_setting(UserSettingKey.MAP_LINKS, [])
