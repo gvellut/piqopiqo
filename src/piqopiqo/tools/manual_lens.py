@@ -8,10 +8,10 @@ from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QDialog,
-    QDialogButtonBox,
     QLabel,
     QMessageBox,
     QVBoxLayout,
+    QWidget,
 )
 
 from piqopiqo.dialogs.settings_redirect import (
@@ -21,6 +21,12 @@ from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.save_workers import MetadataSaveWorker
 from piqopiqo.model import ManualLensPreset
 from piqopiqo.ssf.settings_state import UserSettingKey, get_user_setting
+from piqopiqo.tools.tool_flow import (
+    ToolButton,
+    ToolFlowDialog,
+    ToolScreen,
+    ToolWorkflow,
+)
 
 if TYPE_CHECKING:
     from piqopiqo.main_window import MainWindow
@@ -59,46 +65,33 @@ def _load_manual_lens_presets() -> list[ManualLensPreset]:
     return presets
 
 
-class LensSelectionDialog(QDialog):
+class LensSelectionDialog(ToolFlowDialog):
     """Dialog for choosing one manual lens preset."""
 
     def __init__(self, presets: list[ManualLensPreset], parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Set Lens Info")
-        self.setModal(True)
-        self.setMinimumWidth(520)
-
         self._presets = presets
         self._selected_preset: ManualLensPreset | None = None
         self._selected_clear = False
-
-        layout = QVBoxLayout(self)
-
-        description = QLabel(
-            "Select a lens preset to apply to the target photos.",
-            self,
+        workflow = ToolWorkflow(
+            initial_screen="main",
+            screens={
+                "main": ToolScreen(
+                    id="main",
+                    title="Set Lens Info",
+                    build=lambda dialog: dialog._build_body(),
+                    buttons=(
+                        ToolButton("cancel", "Cancel"),
+                        ToolButton("ok", "OK", enabled=False, default=True),
+                    ),
+                    min_width=520,
+                )
+            },
+            transitions={
+                ("main", "cancel"): lambda dialog, event: dialog.reject(),
+                ("main", "ok"): lambda dialog, event: dialog.accept(),
+            },
         )
-        description.setWordWrap(True)
-        layout.addWidget(description)
-
-        self.combo = QComboBox(self)
-        self.combo.addItem("Choose a lens...", None)
-        self.combo.addItem("Clear lens info", _CLEAR_LENS_INFO_DATA)
-        for preset in self._presets:
-            self.combo.addItem(preset.lens_model, preset)
-        self.combo.setCurrentIndex(0)
-        self.combo.currentIndexChanged.connect(self._on_selection_changed)
-        layout.addWidget(self.combo)
-
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
-        self.ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
-        self.ok_btn.setEnabled(False)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        super().__init__(workflow, parent=parent)
 
     @property
     def selected_preset(self) -> ManualLensPreset | None:
@@ -107,6 +100,32 @@ class LensSelectionDialog(QDialog):
     @property
     def selected_clear(self) -> bool:
         return self._selected_clear
+
+    def transition_to(self, screen_id: str) -> None:
+        super().transition_to(screen_id)
+        self.ok_btn = self.button("ok")
+
+    def _build_body(self) -> QWidget:
+        widget = QWidget(self)
+        layout = QVBoxLayout(widget)
+
+        description = QLabel(
+            "Select a lens preset to apply to the target photos.",
+            widget,
+        )
+        description.setWordWrap(True)
+        layout.addWidget(description)
+
+        self.combo = QComboBox(widget)
+        self.combo.addItem("Choose a lens...", None)
+        self.combo.addItem("Clear lens info", _CLEAR_LENS_INFO_DATA)
+        for preset in self._presets:
+            self.combo.addItem(preset.lens_model, preset)
+        self.combo.setCurrentIndex(0)
+        self.combo.currentIndexChanged.connect(self._on_selection_changed)
+        layout.addWidget(self.combo)
+
+        return widget
 
     def _on_selection_changed(self, _index: int) -> None:
         selected = self.combo.currentData()

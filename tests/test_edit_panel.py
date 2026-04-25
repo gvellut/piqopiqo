@@ -511,8 +511,7 @@ def test_map_button_sits_below_longitude_and_keeps_fields_aligned(qapp):
         == panel.layout.spacing()
     )
     assert (
-        lon_pos.y() - (lat_pos.y() + panel.lat_edit.height())
-        == panel.layout.spacing()
+        lon_pos.y() - (lat_pos.y() + panel.lat_edit.height()) == panel.layout.spacing()
     )
     assert (
         map_btn_pos.y() - (lon_pos.y() + panel.lon_edit.height())

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 import threading
 
 from PySide6.QtCore import QObject, QRunnable, Signal
+
+from piqopiqo.metadata.db_fields import DBFields
+from piqopiqo.metadata.metadata_db import MetadataDBUnavailableError
 
 from .ocr_time_shift import extract_time_shift_from_photo
 from .service import apply_gpx_to_folders
@@ -114,3 +118,82 @@ class ApplyGpxWorker(QRunnable):
             return
 
         self.signals.finished.emit(result)
+
+
+@dataclass(frozen=True)
+class ClearGpsResult:
+    updated_paths: list[str]
+    processed: int
+    total: int
+    cancelled: bool = False
+    db_unavailable: bool = False
+
+
+class ClearGpsWorkerSignals(QObject):
+    progress = Signal(int, int)
+    finished = Signal(object)  # ClearGpsResult
+    error = Signal(str)
+
+
+class ClearGpsWorker(QRunnable):
+    def __init__(self, *, db_manager, file_paths: list[str]):
+        super().__init__()
+        self._db_manager = db_manager
+        self._file_paths = list(file_paths)
+        self._cancel_requested = threading.Event()
+        self.signals = ClearGpsWorkerSignals()
+
+    def request_cancel(self) -> None:
+        self._cancel_requested.set()
+
+    def run(self) -> None:
+        total = len(self._file_paths)
+        processed = 0
+        updated_paths: list[str] = []
+        self.signals.progress.emit(0, total)
+
+        try:
+            for file_path in self._file_paths:
+                if self._cancel_requested.is_set():
+                    self.signals.finished.emit(
+                        ClearGpsResult(
+                            updated_paths=updated_paths,
+                            processed=processed,
+                            total=total,
+                            cancelled=True,
+                        )
+                    )
+                    return
+
+                db = self._db_manager.get_db_for_image(file_path)
+                metadata = db.get_metadata(file_path)
+                if metadata is not None:
+                    updated_metadata = metadata.copy()
+                    updated_metadata[DBFields.LATITUDE] = None
+                    updated_metadata[DBFields.LONGITUDE] = None
+                    db.save_metadata(file_path, updated_metadata)
+                    updated_paths.append(file_path)
+
+                processed += 1
+                self.signals.progress.emit(processed, total)
+        except MetadataDBUnavailableError:
+            self.signals.finished.emit(
+                ClearGpsResult(
+                    updated_paths=updated_paths,
+                    processed=processed,
+                    total=total,
+                    db_unavailable=True,
+                )
+            )
+            return
+        except Exception as ex:
+            self.signals.error.emit(str(ex))
+            return
+
+        self.signals.finished.emit(
+            ClearGpsResult(
+                updated_paths=updated_paths,
+                processed=processed,
+                total=total,
+            )
+        )

@@ -1,4 +1,4 @@
-- [refactor tools](Kc_tasks/Uc_refactor_tools.md)
+* [refactor tools](Kc_tasks/Uc_refactor_tools.md)
 - [Keyword tree should display half checkd](Kc_tasks/Kc_Keyword_tree_should_display_half_chcekd.md)
 - [Keyword clean on validate](Pb_tasks/Pb_Keyword_clean_on_validate.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)

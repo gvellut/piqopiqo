@@ -146,9 +146,7 @@ def _action_by_text(
     return None
 
 
-def _submenu_by_text(
-    window: MainWindow, menu_title: str, submenu_text: str
-):
+def _submenu_by_text(window: MainWindow, menu_title: str, submenu_text: str):
     action = _action_by_text(window, menu_title, submenu_text)
     if action is None:
         return None
@@ -240,9 +238,7 @@ def test_open_recent_menu_excludes_current_folder(window, tmp_path):
     other_b = tmp_path / "other-b"
     window.root_folder = str(current_folder)
 
-    window._set_recent_folder_history(
-        [str(current_folder), str(other_a), str(other_b)]
-    )
+    window._set_recent_folder_history([str(current_folder), str(other_a), str(other_b)])
 
     assert _submenu_action_tooltips(window, "File", "Open Recent") == [
         MainWindow._canonicalize_recent_folder_path(str(other_a)),

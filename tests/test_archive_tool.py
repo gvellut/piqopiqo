@@ -261,7 +261,10 @@ def test_launch_archive_warns_when_no_folder_loaded(qapp, settings_store, monkey
 
 
 def test_launch_archive_redirects_to_settings_for_missing_destination(
-    qapp, settings_store, tmp_path, monkeypatch  # noqa: ARG001
+    qapp,
+    settings_store,
+    tmp_path,
+    monkeypatch,  # noqa: ARG001
 ):
     root_folder = tmp_path / "20250502_annecy"
     root_folder.mkdir()
@@ -269,10 +272,9 @@ def test_launch_archive_redirects_to_settings_for_missing_destination(
     prompted: list[str] = []
     monkeypatch.setattr(
         "piqopiqo.tools.archive.prompt_open_settings_for_missing_setting",
-        lambda _parent, *, title, text, icon=None: prompted.append(
-            f"{title}:{text}"
-        )
-        or True,
+        lambda _parent, *, title, text, icon=None: (
+            prompted.append(f"{title}:{text}") or True
+        ),
     )
 
     launch_archive(window)
@@ -282,7 +284,10 @@ def test_launch_archive_redirects_to_settings_for_missing_destination(
 
 
 def test_launch_archive_stops_on_same_name_conflict(
-    qapp, settings_store, tmp_path, monkeypatch  # noqa: ARG001
+    qapp,
+    settings_store,
+    tmp_path,
+    monkeypatch,  # noqa: ARG001
 ):
     root_folder = tmp_path / "20250502_annecy"
     root_folder.mkdir()
@@ -312,7 +317,10 @@ def test_launch_archive_stops_on_same_name_conflict(
 
 
 def test_launch_archive_uses_all_photos_not_visible_photos(
-    qapp, settings_store, tmp_path, monkeypatch  # noqa: ARG001
+    qapp,
+    settings_store,
+    tmp_path,
+    monkeypatch,  # noqa: ARG001
 ):
     root_folder = tmp_path / "20250502_annecy"
     root_folder.mkdir()
@@ -345,7 +353,10 @@ def test_launch_archive_uses_all_photos_not_visible_photos(
 
 
 def test_launch_archive_passes_workspace_watcher_control(
-    qapp, settings_store, tmp_path, monkeypatch  # noqa: ARG001
+    qapp,
+    settings_store,
+    tmp_path,
+    monkeypatch,  # noqa: ARG001
 ):
     root_folder = tmp_path / "20250502_annecy"
     root_folder.mkdir()
@@ -413,7 +424,8 @@ def test_archive_dialog_initial_focus_is_ok_button(qapp, settings_store):  # noq
 
 
 def test_archive_dialog_exif_stage_shows_compact_progress_and_suspends_watcher(
-    qapp, settings_store  # noqa: ARG001
+    qapp,
+    settings_store,  # noqa: ARG001
 ):
     watcher_control = _WatcherControlSpy()
     window = _FakeArchiveWindow()
@@ -451,11 +463,16 @@ def test_archive_dialog_exif_stage_shows_compact_progress_and_suspends_watcher(
 
 
 def test_archive_dialog_exif_progress_updates_counter_and_bar(
-    qapp, settings_store  # noqa: ARG001
+    qapp,
+    settings_store,  # noqa: ARG001
 ):
     watcher_control = _WatcherControlSpy()
     window = _FakeArchiveWindow()
-    items = [_item("/photos/root/a.jpg"), _item("/photos/root/b.jpg"), _item("/photos/root/c.jpg")]
+    items = [
+        _item("/photos/root/a.jpg"),
+        _item("/photos/root/b.jpg"),
+        _item("/photos/root/c.jpg"),
+    ]
     for index, item in enumerate(items):
         item.db_metadata = {"title": f"Title {index}"}
 
@@ -480,7 +497,8 @@ def test_archive_dialog_exif_progress_updates_counter_and_bar(
 
 
 def test_archive_dialog_finished_state_keeps_current_width(
-    qapp, settings_store  # noqa: ARG001
+    qapp,
+    settings_store,  # noqa: ARG001
 ):
     window = _FakeArchiveWindow()
     item = _item("/photos/root/a.jpg")
@@ -531,7 +549,8 @@ def test_archive_dialog_unchecked_exif_starts_move_immediately(qapp, settings_st
 
 
 def test_archive_dialog_exif_cancel_stops_before_move_and_resumes_watcher(
-    qapp, settings_store  # noqa: ARG001
+    qapp,
+    settings_store,  # noqa: ARG001
 ):
     watcher_control = _WatcherControlSpy()
     window = _FakeArchiveWindow()
@@ -591,7 +610,8 @@ def test_archive_dialog_exif_failure_stops_before_move(qapp, settings_store):  #
 
 
 def test_archive_dialog_exif_success_keeps_watcher_suspended_until_move(
-    qapp, settings_store  # noqa: ARG001
+    qapp,
+    settings_store,  # noqa: ARG001
 ):
     watcher_control = _WatcherControlSpy()
     window = _FakeArchiveWindow()
@@ -618,7 +638,8 @@ def test_archive_dialog_exif_success_keeps_watcher_suspended_until_move(
 
 
 def test_archive_dialog_move_prepare_failure_after_exif_success_resumes_watcher(
-    qapp, settings_store  # noqa: ARG001
+    qapp,
+    settings_store,  # noqa: ARG001
 ):
     watcher_control = _WatcherControlSpy()
     window = _FakeArchiveWindow()
@@ -650,7 +671,9 @@ def test_archive_dialog_move_prepare_failure_after_exif_success_resumes_watcher(
 
 
 def test_archive_dialog_move_stage_uses_current_root_and_source_folders(
-    qapp, settings_store, monkeypatch  # noqa: ARG001
+    qapp,
+    settings_store,
+    monkeypatch,  # noqa: ARG001
 ):
     window = _FakeArchiveWindow()
     dialog = ArchiveDialog(
@@ -669,7 +692,11 @@ def test_archive_dialog_move_stage_uses_current_root_and_source_folders(
             self.signals = type(
                 "_Signals",
                 (),
-                {"finished": type("_Finished", (), {"connect": lambda self, cb: None})()},
+                {
+                    "finished": type(
+                        "_Finished", (), {"connect": lambda self, cb: None}
+                    )()
+                },
             )()
 
     class _FakePool:
@@ -736,7 +763,8 @@ def test_archive_move_worker_cleans_only_loaded_source_folders(monkeypatch):
 
 
 def test_archive_dialog_move_failure_restores_workspace_when_source_still_exists(
-    qapp, settings_store  # noqa: ARG001
+    qapp,
+    settings_store,  # noqa: ARG001
 ):
     window = _FakeArchiveWindow()
     dialog = ArchiveDialog(
@@ -762,7 +790,8 @@ def test_archive_dialog_move_failure_restores_workspace_when_source_still_exists
 
 
 def test_archive_dialog_success_does_not_override_folder_dialog_hint(
-    qapp, settings_store  # noqa: ARG001
+    qapp,
+    settings_store,  # noqa: ARG001
 ):
     window = _FakeArchiveWindow()
     dialog = ArchiveDialog(

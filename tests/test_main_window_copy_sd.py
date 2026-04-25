@@ -110,7 +110,9 @@ def window(qapp, monkeypatch):  # noqa: ARG001
     main_window.close()
 
 
-def test_on_copy_from_sd_passes_workspace_watcher_control(window: MainWindow, monkeypatch):
+def test_on_copy_from_sd_passes_workspace_watcher_control(
+    window: MainWindow, monkeypatch
+):
     captured: list[object] = []
 
     def _fake_launch(parent=None, *, watcher_control=None):

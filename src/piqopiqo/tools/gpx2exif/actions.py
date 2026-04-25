@@ -7,7 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QThreadPool
-from PySide6.QtWidgets import QDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QWidget
 
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBUnavailableError
@@ -371,6 +371,72 @@ def launch_clear_gps(window: MainWindow) -> None:
     if reply != QMessageBox.StandardButton.Yes:
         return
 
+    if QApplication.instance() is None or not isinstance(window, QWidget):
+        _clear_gps_sync(window, items)
+        return
+
+    from .dialogs import ClearGpsProgressDialog
+    from .workers import ClearGpsResult, ClearGpsWorker
+
+    progress_dialog = ClearGpsProgressDialog(total=len(items), parent=window)
+    worker = ClearGpsWorker(
+        db_manager=window.db_manager,
+        file_paths=[item.path for item in items],
+    )
+
+    def on_progress(completed: int, total_count: int) -> None:
+        progress_dialog.set_progress(completed, total_count)
+
+    def on_error(message: str) -> None:
+        if progress_dialog.isVisible():
+            progress_dialog.show_error(message)
+        else:
+            QMessageBox.warning(window, "Clear GPS", message)
+
+    def on_finished(result: ClearGpsResult) -> None:
+        if result.db_unavailable:
+            handle_interrupted = getattr(window, "_handle_interrupted_db_action", None)
+            if callable(handle_interrupted):
+                handle_interrupted(action_name="Clear GPS")
+            if progress_dialog.isVisible():
+                progress_dialog.finish(
+                    processed=result.processed,
+                    total=result.total,
+                    cancelled=True,
+                )
+            return
+
+        if result.updated_paths:
+            for item in items:
+                if item.path not in result.updated_paths:
+                    continue
+                db = window.db_manager.get_db_for_image(item.path)
+                metadata = db.get_metadata(item.path)
+                if metadata is None:
+                    continue
+                item.db_metadata = metadata.copy()
+
+            window.sync_model_after_metadata_update(
+                {DBFields.LATITUDE, DBFields.LONGITUDE},
+                source="clear_gpx",
+            )
+
+        if progress_dialog.isVisible():
+            progress_dialog.finish(
+                processed=result.processed,
+                total=result.total,
+                cancelled=result.cancelled,
+            )
+
+    worker.signals.progress.connect(on_progress)
+    worker.signals.error.connect(on_error)
+    worker.signals.finished.connect(on_finished)
+    progress_dialog.cancel_requested.connect(worker.request_cancel)
+    QThreadPool.globalInstance().start(worker)
+    progress_dialog.exec()
+
+
+def _clear_gps_sync(window: MainWindow, items: list) -> None:
     updated_count = 0
     for item in items:
         db = window.db_manager.get_db_for_image(item.path)

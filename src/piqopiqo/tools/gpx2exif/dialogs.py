@@ -6,7 +6,7 @@ from collections.abc import Callable
 from enum import Enum, auto
 import os
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QThreadPool, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -18,11 +18,18 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QProgressBar,
     QPushButton,
     QTextEdit,
     QVBoxLayout,
     QWidget,
+)
+
+from piqopiqo.tools.tool_flow import (
+    ToolButton,
+    ToolFlowDialog,
+    ToolScreen,
+    ToolTaskHandle,
+    ToolWorkflow,
 )
 
 from .constants import (
@@ -96,95 +103,119 @@ class ExtractGpsTimeShiftConfirmDialog(QDialog):
         self.setFixedSize(self.size())
 
 
-class ExtractGpsTimeShiftProgressDialog(QDialog):
+class ExtractGpsTimeShiftProgressDialog(ToolFlowDialog):
     """Modal progress/result dialog for OCR time-shift extraction."""
 
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Extract GPS Time shift")
-        self.setModal(True)
-        self.setMinimumWidth(460)
-
         self._worker = None
         self._result_shift: str | None = None
-
-        layout = QVBoxLayout(self)
-
+        workflow = ToolWorkflow(
+            initial_screen="running",
+            screens={
+                "running": ToolScreen(
+                    id="running",
+                    title="Extract GPS Time shift",
+                    build=lambda dialog: dialog._build_body(),
+                    buttons=(
+                        ToolButton("cancel", "Cancel"),
+                        ToolButton("ok", "OK", enabled=False, visible=False),
+                    ),
+                    min_width=460,
+                    show_progress=True,
+                    show_progress_count=False,
+                ),
+                "result": ToolScreen(
+                    id="result",
+                    title="Extract GPS Time shift",
+                    build=lambda dialog: dialog._build_body(),
+                    buttons=(
+                        ToolButton("cancel", "Cancel", visible=False),
+                        ToolButton(
+                            "ok", "OK", enabled=True, visible=True, default=True
+                        ),
+                    ),
+                    min_width=460,
+                    show_progress=True,
+                    show_progress_count=False,
+                ),
+            },
+            transitions={
+                ("running", "cancel"): lambda dialog, event: dialog._on_cancel(),
+                ("result", "ok"): lambda dialog, event: dialog.accept(),
+                ("*", "worker_success"): lambda dialog, event: dialog._on_success(
+                    *event.args
+                ),
+                ("*", "worker_error"): lambda dialog, event: dialog._on_error(
+                    *event.args
+                ),
+            },
+        )
+        super().__init__(workflow, parent=parent)
         provider_name = get_time_shift_ocr_provider_display_name()
-        self.status_label = QLabel(f"Extracting clock time with {provider_name}...")
-        self.status_label.setWordWrap(True)
-        layout.addWidget(self.status_label)
-
-        self.progress_bar = QProgressBar()
+        self.set_status(f"Extracting clock time with {provider_name}...")
         self.progress_bar.setRange(0, 0)
-        layout.addWidget(self.progress_bar)
-
-        self.result_label = QLabel("")
-        self.result_label.setWordWrap(True)
-        self.result_label.hide()
-        layout.addWidget(self.result_label)
-
-        buttons = QHBoxLayout()
-        buttons.addStretch(1)
-
-        self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.clicked.connect(self._on_cancel)
-        buttons.addWidget(self.cancel_btn)
-
-        self.ok_btn = QPushButton("OK")
-        self.ok_btn.setEnabled(False)
-        self.ok_btn.hide()
-        self.ok_btn.clicked.connect(self.accept)
-        buttons.addWidget(self.ok_btn)
-
-        layout.addLayout(buttons)
 
     @property
     def result_shift(self) -> str | None:
         return self._result_shift
 
+    def transition_to(self, screen_id: str) -> None:
+        super().transition_to(screen_id)
+        self.cancel_btn = self.button("cancel")
+        self.ok_btn = self.button("ok")
+
+    def _build_body(self) -> QWidget:
+        widget = QWidget(self)
+        layout = QVBoxLayout(widget)
+
+        self.result_label = QLabel("", widget)
+        self.result_label.setWordWrap(True)
+        self.result_label.hide()
+        layout.addWidget(self.result_label)
+
+        return widget
+
     def start(self, worker) -> None:
         self._worker = worker
-        worker.signals.finished.connect(self._on_success)
-        worker.signals.error.connect(self._on_error)
-
-        from PySide6.QtCore import QThreadPool
-
-        QThreadPool.globalInstance().start(worker)
+        self.start_task(
+            "extract_time_shift",
+            ToolTaskHandle.from_qrunnable(
+                worker=worker,
+                pool=QThreadPool.globalInstance(),
+                signal_map={
+                    worker.signals.finished: "worker_success",
+                    worker.signals.error: "worker_error",
+                },
+            ),
+        )
 
     def _on_success(self, extracted_clock: str, time_shift: str) -> None:
         self._result_shift = time_shift
-        self.progress_bar.setRange(0, 1)
-        self.progress_bar.setValue(1)
-        self.status_label.setText("Extraction done.")
+        self.transition_to("result")
+        self.set_progress(1, 1)
+        self.set_status("Extraction done.")
         self.result_label.setStyleSheet("")
         self.result_label.setText(
             f"Extracted clock: {extracted_clock}\nComputed time shift: {time_shift}"
         )
         self.result_label.show()
-        self.cancel_btn.hide()
-        self.ok_btn.setEnabled(True)
-        self.ok_btn.show()
         self.ok_btn.setFocus()
-        self.adjustSize()
+        self.sync_size_to_content()
 
     def _on_error(self, message: str) -> None:
         self._result_shift = None
-        self.progress_bar.setRange(0, 1)
-        self.progress_bar.setValue(1)
-        self.status_label.setText("Extraction failed:")
+        self.transition_to("result")
+        self.set_progress(1, 1)
+        self.set_status("Extraction failed:")
         self.result_label.setStyleSheet("color: red;")
         self.result_label.setText(message)
         self.result_label.show()
-        self.cancel_btn.hide()
-        self.ok_btn.setEnabled(True)
-        self.ok_btn.show()
         self.ok_btn.setFocus()
-        self.adjustSize()
+        self.sync_size_to_content()
 
     def _on_cancel(self) -> None:
         if self._worker is not None:
-            self._worker.request_cancel()
+            self.stop_task("extract_time_shift", cancel=True)
         self.reject()
 
 
@@ -369,84 +400,78 @@ class ApplyGpxDialog(QDialog):
         )
 
 
-class ApplyGpxProgressDialog(QDialog):
+class ApplyGpxProgressDialog(ToolFlowDialog):
     """Progress and completion dialog for Apply GPX."""
 
     cancel_requested = Signal()
 
     def __init__(self, *, total: int, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Apply GPX")
-        self.setModal(True)
-        self.setMinimumWidth(620)
-
         self._kml_paths: list[str] = []
+        self._total = max(0, int(total))
+        workflow = ToolWorkflow(
+            initial_screen="main",
+            screens={
+                "main": ToolScreen(
+                    id="main",
+                    title="Apply GPX",
+                    build=lambda dialog: dialog._build_body(),
+                    buttons=(
+                        ToolButton("cancel", "Cancel"),
+                        ToolButton("show_finder", "Show in Finder", visible=False),
+                        ToolButton("ok", "OK", enabled=False),
+                    ),
+                    min_width=620,
+                    show_progress=True,
+                    show_progress_count=False,
+                ),
+            },
+            transitions={
+                ("main", "cancel"): lambda dialog, event: dialog._on_cancel(),
+                ("main", "show_finder"): lambda dialog, event: dialog._on_show_finder(),
+                ("main", "ok"): lambda dialog, event: dialog.accept(),
+            },
+        )
+        super().__init__(workflow, parent=parent)
+        self.set_status("Applying GPX...")
+        self.progress_bar.setRange(0, self._total)
+        self.progress_bar.setValue(0)
+        self.sync_size_to_content()
 
-        layout = QVBoxLayout(self)
+    def transition_to(self, screen_id: str) -> None:
+        super().transition_to(screen_id)
+        self.cancel_btn = self.button("cancel")
+        self.show_finder_btn = self.button("show_finder")
+        self.ok_btn = self.button("ok")
 
-        self.status_label = QLabel("Applying GPX...")
-        self.status_label.setWordWrap(True)
-        layout.addWidget(self.status_label)
+    def _build_body(self) -> QWidget:
+        widget = QWidget(self)
+        layout = QVBoxLayout(widget)
 
-        self.folder_label = QLabel("")
+        self.folder_label = QLabel("", widget)
         self.folder_label.setWordWrap(True)
         self.folder_label.hide()
         layout.addWidget(self.folder_label)
 
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, max(0, int(total)))
-        self.progress_bar.setValue(0)
-        layout.addWidget(self.progress_bar)
-
-        self.details_text = QTextEdit()
+        self.details_text = QTextEdit(widget)
         self.details_text.setReadOnly(True)
         self.details_text.hide()
         layout.addWidget(self.details_text, 1)
 
-        button_row = QHBoxLayout()
-        button_row.addStretch(1)
-
-        self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.clicked.connect(self._on_cancel)
-        button_row.addWidget(self.cancel_btn)
-
-        self.show_finder_btn = QPushButton("Show in Finder")
-        self.show_finder_btn.clicked.connect(self._on_show_finder)
-        self.show_finder_btn.hide()
-        button_row.addWidget(self.show_finder_btn)
-
-        self.ok_btn = QPushButton("OK")
-        self.ok_btn.setEnabled(False)
-        self.ok_btn.clicked.connect(self.accept)
-        button_row.addWidget(self.ok_btn)
-
-        layout.addLayout(button_row)
-        self._sync_height_to_content()
-
-    def _sync_height_to_content(self) -> None:
-        layout = self.layout()
-        if layout is not None:
-            layout.activate()
-        self.adjustSize()
-        target_height = self.sizeHint().height()
-        if target_height > 0:
-            self.setFixedHeight(target_height)
+        return widget
 
     def set_folder(self, relative_folder: str) -> None:
         text = str(relative_folder).strip()
         if not text:
             self.folder_label.clear()
             self.folder_label.hide()
-            self._sync_height_to_content()
+            self.sync_size_to_content()
             return
         self.folder_label.setText(f"Folder: {text}")
         self.folder_label.show()
-        self._sync_height_to_content()
+        self.sync_size_to_content()
 
     def set_progress(self, completed: int, total: int) -> None:
-        self.progress_bar.setRange(0, max(0, int(total)))
-        self.progress_bar.setValue(max(0, int(completed)))
-        self.progress_bar.setFormat(f"{completed}/{total}")
+        super().set_progress(completed, total)
 
     def finish(self, result: ApplyGpxResult) -> None:
         self.cancel_btn.setEnabled(False)
@@ -454,7 +479,7 @@ class ApplyGpxProgressDialog(QDialog):
         summary = f"Processed {result.processed} photo(s)."
         if result.cancelled:
             summary = f"Cancelled. {result.processed} photo(s) processed."
-        self.status_label.setText(summary)
+        self.set_status(summary)
 
         self._kml_paths = list(result.kml_paths)
         details_lines = []
@@ -468,24 +493,28 @@ class ApplyGpxProgressDialog(QDialog):
 
         if details_lines:
             self.details_text.setPlainText("\n".join(details_lines))
+            self.details_text.setFixedHeight(140)
             self.details_text.show()
 
         if self._kml_paths:
-            self.show_finder_btn.show()
+            self.show_finder_btn.setVisible(True)
             self.show_finder_btn.setEnabled(True)
 
         self.ok_btn.setEnabled(True)
+        self.ok_btn.setDefault(True)
         self.ok_btn.setFocus()
-        self._sync_height_to_content()
+        self.sync_size_to_content()
 
     def show_error(self, message: str) -> None:
         self.cancel_btn.setEnabled(False)
-        self.status_label.setText("Apply GPX failed:")
+        self.set_status("Apply GPX failed:")
         self.details_text.setPlainText(message)
+        self.details_text.setFixedHeight(140)
         self.details_text.show()
         self.ok_btn.setEnabled(True)
+        self.ok_btn.setDefault(True)
         self.ok_btn.setFocus()
-        self._sync_height_to_content()
+        self.sync_size_to_content()
 
     def _on_cancel(self) -> None:
         self.cancel_requested.emit()
@@ -497,3 +526,79 @@ class ApplyGpxProgressDialog(QDialog):
         import showinfm
 
         showinfm.show_in_file_manager(self._kml_paths)
+
+
+class ClearGpsProgressDialog(ToolFlowDialog):
+    """Progress dialog for clearing GPS coordinates."""
+
+    cancel_requested = Signal()
+
+    def __init__(self, *, total: int, parent=None):
+        self._total = max(0, int(total))
+        workflow = ToolWorkflow(
+            initial_screen="main",
+            screens={
+                "main": ToolScreen(
+                    id="main",
+                    title="Clear GPS",
+                    build=lambda dialog: dialog._build_body(),
+                    buttons=(
+                        ToolButton("cancel", "Cancel"),
+                        ToolButton("ok", "OK", enabled=False),
+                    ),
+                    min_width=520,
+                    show_progress=True,
+                    show_progress_count=False,
+                )
+            },
+            transitions={
+                ("main", "cancel"): lambda dialog, event: dialog._on_cancel(),
+                ("main", "ok"): lambda dialog, event: dialog.accept(),
+            },
+        )
+        super().__init__(workflow, parent=parent)
+        self.cancel_btn = self.button("cancel")
+        self.ok_btn = self.button("ok")
+        self.set_status("Clearing GPS coordinates...")
+        self.progress_bar.setRange(0, self._total)
+        self.progress_bar.setValue(0)
+        self.sync_size_to_content()
+
+    def _build_body(self) -> QWidget:
+        widget = QWidget(self)
+        layout = QVBoxLayout(widget)
+        self.details_text = QTextEdit(widget)
+        self.details_text.setReadOnly(True)
+        self.details_text.hide()
+        layout.addWidget(self.details_text, 1)
+        return widget
+
+    def finish(self, *, processed: int, total: int, cancelled: bool) -> None:
+        if cancelled:
+            self.set_status(
+                f"Clear GPS cancelled. {processed}/{total} photo(s) processed."
+            )
+        else:
+            self.set_status(
+                f"Clear GPS complete. {processed}/{total} photo(s) processed."
+            )
+        self.cancel_btn.setEnabled(False)
+        self.ok_btn.setEnabled(True)
+        self.ok_btn.setDefault(True)
+        self.ok_btn.setFocus()
+        self.sync_size_to_content()
+
+    def show_error(self, message: str) -> None:
+        self.set_status("Clear GPS failed:")
+        self.details_text.setPlainText(message)
+        self.details_text.setFixedHeight(140)
+        self.details_text.show()
+        self.cancel_btn.setEnabled(False)
+        self.ok_btn.setEnabled(True)
+        self.ok_btn.setDefault(True)
+        self.ok_btn.setFocus()
+        self.sync_size_to_content()
+
+    def _on_cancel(self) -> None:
+        self.cancel_requested.emit()
+        self.reject()

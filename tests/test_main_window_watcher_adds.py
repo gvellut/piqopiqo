@@ -168,8 +168,14 @@ def test_watcher_add_batch_refreshes_grid_once_and_registers_media_once(
 
     assert window.media_manager.add_files_calls == [[new_one["path"], new_two["path"]]]
     assert len(set_data_calls) == 1
-    assert sum(1 for item in window.photo_model.all_photos if item.path == new_one["path"]) == 1
-    assert sum(1 for item in window.photo_model.all_photos if item.path == new_two["path"]) == 1
+    assert (
+        sum(1 for item in window.photo_model.all_photos if item.path == new_one["path"])
+        == 1
+    )
+    assert (
+        sum(1 for item in window.photo_model.all_photos if item.path == new_two["path"])
+        == 1
+    )
 
 
 def test_watcher_add_duplicate_events_across_batches_are_idempotent(
@@ -182,12 +188,17 @@ def test_watcher_add_duplicate_events_across_batches_are_idempotent(
     window._on_folder_changes([("added", new_image["path"])])
 
     assert window.media_manager.add_files_calls == [[new_image["path"]]]
-    assert sum(1 for item in window.photo_model.all_photos if item.path == new_image["path"]) == 1
+    assert (
+        sum(
+            1
+            for item in window.photo_model.all_photos
+            if item.path == new_image["path"]
+        )
+        == 1
+    )
 
 
-def test_watcher_add_skips_paths_already_present_in_model(
-    window: MainWindow, tmp_path
-):
+def test_watcher_add_skips_paths_already_present_in_model(window: MainWindow, tmp_path):
     existing_path = window.photo_model.all_photos[0].path
     new_image = _touch_image(tmp_path / "P9994.JPG")
     window.media_manager.add_files_calls.clear()
@@ -200,8 +211,18 @@ def test_watcher_add_skips_paths_already_present_in_model(
     )
 
     assert window.media_manager.add_files_calls == [[new_image["path"]]]
-    assert sum(1 for item in window.photo_model.all_photos if item.path == existing_path) == 1
-    assert sum(1 for item in window.photo_model.all_photos if item.path == new_image["path"]) == 1
+    assert (
+        sum(1 for item in window.photo_model.all_photos if item.path == existing_path)
+        == 1
+    )
+    assert (
+        sum(
+            1
+            for item in window.photo_model.all_photos
+            if item.path == new_image["path"]
+        )
+        == 1
+    )
 
 
 def test_watcher_add_batch_restores_viewport_without_revealing_new_top_item(

@@ -22,8 +22,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .map_links_editor import MapLinksEditor
 from .manual_lenses_editor import ManualLensesEditor
+from .map_links_editor import MapLinksEditor
 from .schema import ChoiceOption, EditorKind
 from .shortcuts_editor import ShortcutsEditor
 from .status_labels_editor import StatusLabelsEditor

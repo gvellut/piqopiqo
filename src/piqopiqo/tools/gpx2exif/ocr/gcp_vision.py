@@ -15,9 +15,7 @@ class GcpVisionClockOcr:
 
     def _configure_gcp(self) -> None:
         if self._gcp_sa_key_path.strip():
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = (
-                self._gcp_sa_key_path.strip()
-            )
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = self._gcp_sa_key_path.strip()
         if self._gcp_project.strip():
             os.environ["GOOGLE_CLOUD_PROJECT"] = self._gcp_project.strip()
 

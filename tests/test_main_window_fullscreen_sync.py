@@ -834,6 +834,7 @@ def test_multi_selection_select_last_viewed_uses_previous_survivor_without_wrap(
     assert window.grid._last_selected_path == "/photos/c.jpg"
     assert window.grid.ensure_visible_paths[-1] == "/photos/c.jpg"
 
+
 def test_eject_updates_grid_immediately_without_waiting_for_close(monkeypatch):
     _patch_settings(monkeypatch)
 

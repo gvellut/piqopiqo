@@ -254,9 +254,7 @@ class WorkspaceWatcherController(QObject):
 
         now = time.monotonic()
         self._suppressed_paths = {
-            path: until
-            for path, until in self._suppressed_paths.items()
-            if until > now
+            path: until for path, until in self._suppressed_paths.items() if until > now
         }
 
         normalized = normalize_workspace_changes(changes)

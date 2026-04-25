@@ -7,7 +7,6 @@ import os
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QThreadPool, Signal
-from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -16,11 +15,11 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QProgressBar,
     QPushButton,
     QTextEdit,
     QToolButton,
     QVBoxLayout,
+    QWidget,
 )
 
 from piqopiqo.cache_paths import get_flickr_cache_dir, get_flickr_token_file_path
@@ -34,6 +33,14 @@ from piqopiqo.ssf.settings_state import (
     UserSettingKey,
     get_runtime_setting,
     get_user_setting,
+)
+from piqopiqo.tools.tool_flow import (
+    ToolButton,
+    ToolFlowDialog,
+    ToolScreen,
+    ToolTaskHandle,
+    ToolWorkflow,
+    sync_dialog_size_to_content,
 )
 
 from .albums import FlickrAlbumPlan, fetch_album_info
@@ -152,7 +159,6 @@ class FlickrPreflightDialog(QDialog):
         count_section.setSpacing(0)
 
         self.count_label = QLabel(self)
-        self.count_label.setTextFormat(Qt.TextFormat.RichText)
         self.count_label.setWordWrap(True)
         count_section.addWidget(self.count_label)
 
@@ -294,13 +300,7 @@ class FlickrPreflightDialog(QDialog):
         self._visible_validation_worker = worker
 
     def _sync_height_to_content(self) -> None:
-        layout = self.layout()
-        if layout is not None:
-            layout.activate()
-        self.adjustSize()
-        target_height = self.sizeHint().height()
-        if target_height > 0:
-            self.setFixedHeight(target_height)
+        sync_dialog_size_to_content(self)
 
     def _set_album_error(self, message: str) -> None:
         if self.album_error_label is None:
@@ -370,7 +370,7 @@ class FlickrPreflightDialog(QDialog):
     def _refresh_scope_state(self) -> None:
         self.selected_use_label_scope = self._get_selected_use_label_scope()
         selected_count = self._scope_count(self.selected_use_label_scope)
-        self.count_label.setText(f"Photos to upload:<br><b>{selected_count}</b>")
+        self.count_label.setText(f"Photos to upload: {selected_count}")
 
         missing_paths: list[str] | None = None
         if self._require_metadata:
@@ -508,41 +508,60 @@ class FlickrPreflightDialog(QDialog):
         super().closeEvent(event)
 
 
-class FlickrLoginProgressDialog(QDialog):
+class FlickrLoginProgressDialog(ToolFlowDialog):
     """Indeterminate login progress dialog."""
 
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Upload to Flickr")
-        self.setModal(True)
-        self.setMinimumWidth(460)
-
         self._worker: FlickrLoginWorker | None = None
         self.error_message: str = ""
         self._finished = False
-
-        layout = QVBoxLayout(self)
-        self.status_label = QLabel("Logging in to Flickr in your browser...")
-        self.status_label.setWordWrap(True)
-        layout.addWidget(self.status_label)
-
-        self.progress = QProgressBar(self)
+        workflow = ToolWorkflow(
+            initial_screen="main",
+            screens={
+                "main": ToolScreen(
+                    id="main",
+                    title="Upload to Flickr",
+                    build=lambda dialog: dialog._build_body(),
+                    buttons=(ToolButton("cancel", "Cancel"),),
+                    min_width=460,
+                    show_progress=True,
+                    show_progress_count=False,
+                )
+            },
+            transitions={
+                ("main", "cancel"): lambda dialog, event: dialog._on_cancel(),
+                ("*", "login_finished"): lambda dialog, event: dialog._on_finished(
+                    *event.args
+                ),
+                ("*", "login_cancelled"): lambda dialog, event: dialog._on_cancelled(),
+                ("*", "login_error"): lambda dialog, event: dialog._on_error(
+                    *event.args
+                ),
+            },
+        )
+        super().__init__(workflow, parent=parent)
+        self.cancel_btn = self.button("cancel")
+        self.progress = self.progress_bar
+        self.set_status("Logging in to Flickr in your browser...")
         self.progress.setRange(0, 0)
-        layout.addWidget(self.progress)
 
-        button_row = QHBoxLayout()
-        button_row.addStretch(1)
-        self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.clicked.connect(self._on_cancel)
-        button_row.addWidget(self.cancel_btn)
-        layout.addLayout(button_row)
+    def _build_body(self) -> QWidget:
+        return QWidget(self)
 
     def start(self, worker: FlickrLoginWorker) -> None:
         self._worker = worker
-        worker.signals.finished.connect(self._on_finished)
-        worker.signals.cancelled.connect(self._on_cancelled)
-        worker.signals.error.connect(self._on_error)
-        QThreadPool.globalInstance().start(worker)
+        self.start_task(
+            "flickr_login",
+            ToolTaskHandle.from_qrunnable(
+                worker=worker,
+                pool=QThreadPool.globalInstance(),
+                signal_map={
+                    worker.signals.finished: "login_finished",
+                    worker.signals.cancelled: "login_cancelled",
+                    worker.signals.error: "login_error",
+                },
+            ),
+        )
 
     def _on_finished(self, _result) -> None:
         self._finished = True
@@ -559,16 +578,16 @@ class FlickrLoginProgressDialog(QDialog):
 
     def _on_cancel(self) -> None:
         if self._worker is not None:
-            self._worker.request_cancel()
+            self.stop_task("flickr_login", cancel=True)
         self.reject()
 
     def closeEvent(self, event) -> None:
         if not self._finished and self._worker is not None:
-            self._worker.request_cancel()
+            self.stop_task("flickr_login", cancel=True)
         super().closeEvent(event)
 
 
-class FlickrUploadProgressDialog(QDialog):
+class FlickrUploadProgressDialog(ToolFlowDialog):
     """Token-validation + upload progress/result dialog."""
 
     manager_started = Signal(object)  # FlickrUploadManager
@@ -586,11 +605,6 @@ class FlickrUploadProgressDialog(QDialog):
         set_folder_album_id_callback,
         parent=None,
     ):
-        super().__init__(parent)
-        self.setWindowTitle("Upload to Flickr")
-        self.setModal(True)
-        self.setMinimumWidth(620)
-
         self._api_key = api_key
         self._api_secret = api_secret
         self._exiftool_path = exiftool_path
@@ -612,60 +626,87 @@ class FlickrUploadProgressDialog(QDialog):
         self.result: FlickrUploadResult | None = None
         self.album_validation_error: str = ""
         self.resolved_album_plan: FlickrAlbumPlan | None = None
+        workflow = ToolWorkflow(
+            initial_screen="main",
+            screens={
+                "main": ToolScreen(
+                    id="main",
+                    title="Upload to Flickr",
+                    build=lambda dialog: dialog._build_body(),
+                    buttons=(
+                        ToolButton("cancel", "Cancel"),
+                        ToolButton("ok", "OK", enabled=False, visible=False),
+                    ),
+                    min_width=620,
+                    show_progress=True,
+                )
+            },
+            transitions={
+                ("main", "cancel"): lambda dialog, event: dialog._on_cancel(),
+                ("main", "ok"): lambda dialog, event: dialog.accept(),
+                ("*", "token_validated"): lambda dialog, event: (
+                    dialog._on_token_validated(*event.args)
+                ),
+                ("*", "validation_cancelled"): (
+                    lambda dialog, event: dialog._on_validation_cancelled()
+                ),
+                ("*", "validation_error"): lambda dialog, event: (
+                    dialog._on_validation_error(*event.args)
+                ),
+                ("*", "album_checked"): lambda dialog, event: dialog._on_album_checked(
+                    *event.args
+                ),
+                ("*", "album_check_cancelled"): (
+                    lambda dialog, event: dialog._on_album_check_cancelled()
+                ),
+                ("*", "album_check_error"): lambda dialog, event: (
+                    dialog._on_album_check_error(*event.args)
+                ),
+                ("*", "manager_stage_changed"): lambda dialog, event: (
+                    dialog._on_stage_changed(*event.args)
+                ),
+                ("*", "manager_progress"): lambda dialog, event: dialog._on_progress(
+                    *event.args
+                ),
+                ("*", "manager_status"): lambda dialog, event: dialog._on_status(
+                    *event.args
+                ),
+                ("*", "manager_album_status"): lambda dialog, event: (
+                    dialog._on_album_status(*event.args)
+                ),
+                ("*", "manager_finished"): lambda dialog, event: dialog._on_finished(
+                    *event.args
+                ),
+            },
+        )
+        super().__init__(workflow, parent=parent)
+        progress_layout = self.progress_row.layout()
+        self.stage_label = progress_layout.itemAt(0).widget()
+        self.progress_text_label = self.progress_count_label
+        self.cancel_btn = self.button("cancel")
+        self.ok_btn = self.button("ok")
+        self._update_stage_label()
+        self.sync_size_to_content()
 
-        layout = QVBoxLayout(self)
+    def _build_body(self) -> QWidget:
+        widget = QWidget(self)
+        layout = QVBoxLayout(widget)
 
-        self.status_label = QLabel("")
+        self.status_label = QLabel("", widget)
         self.status_label.setWordWrap(True)
         self.status_label.hide()
         layout.addWidget(self.status_label)
 
-        stage_row = QHBoxLayout()
-        self.stage_label = QLabel("")
-        self.stage_label.setWordWrap(True)
-        stage_row.addWidget(self.stage_label, 1)
-
-        self.progress_text_label = QLabel("")
-        self.progress_text_label.setAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-        )
-        mono = QFont("menlo")
-        mono.setStyleHint(QFont.StyleHint.Monospace)
-        self.progress_text_label.setFont(mono)
-        self.progress_text_label.hide()
-        stage_row.addWidget(self.progress_text_label)
-        layout.addLayout(stage_row)
-
-        self.progress_bar = QProgressBar(self)
-        self.progress_bar.setRange(0, 0)
-        layout.addWidget(self.progress_bar)
-
-        self.album_action_label = QLabel("")
+        self.album_action_label = QLabel("", widget)
         self.album_action_label.setWordWrap(True)
         self.album_action_label.hide()
         layout.addWidget(self.album_action_label)
 
-        self.details = QTextEdit(self)
+        self.details = QTextEdit(widget)
         self.details.setReadOnly(True)
         self.details.hide()
         layout.addWidget(self.details, 1)
-
-        button_row = QHBoxLayout()
-        button_row.addStretch(1)
-
-        self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.clicked.connect(self._on_cancel)
-        button_row.addWidget(self.cancel_btn)
-
-        self.ok_btn = QPushButton("OK")
-        self.ok_btn.setEnabled(False)
-        self.ok_btn.hide()
-        self.ok_btn.clicked.connect(self.accept)
-        button_row.addWidget(self.ok_btn)
-
-        layout.addLayout(button_row)
-        self._update_stage_label()
-        self._sync_height_to_content()
+        return widget
 
     def _update_stage_label(self) -> None:
         stage_text = self._current_stage.strip() or "-"
@@ -681,15 +722,6 @@ class FlickrUploadProgressDialog(QDialog):
             stage_text = f"{stage_text} - {self._album_action_text}"
         self.stage_label.setText(stage_text)
 
-    def _sync_height_to_content(self) -> None:
-        layout = self.layout()
-        if layout is not None:
-            layout.activate()
-        self.adjustSize()
-        target_height = self.sizeHint().height()
-        if target_height > 0:
-            self.setFixedHeight(target_height)
-
     def start(self) -> None:
         if self._started:
             return
@@ -699,10 +731,18 @@ class FlickrUploadProgressDialog(QDialog):
             api_secret=self._api_secret,
         )
         self._token_worker = worker
-        worker.signals.finished.connect(self._on_token_validated)
-        worker.signals.cancelled.connect(self._on_validation_cancelled)
-        worker.signals.error.connect(self._on_validation_error)
-        QThreadPool.globalInstance().start(worker)
+        self.start_task(
+            "flickr_token_validation",
+            ToolTaskHandle.from_qrunnable(
+                worker=worker,
+                pool=QThreadPool.globalInstance(),
+                signal_map={
+                    worker.signals.finished: "token_validated",
+                    worker.signals.cancelled: "validation_cancelled",
+                    worker.signals.error: "validation_error",
+                },
+            ),
+        )
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
@@ -720,11 +760,8 @@ class FlickrUploadProgressDialog(QDialog):
         self._album_action_text = ""
         self._check_status_text = ""
         self._update_stage_label()
-        self.progress_bar.setRange(0, 0)
-        self.progress_bar.setFormat("")
-        self.progress_text_label.clear()
-        self.progress_text_label.hide()
-        self._sync_height_to_content()
+        self.set_progress(0, 0)
+        self.sync_size_to_content()
 
         album_text = self._album_text.strip()
         if not album_text:
@@ -744,10 +781,18 @@ class FlickrUploadProgressDialog(QDialog):
             ),
         )
         self._album_worker = worker
-        worker.signals.finished.connect(self._on_album_checked)
-        worker.signals.cancelled.connect(self._on_album_check_cancelled)
-        worker.signals.error.connect(self._on_album_check_error)
-        QThreadPool.globalInstance().start(worker)
+        self.start_task(
+            "flickr_album_check",
+            ToolTaskHandle.from_qrunnable(
+                worker=worker,
+                pool=QThreadPool.globalInstance(),
+                signal_map={
+                    worker.signals.finished: "album_checked",
+                    worker.signals.cancelled: "album_check_cancelled",
+                    worker.signals.error: "album_check_error",
+                },
+            ),
+        )
 
     def _on_album_checked(self, plan: FlickrAlbumPlan) -> None:
         self.resolved_album_plan = plan
@@ -759,16 +804,12 @@ class FlickrUploadProgressDialog(QDialog):
 
     def _start_upload_manager(self, album_plan: FlickrAlbumPlan) -> None:
         total_items = max(1, len(self._upload_items))
-        self.progress_bar.setRange(0, total_items)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setFormat(f"0/{total_items}")
-        self.progress_text_label.setText(f"0/{total_items}")
-        self.progress_text_label.show()
+        self.set_progress(0, total_items)
         self._current_stage = FlickrStage.STAGE_UPLOAD.label
         self._album_action_text = ""
         self._check_status_text = ""
         self._update_stage_label()
-        self._sync_height_to_content()
+        self.sync_size_to_content()
 
         manager = FlickrUploadManager(
             api_key=self._api_key,
@@ -784,12 +825,20 @@ class FlickrUploadProgressDialog(QDialog):
         )
         self._manager = manager
         self.manager_started.emit(manager)
-        manager.stage_changed.connect(self._on_stage_changed)
-        manager.progress.connect(self._on_progress)
-        manager.status.connect(self._on_status)
-        manager.album_status.connect(self._on_album_status)
-        manager.finished.connect(self._on_finished)
-        manager.start(self._upload_items)
+        self.start_task(
+            "flickr_upload_manager",
+            ToolTaskHandle.from_signals(
+                start_fn=lambda: manager.start(self._upload_items),
+                cancel_fn=manager.request_cancel,
+                signal_map={
+                    manager.stage_changed: "manager_stage_changed",
+                    manager.progress: "manager_progress",
+                    manager.status: "manager_status",
+                    manager.album_status: "manager_album_status",
+                    manager.finished: "manager_finished",
+                },
+            ),
+        )
 
     def _on_album_check_cancelled(self) -> None:
         self._finished = True
@@ -821,29 +870,19 @@ class FlickrUploadProgressDialog(QDialog):
         self._update_stage_label()
 
         if stage == FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label:
-            self.progress_bar.setRange(0, 0)
-            self.progress_bar.setFormat("")
-            self.progress_text_label.clear()
-            self.progress_text_label.hide()
+            self.set_progress(0, 0)
 
         self.album_action_label.clear()
         self.album_action_label.hide()
-        self._sync_height_to_content()
+        self.sync_size_to_content()
 
     def _on_progress(self, completed: int, total: int) -> None:
         if self._finished:
             return
         if int(total) <= 0:
-            self.progress_bar.setRange(0, 0)
-            self.progress_bar.setFormat("")
-            self.progress_text_label.clear()
-            self.progress_text_label.hide()
+            self.set_progress(0, 0)
             return
-        self.progress_bar.setRange(0, int(total))
-        self.progress_bar.setValue(max(0, int(completed)))
-        self.progress_bar.setFormat(f"{completed}/{total}")
-        self.progress_text_label.setText(f"{completed}/{total}")
-        self.progress_text_label.show()
+        self.set_progress(completed, total)
 
     def _on_status(self, message: str) -> None:
         if self._finished:
@@ -863,7 +902,7 @@ class FlickrUploadProgressDialog(QDialog):
         self._update_stage_label()
         self.album_action_label.clear()
         self.album_action_label.hide()
-        self._sync_height_to_content()
+        self.sync_size_to_content()
 
     def _on_finished(self, result: FlickrUploadResult) -> None:
         self._finished = True
@@ -884,6 +923,7 @@ class FlickrUploadProgressDialog(QDialog):
 
         self.cancel_btn.setEnabled(False)
         self.stage_label.hide()
+        self.progress_row.hide()
         self.progress_bar.hide()
         self.progress_text_label.hide()
         self.album_action_label.clear()
@@ -944,17 +984,18 @@ class FlickrUploadProgressDialog(QDialog):
             self.details.show()
 
         self.ok_btn.setEnabled(True)
-        self.ok_btn.show()
+        self.ok_btn.setVisible(True)
+        self.ok_btn.setDefault(True)
         self.ok_btn.setFocus()
-        self._sync_height_to_content()
+        self.sync_size_to_content()
 
     def _on_cancel(self) -> None:
         if self._token_worker is not None:
-            self._token_worker.request_cancel()
+            self.stop_task("flickr_token_validation", cancel=True)
         if self._album_worker is not None:
-            self._album_worker.request_cancel()
+            self.stop_task("flickr_album_check", cancel=True)
         if self._manager is not None:
-            self._manager.request_cancel()
+            self.stop_task("flickr_upload_manager", cancel=True)
         self.reject()
 
     def closeEvent(self, event) -> None:

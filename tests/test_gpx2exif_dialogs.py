@@ -268,15 +268,16 @@ def test_extract_time_shift_progress_success_shows_clock_and_shift_lines(qapp):
     assert dialog.progress_bar.value() == 1
 
 
-def test_extract_time_shift_progress_uses_gcp_status_text_by_default(
-    qapp, monkeypatch
-):
+def test_extract_time_shift_progress_uses_gcp_status_text_by_default(qapp, monkeypatch):
     monkeypatch.delenv("PIQO_OCR_TIME_SHIFT_PROVIDER", raising=False)
     init_qsettings_store(dyn=True)
 
     dialog = ExtractGpsTimeShiftProgressDialog()
 
-    assert dialog.status_label.text() == "Extracting clock time with Google Cloud Vision..."
+    assert (
+        dialog.status_label.text()
+        == "Extracting clock time with Google Cloud Vision..."
+    )
 
 
 def test_extract_time_shift_progress_uses_apple_status_text_when_selected(

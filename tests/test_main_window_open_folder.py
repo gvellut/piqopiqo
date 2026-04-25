@@ -519,7 +519,7 @@ def test_grid_viewport_restore_prefers_visible_anchor_and_keeps_row():
     assert fake_window.visible_calls == []
 
 
-def test_grid_viewport_restore_falls_back_to_first_visible_selected_when_anchor_not_visible():
+def test_grid_viewport_restore_uses_first_visible_selected_when_no_anchor():
     fake_window = _FakeFilterRestoreWindow(["/a.jpg", "/b.jpg", "/c.jpg"])
     snapshot = {
         "photo_list_paths": ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],
@@ -535,7 +535,7 @@ def test_grid_viewport_restore_falls_back_to_first_visible_selected_when_anchor_
     assert fake_window.visible_calls == []
 
 
-def test_grid_viewport_restore_falls_back_to_first_visible_path_when_no_visible_selection_survives():
+def test_grid_viewport_restore_uses_first_visible_path_when_selection_gone():
     fake_window = _FakeFilterRestoreWindow(["/a.jpg", "/c.jpg"])
     snapshot = {
         "photo_list_paths": ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],
@@ -713,7 +713,7 @@ def test_toggle_right_sidebar_restores_from_manual_collapsed_state():
     assert fake_window._main_splitter.set_sizes_calls == [[820, 180]]
 
 
-def test_capture_sidebar_toggle_viewport_context_keeps_first_visible_when_anchor_exists():
+def test_capture_sidebar_toggle_viewport_context_keeps_first_visible():
     fake_window = _FakeSidebarToggleViewportWindow(
         _FakeSidebarToggleGrid(
             ["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"],

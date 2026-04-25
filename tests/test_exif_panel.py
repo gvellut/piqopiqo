@@ -95,6 +95,8 @@ def test_exif_panel_custom_fields_are_appended_and_deduped(qapp, monkeypatch):
 
     keys = [label.toolTip() for label in panel.field_labels]
     assert keys == [
+        "EXIF:Model",
+        "EXIF:LensModel",
         "EXIF:FocalLength",
         "EXIF:FocalLengthIn35mmFormat",
         "Composite:ShutterSpeed",
@@ -103,7 +105,6 @@ def test_exif_panel_custom_fields_are_appended_and_deduped(qapp, monkeypatch):
         "EXIF:ExposureCompensation",
         "File:FileName",
         "File:FileSize",
-        "EXIF:LensModel",
     ]
 
     labels_by_key = {

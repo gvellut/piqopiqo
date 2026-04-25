@@ -14,20 +14,19 @@ import threading
 from typing import Any
 
 from attrs import define
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QProgressBar,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
 from piqopiqo.dialogs.settings_redirect import (
@@ -39,6 +38,13 @@ from piqopiqo.ssf.settings_state import (
     UserSettingKey,
     get_state,
     get_user_setting,
+)
+from piqopiqo.tools.tool_flow import (
+    ToolButton,
+    ToolFlowDialog,
+    ToolScreen,
+    ToolTaskHandle,
+    ToolWorkflow,
 )
 
 logger = logging.getLogger(__name__)
@@ -549,7 +555,7 @@ class CopySdInputDialog(QDialog):
         )
 
 
-class CopySdProgressDialog(QDialog):
+class CopySdProgressDialog(ToolFlowDialog):
     _eject_done = Signal(str)  # empty string on success, error message on failure
 
     def __init__(
@@ -560,11 +566,6 @@ class CopySdProgressDialog(QDialog):
         should_eject: bool,
         parent=None,
     ):
-        super().__init__(parent)
-        self.setWindowTitle("Copy from SD")
-        self.setModal(True)
-        self.setMinimumWidth(520)
-
         self._volume = volume
         self._should_eject = should_eject
         self._worker = CopySdWorker(volume, dates, target_dirs)
@@ -574,57 +575,53 @@ class CopySdProgressDialog(QDialog):
         self._copied_count = 0
         self._was_cancelled = False
 
-        layout = QVBoxLayout(self)
-
-        status_row = QHBoxLayout()
-        self.status_label = QLabel("Preparing copy...")
-        self.status_label.setWordWrap(True)
-        status_row.addWidget(self.status_label, 1)
-
-        self.progress_text_label = QLabel("")
-        self.progress_text_label.setAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        workflow = ToolWorkflow(
+            initial_screen="running",
+            screens={
+                "running": ToolScreen(
+                    id="running",
+                    title="Copy from SD",
+                    build=lambda dialog: dialog._build_body(),
+                    buttons=(
+                        ToolButton("cancel", "Cancel"),
+                        ToolButton("ok", "OK", enabled=False),
+                    ),
+                    min_width=520,
+                    show_progress=True,
+                ),
+                "result": ToolScreen(
+                    id="result",
+                    title="Copy from SD",
+                    build=lambda dialog: dialog._build_body(),
+                    buttons=(
+                        ToolButton("cancel", "Cancel"),
+                        ToolButton("ok", "OK", enabled=True, default=True),
+                    ),
+                    min_width=520,
+                    show_progress=True,
+                ),
+            },
+            transitions={
+                ("running", "cancel"): lambda dialog, event: dialog._on_cancel(),
+                ("running", "ok"): lambda dialog, event: dialog._on_ok(),
+                ("result", "cancel"): lambda dialog, event: dialog._on_cancel(),
+                ("result", "ok"): lambda dialog, event: dialog._on_ok(),
+                ("*", "status"): lambda dialog, event: dialog._on_status(*event.args),
+                ("*", "plan_ready"): lambda dialog, event: dialog._on_plan_ready(
+                    *event.args
+                ),
+                ("*", "progress"): lambda dialog, event: dialog._on_progress(
+                    *event.args
+                ),
+                ("*", "error"): lambda dialog, event: dialog._on_error(*event.args),
+                ("*", "finished"): lambda dialog, event: dialog._on_finished(
+                    *event.args
+                ),
+            },
         )
-        mono = QFont("menlo")
-        mono.setStyleHint(QFont.StyleHint.Monospace)
-        self.progress_text_label.setFont(mono)
-        status_row.addWidget(self.progress_text_label)
-        layout.addLayout(status_row)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setTextVisible(True)
+        super().__init__(workflow, parent=parent)
         self.progress_bar.setRange(0, 0)
-        layout.addWidget(self.progress_bar)
-
-        self.error_label = QLabel()
-        self.error_label.setStyleSheet("color: red;")
-        self.error_label.hide()
-        layout.addWidget(self.error_label)
-
-        self.eject_checkbox = QCheckBox("Eject SD card")
-        self.eject_checkbox.setChecked(should_eject)
-        self.eject_checkbox.hide()
-        layout.addWidget(self.eject_checkbox)
-
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-
-        self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.clicked.connect(self._on_cancel)
-        btn_layout.addWidget(self.cancel_btn)
-
-        self.ok_btn = QPushButton("OK")
-        self.ok_btn.setEnabled(False)
-        self.ok_btn.clicked.connect(self._on_ok)
-        btn_layout.addWidget(self.ok_btn)
-
-        layout.addLayout(btn_layout)
-
-        self._worker.signals.status.connect(self._on_status)
-        self._worker.signals.plan_ready.connect(self._on_plan_ready)
-        self._worker.signals.progress.connect(self._on_progress)
-        self._worker.signals.error.connect(self._on_error)
-        self._worker.signals.finished.connect(self._on_finished)
+        self.set_status("Preparing copy...")
         self._eject_done.connect(self._on_eject_done)
 
     @property
@@ -635,11 +632,47 @@ class CopySdProgressDialog(QDialog):
     def was_cancelled(self) -> bool:
         return bool(self._was_cancelled)
 
+    def transition_to(self, screen_id: str) -> None:
+        super().transition_to(screen_id)
+        self.status_label = self.status_label
+        self.progress_text_label = self.progress_count_label
+        self.cancel_btn = self.button("cancel")
+        self.ok_btn = self.button("ok")
+
+    def _build_body(self) -> QWidget:
+        widget = QWidget(self)
+        layout = QVBoxLayout(widget)
+
+        self.error_label = QLabel(widget)
+        self.error_label.setStyleSheet("color: red;")
+        self.error_label.hide()
+        layout.addWidget(self.error_label)
+
+        self.eject_checkbox = QCheckBox("Eject SD card", widget)
+        self.eject_checkbox.setChecked(self._should_eject)
+        self.eject_checkbox.hide()
+        layout.addWidget(self.eject_checkbox)
+
+        return widget
+
     def start(self):
         if self._started:
             return
         self._started = True
-        QThreadPool.globalInstance().start(self._worker)
+        self.start_task(
+            "copy_sd",
+            ToolTaskHandle.from_qrunnable(
+                worker=self._worker,
+                pool=QThreadPool.globalInstance(),
+                signal_map={
+                    self._worker.signals.status: "status",
+                    self._worker.signals.plan_ready: "plan_ready",
+                    self._worker.signals.progress: "progress",
+                    self._worker.signals.error: "error",
+                    self._worker.signals.finished: "finished",
+                },
+            ),
+        )
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -651,29 +684,16 @@ class CopySdProgressDialog(QDialog):
         )
 
     def _on_status(self, message: str):
-        self.status_label.setText(message)
+        self.set_status(message)
 
     def _on_plan_ready(self, total: int):
         if total <= 0:
-            self.progress_bar.setRange(0, 1)
-            self.progress_bar.setValue(0)
-            self.progress_bar.setFormat("0/0")
-            self._set_progress_counter(0, 0)
+            self.set_progress(0, 0)
             return
-        self.progress_bar.setRange(0, total)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setFormat(f"0/{total}")
-        self._set_progress_counter(0, total)
+        self.set_progress(0, total)
 
     def _on_progress(self, completed: int, total: int):
-        if total <= 0:
-            self.progress_bar.setValue(0)
-            self.progress_bar.setFormat("0/0")
-            self._set_progress_counter(0, 0)
-            return
-        self.progress_bar.setValue(completed)
-        self.progress_bar.setFormat(f"{completed}/{total}")
-        self._set_progress_counter(completed, total)
+        self.set_progress(completed, total)
 
     def _on_error(self, message: str):
         self._error_count += 1
@@ -685,6 +705,7 @@ class CopySdProgressDialog(QDialog):
         self._finished = True
         self._copied_count = max(0, int(copied))
         self._was_cancelled = bool(cancelled)
+        self.transition_to("result")
         if total == 0:
             status = "No images found for the selected date(s)."
         elif cancelled:
@@ -694,9 +715,8 @@ class CopySdProgressDialog(QDialog):
         if error_count:
             status += f" {error_count} error(s)."
 
-        self.status_label.setText(status)
-        self.progress_bar.setValue(min(copied, total) if total else 0)
-        self._set_progress_counter(min(copied, total) if total else 0, total)
+        self.set_status(status)
+        self.set_progress(min(copied, total) if total else 0, total)
         self.cancel_btn.setEnabled(False)
         self.ok_btn.setEnabled(True)
         self.ok_btn.setDefault(True)
@@ -708,7 +728,7 @@ class CopySdProgressDialog(QDialog):
         if self.eject_checkbox.isChecked() and self.eject_checkbox.isVisible():
             self.ok_btn.setEnabled(False)
             self.eject_checkbox.setEnabled(False)
-            self.status_label.setText(f"Ejecting {self._volume.name}...")
+            self.set_status(f"Ejecting {self._volume.name}...")
             self._eject_thread = threading.Thread(
                 target=self._eject_in_background, daemon=True
             )
@@ -737,9 +757,9 @@ class CopySdProgressDialog(QDialog):
         if self._finished:
             self.accept()
             return
-        self.status_label.setText("Cancelling...")
+        self.set_status("Cancelling...")
         self.cancel_btn.setEnabled(False)
-        self._worker.request_cancel()
+        self.stop_task("copy_sd", cancel=True)
 
     def closeEvent(self, event):
         if not self._finished:

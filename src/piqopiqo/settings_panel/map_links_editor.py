@@ -218,8 +218,8 @@ class _MapLinkOptionDialog(QDialog):
         for option in PREDEFINED_MAP_LINK_OPTIONS:
             action = menu.addAction(option.name)
             action.triggered.connect(
-                lambda _checked=False, current_option=option: self._apply_predefined_option(
-                    current_option
+                lambda _checked=False, current_option=option: (
+                    self._apply_predefined_option(current_option)
                 )
             )
         self._predefined_menu = menu

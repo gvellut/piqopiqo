@@ -8,8 +8,7 @@ from types import SimpleNamespace
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 import pytest
 
-from piqopiqo.ssf.settings_state import StateKey
-from piqopiqo.ssf.settings_state import UserSettingKey
+from piqopiqo.ssf.settings_state import StateKey, UserSettingKey
 from piqopiqo.tools.copy_sd import (
     CopySdProgressDialog,
     PhotoVolume,

@@ -2374,7 +2374,9 @@ class MainWindow(QMainWindow):
 
     def _get_recent_folder_menu_limit(self) -> int:
         try:
-            limit = int(get_runtime_setting(RuntimeSettingKey.RECENT_FOLDERS_MENU_LIMIT))
+            limit = int(
+                get_runtime_setting(RuntimeSettingKey.RECENT_FOLDERS_MENU_LIMIT)
+            )
         except (TypeError, ValueError):
             return 10
         return max(0, limit)
@@ -2480,8 +2482,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Open Recent",
-                "The selected recent folder could not be found.\n\n"
-                f"{missing_path}",
+                f"The selected recent folder could not be found.\n\n{missing_path}",
             )
             return
 
