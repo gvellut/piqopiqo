@@ -438,7 +438,9 @@ def _deserialize_time_shift_ocr_provider(data: Any) -> TimeShiftOcrProvider:
     try:
         return TimeShiftOcrProvider[raw]
     except KeyError:
-        return TimeShiftOcrProvider.GCP_VISION
+        return _RUNTIME_SETTING_REGISTRY[
+            RuntimeSettingKey.OCR_TIME_SHIFT_PROVIDER
+        ].default
 
 
 def _deserialize_column_stretch(data: Any) -> tuple[int, int]:
@@ -737,7 +739,7 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
         read_type=int,
     ),
     RuntimeSettingKey.OCR_TIME_SHIFT_PROVIDER: SettingDef(
-        default=TimeShiftOcrProvider.GCP_VISION,
+        default=TimeShiftOcrProvider.APPLE_VISION,
         read_type=str,
         env_parser=_deserialize_time_shift_ocr_provider,
         deserializer=_deserialize_time_shift_ocr_provider,

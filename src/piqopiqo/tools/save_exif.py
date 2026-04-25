@@ -65,8 +65,8 @@ class SaveExifDialog(ToolFlowDialog):
                     title="Save EXIF Metadata",
                     build=lambda dialog: dialog._build_body(),
                     buttons=(
-                        ToolButton("launch", "Launch", default=True),
                         ToolButton("cancel", "Cancel"),
+                        ToolButton("launch", "Launch", default=True),
                     ),
                     min_width=500,
                 ),
@@ -105,6 +105,7 @@ class SaveExifDialog(ToolFlowDialog):
         )
         super().__init__(workflow, parent=parent)
         self._update_confirmation_text()
+        self.sync_size_to_content()
 
     def _build_body(self) -> QWidget:
         widget = QWidget(self)
@@ -122,7 +123,7 @@ class SaveExifDialog(ToolFlowDialog):
         self.error_text = QTextEdit(widget)
         self.error_text.setReadOnly(True)
         self.error_text.hide()
-        layout.addWidget(self.error_text, 1)
+        layout.addWidget(self.error_text)
 
         return widget
 
@@ -237,7 +238,7 @@ class SaveExifDialog(ToolFlowDialog):
             self.error_text.setPlainText("\n".join(self._error_lines))
             self.error_text.setFixedHeight(120)
             self.error_text.show()
-            self.sync_size_to_content()
+        self.sync_size_to_content()
 
     def get_processed_paths(self) -> list[str]:
         """Get list of file paths that were successfully processed."""

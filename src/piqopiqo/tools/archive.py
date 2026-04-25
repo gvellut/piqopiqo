@@ -365,7 +365,7 @@ class ArchiveDialog(ToolFlowDialog):
         self.details_text = QTextEdit(widget)
         self.details_text.setReadOnly(True)
         self.details_text.hide()
-        layout.addWidget(self.details_text, 1)
+        layout.addWidget(self.details_text)
 
         return widget
 

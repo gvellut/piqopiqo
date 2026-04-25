@@ -30,6 +30,7 @@ from piqopiqo.tools.tool_flow import (
     ToolScreen,
     ToolTaskHandle,
     ToolWorkflow,
+    sync_dialog_size_to_content,
 )
 
 from .constants import (
@@ -100,7 +101,7 @@ class ExtractGpsTimeShiftConfirmDialog(QDialog):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
-        self.setFixedSize(self.size())
+        sync_dialog_size_to_content(self, sizing="fixed")
 
 
 class ExtractGpsTimeShiftProgressDialog(ToolFlowDialog):
@@ -115,7 +116,6 @@ class ExtractGpsTimeShiftProgressDialog(ToolFlowDialog):
                 "running": ToolScreen(
                     id="running",
                     title="Extract GPS Time shift",
-                    build=lambda dialog: dialog._build_body(),
                     buttons=(
                         ToolButton("cancel", "Cancel"),
                         ToolButton("ok", "OK", enabled=False, visible=False),
@@ -135,8 +135,6 @@ class ExtractGpsTimeShiftProgressDialog(ToolFlowDialog):
                         ),
                     ),
                     min_width=460,
-                    show_progress=True,
-                    show_progress_count=False,
                 ),
             },
             transitions={
@@ -192,8 +190,6 @@ class ExtractGpsTimeShiftProgressDialog(ToolFlowDialog):
     def _on_success(self, extracted_clock: str, time_shift: str) -> None:
         self._result_shift = time_shift
         self.transition_to("result")
-        self.set_progress(1, 1)
-        self.set_status("Extraction done.")
         self.result_label.setStyleSheet("")
         self.result_label.setText(
             f"Extracted clock: {extracted_clock}\nComputed time shift: {time_shift}"
@@ -205,8 +201,6 @@ class ExtractGpsTimeShiftProgressDialog(ToolFlowDialog):
     def _on_error(self, message: str) -> None:
         self._result_shift = None
         self.transition_to("result")
-        self.set_progress(1, 1)
-        self.set_status("Extraction failed:")
         self.result_label.setStyleSheet("color: red;")
         self.result_label.setText(message)
         self.result_label.show()
@@ -315,6 +309,9 @@ class ApplyGpxDialog(QDialog):
                 "KML folder is not set in Settings. KML will be written to the "
                 "loaded photo root folder."
             )
+            self.kml_warning.show()
+        else:
+            self.kml_warning.hide()
         layout.addWidget(self.kml_warning)
 
         buttons = QDialogButtonBox(
@@ -330,7 +327,7 @@ class ApplyGpxDialog(QDialog):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
-        self.setFixedSize(self.size())
+        sync_dialog_size_to_content(self, sizing="fixed")
 
     def _resolve_browse_start_dir(self) -> str:
         current_value = self.gpx_path_edit.text().strip()
@@ -455,7 +452,7 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
         self.details_text = QTextEdit(widget)
         self.details_text.setReadOnly(True)
         self.details_text.hide()
-        layout.addWidget(self.details_text, 1)
+        layout.addWidget(self.details_text)
 
         return widget
 
@@ -570,7 +567,7 @@ class ClearGpsProgressDialog(ToolFlowDialog):
         self.details_text = QTextEdit(widget)
         self.details_text.setReadOnly(True)
         self.details_text.hide()
-        layout.addWidget(self.details_text, 1)
+        layout.addWidget(self.details_text)
         return widget
 
     def finish(self, *, processed: int, total: int, cancelled: bool) -> None:

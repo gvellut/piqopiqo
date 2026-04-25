@@ -416,3 +416,7 @@ Always reply in English even if the request is in French.
 When creating dialogs : do not just center the labels and the fields and leave the sides empty. Maximise the use of space : The labels must be aligned to the left, the fields must take the reamining space and aligned on the left. Just add some space between the labels and the fields to make that happen.
 
 When using the OK Cancel buttons : Always put the OK on the right (or other positive action) and the Cancel on the left.
+
+## Tests
+
+When doing refactoring, it is possible the code was changed by the user: config values changed, enum members changed. And the test was not updated. Then ascertain with the user that the change is intended. !!!! IN THAT CASE, DO NOT CHANGE THE CODE TO MAKE THE TESTS PASS !!!!! Especially, when the user requests a change that has nothing to do with the test, it is of paramount importance that you ascertain the intention of the change.

@@ -485,13 +485,17 @@ def test_archive_dialog_exif_progress_updates_counter_and_bar(
         watcher_control=watcher_control,
     )
 
+    dialog.show()
+    qapp.processEvents()
     dialog.save_exif_checkbox.setChecked(True)
     dialog._start_archive()
     window.media_manager.write_progress.emit(1, 3)
+    qapp.processEvents()
 
     assert dialog.progress_bar.value() == 1
     assert dialog.progress_bar.format() == "1/3"
     assert dialog.progress_count_label.text() == "1/3"
+    assert dialog.ok_btn.height() >= dialog.ok_btn.sizeHint().height()
 
     dialog._cancel_exif_stage()
 
@@ -525,6 +529,34 @@ def test_archive_dialog_finished_state_keeps_current_width(
     qapp.processEvents()
 
     assert dialog.width() == 760
+
+    dialog.close()
+
+
+def test_archive_dialog_finished_state_shows_summary_and_clickable_ok(
+    qapp,
+    settings_store,  # noqa: ARG001
+):
+    window = _FakeArchiveWindow()
+    item = _item("/photos/root/a.jpg")
+    item.db_metadata = {"title": "Title"}
+    dialog = ArchiveDialog(
+        window,
+        root_folder="/photos/root",
+        archive_path="/archive/root",
+        items=[item],
+        source_folders=["/photos/root"],
+    )
+
+    dialog.show()
+    qapp.processEvents()
+    dialog._show_finished_result(text="Archive complete.\nMoved to:\n/archive/root")
+    qapp.processEvents()
+
+    assert dialog.summary_label.isVisible() is True
+    assert dialog.summary_label.height() >= dialog.summary_label.sizeHint().height()
+    assert dialog.ok_btn.isVisible() is True
+    assert dialog.ok_btn.height() >= dialog.ok_btn.sizeHint().height()
 
     dialog.close()
 

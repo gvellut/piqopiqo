@@ -174,7 +174,9 @@ def test_preflight_label_scope_defaults_checked_when_label_scope_available(
     assert dialog.scope_checkbox.isChecked() is True
     assert dialog.count_label.text() == "Photos to upload: 2"
     assert dialog.selected_use_label_scope is True
-    assert dialog.layout().itemAt(0).widget() is dialog.scope_checkbox
+    scope_layout = dialog.layout().itemAt(0).layout()
+    assert scope_layout is not None
+    assert scope_layout.itemAt(0).widget() is dialog.scope_checkbox
 
 
 def test_preflight_label_scope_disabled_when_no_label_matches(qapp) -> None:  # noqa: ARG001
@@ -222,9 +224,12 @@ def test_preflight_scope_checkbox_is_first_and_warning_stack_has_no_gap(
 
     root_layout = dialog.layout()
     assert root_layout is not None
+    scope_layout = root_layout.itemAt(0).layout()
+    assert scope_layout is not None
     assert dialog.scope_checkbox is not None
-    assert root_layout.itemAt(0).widget() is dialog.scope_checkbox
-    count_layout = root_layout.itemAt(2).layout()
+    assert scope_layout.itemAt(0).widget() is dialog.scope_checkbox
+    assert scope_layout.spacing() == 0
+    count_layout = root_layout.itemAt(1).layout()
     assert count_layout is not None
     assert count_layout.spacing() == 0
 

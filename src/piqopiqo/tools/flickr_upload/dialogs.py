@@ -128,6 +128,10 @@ class FlickrPreflightDialog(QDialog):
         self.scope_checkbox: QCheckBox | None = None
         self.label_scope_warning_label: QLabel | None = None
         if self._has_label_scope_toggle:
+            scope_section = QVBoxLayout()
+            scope_section.setContentsMargins(0, 0, 0, 0)
+            scope_section.setSpacing(0)
+
             checkbox = QCheckBox(
                 f"Upload all the {self._label_override_text} images",
                 self,
@@ -142,7 +146,7 @@ class FlickrPreflightDialog(QDialog):
                 self.selected_use_label_scope = False
             checkbox.blockSignals(False)
             self.scope_checkbox = checkbox
-            layout.addWidget(checkbox)
+            scope_section.addWidget(checkbox)
 
             label_scope_warning = QLabel("No image with label", self)
             label_scope_warning.setStyleSheet("color: red;")
@@ -152,7 +156,8 @@ class FlickrPreflightDialog(QDialog):
             else:
                 label_scope_warning.hide()
             self.label_scope_warning_label = label_scope_warning
-            layout.addWidget(label_scope_warning)
+            scope_section.addWidget(label_scope_warning)
+            layout.addLayout(scope_section)
 
         count_section = QVBoxLayout()
         count_section.setContentsMargins(0, 0, 0, 0)
@@ -224,6 +229,7 @@ class FlickrPreflightDialog(QDialog):
             self.album_error_label.setStyleSheet("color: red;")
             self.album_error_label.setWordWrap(True)
             album_info_layout.addWidget(self.album_error_label)
+            layout.addSpacing(8)
             layout.addWidget(self.album_info_group)
             self._set_album_display_plan(
                 album_display_plan if album_display_plan is not None else None,
@@ -705,7 +711,7 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         self.details = QTextEdit(widget)
         self.details.setReadOnly(True)
         self.details.hide()
-        layout.addWidget(self.details, 1)
+        layout.addWidget(self.details)
         return widget
 
     def _update_stage_label(self) -> None:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QObject, QRunnable, Signal
-from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QTextEdit, QVBoxLayout, QWidget
 import pytest
 
 from piqopiqo.tools.tool_flow import (
@@ -122,6 +122,81 @@ def test_content_sizing_can_preserve_current_width(qapp):
 
     assert dialog.width() == 720
     assert dialog.minimumHeight() == dialog.maximumHeight() == dialog.height()
+
+
+def test_none_body_does_not_reserve_space_above_progress(qapp):
+    workflow = ToolWorkflow(
+        initial_screen="progress",
+        screens={
+            "progress": ToolScreen(
+                id="progress",
+                build=lambda _dialog: None,
+                buttons=(ToolButton("cancel", "Cancel"),),
+                show_progress=True,
+            )
+        },
+    )
+
+    dialog = ToolFlowDialog(workflow)
+    dialog.set_status("Working...")
+    dialog.show()
+    qapp.processEvents()
+
+    assert dialog._content_host.isHidden() is True
+    assert (
+        dialog.progress_row.geometry().top()
+        <= dialog.layout().contentsMargins().top()
+    )
+
+
+def test_hidden_body_children_do_not_reserve_height(qapp):
+    def build(_dialog: ToolFlowDialog) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        hidden_details = QTextEdit(widget)
+        hidden_details.hide()
+        layout.addWidget(hidden_details)
+        return widget
+
+    workflow = ToolWorkflow(
+        initial_screen="progress",
+        screens={
+            "progress": ToolScreen(
+                id="progress",
+                build=build,
+                buttons=(ToolButton("cancel", "Cancel"),),
+                show_progress=True,
+            )
+        },
+    )
+
+    dialog = ToolFlowDialog(workflow)
+    dialog.set_status("Working...")
+    dialog.show()
+    qapp.processEvents()
+
+    assert dialog._content_host.isHidden() is True
+
+
+def test_non_progress_screen_ignores_late_progress_calls(qapp):
+    workflow = ToolWorkflow(
+        initial_screen="result",
+        screens={
+            "result": ToolScreen(
+                id="result",
+                build=lambda _dialog: _widget_with_text("Done"),
+                buttons=(ToolButton("ok", "OK"),),
+                show_progress=False,
+            )
+        },
+    )
+
+    dialog = ToolFlowDialog(workflow)
+    dialog.set_status("Should stay hidden")
+    dialog.set_progress(1, 1)
+
+    assert dialog.progress_row.isHidden() is True
+    assert dialog.progress_bar.isHidden() is True
 
 
 class _Signals(QObject):

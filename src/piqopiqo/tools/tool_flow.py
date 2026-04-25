@@ -20,6 +20,176 @@ from PySide6.QtWidgets import (
 )
 
 logger = logging.getLogger(__name__)
+_QWIDGETSIZE_MAX = 16777215
+_SIZE_CONSTRAINT_PROPERTY = "_tool_flow_size_constraints"
+
+
+def _clamp_dialog_width(dialog: QDialog, width: int) -> int:
+    minimum_width = max(0, dialog.minimumWidth())
+    maximum_width = dialog.maximumWidth()
+    bounded = max(int(width), minimum_width)
+    if 0 < maximum_width < _QWIDGETSIZE_MAX:
+        bounded = min(bounded, maximum_width)
+    return bounded
+
+
+def _release_applied_size_constraints(dialog: QDialog) -> None:
+    constraints = dialog.property(_SIZE_CONSTRAINT_PROPERTY)
+    dialog.setProperty(_SIZE_CONSTRAINT_PROPERTY, None)
+    if not isinstance(constraints, dict):
+        return
+    if constraints.get("width"):
+        dialog.setMinimumWidth(int(constraints["min_width"]))
+        dialog.setMaximumWidth(int(constraints["max_width"]))
+    if constraints.get("height"):
+        dialog.setMinimumHeight(int(constraints["min_height"]))
+        dialog.setMaximumHeight(int(constraints["max_height"]))
+
+
+def _invalidate_layout_tree(widget: QWidget) -> None:
+    widget.updateGeometry()
+    layout = widget.layout()
+    if layout is None:
+        return
+    layout.invalidate()
+    for index in range(layout.count()):
+        item = layout.itemAt(index)
+        child_layout = item.layout()
+        if child_layout is not None:
+            child_layout.invalidate()
+        child_widget = item.widget()
+        if child_widget is not None:
+            _invalidate_layout_tree(child_widget)
+
+
+def _activate_layout_tree(widget: QWidget) -> None:
+    layout = widget.layout()
+    if layout is None:
+        return
+    for index in range(layout.count()):
+        item = layout.itemAt(index)
+        child_widget = item.widget()
+        if child_widget is not None:
+            _activate_layout_tree(child_widget)
+        child_layout = item.layout()
+        if child_layout is not None:
+            child_layout.activate()
+    layout.activate()
+
+
+def _polish_widget_tree(widget: QWidget) -> None:
+    widget.ensurePolished()
+    for child in widget.findChildren(QWidget):
+        child.ensurePolished()
+
+
+def _layout_has_visible_content(layout) -> bool:
+    for index in range(layout.count()):
+        item = layout.itemAt(index)
+        child_widget = item.widget()
+        if child_widget is not None and not child_widget.isHidden():
+            return True
+        child_layout = item.layout()
+        if child_layout is not None and _layout_has_visible_content(child_layout):
+            return True
+        spacer = item.spacerItem()
+        if spacer is not None:
+            hint = spacer.sizeHint()
+            if hint.width() > 0 or hint.height() > 0:
+                return True
+    return False
+
+
+def _widget_has_visible_content(widget: QWidget) -> bool:
+    layout = widget.layout()
+    if layout is None:
+        return True
+    return _layout_has_visible_content(layout)
+
+
+def _normalize_body_widget(widget: QWidget) -> None:
+    layout = widget.layout()
+    if layout is not None:
+        layout.setContentsMargins(0, 0, 0, 0)
+
+
+def _height_for_width(dialog: QDialog, *, width: int, fallback_height: int) -> int:
+    minimum_height = int(dialog.minimumSizeHint().height())
+    layout = dialog.layout()
+    if layout is not None and layout.hasHeightForWidth():
+        height_for_width = layout.totalHeightForWidth(width)
+        if height_for_width > 0:
+            return max(int(height_for_width), minimum_height)
+    if fallback_height > 0:
+        return max(int(fallback_height), minimum_height)
+    return minimum_height
+
+
+def _clamp_dialog_height(dialog: QDialog, height: int) -> int:
+    minimum_height = max(0, dialog.minimumHeight())
+    maximum_height = dialog.maximumHeight()
+    bounded = max(int(height), minimum_height)
+    if 0 < maximum_height < _QWIDGETSIZE_MAX:
+        bounded = min(bounded, maximum_height)
+    return bounded
+
+
+def _apply_dialog_size_to_content(
+    dialog: QDialog,
+    *,
+    sizing: str,
+    preserve_width: bool,
+) -> None:
+    if sizing == "free":
+        return
+
+    _release_applied_size_constraints(dialog)
+    _polish_widget_tree(dialog)
+    _invalidate_layout_tree(dialog)
+    _activate_layout_tree(dialog)
+
+    size_hint = dialog.sizeHint()
+    base_width = (
+        dialog.width()
+        if preserve_width and dialog.isVisible()
+        else size_hint.width()
+    )
+    target_width = _clamp_dialog_width(
+        dialog,
+        max(int(base_width), int(dialog.minimumSizeHint().width())),
+    )
+    target_height = _height_for_width(
+        dialog,
+        width=target_width,
+        fallback_height=size_hint.height(),
+    )
+    target_height = _clamp_dialog_height(dialog, target_height)
+    constraints: dict[str, int | bool] = {
+        "height": True,
+        "min_height": dialog.minimumHeight(),
+        "max_height": dialog.maximumHeight(),
+    }
+
+    if sizing == "fixed":
+        constraints.update(
+            {
+                "width": True,
+                "min_width": dialog.minimumWidth(),
+                "max_width": dialog.maximumWidth(),
+            }
+        )
+        dialog.resize(target_width, target_height)
+        dialog.setMinimumWidth(target_width)
+        dialog.setMaximumWidth(target_width)
+        dialog.setMinimumHeight(target_height)
+        dialog.setMaximumHeight(target_height)
+        dialog.setProperty(_SIZE_CONSTRAINT_PROPERTY, constraints)
+        return
+
+    dialog.resize(target_width, target_height)
+    dialog.setMinimumHeight(target_height)
+    dialog.setMaximumHeight(target_height)
+    dialog.setProperty(_SIZE_CONSTRAINT_PROPERTY, constraints)
 
 
 def sync_dialog_size_to_content(
@@ -29,36 +199,11 @@ def sync_dialog_size_to_content(
     preserve_width: bool = False,
 ) -> None:
     """Resize a dialog from its current visible content."""
-    if sizing == "free":
-        return
-
-    dialog.setMinimumHeight(0)
-    dialog.setMaximumHeight(16777215)
-    layout = dialog.layout()
-    if layout is not None:
-        layout.activate()
-
-    if sizing == "fixed":
-        dialog.adjustSize()
-        dialog.setFixedSize(dialog.sizeHint())
-        return
-
-    if preserve_width:
-        current_width = max(dialog.width(), dialog.minimumWidth())
-        target_height = dialog.sizeHint().height()
-        if layout is not None and layout.hasHeightForWidth():
-            height_for_width = layout.totalHeightForWidth(current_width)
-            if height_for_width > 0:
-                target_height = height_for_width
-        if target_height > 0:
-            dialog.resize(current_width, target_height)
-            dialog.setFixedHeight(target_height)
-        return
-
-    dialog.adjustSize()
-    target_height = dialog.sizeHint().height()
-    if target_height > 0:
-        dialog.setFixedHeight(target_height)
+    _apply_dialog_size_to_content(
+        dialog,
+        sizing=sizing,
+        preserve_width=preserve_width,
+    )
 
 
 @dataclass(frozen=True)
@@ -218,6 +363,7 @@ class ToolFlowDialog(QDialog):
         self.context: dict[str, Any] = context if context is not None else {}
         self.current_screen_id = ""
         self._current_screen: ToolScreen | None = None
+        self._content_host: QWidget | None = None
         self._content_widget: QWidget | None = None
         self._buttons: dict[str, QPushButton] = {}
         self._tasks: dict[str, ToolTaskHandle] = {}
@@ -229,9 +375,11 @@ class ToolFlowDialog(QDialog):
     def _setup_base_ui(self) -> None:
         self._root_layout = QVBoxLayout(self)
 
-        self._content_layout = QVBoxLayout()
+        self._content_host = QWidget(self)
+        self._content_host.hide()
+        self._content_layout = QVBoxLayout(self._content_host)
         self._content_layout.setContentsMargins(0, 0, 0, 0)
-        self._root_layout.addLayout(self._content_layout)
+        self._root_layout.addWidget(self._content_host)
 
         self.progress_row = QWidget(self)
         progress_row_layout = QHBoxLayout(self.progress_row)
@@ -307,8 +455,10 @@ class ToolFlowDialog(QDialog):
 
     def set_status(self, text: str) -> None:
         self.status_label.setText(str(text))
-        if not self.progress_row.isVisible():
+        if self._current_screen is not None and self._current_screen.show_progress:
             self.progress_row.show()
+        else:
+            self.progress_row.hide()
         self.sync_size_to_content()
 
     def set_progress(self, completed: int, total: int) -> None:
@@ -328,9 +478,12 @@ class ToolFlowDialog(QDialog):
             if self._current_screen is None or self._current_screen.show_progress_count:
                 self.progress_count_label.setText(text)
                 self.progress_count_label.show()
-        self.progress_bar.show()
-        if not self.progress_row.isVisible():
+        if self._current_screen is not None and self._current_screen.show_progress:
+            self.progress_bar.show()
             self.progress_row.show()
+        else:
+            self.progress_bar.hide()
+            self.progress_row.hide()
         self.sync_size_to_content()
 
     def button(self, event: str) -> QPushButton | None:
@@ -338,11 +491,16 @@ class ToolFlowDialog(QDialog):
 
     def sync_size_to_content(self) -> None:
         screen = self._current_screen
+        self._sync_content_host_visibility()
         sync_dialog_size_to_content(
             self,
             sizing=screen.sizing if screen is not None else "content",
             preserve_width=screen.preserve_width if screen is not None else False,
         )
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        self.sync_size_to_content()
 
     def reject(self) -> None:
         screen = self._current_screen
@@ -385,11 +543,25 @@ class ToolFlowDialog(QDialog):
             self._content_layout.removeWidget(self._content_widget)
             self._content_widget.deleteLater()
             self._content_widget = None
-        widget = screen.build(self) if screen.build is not None else QWidget(self)
+        widget = screen.build(self) if screen.build is not None else None
         if widget is None:
-            widget = QWidget(self)
+            if self._content_host is not None:
+                self._content_host.hide()
+            return
+        _normalize_body_widget(widget)
         self._content_widget = widget
         self._content_layout.addWidget(widget)
+        widget.show()
+        self._sync_content_host_visibility()
+
+    def _sync_content_host_visibility(self) -> None:
+        if self._content_host is None:
+            return
+        visible = (
+            self._content_widget is not None
+            and _widget_has_visible_content(self._content_widget)
+        )
+        self._content_host.setVisible(visible)
 
     def _configure_buttons(self, screen: ToolScreen) -> None:
         while self._button_row.count() > 1:

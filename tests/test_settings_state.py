@@ -329,7 +329,7 @@ def test_gpx_settings_defaults_and_env_override(isolated_settings, monkeypatch):
     assert get_runtime_setting(RuntimeSettingKey.TIMESHIFT_CACHE_NUM) == 10
     assert (
         get_runtime_setting(RuntimeSettingKey.OCR_TIME_SHIFT_PROVIDER)
-        == TimeShiftOcrProvider.GCP_VISION
+        == TimeShiftOcrProvider.APPLE_VISION
     )
 
     monkeypatch.setenv("PIQO_GPX_IGNORE_OFFSET", "true")
@@ -348,7 +348,7 @@ def test_gpx_settings_defaults_and_env_override(isolated_settings, monkeypatch):
     )
 
 
-def test_ocr_time_shift_provider_invalid_env_falls_back_to_gcp(
+def test_ocr_time_shift_provider_invalid_env_falls_back_to_apple(
     isolated_settings, monkeypatch
 ):
     monkeypatch.setenv("PIQO_OCR_TIME_SHIFT_PROVIDER", "INVALID_PROVIDER")
@@ -356,7 +356,7 @@ def test_ocr_time_shift_provider_invalid_env_falls_back_to_gcp(
 
     assert (
         get_runtime_setting(RuntimeSettingKey.OCR_TIME_SHIFT_PROVIDER)
-        == TimeShiftOcrProvider.GCP_VISION
+        == TimeShiftOcrProvider.APPLE_VISION
     )
 
 

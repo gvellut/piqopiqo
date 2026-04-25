@@ -107,6 +107,28 @@ def test_apply_gpx_dialog_prefills_initial_gpx_path(qapp, tmp_path):
     assert path == str(gpx_path)
 
 
+def test_apply_gpx_dialog_is_compact_after_show(qapp, tmp_path):
+    folder_a = "/root/photos/folder-a"
+    folder_b = "/root/photos/folder-b"
+    gpx_path = tmp_path / "track.gpx"
+    gpx_path.write_text("<gpx></gpx>", encoding="utf-8")
+
+    dialog = ApplyGpxDialog(
+        root_folder="/root/photos",
+        source_folders=[folder_a, folder_b],
+        initial_time_shifts={folder_a: "1s", folder_b: "-2s"},
+        previous_time_shift_folders=set(),
+        initial_gpx_path=str(gpx_path),
+        kml_folder="",
+    )
+
+    dialog.show()
+    qapp.processEvents()
+
+    assert dialog.height() < 360
+    assert dialog.minimumHeight() == dialog.maximumHeight() == dialog.height()
+
+
 def test_apply_gpx_dialog_browse_uses_last_folder_when_field_empty(
     qapp, tmp_path, monkeypatch
 ):
@@ -254,21 +276,35 @@ def test_apply_gpx_dialog_browse_accept_updates_field_and_calls_callback(
 def test_extract_time_shift_progress_success_shows_clock_and_shift_lines(qapp):
     init_qsettings_store(dyn=True)
     dialog = ExtractGpsTimeShiftProgressDialog()
+    dialog.show()
+    qapp.processEvents()
 
     dialog._on_success("12:34:56", "-1m4s")
+    qapp.processEvents()
 
-    assert dialog.status_label.text() == "Extraction done."
     assert dialog.result_shift == "-1m4s"
     assert dialog.result_label.isHidden() is False
     assert dialog.result_label.text() == (
         "Extracted clock: 12:34:56\nComputed time shift: -1m4s"
     )
-    assert dialog.progress_bar.minimum() == 0
-    assert dialog.progress_bar.maximum() == 1
-    assert dialog.progress_bar.value() == 1
+    assert dialog.progress_row.isHidden() is True
+    assert dialog.progress_bar.isHidden() is True
+    assert dialog.result_label.geometry().x() == 0
 
 
-def test_extract_time_shift_progress_uses_gcp_status_text_by_default(qapp, monkeypatch):
+def test_extract_time_shift_progress_running_screen_has_no_body_gap(qapp):
+    init_qsettings_store(dyn=True)
+    dialog = ExtractGpsTimeShiftProgressDialog()
+    dialog.show()
+    qapp.processEvents()
+
+    assert dialog._content_host.isHidden() is True
+    assert dialog.progress_bar.isHidden() is False
+
+
+def test_extract_time_shift_progress_uses_apple_status_text_by_default(
+    qapp, monkeypatch
+):
     monkeypatch.delenv("PIQO_OCR_TIME_SHIFT_PROVIDER", raising=False)
     init_qsettings_store(dyn=True)
 
@@ -276,7 +312,7 @@ def test_extract_time_shift_progress_uses_gcp_status_text_by_default(qapp, monke
 
     assert (
         dialog.status_label.text()
-        == "Extracting clock time with Google Cloud Vision..."
+        == "Extracting clock time with Apple Vision..."
     )
 
 
