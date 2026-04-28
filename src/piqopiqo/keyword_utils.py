@@ -65,6 +65,42 @@ def format_keywords(keywords: list[str]) -> str:
     return ", ".join(formatted)
 
 
+def normalize_keyword_list(keywords: list[str]) -> list[str]:
+    """Clean keyword values and remove case-insensitive duplicates.
+
+    Empty values are dropped. For duplicates, the first spelling and position
+    are kept.
+    """
+    normalized: list[str] = []
+    seen: set[str] = set()
+
+    for kw in keywords:
+        clean_kw = kw.replace('"', "").strip()
+        if not clean_kw:
+            continue
+
+        key = clean_kw.casefold()
+        if key in seen:
+            continue
+
+        seen.add(key)
+        normalized.append(clean_kw)
+
+    return normalized
+
+
+def normalize_keywords(text: str | None) -> str | None:
+    """Normalize a comma-separated keyword string for DB storage."""
+    if text is None:
+        return None
+
+    keywords = normalize_keyword_list(parse_keywords(text))
+    if not keywords:
+        return None
+
+    return format_keywords(keywords)
+
+
 def validate_keywords_balanced(text: str) -> bool:
     """Check if quotes are balanced in keyword string.
 

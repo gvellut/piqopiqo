@@ -330,6 +330,71 @@ def test_non_text_protection_blocks_gui_save_for_locked_fields(qapp, monkeypatch
     assert emitted == [DBFields.TITLE]
 
 
+def test_keywords_save_normalizes_value_and_widget_text(qapp, monkeypatch):
+    init_qsettings_store(dyn=True)
+
+    panel = EditPanel(_StubDBManager())
+    item = ImageItem(
+        path="/tmp/keywords-save.jpg",
+        name="keywords-save.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={DBFields.KEYWORDS: "old"},
+    )
+    panel.update_for_selection([item])
+
+    saved: list[tuple[str, str | None]] = []
+    monkeypatch.setattr(
+        panel,
+        "_save_field_for_item",
+        lambda _item, field_name, value: saved.append((field_name, value)),
+    )
+
+    panel.keywords_edit.setPlainText("alpha,, beta, , ALPHA")
+    panel._on_field_saved(DBFields.KEYWORDS)
+
+    assert saved == [(DBFields.KEYWORDS, "alpha, beta")]
+    assert panel.keywords_edit.text() == "alpha, beta"
+    assert panel.keywords_edit._original_value == "alpha, beta"
+
+
+def test_keyword_tree_modifications_normalize_existing_keywords(qapp, monkeypatch):
+    init_qsettings_store(dyn=True)
+
+    panel = EditPanel(_StubDBManager())
+    item = ImageItem(
+        path="/tmp/keyword-tree-save.jpg",
+        name="keyword-tree-save.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={DBFields.KEYWORDS: "alpha,, beta, , ALPHA, Gamma"},
+    )
+    panel.update_for_selection([item])
+
+    saved: list[tuple[str, str | None]] = []
+
+    def _save_field_for_item(
+        save_item: ImageItem, field_name: str, value: str | None
+    ) -> None:
+        saved.append((field_name, value))
+        save_item.db_metadata = dict(save_item.db_metadata or {})
+        save_item.db_metadata[field_name] = value
+
+    monkeypatch.setattr(panel, "_save_field_for_item", _save_field_for_item)
+
+    panel._apply_keyword_modifications(
+        {
+            "BETA": False,
+            "delta": True,
+            "gamma": True,
+        }
+    )
+
+    assert saved == [(DBFields.KEYWORDS, "alpha, Gamma, delta")]
+    assert item.db_metadata[DBFields.KEYWORDS] == "alpha, Gamma, delta"
+    assert panel.keywords_edit.text() == "alpha, Gamma, delta"
+
+
 def test_title_refresh_with_same_saved_value_preserves_cursor_position(qapp):
     init_qsettings_store(dyn=True)
 

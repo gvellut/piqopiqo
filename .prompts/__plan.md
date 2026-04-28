@@ -1,4 +1,3 @@
-* [Keyword clean on validate](Pb_tasks/Pb_Keyword_clean_on_validate.md)
 - [Keyword tree should display half checkd](Kc_tasks/Kc_Keyword_tree_should_display_half_chcekd.md)
 - [Model sync 2](J_tasks/M_Model_sync_2.md)
 - [Prescaled down image in fullscreen (Claude made a mess of it; redo)](Ja_tasks/Qa_Prescaled_down_image_in_fullscreen.md)
@@ -122,3 +121,4 @@
 ! [State Recent folders](Kc_tasks/Sc_State_Recent_folders.md)
 ! [Editor switches to the end](Kc_tasks/Tc_Editor_switches_to_the_end.md)
 ! [refactor tools](Kc_tasks/Uc_refactor_tools.md)
+! [Keyword clean on validate](Pb_tasks/Pb_Keyword_clean_on_validate.md)

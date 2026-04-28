@@ -17,7 +17,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from piqopiqo.keyword_utils import format_keywords, parse_keywords
+from piqopiqo.keyword_utils import (
+    format_keywords,
+    normalize_keyword_list,
+    normalize_keywords,
+    parse_keywords,
+)
 from piqopiqo.metadata.db_fields import EDITABLE_FIELDS, FIELD_DISPLAY_LABELS, DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBManager
 from piqopiqo.metadata.save_workers import MetadataSaveWorker, drain_qthread_pool
@@ -525,6 +530,9 @@ class EditPanel(QWidget):
         for item in self._current_items:
             self._save_field_for_item(item, field_name, value)
 
+        if field_name == DBFields.KEYWORDS:
+            self.keywords_edit.set_value(value or "")
+
         self.metadata_saved.emit(field_name)
         self.edit_finished.emit()
 
@@ -540,7 +548,7 @@ class EditPanel(QWidget):
         elif field_name == DBFields.LONGITUDE:
             return self.lon_edit.get_value()
         elif field_name == DBFields.KEYWORDS:
-            return self.keywords_edit.text() or None
+            return normalize_keywords(self.keywords_edit.text())
         elif field_name == DBFields.TIME_TAKEN:
             return self.time_edit.get_value()
         return None
@@ -623,21 +631,37 @@ class EditPanel(QWidget):
             # Get current keywords as ordered list
             current_kws: list[str] = []
             if item.db_metadata and item.db_metadata.get(DBFields.KEYWORDS):
-                current_kws = parse_keywords(item.db_metadata[DBFields.KEYWORDS])
+                current_kws = normalize_keyword_list(
+                    parse_keywords(item.db_metadata[DBFields.KEYWORDS])
+                )
 
             # Apply removals (filter out removed keywords, preserving order)
+            removed = {
+                clean_keyword.casefold()
+                for keyword, is_add in modifications.items()
+                if is_add is False
+                for clean_keyword in normalize_keyword_list([keyword])
+            }
             result_kws = [
-                kw for kw in current_kws if modifications.get(kw) is not False
+                kw for kw in current_kws if kw.casefold() not in removed
             ]
 
             # Apply additions (add new keywords at the end)
-            existing = set(result_kws)
+            existing = {kw.casefold() for kw in result_kws}
             for keyword, is_add in modifications.items():
-                if is_add and keyword not in existing:
-                    result_kws.append(keyword)
+                if not is_add:
+                    continue
+                cleaned = normalize_keyword_list([keyword])
+                if not cleaned:
+                    continue
+                clean_keyword = cleaned[0]
+                key = clean_keyword.casefold()
+                if key not in existing:
+                    result_kws.append(clean_keyword)
+                    existing.add(key)
 
             # Format and save
-            new_value = format_keywords(result_kws)
+            new_value = format_keywords(normalize_keyword_list(result_kws))
             self._save_field_for_item(item, DBFields.KEYWORDS, new_value or None)
 
         # Update the keywords field display
