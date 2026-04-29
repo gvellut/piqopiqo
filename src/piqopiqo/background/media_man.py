@@ -18,6 +18,7 @@ from attrs import define
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from piqopiqo.cache_paths import ensure_thumb_dir
+from piqopiqo.metadata.db_fields import LENS_INFO_EXIF_FALLBACK_FIELD_KEYS
 from piqopiqo.metadata.metadata_db import MetadataDBManager, MetadataDBUnavailableError
 from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
@@ -30,6 +31,18 @@ from piqopiqo.ssf.settings_state import (
 from . import media_worker
 
 logger = logging.getLogger(__name__)
+
+
+def _exif_storage_field_keys(visible_field_keys: list[str]) -> list[str]:
+    keys = list(visible_field_keys) + list(LENS_INFO_EXIF_FALLBACK_FIELD_KEYS)
+    seen: set[str] = set()
+    out: list[str] = []
+    for key in keys:
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(key)
+    return out
 
 
 @define
@@ -137,7 +150,9 @@ class MediaManager(QObject):
         self._deferred_combined: dict[str, _CombinedNeed] = {}
 
         # EXIF panel field keys
-        self._panel_field_keys: list[str] = get_effective_exif_panel_field_keys()
+        self._panel_field_keys: list[str] = _exif_storage_field_keys(
+            get_effective_exif_panel_field_keys()
+        )
 
         # EXIF writing state
         self._write_total = 0
@@ -181,7 +196,9 @@ class MediaManager(QObject):
         self._exif_total = len(file_paths)
         self._exif_completed = 0
 
-        self._panel_field_keys = get_effective_exif_panel_field_keys()
+        self._panel_field_keys = _exif_storage_field_keys(
+            get_effective_exif_panel_field_keys()
+        )
 
         for folder in source_folders:
             ensure_thumb_dir(folder)
@@ -286,14 +303,7 @@ class MediaManager(QObject):
         - delete removed keys from the DB
         - queue extraction if any new key is missing
         """
-        # Preserve order, drop duplicates
-        seen: set[str] = set()
-        new_keys: list[str] = []
-        for key in field_keys:
-            if not key or key in seen:
-                continue
-            seen.add(key)
-            new_keys.append(key)
+        new_keys = _exif_storage_field_keys(field_keys)
 
         old_keys = set(self._panel_field_keys)
         removed = sorted(old_keys - set(new_keys))

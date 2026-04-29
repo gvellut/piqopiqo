@@ -43,6 +43,16 @@ EXIF_TO_DB_MAPPING = {
     DBFields.ORIENTATION: ["EXIF:Orientation"],
 }
 # Lens info fields are set in code: since some transformation is performed
+LENS_INFO_EXIF_FALLBACK_MAPPING = {
+    DBFields.MANUAL_LENS_MAKE: "EXIF:LensMake",
+    DBFields.MANUAL_LENS_MODEL: "EXIF:LensModel",
+    DBFields.MANUAL_FOCAL_LENGTH: "EXIF:FocalLength",
+    DBFields.MANUAL_FOCAL_LENGTH_35MM: "EXIF:FocalLengthIn35mmFormat",
+}
+
+LENS_INFO_EXIF_FALLBACK_FIELD_KEYS = tuple(
+    LENS_INFO_EXIF_FALLBACK_MAPPING.values()
+)
 
 # Maps DB field -> EXIF tag(s) for writing
 # Uses MWG composite tags where available to write to multiple locations
@@ -73,6 +83,10 @@ FIELD_DISPLAY_LABELS = {
     DBFields.KEYWORDS: "Keywords",
     DBFields.TIME_TAKEN: "Time taken",
     DBFields.LABEL: "Label",
+    DBFields.MANUAL_LENS_MAKE: "Lens make",
+    DBFields.MANUAL_LENS_MODEL: "Lens model",
+    DBFields.MANUAL_FOCAL_LENGTH: "Focal length",
+    DBFields.MANUAL_FOCAL_LENGTH_35MM: "Focal length (35mm)",
 }
 
 # Ordered list of editable fields (determines panel order)
@@ -84,4 +98,8 @@ EDITABLE_FIELDS = [
     DBFields.KEYWORDS,
     DBFields.TIME_TAKEN,
     DBFields.LABEL,
+    DBFields.MANUAL_LENS_MAKE,
+    DBFields.MANUAL_LENS_MODEL,
+    DBFields.MANUAL_FOCAL_LENGTH,
+    DBFields.MANUAL_FOCAL_LENGTH_35MM,
 ]

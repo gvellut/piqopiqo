@@ -8,7 +8,6 @@
 - [Make copy sd and flickr not modal](Kc_tasks/Qc_Make_copy_sd_and_flickr_not_modal.md)
 - [Apply recommend refactor](Vc_tasks/Vc_Apply_recommend_refactor.md)
 - [Stacks](Vc_tasks/Wc_Stacks.md)
-- [make lens info descirption visible if set](Vc_tasks/Xc_make_lens_info_descirption_visible_if_set.md)
 ! [Fix date read delay if since:last](A_tasks/A_Fix_date_read_delay.md)
 ! [Eject SD after user OK](A_tasks/B_Eject_SD_after_user_OK.md)
     !? [GUI lag](A_tasks/B.A_GUI_lag.md)
@@ -123,3 +122,4 @@
 ! [Editor switches to the end](Kc_tasks/Tc_Editor_switches_to_the_end.md)
 ! [refactor tools](Kc_tasks/Uc_refactor_tools.md)
 ! [Keyword clean on validate](Pb_tasks/Pb_Keyword_clean_on_validate.md)
+! [make lens info description visible if set](Vc_tasks/Xc_make_lens_info_descirption_visible_if_set.md)

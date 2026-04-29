@@ -47,6 +47,7 @@ def test_interface_tab_layout_matches_expected_groups_and_fields():
     ]
     assert [field.key for field in interface_tab.groups[2].fields] == [
         UserSettingKey.SHOW_DESCRIPTION_FIELD,
+        UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY,
         UserSettingKey.PROTECT_NON_TEXT_METADATA,
         UserSettingKey.MAP_LINKS,
     ]

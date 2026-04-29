@@ -81,6 +81,7 @@ class UserSettingKey(StrEnum):
     SCREEN_COLOR_PROFILE = "screenColorProfile"
     FAVORITE_FOLDER = "favoriteFolder"
     SHOW_DESCRIPTION_FIELD = "showDescriptionField"
+    SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY = "showHiddenMetadataFieldsIfNotEmpty"
     PROTECT_NON_TEXT_METADATA = "protectNonTextMetadata"
     MAP_LINKS = "mapLinks"
     STATUS_LABELS = "statusLabels"
@@ -561,6 +562,11 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
     UserSettingKey.SHOW_DESCRIPTION_FIELD: SettingDef(
         group=SettingsGroup.SETTINGS,
         default=True,
+        read_type=bool,
+    ),
+    UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default=False,
         read_type=bool,
     ),
     UserSettingKey.PROTECT_NON_TEXT_METADATA: SettingDef(

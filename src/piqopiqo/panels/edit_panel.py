@@ -23,7 +23,12 @@ from piqopiqo.keyword_utils import (
     normalize_keywords,
     parse_keywords,
 )
-from piqopiqo.metadata.db_fields import EDITABLE_FIELDS, FIELD_DISPLAY_LABELS, DBFields
+from piqopiqo.metadata.db_fields import (
+    EDITABLE_FIELDS,
+    FIELD_DISPLAY_LABELS,
+    LENS_INFO_EXIF_FALLBACK_MAPPING,
+    DBFields,
+)
 from piqopiqo.metadata.metadata_db import MetadataDBManager
 from piqopiqo.metadata.save_workers import MetadataSaveWorker, drain_qthread_pool
 from piqopiqo.model import ImageItem, MapLinkOption
@@ -66,10 +71,19 @@ class EditPanel(QWidget):
         self._db_writer_pool = QThreadPool()
         self._keyword_tree_manager = KeywordTreeManager()
         self._protect_non_text_metadata = True
+        self._show_description_field = True
+        self._show_hidden_metadata_fields_if_not_empty = False
         self._map_links: list[MapLinkOption] = []
         self._map_menu: QMenu | None = None
 
         self._setup_ui()
+        self.set_show_hidden_metadata_fields_if_not_empty(
+            bool(
+                get_user_setting(
+                    UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY
+                )
+            )
+        )
         self.set_description_field_visible(
             bool(get_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD))
         )
@@ -242,6 +256,31 @@ class EditPanel(QWidget):
         self.layout.addWidget(self._map_row_widget, row, 1)
         row += 1
 
+        self._lens_edit_widgets = {}
+        self._lens_row_widgets = {}
+        for field in DBFields.MANUAL_LENS_FIELDS:
+            label = QLabel(FIELD_DISPLAY_LABELS[field])
+            edit = TitleEdit()
+            edit.edit_finished.connect(
+                lambda field_name=field: self._on_field_saved(field_name)
+            )
+            edit.edit_finished_explicit.connect(self.interaction_finished.emit)
+            edit.edit_cancelled.connect(self._on_edit_cancelled)
+            edit.edit_cancelled.connect(self.interaction_finished.emit)
+            self.layout.addWidget(label, row, 0)
+            self.layout.addWidget(edit, row, 1)
+            self._lens_edit_widgets[field] = edit
+            self._lens_row_widgets[field] = (label, edit)
+            row += 1
+        self.lens_make_edit = self._lens_edit_widgets[DBFields.MANUAL_LENS_MAKE]
+        self.lens_model_edit = self._lens_edit_widgets[DBFields.MANUAL_LENS_MODEL]
+        self.focal_length_edit = self._lens_edit_widgets[
+            DBFields.MANUAL_FOCAL_LENGTH
+        ]
+        self.focal_length_35mm_edit = self._lens_edit_widgets[
+            DBFields.MANUAL_FOCAL_LENGTH_35MM
+        ]
+
         self._field_edit_widgets = {
             DBFields.TITLE: self.title_edit,
             DBFields.DESCRIPTION: self.description_edit,
@@ -249,6 +288,7 @@ class EditPanel(QWidget):
             DBFields.LONGITUDE: self.lon_edit,
             DBFields.KEYWORDS: self.keywords_edit,
             DBFields.TIME_TAKEN: self.time_edit,
+            **self._lens_edit_widgets,
         }
 
         scroll_area.setWidget(container)
@@ -267,15 +307,20 @@ class EditPanel(QWidget):
         self.keyword_tree_btn.setEnabled(enabled)
         self._apply_metadata_read_only_state()
         self._update_map_button_state()
+        self._sync_hidden_metadata_row_visibility()
 
     def set_description_field_visible(self, visible: bool) -> None:
-        visible = bool(visible)
-        if not visible and self.description_edit.hasFocus():
+        self._show_description_field = bool(visible)
+        should_show = self._should_show_description_field()
+        if not should_show and self.description_edit.hasFocus():
             self.description_edit.clearFocus()
             if self.title_edit.isEnabled() and not self.title_edit.isHidden():
                 self.title_edit.setFocus(Qt.FocusReason.OtherFocusReason)
-        self.description_label.setVisible(visible)
-        self.description_edit.setVisible(visible)
+        self._sync_hidden_metadata_row_visibility()
+
+    def set_show_hidden_metadata_fields_if_not_empty(self, enabled: bool) -> None:
+        self._show_hidden_metadata_fields_if_not_empty = bool(enabled)
+        self._sync_hidden_metadata_row_visibility()
 
     def set_non_text_metadata_protection(self, enabled: bool) -> None:
         self._protect_non_text_metadata = bool(enabled)
@@ -286,6 +331,36 @@ class EditPanel(QWidget):
         has_map_links = bool(self._map_links)
         self.map_btn.setVisible(has_map_links)
         self._update_map_button_state()
+
+    def _metadata_value_is_visible(self, value: object) -> bool:
+        if value == MULTIPLE_VALUES:
+            return True
+        return bool(str(value or "").strip())
+
+    def _should_show_description_field(self) -> bool:
+        if self._show_description_field:
+            return True
+        if not self._show_hidden_metadata_fields_if_not_empty:
+            return False
+        return self._metadata_value_is_visible(self.description_edit.toPlainText())
+
+    def _should_show_lens_fields(self) -> bool:
+        if not self._show_hidden_metadata_fields_if_not_empty:
+            return False
+        return any(
+            self._metadata_value_is_visible(widget.text())
+            for widget in self._lens_edit_widgets.values()
+        )
+
+    def _sync_hidden_metadata_row_visibility(self) -> None:
+        description_visible = self._should_show_description_field()
+        self.description_label.setVisible(description_visible)
+        self.description_edit.setVisible(description_visible)
+
+        lens_visible = self._should_show_lens_fields()
+        for label, edit in self._lens_row_widgets.values():
+            label.setVisible(lens_visible)
+            edit.setVisible(lens_visible)
 
     def _is_field_gui_editable(self, field_name: str) -> bool:
         if field_name not in self._field_edit_widgets:
@@ -389,7 +464,19 @@ class EditPanel(QWidget):
         self._update_field(
             DBFields.TIME_TAKEN, field_values[DBFields.TIME_TAKEN], self.time_edit
         )
+        self._update_lens_fields(field_values)
         self._update_map_button_state()
+        self._sync_hidden_metadata_row_visibility()
+
+    def refresh_hidden_metadata_fields_for_current_selection(self) -> None:
+        """Refresh hidden/fallback rows without touching the main edit fields."""
+        if not self._current_items or self._has_missing_data:
+            self._sync_hidden_metadata_row_visibility()
+            return
+
+        field_values = self._gather_field_values(self._current_items)
+        self._update_lens_fields(field_values, preserve_focused=True)
+        self._sync_hidden_metadata_row_visibility()
 
     def _gather_field_values(self, items: list[ImageItem]) -> dict:
         """Gather field values from items, preferring cached db_metadata.
@@ -405,14 +492,17 @@ class EditPanel(QWidget):
         for item in items:
             # Prefer cached db_metadata (updated synchronously after saves)
             db_data = item.db_metadata
-            if not db_data:
+            if db_data is None:
                 # Fall back to database query
                 db = self.db_manager.get_db_for_image(item.path)
                 db_data = db.get_metadata(item.path)
 
-            if db_data:
+            if db_data is not None:
                 for field in fields:
-                    value = db_data.get(field)
+                    if field in DBFields.MANUAL_LENS_FIELDS:
+                        value = self._lens_field_value_for_item(field, db_data, item)
+                    else:
+                        value = db_data.get(field)
                     fields[field].add(value if value is not None else "")
             else:
                 # No DB data yet - show empty for all fields
@@ -429,12 +519,39 @@ class EditPanel(QWidget):
 
         return result
 
+    def _lens_field_value_for_item(
+        self,
+        field_name: str,
+        db_data: dict,
+        item: ImageItem,
+    ) -> object:
+        manual_value = db_data.get(field_name)
+        if str(manual_value or "").strip():
+            return manual_value
+
+        fallback_key = LENS_INFO_EXIF_FALLBACK_MAPPING.get(field_name)
+        if not fallback_key or item.exif_data is None:
+            return ""
+        fallback_value = item.exif_data.get(fallback_key)
+        return fallback_value if fallback_value is not None else ""
+
     def _update_field(self, field_name: str, value, widget):
         """Update a text field widget."""
         if value == MULTIPLE_VALUES:
             widget.set_value(MULTIPLE_VALUES)
         else:
-            widget.set_value(value if value else "")
+            widget.set_value(str(value) if value else "")
+
+    def _update_lens_fields(
+        self,
+        field_values: dict,
+        *,
+        preserve_focused: bool = False,
+    ) -> None:
+        for field_name, widget in self._lens_edit_widgets.items():
+            if preserve_focused and widget.hasFocus():
+                continue
+            self._update_field(field_name, field_values[field_name], widget)
 
     def _update_coordinate_field(self, field_name: str, value, widget):
         """Update a coordinate field widget."""
@@ -456,7 +573,10 @@ class EditPanel(QWidget):
         self.lon_edit.set_value(None)
         self.keywords_edit.set_value("")
         self.time_edit.set_value("")
+        for widget in self._lens_edit_widgets.values():
+            widget.set_value("")
         self._update_map_button_state()
+        self._sync_hidden_metadata_row_visibility()
 
     def _map_coordinates(self) -> tuple[float | None, float | None]:
         return self.lat_edit.get_value(), self.lon_edit.get_value()
@@ -551,6 +671,9 @@ class EditPanel(QWidget):
             return normalize_keywords(self.keywords_edit.text())
         elif field_name == DBFields.TIME_TAKEN:
             return self.time_edit.get_value()
+        elif field_name in DBFields.MANUAL_LENS_FIELDS:
+            text = self._lens_edit_widgets[field_name].text().strip()
+            return text or None
         return None
 
     def _save_field_for_item(self, item: ImageItem, field_name: str, value):

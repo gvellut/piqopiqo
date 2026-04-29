@@ -52,7 +52,7 @@ class TitleEdit(QLineEdit):
 
     def focusInEvent(self, event):
         """Clear Multiple Values placeholder on focus."""
-        if self.text() == MULTIPLE_VALUES:
+        if self.text() == MULTIPLE_VALUES and not self.isReadOnly():
             self.clear()
         super().focusInEvent(event)
 

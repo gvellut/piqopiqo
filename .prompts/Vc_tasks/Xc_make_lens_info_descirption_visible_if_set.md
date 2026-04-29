@@ -1,8 +1,9 @@
-Lens info set by the lens info tools : never shown in the metadata edit panel
+Lens info set by the lens info tool : never shown in the metadata edit panel
 description : setting to hide the field
-Add an option in the settings panel : to show those hidden fields if not empty
+Add an option in the settings panel > Interface tab > Metadata panel section  : to show hidden fields if not empty (when set by a tool or filled in the standard data in EXIF)
+Lens info : when visible below the Latitude / Longitude / Map button. Keep same space
 
-+ add the lens info fields to the list of fields to prevent editing (option already existing: add them to it ; mention the lens info fields "if present")
++ add the lens info fields to the list of fields to prevent editing (option already existing: process them in the protection + tooltip like the other fields)
 
 
 TODO 

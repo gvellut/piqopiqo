@@ -1292,6 +1292,8 @@ class MainWindow(QMainWindow):
         selected_items = self._get_selected_items()
         if selected_items:
             self.exif_panel.update_exif(selected_items)
+            if self.edit_panel is not None:
+                self.edit_panel.refresh_hidden_metadata_fields_for_current_selection()
 
     def _show_error_dialog(self):
         """Show dialog with loading errors."""
@@ -2255,6 +2257,18 @@ class MainWindow(QMainWindow):
             )
 
         if (
+            UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY in changed_keys
+            and self.edit_panel is not None
+        ):
+            self.edit_panel.set_show_hidden_metadata_fields_if_not_empty(
+                bool(
+                    get_user_setting(
+                        UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY
+                    )
+                )
+            )
+
+        if (
             UserSettingKey.PROTECT_NON_TEXT_METADATA in changed_keys
             and self.edit_panel is not None
         ):
@@ -2991,6 +3005,8 @@ class MainWindow(QMainWindow):
             self.media_manager.ensure_panel_fields_loaded_from_db(
                 [item.path for item in items]
             )
+            if self.edit_panel:
+                self.edit_panel.refresh_hidden_metadata_fields_for_current_selection()
             self.exif_panel.update_exif(items)
         finally:
             self._selection_panel_refresh_in_progress = False

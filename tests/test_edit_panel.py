@@ -68,6 +68,121 @@ def test_description_field_visibility_follows_user_setting(qapp):
     assert panel.description_edit.isHidden() is True
 
 
+def test_hidden_description_reappears_when_non_empty_option_is_enabled(qapp):
+    init_qsettings_store(dyn=True)
+    set_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD, False)
+    set_user_setting(
+        UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY,
+        True,
+    )
+
+    panel = EditPanel(_StubDBManager())
+    empty_item = ImageItem(
+        path="/tmp/empty-description.jpg",
+        name="empty-description.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={DBFields.DESCRIPTION: ""},
+    )
+    panel.update_for_selection([empty_item])
+
+    assert panel.description_label.isHidden() is True
+    assert panel.description_edit.isHidden() is True
+
+    item = ImageItem(
+        path="/tmp/description.jpg",
+        name="description.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={DBFields.DESCRIPTION: "Existing caption"},
+    )
+    panel.update_for_selection([item])
+
+    assert panel.description_label.isHidden() is False
+    assert panel.description_edit.isHidden() is False
+    assert panel.description_edit.toPlainText() == "Existing caption"
+
+
+def test_lens_fields_follow_hidden_non_empty_setting_and_value_priority(qapp):
+    init_qsettings_store(dyn=True)
+    set_user_setting(
+        UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY,
+        False,
+    )
+
+    panel = EditPanel(_StubDBManager())
+    manual_item = ImageItem(
+        path="/tmp/manual-lens.jpg",
+        name="manual-lens.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={
+            DBFields.MANUAL_LENS_MAKE: "Manual Make",
+            DBFields.MANUAL_LENS_MODEL: "Manual Model",
+            DBFields.MANUAL_FOCAL_LENGTH: "12",
+            DBFields.MANUAL_FOCAL_LENGTH_35MM: "18",
+        },
+        exif_data={
+            "EXIF:LensMake": "EXIF Make",
+            "EXIF:LensModel": "EXIF Model",
+            "EXIF:FocalLength": "13",
+            "EXIF:FocalLengthIn35mmFormat": "19",
+        },
+    )
+    panel.update_for_selection([manual_item])
+
+    assert panel.lens_make_edit.isHidden() is True
+    assert panel.lens_model_edit.isHidden() is True
+
+    panel.set_show_hidden_metadata_fields_if_not_empty(True)
+
+    assert panel.lens_make_edit.isHidden() is False
+    assert panel.lens_model_edit.isHidden() is False
+    assert panel.lens_make_edit.text() == "Manual Make"
+    assert panel.lens_model_edit.text() == "Manual Model"
+    assert panel.focal_length_edit.text() == "12"
+    assert panel.focal_length_35mm_edit.text() == "18"
+
+    fallback_item = ImageItem(
+        path="/tmp/fallback-lens.jpg",
+        name="fallback-lens.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={},
+        exif_data={
+            "EXIF:LensMake": "EXIF Make",
+            "EXIF:LensModel": "EXIF Model",
+            "EXIF:FocalLength": "35",
+            "EXIF:FocalLengthIn35mmFormat": "50",
+        },
+    )
+    panel.update_for_selection([fallback_item])
+
+    assert panel.lens_make_edit.isHidden() is False
+    assert panel.lens_make_edit.text() == "EXIF Make"
+    assert panel.lens_model_edit.text() == "EXIF Model"
+    assert panel.focal_length_edit.text() == "35"
+    assert panel.focal_length_35mm_edit.text() == "50"
+
+    empty_item = ImageItem(
+        path="/tmp/empty-lens.jpg",
+        name="empty-lens.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={},
+        exif_data={
+            "EXIF:LensMake": None,
+            "EXIF:LensModel": None,
+            "EXIF:FocalLength": None,
+            "EXIF:FocalLengthIn35mmFormat": None,
+        },
+    )
+    panel.update_for_selection([empty_item])
+
+    assert panel.lens_make_edit.isHidden() is True
+    assert panel.lens_model_edit.isHidden() is True
+
+
 def test_keywords_height_change_keeps_edit_panel_rows_stable(qapp):
     init_qsettings_store(dyn=True)
     set_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD, True)
@@ -249,6 +364,48 @@ def test_non_text_protection_read_only_toggle(qapp):
     assert panel.keyword_tree_btn.isEnabled() is True
 
 
+def test_lens_fields_use_non_text_protection_and_tooltip(qapp):
+    init_qsettings_store(dyn=True)
+    set_user_setting(
+        UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY,
+        True,
+    )
+    set_user_setting(UserSettingKey.PROTECT_NON_TEXT_METADATA, True)
+
+    panel = EditPanel(_StubDBManager())
+    item = ImageItem(
+        path="/tmp/protected-lens.jpg",
+        name="protected-lens.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={
+            DBFields.MANUAL_LENS_MODEL: "Manual Model",
+        },
+    )
+    panel.update_for_selection([item])
+
+    assert panel.lens_model_edit.isHidden() is False
+    for widget in (
+        panel.lens_make_edit,
+        panel.lens_model_edit,
+        panel.focal_length_edit,
+        panel.focal_length_35mm_edit,
+    ):
+        assert widget.isReadOnly() is True
+        assert widget.toolTip() == "Protected field. Change in Settings Panel"
+
+    panel.set_non_text_metadata_protection(False)
+
+    for widget in (
+        panel.lens_make_edit,
+        panel.lens_model_edit,
+        panel.focal_length_edit,
+        panel.focal_length_35mm_edit,
+    ):
+        assert widget.isReadOnly() is False
+        assert widget.toolTip() == ""
+
+
 def test_non_text_protection_preserves_multiple_values_on_focus(qapp):
     """Protected non-text fields must keep <Multiple Values> text when clicked."""
     init_qsettings_store(dyn=True)
@@ -328,6 +485,74 @@ def test_non_text_protection_blocks_gui_save_for_locked_fields(qapp, monkeypatch
 
     assert saved_fields == [DBFields.TITLE]
     assert emitted == [DBFields.TITLE]
+
+
+def test_lens_field_save_writes_manual_override_when_unprotected(qapp, monkeypatch):
+    init_qsettings_store(dyn=True)
+    set_user_setting(
+        UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY,
+        True,
+    )
+    set_user_setting(UserSettingKey.PROTECT_NON_TEXT_METADATA, False)
+
+    panel = EditPanel(_StubDBManager())
+    item = ImageItem(
+        path="/tmp/lens-save.jpg",
+        name="lens-save.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={},
+        exif_data={"EXIF:LensModel": "Fallback Model"},
+    )
+    panel.update_for_selection([item])
+
+    saved: list[tuple[str, str | None]] = []
+    emitted: list[str] = []
+    monkeypatch.setattr(
+        panel,
+        "_save_field_for_item",
+        lambda _item, field_name, value: saved.append((field_name, value)),
+    )
+    panel.metadata_saved.connect(emitted.append)
+
+    panel.lens_model_edit.setText("Manual Override")
+    panel._on_field_saved(DBFields.MANUAL_LENS_MODEL)
+
+    assert saved == [(DBFields.MANUAL_LENS_MODEL, "Manual Override")]
+    assert emitted == [DBFields.MANUAL_LENS_MODEL]
+
+
+def test_lens_fallback_refresh_does_not_reset_other_active_edits(qapp):
+    init_qsettings_store(dyn=True)
+    set_user_setting(
+        UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY,
+        True,
+    )
+
+    panel = EditPanel(_StubDBManager())
+    panel.show()
+    item = ImageItem(
+        path="/tmp/lens-refresh.jpg",
+        name="lens-refresh.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={DBFields.TITLE: "Before"},
+        exif_data=None,
+    )
+    panel.update_for_selection([item])
+    qapp.processEvents()
+
+    panel.title_edit.setFocus()
+    panel.title_edit.setText("Edited title")
+    panel.title_edit.setCursorPosition(4)
+
+    item.exif_data = {"EXIF:LensModel": "Fallback Model"}
+    panel.refresh_hidden_metadata_fields_for_current_selection()
+
+    assert panel.title_edit.text() == "Edited title"
+    assert panel.title_edit.cursorPosition() == 4
+    assert panel.lens_model_edit.isHidden() is False
+    assert panel.lens_model_edit.text() == "Fallback Model"
 
 
 def test_keywords_save_normalizes_value_and_widget_text(qapp, monkeypatch):

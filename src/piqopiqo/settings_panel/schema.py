@@ -151,6 +151,11 @@ SETTINGS_TABS: list[TabSpec] = [
                         editor=EditorKind.BOOL,
                     ),
                     FieldSpec(
+                        key=UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY,
+                        label="Show hidden fields if not empty",
+                        editor=EditorKind.BOOL,
+                    ),
+                    FieldSpec(
                         key=UserSettingKey.PROTECT_NON_TEXT_METADATA,
                         label="Protect non-text metadata fields",
                         editor=EditorKind.BOOL,

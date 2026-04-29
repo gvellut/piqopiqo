@@ -79,6 +79,7 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_TIMESHIFT_CACHE_NUM",
         "PIQO_FLICKR_UPLOAD_MAX_WORKERS",
         "PIQO_PROTECT_NON_TEXT_METADATA",
+        "PIQO_SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY",
         "PIQO_FORCE_SRGB",
         "PIQO_SCREEN_COLOR_PROFILE",
         "PIQO_FAVORITE_FOLDER",
@@ -419,6 +420,27 @@ def test_show_description_field_default_and_roundtrip(isolated_settings):
 
     set_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD, True)
     assert get_user_setting(UserSettingKey.SHOW_DESCRIPTION_FIELD) is True
+
+
+def test_show_hidden_metadata_fields_default_roundtrip_and_env(
+    isolated_settings, monkeypatch
+):
+    assert (
+        get_user_setting(UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY)
+        is False
+    )
+
+    set_user_setting(UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY, True)
+    assert (
+        get_user_setting(UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY)
+        is True
+    )
+
+    monkeypatch.setenv("PIQO_SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY", "false")
+    assert (
+        get_user_setting(UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY)
+        is False
+    )
 
 
 def test_favorite_folder_default_and_roundtrip(isolated_settings, tmp_path):
