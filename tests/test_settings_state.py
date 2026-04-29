@@ -71,6 +71,7 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_GRID_NUM_COLUMNS_MAX",
         "PIQO_STATUS_BAR_SIDE_PADDING",
         "PIQO_SETTINGS_PANEL_SAVE_MODE",
+        "PIQO_SETTINGS_PANEL_ROW_SPACING",
         "PIQO_FONT_SIZE",
         "PIQO_GPX_IGNORE_OFFSET",
         "PIQO_GPX_TIMEZONE",
@@ -320,6 +321,17 @@ def test_recent_folders_menu_limit_default_and_env_override(
     init_qsettings_store(dyn=False)
 
     assert get_runtime_setting(RuntimeSettingKey.RECENT_FOLDERS_MENU_LIMIT) == 6
+
+
+def test_settings_panel_row_spacing_default_and_env_override(
+    isolated_settings, monkeypatch
+):
+    assert get_runtime_setting(RuntimeSettingKey.SETTINGS_PANEL_ROW_SPACING) == 0
+
+    monkeypatch.setenv("PIQO_SETTINGS_PANEL_ROW_SPACING", "2")
+    init_qsettings_store(dyn=False)
+
+    assert get_runtime_setting(RuntimeSettingKey.SETTINGS_PANEL_ROW_SPACING) == 2
 
 
 def test_gpx_settings_defaults_and_env_override(isolated_settings, monkeypatch):

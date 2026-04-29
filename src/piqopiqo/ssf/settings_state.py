@@ -113,6 +113,7 @@ class RuntimeSettingKey(StrEnum):
     TIME_TAKEN_LOAD_RESORT_BATCH_SIZE = "timeTakenLoadResortBatchSize"
     EXIF_PANEL_COLUMN_STRETCH = "exifPanelColumnStretch"
     EXIF_PANEL_ROW_SPACING = "exifPanelRowSpacing"
+    SETTINGS_PANEL_ROW_SPACING = "settingsPanelRowSpacing"
     GRID_ITEM_SHOW_LABEL_SWATCH = "gridItemShowLabelSwatch"
     EXIF_AUTO_FORMAT = "exifAutoFormat"
     MAX_WORKERS = "maxWorkers"
@@ -760,6 +761,7 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
         env_parser=lambda raw: _deserialize_column_stretch(_parse_json(raw)),
     ),
     RuntimeSettingKey.EXIF_PANEL_ROW_SPACING: SettingDef(default=5, read_type=int),
+    RuntimeSettingKey.SETTINGS_PANEL_ROW_SPACING: SettingDef(default=0, read_type=int),
     RuntimeSettingKey.GRID_ITEM_SHOW_LABEL_SWATCH: SettingDef(
         default=True, read_type=bool
     ),

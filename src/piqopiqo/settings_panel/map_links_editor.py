@@ -437,9 +437,13 @@ class MapLinksEditor(QWidget):
         layout.setSpacing(8)
 
         self._summary_label = QLabel(self)
+        self._summary_label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
         layout.addWidget(self._summary_label)
 
         self._edit_btn = QPushButton("Edit...", self)
+        self._edit_btn.setAttribute(Qt.WidgetAttribute.WA_LayoutUsesWidgetRect)
         self._edit_btn.clicked.connect(self._on_edit)
         layout.addWidget(self._edit_btn)
 

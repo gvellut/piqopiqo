@@ -6,14 +6,18 @@ from functools import partial
 import os
 
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QPalette, QPixmap
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QDialog,
     QDialogButtonBox,
-    QFormLayout,
+    QFrame,
+    QGridLayout,
     QGroupBox,
+    QLabel,
     QLineEdit,
     QMessageBox,
+    QScrollArea,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -39,6 +43,190 @@ _GCP_OCR_FIELD_KEYS = {
     UserSettingKey.GCP_PROJECT,
     UserSettingKey.GCP_SA_KEY_PATH,
 }
+
+_TOP_ALIGNED_EDITOR_KINDS = {
+    EditorKind.LIST_TEXT,
+    EditorKind.MANUAL_LENSES,
+    EditorKind.SHORTCUTS,
+    EditorKind.STATUS_LABELS,
+}
+_SETTINGS_SECTION_SPACING = 4
+_SETTINGS_PAGE_MARGIN_LEFT = 8
+_SETTINGS_PAGE_MARGIN_RIGHT = 8
+
+
+def _settings_form_row_spacing() -> int:
+    return max(
+        0,
+        int(get_runtime_setting(RuntimeSettingKey.SETTINGS_PANEL_ROW_SPACING)),
+    )
+
+
+def _natural_height(widget: QWidget) -> int:
+    return max(widget.sizeHint().height(), widget.minimumSizeHint().height())
+
+
+def _use_background_color(widget: QWidget, color: QColor) -> None:
+    palette = widget.palette()
+    palette.setColor(QPalette.ColorRole.Window, color)
+    widget.setPalette(palette)
+    widget.setAutoFillBackground(True)
+
+
+def _native_group_box_background_color(source: QWidget) -> QColor:
+    sample = QGroupBox()
+    sample.setPalette(source.palette())
+    sample.resize(32, 32)
+    pixmap = QPixmap(sample.size())
+    pixmap.fill(source.palette().color(QPalette.ColorRole.Window))
+    sample.render(pixmap)
+    return pixmap.toImage().pixelColor(16, 16)
+
+
+class _SettingsFormLayout(QGridLayout):
+    """Form layout with equal visible label rhythm across mixed-height rows."""
+
+    def __init__(self, *, row_spacing: int, parent: QWidget):
+        super().__init__(parent)
+        self._row_spacing = max(0, int(row_spacing))
+        self._minimum_center_delta = 0
+        self._rows: list[tuple[QLabel, QWidget, Qt.AlignmentFlag]] = []
+        self.setProperty("settingsPanelRowSpacing", self._row_spacing)
+        self.setColumnStretch(1, 1)
+        self.setHorizontalSpacing(8)
+        self.setVerticalSpacing(0)
+
+    def add_settings_row(
+        self,
+        label: QLabel,
+        editor: QWidget,
+        *,
+        vertical_alignment: Qt.AlignmentFlag,
+    ) -> None:
+        content_row = len(self._rows) * 2
+        alignment = Qt.AlignmentFlag.AlignLeft | vertical_alignment
+        label.setAlignment(alignment)
+        self.addWidget(
+            label,
+            content_row,
+            0,
+            alignment=alignment,
+        )
+        self.addWidget(editor, content_row, 1)
+        self._rows.append((label, editor, vertical_alignment))
+        self._update_gap_rows()
+
+    def setGeometry(self, rect) -> None:  # noqa: N802
+        self._update_gap_rows()
+        super().setGeometry(rect)
+
+    def minimum_natural_center_delta(self) -> int:
+        if len(self._rows) < 2:
+            return 0
+
+        row_heights = [
+            max(_natural_height(label), _natural_height(editor))
+            for label, editor, _alignment in self._rows
+        ]
+        return max(
+            (
+                (previous + current + 1) // 2
+                for previous, current, previous_row, current_row in zip(
+                    row_heights[:-1],
+                    row_heights[1:],
+                    self._rows[:-1],
+                    self._rows[1:],
+                    strict=True,
+                )
+                if previous_row[2] == current_row[2] == Qt.AlignmentFlag.AlignVCenter
+            ),
+            default=0,
+        )
+
+    def centered_row_count(self) -> int:
+        return sum(
+            1
+            for _label, _editor, alignment in self._rows
+            if alignment == Qt.AlignmentFlag.AlignVCenter
+        )
+
+    def set_minimum_center_delta(self, value: int) -> None:
+        self._minimum_center_delta = max(0, int(value))
+        self._update_gap_rows()
+
+    def _update_gap_rows(self) -> None:
+        if len(self._rows) < 2:
+            return
+
+        row_heights = [
+            max(_natural_height(label), _natural_height(editor))
+            for label, editor, _alignment in self._rows
+        ]
+        minimum_center_delta = max(
+            self._minimum_center_delta,
+            self.minimum_natural_center_delta(),
+        )
+        target_center_delta = minimum_center_delta + self._row_spacing
+
+        for row_index, (previous, current, previous_row, current_row) in enumerate(
+            zip(
+                row_heights[:-1],
+                row_heights[1:],
+                self._rows[:-1],
+                self._rows[1:],
+                strict=True,
+            ),
+            start=1,
+        ):
+            gap_row = row_index * 2 - 1
+            if previous_row[2] != current_row[2]:
+                self.setRowMinimumHeight(gap_row, self._row_spacing)
+                continue
+            if current_row[2] == Qt.AlignmentFlag.AlignTop:
+                self.setRowMinimumHeight(gap_row, self._row_spacing)
+                continue
+
+            natural_center_delta = (previous + current + 1) // 2
+            self.setRowMinimumHeight(
+                gap_row,
+                max(0, target_center_delta - natural_center_delta),
+            )
+
+
+def _harmonize_form_row_spacing(layouts: list[_SettingsFormLayout]) -> None:
+    # Do not let short path-only sections dictate the rhythm of dense forms.
+    dense_layouts = [layout for layout in layouts if layout.centered_row_count() >= 3]
+    candidate_layouts = dense_layouts or layouts
+    minimum_center_delta = max(
+        (layout.minimum_natural_center_delta() for layout in candidate_layouts),
+        default=0,
+    )
+    for layout in layouts:
+        layout.set_minimum_center_delta(minimum_center_delta)
+
+
+class _SettingsSection(QWidget):
+    def __init__(self, title: str, parent: QWidget):
+        super().__init__(parent)
+        self.setProperty("settingsPanelSectionTitle", title)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(_SETTINGS_SECTION_SPACING)
+
+        self.title_label = QLabel(title, self)
+        self.title_label.setProperty("settingsPanelSectionTitle", title)
+        layout.addWidget(self.title_label)
+
+        self.panel = QGroupBox(self)
+        self.panel.setProperty("settingsPanelSectionTitle", title)
+        layout.addWidget(self.panel)
+
+
+def _settings_label_vertical_alignment(field: FieldSpec) -> Qt.AlignmentFlag:
+    if field.editor in _TOP_ALIGNED_EDITOR_KINDS:
+        return Qt.AlignmentFlag.AlignTop
+    return Qt.AlignmentFlag.AlignVCenter
 
 
 class SettingsDialog(QDialog):
@@ -76,9 +264,29 @@ class SettingsDialog(QDialog):
         self._tabs.currentChanged.connect(self._on_tab_changed)
         root.addWidget(self._tabs)
 
+        row_spacing = _settings_form_row_spacing()
+        page_background = _native_group_box_background_color(self)
         for tab_spec in SETTINGS_TABS:
-            tab = QWidget(self)
-            tab_layout = QVBoxLayout(tab)
+            tab_form_layouts: list[_SettingsFormLayout] = []
+            tab_scroll = QScrollArea(self._tabs)
+            tab_scroll.setFrameShape(QFrame.Shape.NoFrame)
+            tab_scroll.setWidgetResizable(True)
+            tab_scroll.setHorizontalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            )
+            tab_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            _use_background_color(tab_scroll.viewport(), page_background)
+
+            tab_content = QWidget(tab_scroll)
+            _use_background_color(tab_content, page_background)
+            tab_layout = QVBoxLayout(tab_content)
+            tab_layout.setContentsMargins(
+                _SETTINGS_PAGE_MARGIN_LEFT,
+                0,
+                _SETTINGS_PAGE_MARGIN_RIGHT,
+                0,
+            )
+            tab_layout.setSpacing(_SETTINGS_SECTION_SPACING)
 
             for group_spec in tab_spec.groups:
                 visible_fields = [
@@ -89,15 +297,12 @@ class SettingsDialog(QDialog):
                 if not visible_fields:
                     continue
 
-                group_box = QGroupBox(group_spec.title, tab)
-                group_layout = QFormLayout(group_box)
-                group_layout.setFieldGrowthPolicy(
-                    QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
+                section = _SettingsSection(group_spec.title, tab_content)
+                group_layout = _SettingsFormLayout(
+                    row_spacing=row_spacing,
+                    parent=section.panel,
                 )
-                group_layout.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
-                group_layout.setLabelAlignment(
-                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-                )
+                tab_form_layouts.append(group_layout)
 
                 for field in visible_fields:
                     editor = build_editor(
@@ -108,7 +313,13 @@ class SettingsDialog(QDialog):
                     )
                     self._editors[field.key] = editor
                     self._fields[field.key] = field
-                    group_layout.addRow(field.label, editor)
+
+                    label = QLabel(field.label, section.panel)
+                    group_layout.add_settings_row(
+                        label,
+                        editor,
+                        vertical_alignment=_settings_label_vertical_alignment(field),
+                    )
 
                     if self._mode == SettingsPanelSaveMode.AUTOSAVE:
                         editor.value_changed.connect(
@@ -119,10 +330,13 @@ class SettingsDialog(QDialog):
                             partial(self._on_field_changed, field.key)
                         )
 
-                tab_layout.addWidget(group_box)
+                tab_layout.addWidget(section)
 
+            _harmonize_form_row_spacing(tab_form_layouts)
             tab_layout.addStretch(1)
-            self._tabs.addTab(tab, tab_spec.title)
+            tab_content.setMinimumHeight(tab_content.sizeHint().height())
+            tab_scroll.setWidget(tab_content)
+            self._tabs.addTab(tab_scroll, tab_spec.title)
 
         if self._initial_tab_title and self._tabs is not None:
             for i in range(self._tabs.count()):
