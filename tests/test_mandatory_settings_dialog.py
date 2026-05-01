@@ -11,7 +11,10 @@ from PySide6.QtWidgets import (
 )
 import pytest
 
-from piqopiqo.dialogs.mandatory_settings_dialog import MandatorySettingsDialog
+from piqopiqo.dialogs.mandatory_settings_dialog import (
+    MANDATORY_SETTINGS_DIALOG_WIDTH,
+    MandatorySettingsDialog,
+)
 from piqopiqo.ssf.settings_state import (
     PendingMandatorySetting,
     UserSettingKey,
@@ -42,6 +45,16 @@ def _pending(
         current_value=current_value,
         auto_value=auto_value,
         is_empty=is_empty,
+    )
+
+
+def _height_for_dialog_width(dialog: MandatorySettingsDialog) -> int:
+    layout = dialog.layout()
+    assert layout is not None
+    assert layout.hasHeightForWidth()
+    return max(
+        layout.totalHeightForWidth(MANDATORY_SETTINGS_DIALOG_WIDTH),
+        dialog.minimumSizeHint().height(),
     )
 
 
@@ -89,6 +102,44 @@ def test_creatable_directory_row_shows_creation_note(qapp):
     labels = [lbl.text() for lbl in dialog.findChildren(QLabel)]
     assert any("created on save if missing" in text for text in labels)
     assert any("/tmp/future-cache" in text for text in labels)
+
+
+def test_dialog_uses_compact_width_and_height_for_one_setting(qapp):
+    pending = _pending(
+        UserSettingKey.CACHE_BASE_DIR,
+        current_value="",
+        auto_value="/tmp/piqopiqo-cache",
+        is_empty=True,
+    )
+    dialog = MandatorySettingsDialog([pending])
+
+    expected_height = _height_for_dialog_width(dialog)
+
+    assert dialog.width() == MANDATORY_SETTINGS_DIALOG_WIDTH
+    assert dialog.height() == expected_height
+    assert expected_height < dialog.sizeHint().height()
+
+
+def test_dialog_height_grows_for_two_settings(qapp):
+    cache_pending = _pending(
+        UserSettingKey.CACHE_BASE_DIR,
+        current_value="",
+        auto_value="/tmp/piqopiqo-cache",
+        is_empty=True,
+    )
+    exiftool_pending = _pending(
+        UserSettingKey.EXIFTOOL_PATH,
+        current_value="",
+        auto_value="/usr/bin/exiftool",
+        is_empty=True,
+    )
+
+    one_setting_dialog = MandatorySettingsDialog([cache_pending])
+    two_setting_dialog = MandatorySettingsDialog([cache_pending, exiftool_pending])
+
+    assert two_setting_dialog.width() == MANDATORY_SETTINGS_DIALOG_WIDTH
+    assert two_setting_dialog.height() == _height_for_dialog_width(two_setting_dialog)
+    assert two_setting_dialog.height() > one_setting_dialog.height()
 
 
 def test_save_cancel_buttons_and_values_roundtrip(qapp):

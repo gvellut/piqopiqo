@@ -287,14 +287,12 @@ def _deserialize_status_labels(data: Any) -> list[StatusLabel]:
 def _serialize_manual_lenses(value: list[ManualLensPreset]) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
     for preset in value:
-        out.append(
-            {
-                "lens_make": str(preset.lens_make).strip(),
-                "lens_model": str(preset.lens_model).strip(),
-                "focal_length": str(preset.focal_length).strip(),
-                "focal_length_35mm": str(preset.focal_length_35mm).strip(),
-            }
-        )
+        out.append({
+            "lens_make": str(preset.lens_make).strip(),
+            "lens_model": str(preset.lens_model).strip(),
+            "focal_length": str(preset.focal_length).strip(),
+            "focal_length_35mm": str(preset.focal_length_35mm).strip(),
+        })
     return out
 
 
@@ -320,12 +318,10 @@ def _deserialize_manual_lenses(data: Any) -> list[ManualLensPreset]:
 def _serialize_map_links(value: list[MapLinkOption]) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
     for option in value:
-        out.append(
-            {
-                "name": str(option.name).strip(),
-                "url_template": str(option.url_template).strip(),
-            }
-        )
+        out.append({
+            "name": str(option.name).strip(),
+            "url_template": str(option.url_template).strip(),
+        })
     return out
 
 

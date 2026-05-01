@@ -25,6 +25,8 @@ from piqopiqo.ssf.settings_state import (
     UserSettingKey,
 )
 
+MANDATORY_SETTINGS_DIALOG_WIDTH = 640
+
 
 class MandatorySettingsDialog(QDialog):
     def __init__(
@@ -42,7 +44,7 @@ class MandatorySettingsDialog(QDialog):
         self._create_notes: dict[UserSettingKey, QLabel] = {}
 
         self._build_ui(error_message=error_message)
-        self.resize(760, self.sizeHint().height())
+        self._resize_to_content()
 
     def values(self) -> dict[UserSettingKey, str]:
         return {
@@ -87,6 +89,20 @@ class MandatorySettingsDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
+
+    def _resize_to_content(self) -> None:
+        self.ensurePolished()
+        target_height = self.sizeHint().height()
+        layout = self.layout()
+        if layout is not None and layout.hasHeightForWidth():
+            height_for_width = layout.totalHeightForWidth(
+                MANDATORY_SETTINGS_DIALOG_WIDTH
+            )
+            if height_for_width >= 0:
+                target_height = height_for_width
+
+        target_height = max(target_height, self.minimumSizeHint().height())
+        self.resize(MANDATORY_SETTINGS_DIALOG_WIDTH, target_height)
 
     def _build_setting_row(self, pending: PendingMandatorySetting) -> QWidget:
         row = QWidget(self)
