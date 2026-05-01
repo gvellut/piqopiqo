@@ -1,3 +1,2 @@
-Si aucun georeferencement : affichier une erreur/ Mettre le log similaire à gpx2exif + Fliuckr upload tool à la fin
-=> si apply gpx sans photo : a l’air ok.
-Si aucune photo geoiref => ne pas outputter de KML (comme dans gpx2exif)
+In the final screen : if there was no photo that was georerenced (that is their time did not fall into the time range of the GPX file) display that "The GPX did not match any image" with a standard Qt yellow warning icon:  Also in that case, do not output or overwrite the KMLs and ro not print the paths either. Actually in that case : do not display the text field, only the warning / error message. Pay attention to the height of the dialog (not too much empty space)
+Also if there were georeferenced images (but some were not): display in the text field in red the names of the files without georeferencing (if there was no georeferenced image : do not print the filenames, just general error message; see case above)

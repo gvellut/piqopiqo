@@ -351,6 +351,17 @@ def test_recent_folders_menu_limit_default_and_env_override(
     assert get_runtime_setting(RuntimeSettingKey.RECENT_FOLDERS_MENU_LIMIT) == 6
 
 
+def test_copy_sd_eject_timeout_default_and_env_override(
+    isolated_settings, monkeypatch
+):
+    assert get_runtime_setting(RuntimeSettingKey.COPY_SD_EJECT_TIMEOUT_S) == 5.0
+
+    monkeypatch.setenv("PIQO_COPY_SD_EJECT_TIMEOUT_S", "2.5")
+    init_qsettings_store(dyn=False)
+
+    assert get_runtime_setting(RuntimeSettingKey.COPY_SD_EJECT_TIMEOUT_S) == 2.5
+
+
 def test_settings_panel_row_spacing_default_and_env_override(
     isolated_settings, monkeypatch
 ):

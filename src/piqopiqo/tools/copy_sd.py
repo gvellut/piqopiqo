@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import threading
+import time
 from typing import Any
 
 from attrs import define
@@ -25,6 +26,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -34,8 +36,10 @@ from piqopiqo.dialogs.settings_redirect import (
 )
 from piqopiqo.folder_watcher import WorkspaceWatcherController
 from piqopiqo.ssf.settings_state import (
+    RuntimeSettingKey,
     StateKey,
     UserSettingKey,
+    get_runtime_setting,
     get_state,
     get_user_setting,
 )
@@ -374,8 +378,115 @@ def get_sd_volume() -> PhotoVolume | None:
     return sd_volumes[0]
 
 
-def eject_volume(volume_name):
-    subprocess.run(["diskutil", "eject", f"/Volumes/{volume_name}"])
+class EjectVolumeError(RuntimeError):
+    """Raised when macOS does not verify that a volume was ejected."""
+
+
+def _process_output_text(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode(errors="replace").strip()
+    return str(value).strip()
+
+
+def _volume_is_mounted(volume_path: str) -> bool:
+    return os.path.exists(volume_path) and os.path.ismount(volume_path)
+
+
+def _wait_until_unmounted(
+    volume_path: str,
+    *,
+    deadline: float,
+    poll_interval_s: float,
+) -> bool:
+    while True:
+        if not _volume_is_mounted(volume_path):
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(max(0.01, poll_interval_s), remaining))
+
+
+def _format_eject_failure(
+    volume: PhotoVolume,
+    *,
+    result: subprocess.CompletedProcess | None,
+    command_error: str,
+    stdout: object = None,
+    stderr: object = None,
+) -> str:
+    lines = [
+        f"Could not eject {volume.name}.",
+        f"The volume is still mounted at {volume.path}.",
+    ]
+    if command_error:
+        lines.append(command_error)
+    elif result is not None and result.returncode:
+        lines.append(f"diskutil eject failed with exit code {result.returncode}.")
+    else:
+        lines.append("Timed out waiting for macOS to unmount the volume.")
+
+    stdout_text = _process_output_text(
+        stdout if stdout is not None else getattr(result, "stdout", "")
+    )
+    stderr_text = _process_output_text(
+        stderr if stderr is not None else getattr(result, "stderr", "")
+    )
+    if stdout_text:
+        lines.append(f"stdout: {stdout_text}")
+    if stderr_text:
+        lines.append(f"stderr: {stderr_text}")
+    return "\n".join(lines)
+
+
+def eject_volume(
+    volume: PhotoVolume,
+    *,
+    timeout_s: float,
+    poll_interval_s: float = 0.25,
+) -> None:
+    timeout_value = max(0.0, float(timeout_s))
+    deadline = time.monotonic() + timeout_value
+    result: subprocess.CompletedProcess | None = None
+    command_error = ""
+    stdout: object = None
+    stderr: object = None
+
+    if not _volume_is_mounted(volume.path):
+        return
+
+    try:
+        result = subprocess.run(
+            ["diskutil", "eject", volume.path],
+            capture_output=True,
+            text=True,
+            timeout=max(0.1, timeout_value),
+        )
+    except FileNotFoundError as exc:
+        command_error = f"diskutil was not found: {exc}"
+    except subprocess.TimeoutExpired as exc:
+        command_error = f"diskutil eject timed out after {timeout_value:g} second(s)."
+        stdout = exc.stdout
+        stderr = exc.stderr
+
+    if _wait_until_unmounted(
+        volume.path,
+        deadline=deadline,
+        poll_interval_s=poll_interval_s,
+    ):
+        return
+
+    raise EjectVolumeError(
+        _format_eject_failure(
+            volume,
+            result=result,
+            command_error=command_error,
+            stdout=stdout,
+            stderr=stderr,
+        )
+    )
 
 
 def filter_relevant_image(filename):
@@ -445,7 +556,6 @@ class CopySdWorker(QRunnable):
                 logger.info(
                     "Copy to %s (date: %s) ...", target_dir, date_to_str(f_date)
                 )
-                os.makedirs(target_dir, exist_ok=True)
 
                 self.signals.status.emit(
                     f"Scanning for {date_to_str(f_date)} in {self._volume.name}..."
@@ -469,6 +579,7 @@ class CopySdWorker(QRunnable):
                 if self._is_cancelled():
                     break
                 try:
+                    os.makedirs(output_folder, exist_ok=True)
                     shutil.copy2(file_path, output_folder)
                 except Exception as exc:
                     error_count += 1
@@ -567,13 +678,18 @@ class CopySdProgressDialog(ToolFlowDialog):
         parent=None,
     ):
         self._volume = volume
-        self._should_eject = should_eject
         self._worker = CopySdWorker(volume, dates, target_dirs)
         self._finished = False
         self._error_count = 0
         self._started = False
         self._copied_count = 0
         self._was_cancelled = False
+        self._eject_checked = bool(should_eject)
+        self._eject_error_message = ""
+        self._ignore_eject_result = False
+        self._eject_thread: threading.Thread | None = None
+        self.status_warning_icon_label: QLabel | None = None
+        self.eject_checkbox: QCheckBox | None = None
 
         workflow = ToolWorkflow(
             initial_screen="running",
@@ -600,12 +716,40 @@ class CopySdProgressDialog(ToolFlowDialog):
                     min_width=520,
                     show_progress=True,
                 ),
+                "ejecting": ToolScreen(
+                    id="ejecting",
+                    title="Copy from SD",
+                    build=lambda dialog: None,
+                    buttons=(ToolButton("cancel", "Cancel"),),
+                    min_width=520,
+                    show_progress=True,
+                    show_progress_count=False,
+                ),
+                "ejected": ToolScreen(
+                    id="ejected",
+                    title="Copy from SD",
+                    build=lambda dialog: dialog._build_ejected_body(),
+                    buttons=(ToolButton("ok", "OK", enabled=True, default=True),),
+                    min_width=520,
+                    show_progress=False,
+                ),
+                "eject_error": ToolScreen(
+                    id="eject_error",
+                    title="Copy from SD",
+                    build=lambda dialog: dialog._build_eject_error_body(),
+                    buttons=(ToolButton("ok", "OK", enabled=True, default=True),),
+                    min_width=520,
+                    show_progress=False,
+                ),
             },
             transitions={
                 ("running", "cancel"): lambda dialog, event: dialog._on_cancel(),
                 ("running", "ok"): lambda dialog, event: dialog._on_ok(),
                 ("result", "cancel"): lambda dialog, event: dialog._on_cancel(),
                 ("result", "ok"): lambda dialog, event: dialog._on_ok(),
+                ("ejecting", "cancel"): lambda dialog, event: dialog._on_cancel(),
+                ("ejected", "ok"): lambda dialog, event: dialog.accept(),
+                ("eject_error", "ok"): lambda dialog, event: dialog.accept(),
                 ("*", "status"): lambda dialog, event: dialog._on_status(*event.args),
                 ("*", "plan_ready"): lambda dialog, event: dialog._on_plan_ready(
                     *event.args
@@ -620,6 +764,8 @@ class CopySdProgressDialog(ToolFlowDialog):
             },
         )
         super().__init__(workflow, parent=parent)
+        self._setup_status_warning_icon()
+        self._setup_eject_checkbox()
         self.progress_bar.setRange(0, 0)
         self.set_status("Preparing copy...")
         self._eject_done.connect(self._on_eject_done)
@@ -632,12 +778,20 @@ class CopySdProgressDialog(ToolFlowDialog):
     def was_cancelled(self) -> bool:
         return bool(self._was_cancelled)
 
+    @property
+    def eject_requested(self) -> bool:
+        return bool(self._eject_checked)
+
     def transition_to(self, screen_id: str) -> None:
         super().transition_to(screen_id)
         self.status_label = self.status_label
         self.progress_text_label = self.progress_count_label
         self.cancel_btn = self.button("cancel")
         self.ok_btn = self.button("ok")
+        if self.eject_checkbox is not None:
+            self.eject_checkbox.hide()
+        if self.status_warning_icon_label is not None:
+            self.status_warning_icon_label.hide()
 
     def _build_body(self) -> QWidget:
         widget = QWidget(self)
@@ -648,12 +802,54 @@ class CopySdProgressDialog(ToolFlowDialog):
         self.error_label.hide()
         layout.addWidget(self.error_label)
 
-        self.eject_checkbox = QCheckBox("Eject SD card", widget)
-        self.eject_checkbox.setChecked(self._should_eject)
-        self.eject_checkbox.hide()
-        layout.addWidget(self.eject_checkbox)
-
         return widget
+
+    def _setup_eject_checkbox(self) -> None:
+        self.eject_checkbox = QCheckBox("Eject SD card", self)
+        self.eject_checkbox.setChecked(self._eject_checked)
+        self.eject_checkbox.toggled.connect(self._set_eject_checked)
+        self.eject_checkbox.hide()
+        layout = self.layout()
+        if layout is not None:
+            layout.insertWidget(layout.count() - 1, self.eject_checkbox)
+
+    def _setup_status_warning_icon(self) -> None:
+        self.status_warning_icon_label = QLabel(self.progress_row)
+        self.status_warning_icon_label.setObjectName("copySdWarningIcon")
+        icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
+        self.status_warning_icon_label.setPixmap(icon.pixmap(24, 24))
+        self.status_warning_icon_label.hide()
+        layout = self.progress_row.layout()
+        if layout is not None:
+            layout.insertWidget(0, self.status_warning_icon_label)
+
+    def _set_status_warning_icon_visible(self, visible: bool) -> None:
+        if self.status_warning_icon_label is None:
+            return
+        self.status_warning_icon_label.setVisible(visible)
+
+    def _build_ejected_body(self) -> QWidget:
+        widget = QWidget(self)
+        layout = QVBoxLayout(widget)
+        label = QLabel("You can remove the SD Card safely", widget)
+        label.setWordWrap(True)
+        layout.addWidget(label)
+        return widget
+
+    def _build_eject_error_body(self) -> QWidget:
+        widget = QWidget(self)
+        layout = QVBoxLayout(widget)
+        message = "Could not eject the SD card."
+        if self._eject_error_message:
+            message = f"{message}\n\n{self._eject_error_message}"
+        label = QLabel(message, widget)
+        label.setWordWrap(True)
+        label.setStyleSheet("color: red;")
+        layout.addWidget(label)
+        return widget
+
+    def _set_eject_checked(self, checked: bool) -> None:
+        self._eject_checked = bool(checked)
 
     def start(self):
         if self._started:
@@ -684,6 +880,7 @@ class CopySdProgressDialog(ToolFlowDialog):
         )
 
     def _on_status(self, message: str):
+        self._set_status_warning_icon_visible(False)
         self.set_status(message)
 
     def _on_plan_ready(self, total: int):
@@ -708,52 +905,84 @@ class CopySdProgressDialog(ToolFlowDialog):
         self.transition_to("result")
         if total == 0:
             status = "No images found for the selected date(s)."
+            self._set_status_warning_icon_visible(True)
         elif cancelled:
             status = f"Copy cancelled ({copied}/{total} file(s) copied)."
+            self._set_status_warning_icon_visible(False)
         else:
             status = f"Copy complete. {copied} file(s) copied."
+            self._set_status_warning_icon_visible(False)
         if error_count:
             status += f" {error_count} error(s)."
 
         self.set_status(status)
-        self.set_progress(min(copied, total) if total else 0, total)
+        if total:
+            self.set_progress(min(copied, total), total)
+        else:
+            self.progress_bar.hide()
+            self.progress_count_label.clear()
+            self.progress_count_label.hide()
+            self.sync_size_to_content()
         self.cancel_btn.setEnabled(False)
         self.ok_btn.setEnabled(True)
         self.ok_btn.setDefault(True)
         self.ok_btn.setFocus()
-        if not cancelled:
+        if not cancelled and self.eject_checkbox is not None:
             self.eject_checkbox.show()
+            self.sync_size_to_content()
 
     def _on_ok(self):
-        if self.eject_checkbox.isChecked() and self.eject_checkbox.isVisible():
-            self.ok_btn.setEnabled(False)
-            self.eject_checkbox.setEnabled(False)
-            self.set_status(f"Ejecting {self._volume.name}...")
-            self._eject_thread = threading.Thread(
-                target=self._eject_in_background, daemon=True
-            )
-            self._eject_thread.start()
+        if self.eject_checkbox is not None:
+            self._set_eject_checked(self.eject_checkbox.isChecked())
+        if (
+            self.eject_checkbox is not None
+            and self.eject_checkbox.isChecked()
+            and not self.eject_checkbox.isHidden()
+        ):
+            self._start_eject()
             return
         self.accept()
 
+    def _start_eject(self) -> None:
+        self._ignore_eject_result = False
+        self.transition_to("ejecting")
+        self.set_status("Ejecting SD Card...")
+        self.set_progress(0, 0)
+        self._start_eject_thread()
+
+    def _start_eject_thread(self) -> None:
+        self._eject_thread = threading.Thread(
+            target=self._eject_in_background,
+            daemon=True,
+        )
+        self._eject_thread.start()
+
     def _eject_in_background(self):
         try:
-            eject_volume(self._volume.name)
+            timeout_s = get_runtime_setting(RuntimeSettingKey.COPY_SD_EJECT_TIMEOUT_S)
+            eject_volume(self._volume, timeout_s=timeout_s)
             self._eject_done.emit("")
         except Exception as exc:
             logger.exception("Error ejecting %s", self._volume.name)
             self._eject_done.emit(str(exc))
 
     def _on_eject_done(self, error: str):
+        if self._ignore_eject_result or self.current_screen_id != "ejecting":
+            return
         if error:
-            QMessageBox.warning(
-                self,
-                "Eject failed",
-                f"Could not eject {self._volume.name}:\n{error}",
-            )
-        self.accept()
+            self._eject_error_message = str(error)
+            self.transition_to("eject_error")
+        else:
+            self.transition_to("ejected")
+        if self.ok_btn is not None:
+            self.ok_btn.setDefault(True)
+            self.ok_btn.setFocus()
 
     def _on_cancel(self):
+        if self.current_screen_id == "ejecting":
+            self._ignore_eject_result = True
+            self.reject()
+            return
         if self._finished:
             self.accept()
             return
@@ -761,7 +990,16 @@ class CopySdProgressDialog(ToolFlowDialog):
         self.cancel_btn.setEnabled(False)
         self.stop_task("copy_sd", cancel=True)
 
+    def reject(self) -> None:
+        if self.current_screen_id == "ejecting":
+            self._ignore_eject_result = True
+        super().reject()
+
     def closeEvent(self, event):
+        if self.current_screen_id == "ejecting":
+            self._ignore_eject_result = True
+            super().closeEvent(event)
+            return
         if not self._finished:
             self._on_cancel()
             event.ignore()
@@ -820,7 +1058,7 @@ def _resolve_dates_with_progress(parent, date_spec: str, volume: PhotoVolume):
     if not is_dynamic(normalized):
         # No worker needed for fixed dates
         try:
-            return to_fixed_dates(date_spec, volume)
+            return to_fixed_dates(date_spec)
         except ValueError:
             return "Invalid date spec. Please try again."
 
@@ -977,4 +1215,4 @@ def launch_copy_sd(
     # Save user choices for next session
     state.set(StateKey.COPY_SD_NAME_SUFFIX, name)
     state.set(StateKey.COPY_SD_DATE_SPEC, date_spec)
-    state.set(StateKey.COPY_SD_EJECT, progress_dialog.eject_checkbox.isChecked())
+    state.set(StateKey.COPY_SD_EJECT, progress_dialog.eject_requested)
