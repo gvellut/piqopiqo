@@ -174,6 +174,70 @@ class PhotoListModel(QObject):
         self.photos_changed.emit()
         return added_paths
 
+    def update_photo_paths(
+        self,
+        moves: list[tuple[str, str]],
+        *,
+        emit_signals: bool = True,
+    ) -> list[tuple[str, str]]:
+        """Update existing photo paths in place.
+
+        Selection and cached editable metadata stay attached to the ImageItem.
+        Runtime thumbnail state is cleared because cache paths are path based.
+
+        Args:
+            moves: List of (old_path, new_path) pairs.
+            emit_signals: Emit photos_changed when True.
+
+        Returns:
+            Move pairs that were applied.
+        """
+        if not moves:
+            return []
+
+        photos_by_path = {photo.path: photo for photo in self._all_photos}
+        applied: list[tuple[str, str]] = []
+
+        for old_path, new_path in moves:
+            if not old_path or not new_path or old_path == new_path:
+                continue
+
+            photo = photos_by_path.get(old_path)
+            if photo is None:
+                continue
+
+            existing_new = photos_by_path.get(new_path)
+            if existing_new is not None and existing_new is not photo:
+                logger.warning(
+                    "Skipping path update %s -> %s: destination already exists",
+                    old_path,
+                    new_path,
+                )
+                continue
+
+            photos_by_path.pop(old_path, None)
+            photos_by_path[new_path] = photo
+
+            photo.path = new_path
+            photo.name = os.path.basename(new_path)
+            photo.source_folder = os.path.dirname(new_path)
+            photo.state = 0
+            photo._cache_state_dirty = True
+            photo.embedded_pixmap = None
+            photo.hq_pixmap = None
+            photo.pixmap = None
+            photo.exif_data = None
+            applied.append((old_path, new_path))
+
+        if not applied:
+            return []
+
+        self._rebuild_source_folders()
+        self._apply_filter_and_sort()
+        if emit_signals:
+            self.photos_changed.emit()
+        return applied
+
     def remove_photo(self, file_path: str) -> int:
         """Remove a photo from the model.
 
@@ -192,6 +256,8 @@ class PhotoListModel(QObject):
 
         if photo is None:
             return -1
+
+        self._rebuild_source_folders()
 
         # Find and remove from filtered view
         former_index = -1
@@ -478,6 +544,15 @@ class PhotoListModel(QObject):
             photo._global_index = i
 
         self._filtered_photos = filtered
+
+    def _rebuild_source_folders(self) -> None:
+        self._source_folders = sorted(
+            {
+                photo.source_folder
+                for photo in self._all_photos
+                if photo.source_folder
+            }
+        )
 
     def _reindex_from(self, start_index: int):
         """Update _global_index for all photos from start_index onwards."""

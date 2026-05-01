@@ -1,0 +1,3 @@
+in 6029abfec6bc9434f9aa897d94f960aec65585aa you made Lens info displayed if set.
+What I requested was to make the lens info displayed ONLY IF it was set using the Set Lens Info tool : that is if present in the metadata (SQLLite DB), NOT if present in the EXIF data (which it will always will be).
+So correct this : only display the Lens Info if present in the metadatadata, NOT the EXIF.

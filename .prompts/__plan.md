@@ -1,3 +1,4 @@
+- [Correct Lens info disply](Vc_tasks/Dd_Correct_Lens_info_disply.md)
 - [Keyword tree should display half checkd](Kc_tasks/Kc_Keyword_tree_should_display_half_chcekd.md)
 - [Flickr max workers diff for upload and set date public](Yb_tasks/Cc_Flickr_max_workers_diff_for_upload_and_set_date_.md)
 - [Copy SD display the list of dates in multiline text field](Kc_tasks/Pc_Copy_SD_display_the_list_of_dates_in_multiline_t.md)
@@ -127,3 +128,4 @@
 ! [Required settings to high](Vc_tasks/Ad_Required_settings_to_high.md)
 ! [add progress bar for sd card eject](Vc_tasks/Bd_add_progress_bar_for_sd_card_eject.md)
 ! [apply gpx show number of georeferenced warning if none](Vc_tasks/Yc_apply_gpx_show_number_of_georeferenced_warning_i.md)
+! [detect folder move](Vc_tasks/Cd_detect_folder_move.md)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Callable, Iterable
 import logging
 import os
@@ -21,27 +22,66 @@ _IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
 class WorkspaceFileState:
     mtime_ns: int
     size: int
+    dev: int
+    ino: int
+
+
+WorkspaceChange = tuple[str, ...]
 
 
 def _is_image_path(path: str) -> bool:
     return path.lower().endswith(_IMAGE_EXTENSIONS)
 
 
-def _iter_image_changes(
+def _change_kind(change: object) -> str:
+    kind = getattr(change, "name", None)
+    if not isinstance(kind, str):
+        kind = str(change)
+    return kind
+
+
+def _stat_file_state(file_path: str) -> WorkspaceFileState:
+    stat = os.stat(file_path)
+    return WorkspaceFileState(
+        mtime_ns=int(getattr(stat, "st_mtime_ns", 0)),
+        size=int(getattr(stat, "st_size", 0)),
+        dev=int(getattr(stat, "st_dev", 0)),
+        ino=int(getattr(stat, "st_ino", 0)),
+    )
+
+
+def _iter_workspace_changes(
     changes: Iterable[tuple[object, str]],
 ) -> list[tuple[str, str]]:
+    """Return image changes plus non-image structure changes.
+
+    watchfiles does not reliably emit every contained image when a directory is
+    moved or renamed. Non-image add/delete events are therefore forwarded as
+    structure hints so the controller can reconcile against a fresh snapshot.
+    Ordinary non-image modifications are ignored.
+    """
     results: list[tuple[str, str]] = []
     for change, path in changes:
         if not isinstance(path, str):
             continue
-        if not _is_image_path(path):
-            continue
 
-        kind = getattr(change, "name", None)
-        if not isinstance(kind, str):
-            kind = str(change)
+        kind = _change_kind(change)
+        if not _is_image_path(path):
+            kind_lower = kind.lower()
+            if "added" not in kind_lower and "deleted" not in kind_lower:
+                continue
         results.append((kind, path))
     return results
+
+
+def _iter_image_changes(
+    changes: Iterable[tuple[object, str]],
+) -> list[tuple[str, str]]:
+    return [
+        (kind, path)
+        for kind, path in _iter_workspace_changes(changes)
+        if _is_image_path(path)
+    ]
 
 
 def build_file_snapshot(file_paths: Iterable[str]) -> dict[str, WorkspaceFileState]:
@@ -50,13 +90,10 @@ def build_file_snapshot(file_paths: Iterable[str]) -> dict[str, WorkspaceFileSta
         if not isinstance(file_path, str) or not _is_image_path(file_path):
             continue
         try:
-            stat = os.stat(file_path)
+            state = _stat_file_state(file_path)
         except OSError:
             continue
-        snapshot[file_path] = WorkspaceFileState(
-            mtime_ns=int(getattr(stat, "st_mtime_ns", 0)),
-            size=int(getattr(stat, "st_size", 0)),
-        )
+        snapshot[file_path] = state
     return snapshot
 
 
@@ -71,52 +108,100 @@ def scan_workspace_snapshot(root_folder: str | None) -> dict[str, WorkspaceFileS
                 continue
             file_path = os.path.join(root, file_name)
             try:
-                stat = os.stat(file_path)
+                state = _stat_file_state(file_path)
             except OSError:
                 continue
-            snapshot[file_path] = WorkspaceFileState(
-                mtime_ns=int(getattr(stat, "st_mtime_ns", 0)),
-                size=int(getattr(stat, "st_size", 0)),
-            )
+            snapshot[file_path] = state
     return snapshot
 
 
 def normalize_workspace_changes(
-    changes: Iterable[tuple[str, str]],
-) -> list[tuple[str, str]]:
+    changes: Iterable[WorkspaceChange],
+) -> list[WorkspaceChange]:
+    moved: dict[str, str] = {}
     added: set[str] = set()
     deleted: set[str] = set()
     modified: set[str] = set()
 
-    for kind, path in changes:
+    for change in changes:
+        if len(change) < 2:
+            continue
+        kind, path = change[0], change[1]
         if not isinstance(path, str) or not path:
             continue
         kind_lower = str(kind).lower()
-        if "added" in kind_lower:
+        if "moved" in kind_lower and len(change) >= 3:
+            new_path = change[2]
+            if isinstance(new_path, str) and new_path:
+                moved[path] = new_path
+        elif "added" in kind_lower:
             added.add(path)
         elif "deleted" in kind_lower or "removed" in kind_lower:
             deleted.add(path)
         elif "modified" in kind_lower:
             modified.add(path)
 
+    if moved:
+        deleted.difference_update(moved.keys())
+        added.difference_update(moved.values())
+        modified.difference_update(moved.keys())
+        modified.difference_update(moved.values())
+
     effective_modified = modified - added - deleted
-    normalized: list[tuple[str, str]] = []
+    normalized: list[WorkspaceChange] = []
+    normalized.extend(("moved", old, new) for old, new in sorted(moved.items()))
     normalized.extend(("deleted", path) for path in sorted(deleted))
     normalized.extend(("added", path) for path in sorted(added))
     normalized.extend(("modified", path) for path in sorted(effective_modified))
     return normalized
 
 
+def _file_identity(state: WorkspaceFileState) -> tuple[int, int] | None:
+    if state.dev <= 0 or state.ino <= 0:
+        return None
+    return (state.dev, state.ino)
+
+
 def diff_workspace_snapshots(
     previous: dict[str, WorkspaceFileState],
     current: dict[str, WorkspaceFileState],
-) -> list[tuple[str, str]]:
+) -> list[WorkspaceChange]:
     previous_paths = set(previous)
     current_paths = set(current)
+    deleted_paths = previous_paths - current_paths
+    added_paths = current_paths - previous_paths
 
-    changes: list[tuple[str, str]] = []
-    changes.extend(("deleted", path) for path in sorted(previous_paths - current_paths))
-    changes.extend(("added", path) for path in sorted(current_paths - previous_paths))
+    deleted_by_identity: dict[tuple[int, int], list[str]] = defaultdict(list)
+    added_by_identity: dict[tuple[int, int], list[str]] = defaultdict(list)
+    for path in deleted_paths:
+        identity = _file_identity(previous[path])
+        if identity is not None:
+            deleted_by_identity[identity].append(path)
+    for path in added_paths:
+        identity = _file_identity(current[path])
+        if identity is not None:
+            added_by_identity[identity].append(path)
+
+    moved: list[tuple[str, str, str]] = []
+    paired_deleted: set[str] = set()
+    paired_added: set[str] = set()
+    for identity in sorted(set(deleted_by_identity) & set(added_by_identity)):
+        old_paths = deleted_by_identity[identity]
+        new_paths = added_by_identity[identity]
+        if len(old_paths) != 1 or len(new_paths) != 1:
+            continue
+        old_path = old_paths[0]
+        new_path = new_paths[0]
+        moved.append(("moved", old_path, new_path))
+        paired_deleted.add(old_path)
+        paired_added.add(new_path)
+
+    changes: list[WorkspaceChange] = []
+    changes.extend(sorted(moved, key=lambda item: (item[1], item[2])))
+    changes.extend(
+        ("deleted", path) for path in sorted(deleted_paths - paired_deleted)
+    )
+    changes.extend(("added", path) for path in sorted(added_paths - paired_added))
 
     modified = sorted(
         path
@@ -156,9 +241,9 @@ class FolderWatcher(QObject):
             stop_event=self._stop_event,
             recursive=True,
         ):
-            image_changes = _iter_image_changes(changes)
-            if image_changes:
-                self.changes_detected.emit(image_changes)
+            workspace_changes = _iter_workspace_changes(changes)
+            if workspace_changes:
+                self.changes_detected.emit(workspace_changes)
 
 
 class WorkspaceWatcherController(QObject):
@@ -166,7 +251,7 @@ class WorkspaceWatcherController(QObject):
 
     def __init__(
         self,
-        apply_changes: Callable[[list[tuple[str, str]]], None],
+        apply_changes: Callable[[list[WorkspaceChange]], None],
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -243,12 +328,13 @@ class WorkspaceWatcherController(QObject):
         self._snapshot = current_snapshot
         self._suspended = False
 
-        if changes:
-            self._apply_changes(changes)
+        dispatched = self._filter_suppressed_changes(changes)
+        if dispatched:
+            self._apply_changes(dispatched)
 
         self.start()
 
-    def _on_watcher_changes(self, changes: list[tuple[str, str]]) -> None:
+    def _on_watcher_changes(self, changes: list[WorkspaceChange]) -> None:
         if not changes:
             return
 
@@ -258,28 +344,79 @@ class WorkspaceWatcherController(QObject):
         }
 
         normalized = normalize_workspace_changes(changes)
-        dispatched: list[tuple[str, str]] = []
+        if self._requires_snapshot_reconcile(normalized):
+            self._reconcile_snapshot()
+            return
+
+        image_changes = [
+            change
+            for change in normalized
+            if len(change) >= 2 and _is_image_path(change[1])
+        ]
+        dispatched = self._filter_suppressed_changes(image_changes)
         touched_paths: set[str] = set()
 
-        for kind, path in normalized:
-            touched_paths.add(path)
-            if path in self._suppressed_paths:
-                continue
-            dispatched.append((kind, path))
+        for change in image_changes:
+            touched_paths.update(self._paths_for_change(change))
 
         self._apply_snapshot_updates(touched_paths)
 
         if dispatched:
             self._apply_changes(dispatched)
 
+    def _requires_snapshot_reconcile(self, changes: list[WorkspaceChange]) -> bool:
+        has_image_added = False
+        has_image_deleted = False
+        for change in changes:
+            if len(change) < 2:
+                continue
+            kind = str(change[0]).lower()
+            path = change[1]
+            if not _is_image_path(path):
+                return True
+            if "added" in kind:
+                has_image_added = True
+            elif "deleted" in kind or "removed" in kind:
+                has_image_deleted = True
+            elif "moved" in kind:
+                return True
+        return has_image_added and has_image_deleted
+
+    def _reconcile_snapshot(self) -> None:
+        current_snapshot = scan_workspace_snapshot(self._root_folder)
+        changes = diff_workspace_snapshots(self._snapshot, current_snapshot)
+        self._snapshot = current_snapshot
+
+        dispatched = self._filter_suppressed_changes(changes)
+        if dispatched:
+            self._apply_changes(dispatched)
+
+    def _paths_for_change(self, change: WorkspaceChange) -> list[str]:
+        if len(change) >= 3 and str(change[0]).lower() == "moved":
+            return [change[1], change[2]]
+        if len(change) >= 2:
+            return [change[1]]
+        return []
+
+    def _filter_suppressed_changes(
+        self,
+        changes: Iterable[WorkspaceChange],
+    ) -> list[WorkspaceChange]:
+        dispatched: list[WorkspaceChange] = []
+        for change in changes:
+            if any(
+                path in self._suppressed_paths
+                for path in self._paths_for_change(change)
+            ):
+                continue
+            dispatched.append(change)
+        return dispatched
+
     def _apply_snapshot_updates(self, paths: set[str]) -> None:
         for path in paths:
             try:
-                stat = os.stat(path)
+                state = _stat_file_state(path)
             except OSError:
                 self._snapshot.pop(path, None)
                 continue
-            self._snapshot[path] = WorkspaceFileState(
-                mtime_ns=int(getattr(stat, "st_mtime_ns", 0)),
-                size=int(getattr(stat, "st_size", 0)),
-            )
+            self._snapshot[path] = state

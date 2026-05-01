@@ -262,6 +262,62 @@ class FullscreenOverlay(QWidget):
             self.index_changed.emit(new_global_index)
         return True
 
+    def rebind_to_items_and_paths(
+        self,
+        all_items: list,
+        paths: list[str],
+        preferred_path: str | None = None,
+    ) -> bool:
+        old_global_index = None
+        if self.visible_indices and (
+            0 <= self.current_visible_idx < len(self.visible_indices)
+        ):
+            old_global_index = self.visible_indices[self.current_visible_idx]
+
+        self.all_items = all_items
+        self._all_paths_order = [
+            path
+            for item in self.all_items
+            if isinstance((path := getattr(item, "path", None)), str)
+        ]
+
+        path_to_index: dict[str, int] = {}
+        for i, item in enumerate(self.all_items):
+            path = getattr(item, "path", None)
+            if isinstance(path, str):
+                path_to_index[path] = i
+
+        new_visible_indices = [
+            path_to_index[path] for path in paths if path in path_to_index
+        ]
+        if not new_visible_indices:
+            return False
+
+        self.visible_indices = new_visible_indices
+
+        preferred_index = None
+        if preferred_path is not None:
+            preferred_global = path_to_index.get(preferred_path)
+            if (
+                preferred_global is not None
+                and preferred_global in self.visible_indices
+            ):
+                preferred_index = self.visible_indices.index(preferred_global)
+
+        if preferred_index is None:
+            self.current_visible_idx = min(
+                max(0, self.current_visible_idx),
+                len(self.visible_indices) - 1,
+            )
+        else:
+            self.current_visible_idx = preferred_index
+
+        self._load_current_image()
+        new_global_index = self.visible_indices[self.current_visible_idx]
+        if new_global_index != old_global_index:
+            self.index_changed.emit(new_global_index)
+        return True
+
     def eject_current_from_loop(self) -> dict[str, object] | None:
         current_path = self.get_current_path()
         if current_path is None:

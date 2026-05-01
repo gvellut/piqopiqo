@@ -18,12 +18,13 @@ def _item(
     label: str | None = None,
     time_taken: datetime | None = None,
     selected: bool = False,
+    source_folder: str = "/photos",
 ) -> ImageItem:
     return ImageItem(
         path=path,
         name=path.split("/")[-1],
         created="2020-01-01 00:00:00",
-        source_folder="/photos",
+        source_folder=source_folder,
         is_selected=selected,
         db_metadata={
             DBFields.TITLE: title,
@@ -143,3 +144,46 @@ def test_no_label_filter_includes_unknown_labels_from_old_settings():
     )
 
     assert [item.path for item in model.photos] == ["/photos/a.jpg", "/photos/c.jpg"]
+
+
+def test_update_photo_paths_preserves_selection_and_metadata():
+    model = PhotoListModel(MetadataDBManager())
+    first = _item("/photos/old/a.jpg", label="Approved", selected=True)
+    second = _item("/photos/b.jpg", label="Rejected")
+    model.set_photos([first, second], ["/photos/old", "/photos"])
+
+    applied = model.update_photo_paths(
+        [("/photos/old/a.jpg", "/photos/new/a-renamed.jpg")]
+    )
+
+    assert applied == [("/photos/old/a.jpg", "/photos/new/a-renamed.jpg")]
+    assert first.path == "/photos/new/a-renamed.jpg"
+    assert first.name == "a-renamed.jpg"
+    assert first.source_folder == "/photos/new"
+    assert first.is_selected is True
+    assert first.db_metadata[DBFields.LABEL] == "Approved"
+    assert model.source_folders == ["/photos", "/photos/new"]
+    assert model.get_selected_photos() == [first]
+
+
+def test_update_photo_paths_respects_folder_filter_and_clears_hidden_selection():
+    model = PhotoListModel(MetadataDBManager())
+    first = _item(
+        "/photos/old/a.jpg",
+        selected=True,
+        source_folder="/photos/old",
+    )
+    second = _item(
+        "/photos/old/b.jpg",
+        selected=True,
+        source_folder="/photos/old",
+    )
+    model.set_photos([first, second], ["/photos/old"])
+    model.set_filter(FilterCriteria(folder="/photos/old"))
+
+    model.update_photo_paths([("/photos/old/a.jpg", "/photos/new/a.jpg")])
+
+    assert [item.path for item in model.photos] == ["/photos/old/b.jpg"]
+    assert first.is_selected is False
+    assert second.is_selected is True
+    assert model.source_folders == ["/photos/new", "/photos/old"]

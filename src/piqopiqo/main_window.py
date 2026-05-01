@@ -2862,14 +2862,47 @@ class MainWindow(QMainWindow):
     ) -> None:
         self._workspace_watcher.suppress_paths(paths, duration_s=duration_s)
 
-    def _on_folder_changes(self, changes: list[tuple[str, str]]) -> None:
+    def _on_folder_changes(self, changes: list[tuple[str, ...]]) -> None:
         if not changes:
             return
 
         normalized_changes = normalize_workspace_changes(changes)
-        deleted = [path for kind, path in normalized_changes if kind == "deleted"]
-        added = [path for kind, path in normalized_changes if kind == "added"]
-        modified = [path for kind, path in normalized_changes if kind == "modified"]
+        fullscreen_state = self._capture_fullscreen_filesystem_reconcile_state()
+
+        moves = [
+            (change[1], change[2])
+            for change in normalized_changes
+            if len(change) >= 3 and change[0] == "moved"
+        ]
+        applied_moves = self._apply_photo_path_moves(moves)
+        applied_move_map = dict(applied_moves)
+        applied_move_set = set(applied_moves)
+
+        deleted = [
+            change[1]
+            for change in normalized_changes
+            if len(change) >= 2
+            and change[0] == "deleted"
+            and change[1] not in applied_move_map
+        ]
+        added = [
+            change[1]
+            for change in normalized_changes
+            if len(change) >= 2
+            and change[0] == "added"
+            and change[1] not in set(applied_move_map.values())
+        ]
+        modified = [
+            change[1]
+            for change in normalized_changes
+            if len(change) >= 2 and change[0] == "modified"
+        ]
+
+        for old_path, new_path in moves:
+            if (old_path, new_path) in applied_move_set:
+                continue
+            deleted.append(old_path)
+            added.append(new_path)
 
         # Deletions first to handle renames (delete+add)
         for path in deleted:
@@ -2880,24 +2913,9 @@ class MainWindow(QMainWindow):
         for path in added:
             if path in self._items_by_path:
                 continue
-            if not os.path.isfile(path):
+            item = self._make_image_item_for_path(path)
+            if item is None:
                 continue
-
-            source_folder = os.path.dirname(path)
-            try:
-                created = datetime.fromtimestamp(os.path.getctime(path)).strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                )
-            except OSError:
-                created = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-            item = ImageItem(
-                path=path,
-                name=os.path.basename(path),
-                created=created,
-                source_folder=source_folder,
-                state=0,
-            )
             added_items.append(item)
             added_paths.append(path)
 
@@ -2926,6 +2944,199 @@ class MainWindow(QMainWindow):
 
         if modified_paths:
             self.media_manager.refresh_files(modified_paths)
+
+        if applied_moves or deleted or added_items:
+            self.source_folders = list(self.photo_model.source_folders)
+            self.filter_panel.set_folders(self.photo_model.source_folders)
+            self._rebind_fullscreen_after_filesystem_reconcile(
+                fullscreen_state,
+                applied_move_map,
+            )
+
+    def _make_image_item_for_path(self, path: str) -> ImageItem | None:
+        if not os.path.isfile(path):
+            return None
+
+        try:
+            created = datetime.fromtimestamp(os.path.getctime(path)).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+        except OSError:
+            created = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        return ImageItem(
+            path=path,
+            name=os.path.basename(path),
+            created=created,
+            source_folder=os.path.dirname(path),
+            state=0,
+        )
+
+    def _apply_photo_path_moves(
+        self,
+        moves: list[tuple[str, str]],
+    ) -> list[tuple[str, str]]:
+        valid_moves: list[tuple[str, str]] = []
+        old_source_folders: dict[str, str] = {}
+        cleanup_old_paths: set[str] = set()
+
+        for old_path, new_path in moves:
+            item = self._items_by_path.get(old_path)
+            if item is None:
+                continue
+            if new_path in self._items_by_path and new_path != old_path:
+                continue
+            if not os.path.isfile(new_path):
+                continue
+
+            old_source_folders[old_path] = item.source_folder
+            if self._copy_metadata_for_moved_photo(old_path, new_path, item):
+                cleanup_old_paths.add(old_path)
+            valid_moves.append((old_path, new_path))
+
+        if not valid_moves:
+            return []
+
+        applied_moves = self.photo_model.update_photo_paths(
+            valid_moves,
+            emit_signals=False,
+        )
+        if not applied_moves:
+            return []
+
+        old_paths = [old_path for old_path, _new_path in applied_moves]
+        new_paths = [new_path for _old_path, new_path in applied_moves]
+
+        for old_path, new_path in applied_moves:
+            item = self._items_by_path.pop(old_path, None)
+            if item is not None:
+                self._items_by_path[new_path] = item
+
+            if old_path in cleanup_old_paths:
+                self.photo_model._cleanup_photo_data(
+                    old_path,
+                    old_source_folders.get(old_path, os.path.dirname(old_path)),
+                )
+
+        self.media_manager.remove_files(old_paths)
+        self.media_manager.add_files(new_paths)
+        self.photo_model.photos_changed.emit()
+        return applied_moves
+
+    def _copy_metadata_for_moved_photo(
+        self,
+        old_path: str,
+        new_path: str,
+        item: ImageItem,
+    ) -> bool:
+        metadata = item.db_metadata
+        if metadata is None:
+            try:
+                old_db = self.db_manager.get_db_for_image(old_path)
+                metadata = old_db.get_metadata(old_path)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to read metadata before move %s: %s",
+                    old_path,
+                    exc,
+                )
+
+        if metadata is None:
+            item.db_metadata = None
+            return True
+
+        metadata_copy = dict(metadata)
+        try:
+            new_db = self.db_manager.get_db_for_image(new_path)
+            new_db.save_metadata(new_path, metadata_copy)
+        except MetadataDBUnavailableError:
+            queue_replay = getattr(self, "_queue_replayable_metadata_save", None)
+            if not callable(queue_replay):
+                return False
+            queue_replay(
+                file_path=new_path,
+                data=metadata_copy,
+                changed_fields=set(metadata_copy.keys()),
+                source="filesystem_move",
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to save moved metadata %s -> %s: %s",
+                old_path,
+                new_path,
+                exc,
+            )
+            return False
+
+        item.db_metadata = metadata_copy
+        return True
+
+    def _capture_fullscreen_filesystem_reconcile_state(self) -> dict | None:
+        overlay = getattr(self, "_fullscreen_overlay", None)
+        if overlay is None:
+            return None
+        return {
+            "current_path": overlay.get_current_path(),
+            "loop_paths": overlay.get_visible_paths(),
+            "all_paths": overlay.get_all_paths(),
+        }
+
+    def _rebind_fullscreen_after_filesystem_reconcile(
+        self,
+        state: dict | None,
+        path_moves: dict[str, str],
+    ) -> None:
+        overlay = getattr(self, "_fullscreen_overlay", None)
+        if overlay is None or state is None:
+            return
+
+        current_path_set = {item.path for item in self.images_data}
+        if not current_path_set:
+            overlay.close()
+            return
+
+        def rewrite(path: object) -> str | None:
+            if not isinstance(path, str) or not path:
+                return None
+            return path_moves.get(path, path)
+
+        loop_paths: list[str] = []
+        seen_loop_paths: set[str] = set()
+        for path in state.get("loop_paths", []):
+            rewritten = rewrite(path)
+            if rewritten in current_path_set and rewritten not in seen_loop_paths:
+                loop_paths.append(rewritten)
+                seen_loop_paths.add(rewritten)
+
+        if not loop_paths:
+            overlay.close()
+            return
+
+        current_path = rewrite(state.get("current_path"))
+        preferred_path = (
+            current_path if current_path in seen_loop_paths else None
+        )
+        if preferred_path is None:
+            ordered_paths = [
+                rewritten
+                for path in state.get("all_paths", [])
+                if (rewritten := rewrite(path)) is not None
+            ]
+            preferred_path = MainWindow._pick_replacement_path_in_order(
+                ordered_paths,
+                set(loop_paths),
+                current_path,
+            )
+
+        if not overlay.rebind_to_items_and_paths(
+            self.images_data,
+            loop_paths,
+            preferred_path,
+        ):
+            overlay.close()
+            return
+
+        self._apply_live_grid_selection_from_fullscreen()
 
     def on_reload_exif(self):
         """Reload EXIF (editable + panel fields) for selected or all filtered."""
@@ -3338,6 +3549,7 @@ class MainWindow(QMainWindow):
             self._items_by_path[file_path] = item
             self.media_manager.add_files([file_path])
 
+        self.source_folders = list(self.photo_model.source_folders)
         self.filter_panel.set_folders(self.photo_model.source_folders)
         self.grid.set_data(self.photo_model.photos)
         if index >= 0:
@@ -3348,6 +3560,7 @@ class MainWindow(QMainWindow):
         """Handle photo removed from model."""
         self._items_by_path.pop(file_path, None)
         self.media_manager.remove_files([file_path])
+        self.source_folders = list(self.photo_model.source_folders)
         self.filter_panel.set_folders(self.photo_model.source_folders)
 
         self.grid.set_data(self.photo_model.photos)

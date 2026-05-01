@@ -125,3 +125,101 @@ def test_suppressed_live_changes_do_not_dispatch_and_keep_snapshot_in_sync(
     controller.resume_and_refresh()
 
     assert callback_changes == []
+
+
+def test_directory_move_outside_root_dispatches_deleted_images(
+    qapp, fake_folder_watcher, tmp_path
+):  # noqa: ARG001
+    callback_changes: list[list[tuple[str, ...]]] = []
+    subfolder = tmp_path / "sub"
+    subfolder.mkdir()
+    existing = _touch_image(subfolder / "A001.JPG")
+
+    controller = WorkspaceWatcherController(callback_changes.append)
+    controller.set_workspace(str(tmp_path), [existing])
+    controller.start()
+
+    outside = tmp_path.parent / f"moved-{uuid.uuid4().hex}"
+    subfolder.rename(outside)
+
+    controller._on_watcher_changes([("deleted", str(subfolder))])
+
+    assert callback_changes == [[("deleted", existing)]]
+
+
+def test_directory_rename_inside_root_dispatches_moved_images(
+    qapp, fake_folder_watcher, tmp_path
+):  # noqa: ARG001
+    callback_changes: list[list[tuple[str, ...]]] = []
+    subfolder = tmp_path / "sub"
+    subfolder.mkdir()
+    existing = _touch_image(subfolder / "A001.JPG")
+
+    controller = WorkspaceWatcherController(callback_changes.append)
+    controller.set_workspace(str(tmp_path), [existing])
+    controller.start()
+
+    renamed = tmp_path / "renamed"
+    subfolder.rename(renamed)
+    new_path = str(renamed / "A001.JPG")
+
+    controller._on_watcher_changes(
+        [
+            ("deleted", str(subfolder)),
+            ("added", str(renamed)),
+        ]
+    )
+
+    assert callback_changes == [[("moved", existing, new_path)]]
+
+
+def test_image_rename_inside_root_dispatches_moved_pair(
+    qapp, fake_folder_watcher, tmp_path
+):  # noqa: ARG001
+    callback_changes: list[list[tuple[str, ...]]] = []
+    existing = _touch_image(tmp_path / "A001.JPG")
+
+    controller = WorkspaceWatcherController(callback_changes.append)
+    controller.set_workspace(str(tmp_path), [existing])
+    controller.start()
+
+    renamed = tmp_path / "A002.JPG"
+    Path(existing).rename(renamed)
+
+    controller._on_watcher_changes(
+        [
+            ("deleted", existing),
+            ("added", str(renamed)),
+        ]
+    )
+
+    assert callback_changes == [[("moved", existing, str(renamed))]]
+
+
+def test_suppressed_snapshot_move_is_not_dispatched_and_snapshot_stays_in_sync(
+    qapp, fake_folder_watcher, tmp_path
+):  # noqa: ARG001
+    callback_changes: list[list[tuple[str, ...]]] = []
+    existing = _touch_image(tmp_path / "A001.JPG")
+
+    controller = WorkspaceWatcherController(callback_changes.append)
+    controller.set_workspace(str(tmp_path), [existing])
+    controller.start()
+
+    renamed = tmp_path / "A002.JPG"
+    controller.suppress_paths([existing], duration_s=5.0)
+    Path(existing).rename(renamed)
+
+    controller._on_watcher_changes(
+        [
+            ("deleted", existing),
+            ("added", str(renamed)),
+        ]
+    )
+
+    assert callback_changes == []
+
+    controller.suspend()
+    controller.resume_and_refresh()
+
+    assert callback_changes == []
