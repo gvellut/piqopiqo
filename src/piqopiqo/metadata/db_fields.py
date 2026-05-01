@@ -42,18 +42,6 @@ EXIF_TO_DB_MAPPING = {
     DBFields.LABEL: ["XMP:Label"],
     DBFields.ORIENTATION: ["EXIF:Orientation"],
 }
-# Lens info fields are set in code: since some transformation is performed
-LENS_INFO_EXIF_FALLBACK_MAPPING = {
-    DBFields.MANUAL_LENS_MAKE: "EXIF:LensMake",
-    DBFields.MANUAL_LENS_MODEL: "EXIF:LensModel",
-    DBFields.MANUAL_FOCAL_LENGTH: "EXIF:FocalLength",
-    DBFields.MANUAL_FOCAL_LENGTH_35MM: "EXIF:FocalLengthIn35mmFormat",
-}
-
-LENS_INFO_EXIF_FALLBACK_FIELD_KEYS = tuple(
-    LENS_INFO_EXIF_FALLBACK_MAPPING.values()
-)
-
 # Maps DB field -> EXIF tag(s) for writing
 # Uses MWG composite tags where available to write to multiple locations
 # String value = single tag, list = write to multiple tags

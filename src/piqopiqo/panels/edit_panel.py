@@ -26,7 +26,6 @@ from piqopiqo.keyword_utils import (
 from piqopiqo.metadata.db_fields import (
     EDITABLE_FIELDS,
     FIELD_DISPLAY_LABELS,
-    LENS_INFO_EXIF_FALLBACK_MAPPING,
     DBFields,
 )
 from piqopiqo.metadata.metadata_db import MetadataDBManager
@@ -468,16 +467,6 @@ class EditPanel(QWidget):
         self._update_map_button_state()
         self._sync_hidden_metadata_row_visibility()
 
-    def refresh_hidden_metadata_fields_for_current_selection(self) -> None:
-        """Refresh hidden/fallback rows without touching the main edit fields."""
-        if not self._current_items or self._has_missing_data:
-            self._sync_hidden_metadata_row_visibility()
-            return
-
-        field_values = self._gather_field_values(self._current_items)
-        self._update_lens_fields(field_values, preserve_focused=True)
-        self._sync_hidden_metadata_row_visibility()
-
     def _gather_field_values(self, items: list[ImageItem]) -> dict:
         """Gather field values from items, preferring cached db_metadata.
 
@@ -499,10 +488,7 @@ class EditPanel(QWidget):
 
             if db_data is not None:
                 for field in fields:
-                    if field in DBFields.MANUAL_LENS_FIELDS:
-                        value = self._lens_field_value_for_item(field, db_data, item)
-                    else:
-                        value = db_data.get(field)
+                    value = db_data.get(field)
                     fields[field].add(value if value is not None else "")
             else:
                 # No DB data yet - show empty for all fields
@@ -519,22 +505,6 @@ class EditPanel(QWidget):
 
         return result
 
-    def _lens_field_value_for_item(
-        self,
-        field_name: str,
-        db_data: dict,
-        item: ImageItem,
-    ) -> object:
-        manual_value = db_data.get(field_name)
-        if str(manual_value or "").strip():
-            return manual_value
-
-        fallback_key = LENS_INFO_EXIF_FALLBACK_MAPPING.get(field_name)
-        if not fallback_key or item.exif_data is None:
-            return ""
-        fallback_value = item.exif_data.get(fallback_key)
-        return fallback_value if fallback_value is not None else ""
-
     def _update_field(self, field_name: str, value, widget):
         """Update a text field widget."""
         if value == MULTIPLE_VALUES:
@@ -542,15 +512,8 @@ class EditPanel(QWidget):
         else:
             widget.set_value(str(value) if value else "")
 
-    def _update_lens_fields(
-        self,
-        field_values: dict,
-        *,
-        preserve_focused: bool = False,
-    ) -> None:
+    def _update_lens_fields(self, field_values: dict) -> None:
         for field_name, widget in self._lens_edit_widgets.items():
-            if preserve_focused and widget.hasFocus():
-                continue
             self._update_field(field_name, field_values[field_name], widget)
 
     def _update_coordinate_field(self, field_name: str, value, widget):

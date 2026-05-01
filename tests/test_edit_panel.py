@@ -103,7 +103,7 @@ def test_hidden_description_reappears_when_non_empty_option_is_enabled(qapp):
     assert panel.description_edit.toPlainText() == "Existing caption"
 
 
-def test_lens_fields_follow_hidden_non_empty_setting_and_value_priority(qapp):
+def test_lens_fields_follow_hidden_non_empty_setting_and_db_value_priority(qapp):
     init_qsettings_store(dyn=True)
     set_user_setting(
         UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY,
@@ -143,9 +143,9 @@ def test_lens_fields_follow_hidden_non_empty_setting_and_value_priority(qapp):
     assert panel.focal_length_edit.text() == "12"
     assert panel.focal_length_35mm_edit.text() == "18"
 
-    fallback_item = ImageItem(
-        path="/tmp/fallback-lens.jpg",
-        name="fallback-lens.jpg",
+    exif_only_item = ImageItem(
+        path="/tmp/exif-only-lens.jpg",
+        name="exif-only-lens.jpg",
         created="2020-01-01 00:00:00",
         source_folder="/tmp",
         db_metadata={},
@@ -156,13 +156,14 @@ def test_lens_fields_follow_hidden_non_empty_setting_and_value_priority(qapp):
             "EXIF:FocalLengthIn35mmFormat": "50",
         },
     )
-    panel.update_for_selection([fallback_item])
+    panel.update_for_selection([exif_only_item])
 
-    assert panel.lens_make_edit.isHidden() is False
-    assert panel.lens_make_edit.text() == "EXIF Make"
-    assert panel.lens_model_edit.text() == "EXIF Model"
-    assert panel.focal_length_edit.text() == "35"
-    assert panel.focal_length_35mm_edit.text() == "50"
+    assert panel.lens_make_edit.isHidden() is True
+    assert panel.lens_model_edit.isHidden() is True
+    assert panel.lens_make_edit.text() == ""
+    assert panel.lens_model_edit.text() == ""
+    assert panel.focal_length_edit.text() == ""
+    assert panel.focal_length_35mm_edit.text() == ""
 
     empty_item = ImageItem(
         path="/tmp/empty-lens.jpg",
@@ -501,8 +502,8 @@ def test_lens_field_save_writes_manual_override_when_unprotected(qapp, monkeypat
         name="lens-save.jpg",
         created="2020-01-01 00:00:00",
         source_folder="/tmp",
-        db_metadata={},
-        exif_data={"EXIF:LensModel": "Fallback Model"},
+        db_metadata={DBFields.MANUAL_LENS_MODEL: "Stored Manual Model"},
+        exif_data={"EXIF:LensModel": "Ignored EXIF Model"},
     )
     panel.update_for_selection([item])
 
@@ -522,7 +523,7 @@ def test_lens_field_save_writes_manual_override_when_unprotected(qapp, monkeypat
     assert emitted == [DBFields.MANUAL_LENS_MODEL]
 
 
-def test_lens_fallback_refresh_does_not_reset_other_active_edits(qapp):
+def test_exif_lens_data_does_not_reveal_or_overwrite_manual_lens_rows(qapp):
     init_qsettings_store(dyn=True)
     set_user_setting(
         UserSettingKey.SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY,
@@ -530,29 +531,45 @@ def test_lens_fallback_refresh_does_not_reset_other_active_edits(qapp):
     )
 
     panel = EditPanel(_StubDBManager())
-    panel.show()
-    item = ImageItem(
-        path="/tmp/lens-refresh.jpg",
-        name="lens-refresh.jpg",
+    exif_only_item = ImageItem(
+        path="/tmp/exif-lens-refresh.jpg",
+        name="exif-lens-refresh.jpg",
         created="2020-01-01 00:00:00",
         source_folder="/tmp",
         db_metadata={DBFields.TITLE: "Before"},
         exif_data=None,
     )
-    panel.update_for_selection([item])
-    qapp.processEvents()
+    panel.update_for_selection([exif_only_item])
+    assert panel.lens_model_edit.isHidden() is True
+    assert panel.lens_model_edit.text() == ""
 
-    panel.title_edit.setFocus()
-    panel.title_edit.setText("Edited title")
-    panel.title_edit.setCursorPosition(4)
+    exif_only_item.exif_data = {
+        "EXIF:LensMake": "EXIF Make",
+        "EXIF:LensModel": "EXIF Model",
+        "EXIF:FocalLength": "35",
+        "EXIF:FocalLengthIn35mmFormat": "50",
+    }
+    panel.update_for_selection([exif_only_item])
 
-    item.exif_data = {"EXIF:LensModel": "Fallback Model"}
-    panel.refresh_hidden_metadata_fields_for_current_selection()
+    assert panel.lens_make_edit.isHidden() is True
+    assert panel.lens_model_edit.isHidden() is True
+    assert panel.lens_make_edit.text() == ""
+    assert panel.lens_model_edit.text() == ""
+    assert panel.focal_length_edit.text() == ""
+    assert panel.focal_length_35mm_edit.text() == ""
 
-    assert panel.title_edit.text() == "Edited title"
-    assert panel.title_edit.cursorPosition() == 4
+    manual_item = ImageItem(
+        path="/tmp/manual-lens-refresh.jpg",
+        name="manual-lens-refresh.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={DBFields.MANUAL_LENS_MODEL: "Manual Model"},
+        exif_data={"EXIF:LensModel": "Ignored EXIF Model"},
+    )
+    panel.update_for_selection([manual_item])
+
     assert panel.lens_model_edit.isHidden() is False
-    assert panel.lens_model_edit.text() == "Fallback Model"
+    assert panel.lens_model_edit.text() == "Manual Model"
 
 
 def test_keywords_save_normalizes_value_and_widget_text(qapp, monkeypatch):
