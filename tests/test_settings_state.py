@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 import uuid
 
@@ -97,6 +98,33 @@ def isolated_settings(qcore_app, monkeypatch):
     settings.clear()
     settings.sync()
     return settings
+
+
+def test_init_qsettings_store_logs_persistent_file_name(qcore_app, caplog):
+    qcore_app.setOrganizationName("PiqoPiqoTests")
+    qcore_app.setOrganizationDomain("tests.local")
+    qcore_app.setApplicationName(f"piqopiqo-test-log-{uuid.uuid4().hex}")
+
+    with caplog.at_level(logging.INFO, logger=settings_state.__name__):
+        init_qsettings_store(dyn=False)
+
+    expected_file_name = QSettings().fileName()
+    assert f"QSettings location: {expected_file_name}" in caplog.messages
+
+    settings = QSettings()
+    settings.clear()
+    settings.sync()
+
+
+def test_init_qsettings_store_logs_dyn_mode_location(qcore_app, caplog):
+    qcore_app.setOrganizationName("PiqoPiqoTests")
+    qcore_app.setOrganizationDomain("tests.local")
+    qcore_app.setApplicationName(f"piqopiqo-test-log-dyn-{uuid.uuid4().hex}")
+
+    with caplog.at_level(logging.INFO, logger=settings_state.__name__):
+        init_qsettings_store(dyn=True)
+
+    assert "QSettings location: memory only (--dyn)" in caplog.messages
 
 
 def test_typed_state_roundtrip(isolated_settings):

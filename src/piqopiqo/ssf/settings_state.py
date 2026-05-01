@@ -1023,6 +1023,11 @@ class QSettingsStore:
         if self._settings is not None:
             self._settings.sync()
 
+    def _qsettings_file_name(self) -> str | None:
+        if self._settings is None:
+            return None
+        return self._settings.fileName()
+
     def _load_runtime_values(self) -> None:
         for key, entry in _RUNTIME_SETTING_REGISTRY.items():
             env_value = self._read_env_override(key.name, entry)
@@ -1132,6 +1137,11 @@ def init_qsettings_store(dyn: bool = False) -> QSettingsStore:
     """Initialize the global QSettings store after QApplication identity setup."""
     global _store
     _store = QSettingsStore(dyn=dyn)
+    qsettings_file_name = _store._qsettings_file_name()
+    if qsettings_file_name is None:
+        logger.info("QSettings location: memory only (--dyn)")
+    else:
+        logger.info("QSettings location: %s", qsettings_file_name)
     return _store
 
 
