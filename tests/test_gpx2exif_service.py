@@ -10,7 +10,11 @@ from piqopiqo.cache_paths import set_cache_base_dir
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBManager
 from piqopiqo.tools.gpx2exif.constants import FOLDER_STATE_LAST_TIME_SHIFT
-from piqopiqo.tools.gpx2exif.gpx_processing import GpxPoint, compute_position
+from piqopiqo.tools.gpx2exif.gpx_processing import (
+    GpxPoint,
+    build_kml_output_path,
+    compute_position,
+)
 from piqopiqo.tools.gpx2exif.service import apply_gpx_to_folders
 
 
@@ -87,9 +91,13 @@ def test_apply_gpx_update_mode_updates_db_and_clears_missing(tmp_path) -> None:
 
     assert result.cancelled is False
     assert result.processed == 2
+    assert result.matched == 1
     assert result.updated == 2
     assert len(result.kml_paths) == 1
     assert Path(result.kml_paths[0]).exists()
+    assert [(item.name, item.datetime_display) for item in result.unmatched_photos] == [
+        ("img2.jpg", "2026-01-01 09:00:30")
+    ]
 
     db = dbm.get_db_for_folder(str(folder))
     m1 = db.get_metadata(str(p1))
@@ -104,6 +112,49 @@ def test_apply_gpx_update_mode_updates_db_and_clears_missing(tmp_path) -> None:
     assert m2[DBFields.TIME_TAKEN] == datetime(2026, 1, 1, 9, 0, 30)
     assert m2[DBFields.LATITUDE] is None
     assert m2[DBFields.LONGITUDE] is None
+
+    dbm.close_all()
+
+
+def test_apply_gpx_no_matches_does_not_create_or_overwrite_kml(tmp_path) -> None:
+    set_cache_base_dir(tmp_path / "cache")
+
+    root = tmp_path / "session"
+    folder = root / "cam"
+    folder.mkdir(parents=True)
+
+    photo = folder / "img.jpg"
+    photo.write_bytes(b"")
+
+    gpx_path = tmp_path / "track.gpx"
+    _write_gpx(gpx_path)
+
+    stale_kml = Path(build_kml_output_path(str(root), str(folder), ""))
+    stale_kml.write_text("existing output", encoding="utf-8")
+
+    dbm = MetadataDBManager()
+    _save_metadata(dbm, str(photo), datetime(2026, 1, 1, 9, 0, 0))
+
+    result = apply_gpx_to_folders(
+        root_folder=str(root),
+        folder_to_files={str(folder): [str(photo)]},
+        gpx_path=str(gpx_path),
+        db_manager=dbm,
+        timezone_name="",
+        ignore_offset=True,
+        kml_folder="",
+        update_db=False,
+        exiftool_path="",
+    )
+
+    assert result.cancelled is False
+    assert result.processed == 1
+    assert result.matched == 0
+    assert result.kml_paths == []
+    assert stale_kml.read_text(encoding="utf-8") == "existing output"
+    assert [(item.name, item.datetime_display) for item in result.unmatched_photos] == [
+        ("img.jpg", "2026-01-01 09:00:00")
+    ]
 
     dbm.close_all()
 
@@ -150,6 +201,62 @@ def test_apply_gpx_no_update_mode_keeps_db(tmp_path) -> None:
     assert meta[DBFields.TIME_TAKEN] == original_time
     assert meta[DBFields.LATITUDE] == 1.0
     assert meta[DBFields.LONGITUDE] == 2.0
+
+    dbm.close_all()
+
+
+def test_apply_gpx_mixed_matches_skips_kml_for_unmatched_folder(tmp_path) -> None:
+    set_cache_base_dir(tmp_path / "cache")
+
+    root = tmp_path / "session"
+    folder_a = root / "a"
+    folder_b = root / "b"
+    folder_a.mkdir(parents=True)
+    folder_b.mkdir(parents=True)
+
+    matched = folder_a / "matched.jpg"
+    unmatched_a = folder_a / "unmatched-a.jpg"
+    unmatched_b = folder_b / "unmatched-b.jpg"
+    for path in (matched, unmatched_a, unmatched_b):
+        path.write_bytes(b"")
+
+    gpx_path = tmp_path / "track.gpx"
+    _write_gpx(gpx_path)
+
+    dbm = MetadataDBManager()
+    _save_metadata(dbm, str(matched), datetime(2026, 1, 1, 10, 0, 30))
+    _save_metadata(dbm, str(unmatched_a), datetime(2026, 1, 1, 9, 0, 0))
+    _save_metadata(dbm, str(unmatched_b), datetime(2026, 1, 1, 8, 0, 0))
+    dbm.get_db_for_folder(str(folder_a)).set_folder_value(
+        FOLDER_STATE_LAST_TIME_SHIFT, "30s"
+    )
+
+    result = apply_gpx_to_folders(
+        root_folder=str(root),
+        folder_to_files={
+            str(folder_a): [str(matched), str(unmatched_a)],
+            str(folder_b): [str(unmatched_b)],
+        },
+        gpx_path=str(gpx_path),
+        db_manager=dbm,
+        timezone_name="",
+        ignore_offset=True,
+        kml_folder="",
+        update_db=False,
+        exiftool_path="",
+    )
+
+    assert result.matched == 1
+    assert len(result.kml_paths) == 1
+    assert Path(result.kml_paths[0]) == Path(
+        build_kml_output_path(str(root), str(folder_a), "")
+    )
+    assert Path(result.kml_paths[0]).exists()
+    assert not Path(build_kml_output_path(str(root), str(folder_b), "")).exists()
+    assert [(item.name, item.datetime_display) for item in result.unmatched_photos] == [
+        ("unmatched-a.jpg", "2026-01-01 09:00:30"),
+        ("unmatched-b.jpg", "2026-01-01 08:00:00"),
+    ]
 
     dbm.close_all()
 

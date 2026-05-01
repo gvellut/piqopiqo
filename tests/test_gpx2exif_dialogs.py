@@ -11,7 +11,7 @@ from piqopiqo.tools.gpx2exif.dialogs import (
     ApplyGpxProgressDialog,
     ExtractGpsTimeShiftProgressDialog,
 )
-from piqopiqo.tools.gpx2exif.service import ApplyGpxResult
+from piqopiqo.tools.gpx2exif.service import ApplyGpxResult, ApplyGpxUnmatchedPhoto
 
 
 @pytest.fixture
@@ -358,3 +358,70 @@ def test_apply_gpx_progress_dialog_initially_compact_and_expands_on_details(qapp
     final_height = dialog.height()
     assert dialog.minimumHeight() == dialog.maximumHeight() == final_height
     assert final_height > initial_height
+    assert dialog.progress_bar.isHidden() is True
+    assert dialog.status_label.text() == (
+        "Processed 1 photo(s).\nGeoreferenced: 0 / 1"
+    )
+
+
+def test_apply_gpx_progress_no_match_shows_compact_warning_only(qapp):
+    dialog = ApplyGpxProgressDialog(total=1)
+    dialog.set_folder("a/b")
+    dialog.show()
+    qapp.processEvents()
+
+    dialog.finish(ApplyGpxResult(processed=1, matched=0))
+    qapp.processEvents()
+
+    assert dialog.no_match_warning_row.isHidden() is False
+    assert (
+        dialog.no_match_warning_label.text()
+        == "The GPX did not match any image"
+    )
+    assert dialog.no_match_warning_icon.pixmap().isNull() is False
+    assert dialog.details_text.isHidden() is True
+    assert dialog.folder_label.isHidden() is True
+    assert dialog.progress_row.isHidden() is True
+    assert dialog.progress_bar.isHidden() is True
+    assert dialog.show_finder_btn.isHidden() is True
+    assert dialog.height() < 240
+    assert dialog.minimumHeight() == dialog.maximumHeight() == dialog.height()
+
+
+def test_apply_gpx_progress_mixed_result_shows_kml_then_red_unmatched(qapp):
+    dialog = ApplyGpxProgressDialog(total=24)
+    dialog.show()
+    qapp.processEvents()
+
+    unmatched = [
+        ApplyGpxUnmatchedPhoto(
+            path=f"/tmp/photo-{index}.jpg",
+            name=f"photo-{index}.jpg",
+            datetime_display=f"2026-01-01 09:{index:02d}:00",
+        )
+        for index in range(24)
+    ]
+    dialog.finish(
+        ApplyGpxResult(
+            processed=25,
+            matched=1,
+            kml_paths=["/tmp/out.kml"],
+            unmatched_photos=unmatched,
+        )
+    )
+    qapp.processEvents()
+
+    plain_text = dialog.details_text.toPlainText()
+    assert plain_text.startswith("KML output:\n/tmp/out.kml")
+    assert (
+        "Images without georeferencing:\n"
+        "photo-0.jpg - 2026-01-01 09:00:00"
+    ) in plain_text
+    assert "#b00020" in dialog.details_text.toHtml().lower()
+    assert dialog.details_text.height() == 140
+    assert dialog.details_text.verticalScrollBar().maximum() > 0
+    assert dialog.no_match_warning_row.isHidden() is True
+    assert dialog.progress_bar.isHidden() is True
+    assert dialog.status_label.text() == (
+        "Processed 25 photo(s).\nGeoreferenced: 1 / 24"
+    )

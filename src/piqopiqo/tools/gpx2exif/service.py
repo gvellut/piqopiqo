@@ -33,12 +33,21 @@ logger = logging.getLogger(__name__)
 
 
 @define
+class ApplyGpxUnmatchedPhoto:
+    path: str
+    name: str
+    datetime_display: str
+
+
+@define
 class ApplyGpxFolderResult:
     folder: str
     relative_folder: str
     processed: int = 0
+    matched: int = 0
     updated: int = 0
     kml_path: str | None = None
+    unmatched_photos: list[ApplyGpxUnmatchedPhoto] = field(factory=list)
     cancelled: bool = False
     rolled_back: bool = False
     errors: list[str] = field(factory=list)
@@ -47,10 +56,12 @@ class ApplyGpxFolderResult:
 @define
 class ApplyGpxResult:
     processed: int = 0
+    matched: int = 0
     updated: int = 0
     cancelled: bool = False
     kml_paths: list[str] = field(factory=list)
     updated_paths: list[str] = field(factory=list)
+    unmatched_photos: list[ApplyGpxUnmatchedPhoto] = field(factory=list)
     folder_results: list[ApplyGpxFolderResult] = field(factory=list)
     errors: list[str] = field(factory=list)
 
@@ -144,6 +155,15 @@ def _parse_folder_shift(raw_value: str | None) -> timedelta:
     if raw_value is None or not str(raw_value).strip():
         return timedelta(0)
     return parse_time_shift(str(raw_value).strip())
+
+
+def _format_shifted_datetime(
+    time_taken: datetime | None,
+    folder_shift: timedelta,
+) -> str:
+    if not isinstance(time_taken, datetime):
+        return "No datetime"
+    return (time_taken + folder_shift).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def apply_gpx_to_folders(
@@ -283,6 +303,18 @@ def apply_gpx_to_folders(
             if position is not None:
                 orientation = metadata.get(DBFields.ORIENTATION)
                 folder_positions.append((position, file_path, orientation))
+                folder_result.matched += 1
+            else:
+                folder_result.unmatched_photos.append(
+                    ApplyGpxUnmatchedPhoto(
+                        path=file_path,
+                        name=Path(file_path).name,
+                        datetime_display=_format_shifted_datetime(
+                            time_taken,
+                            folder_shift,
+                        ),
+                    )
+                )
 
             processed += 1
             folder_result.processed += 1
@@ -305,16 +337,28 @@ def apply_gpx_to_folders(
                 folder_result.rolled_back = True
             break
 
-        kml_path = build_kml_output_path(root_folder, folder_path, kml_folder)
-        write_kml(folder_positions, kml_path)
-        folder_result.kml_path = kml_path
-        result.kml_paths.append(kml_path)
+        if folder_positions:
+            kml_path = build_kml_output_path(root_folder, folder_path, kml_folder)
+            write_kml(folder_positions, kml_path)
+            folder_result.kml_path = kml_path
+            result.kml_paths.append(kml_path)
 
         if update_db:
             folder_result.updated = len(folder_updated_paths)
             result.updated_paths.extend(sorted(folder_updated_paths))
 
     result.processed = processed
+    result.matched = sum(
+        folder.matched
+        for folder in result.folder_results
+        if not folder.cancelled
+    )
+    result.unmatched_photos = [
+        photo
+        for folder in result.folder_results
+        if not folder.cancelled
+        for photo in folder.unmatched_photos
+    ]
     # Keep stable order and remove duplicates if any.
     seen: set[str] = set()
     deduped_updated_paths: list[str] = []

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from enum import Enum, auto
+import html
 import os
 
 from PySide6.QtCore import QThreadPool, Signal
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QStyle,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -42,6 +44,8 @@ from .service import ApplyGpxResult
 from .time_shift import is_valid_time_shift
 
 _INVALID_STYLE = "border: 1px solid red;"
+_DETAILS_TEXT_HEIGHT = 140
+_DETAILS_WARNING_STYLE = "color: #b00020;"
 
 
 class ApplyGpxMode(Enum):
@@ -444,6 +448,25 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
         widget = QWidget(self)
         layout = QVBoxLayout(widget)
 
+        self.no_match_warning_row = QWidget(widget)
+        warning_layout = QHBoxLayout(self.no_match_warning_row)
+        warning_layout.setContentsMargins(0, 0, 0, 0)
+        warning_layout.setSpacing(8)
+
+        self.no_match_warning_icon = QLabel(self.no_match_warning_row)
+        icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
+        self.no_match_warning_icon.setPixmap(icon.pixmap(24, 24))
+        warning_layout.addWidget(self.no_match_warning_icon)
+
+        self.no_match_warning_label = QLabel(
+            "The GPX did not match any image",
+            self.no_match_warning_row,
+        )
+        self.no_match_warning_label.setWordWrap(True)
+        warning_layout.addWidget(self.no_match_warning_label, 1)
+        self.no_match_warning_row.hide()
+        layout.addWidget(self.no_match_warning_row)
+
         self.folder_label = QLabel("", widget)
         self.folder_label.setWordWrap(True)
         self.folder_label.hide()
@@ -468,29 +491,41 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
         self.sync_size_to_content()
 
     def set_progress(self, completed: int, total: int) -> None:
+        self._total = max(0, int(total))
         super().set_progress(completed, total)
 
     def finish(self, result: ApplyGpxResult) -> None:
         self.cancel_btn.setEnabled(False)
+        self._kml_paths = list(result.kml_paths)
 
+        if not result.cancelled and result.matched <= 0 and not self._kml_paths:
+            self.configure_progress(visible=False)
+            self.folder_label.clear()
+            self.folder_label.hide()
+            self.details_text.clear()
+            self.details_text.hide()
+            self.no_match_warning_row.show()
+            self.show_finder_btn.setVisible(False)
+            self.show_finder_btn.setEnabled(False)
+            self.ok_btn.setEnabled(True)
+            self.ok_btn.setDefault(True)
+            self.ok_btn.setFocus()
+            self.sync_size_to_content()
+            return
+
+        self.no_match_warning_row.hide()
         summary = f"Processed {result.processed} photo(s)."
         if result.cancelled:
             summary = f"Cancelled. {result.processed} photo(s) processed."
-        self.set_status(summary)
+        self.set_status(
+            f"{summary}\nGeoreferenced: {result.matched} / {self._total}"
+        )
+        self.progress_bar.hide()
 
-        self._kml_paths = list(result.kml_paths)
-        details_lines = []
-        if result.kml_paths:
-            details_lines.append("KML output:")
-            details_lines.extend(result.kml_paths)
-        if result.errors:
-            details_lines.append("")
-            details_lines.append("Errors:")
-            details_lines.extend(result.errors)
-
-        if details_lines:
-            self.details_text.setPlainText("\n".join(details_lines))
-            self.details_text.setFixedHeight(140)
+        details_html = self._build_details_html(result)
+        if details_html:
+            self.details_text.setHtml(details_html)
+            self.details_text.setFixedHeight(_DETAILS_TEXT_HEIGHT)
             self.details_text.show()
 
         if self._kml_paths:
@@ -502,11 +537,44 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
         self.ok_btn.setFocus()
         self.sync_size_to_content()
 
+    def _build_details_html(self, result: ApplyGpxResult) -> str:
+        sections: list[str] = []
+        if result.kml_paths:
+            lines = ["KML output:", *result.kml_paths]
+            sections.append(self._html_lines(lines))
+
+        if result.errors:
+            lines = ["Errors:", *result.errors]
+            sections.append(self._html_lines(lines))
+
+        if result.unmatched_photos:
+            lines = ["Images without georeferencing:"]
+            lines.extend(
+                f"{photo.name} - {photo.datetime_display}"
+                for photo in result.unmatched_photos
+            )
+            sections.append(
+                '<div style="'
+                f"{_DETAILS_WARNING_STYLE}"
+                '">'
+                f"{self._html_lines(lines)}"
+                "</div>"
+            )
+
+        return "<br/>".join(sections)
+
+    def _html_lines(self, lines: list[str]) -> str:
+        return "".join(
+            f"<div>{html.escape(str(line)) if str(line) else '&nbsp;'}</div>"
+            for line in lines
+        )
+
     def show_error(self, message: str) -> None:
         self.cancel_btn.setEnabled(False)
+        self.no_match_warning_row.hide()
         self.set_status("Apply GPX failed:")
         self.details_text.setPlainText(message)
-        self.details_text.setFixedHeight(140)
+        self.details_text.setFixedHeight(_DETAILS_TEXT_HEIGHT)
         self.details_text.show()
         self.ok_btn.setEnabled(True)
         self.ok_btn.setDefault(True)
