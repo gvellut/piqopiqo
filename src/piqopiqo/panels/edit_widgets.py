@@ -321,11 +321,18 @@ class KeywordsEdit(QPlainTextEdit):
         )
         if height != self.height():
             self.setFixedHeight(height)
+        self.horizontalScrollBar().setValue(0)
+        self.verticalScrollBar().setValue(0)
 
     def resizeEvent(self, event):
         """Recalculate height on resize."""
         super().resizeEvent(event)
         self._adjust_height()
+
+    def wheelEvent(self, event):
+        """Let the parent scroll area handle wheel scrolling."""
+        self.verticalScrollBar().setValue(0)
+        event.ignore()
 
     def set_value(self, value: str):
         """Set the field value and store as original."""

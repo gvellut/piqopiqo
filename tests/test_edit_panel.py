@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import uuid
 
-from PySide6.QtCore import QCoreApplication, QPoint
+from PySide6.QtCore import QCoreApplication, QPoint, QPointF, Qt
+from PySide6.QtGui import QWheelEvent
 from PySide6.QtWidgets import QApplication
 import pytest
 
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.model import ImageItem, MapLinkOption
 from piqopiqo.panels.edit_panel import EditPanel
-from piqopiqo.panels.edit_widgets import MULTIPLE_VALUES
+from piqopiqo.panels.edit_widgets import MULTIPLE_VALUES, KeywordsEdit
 from piqopiqo.ssf.settings_state import (
     UserSettingKey,
     init_qsettings_store,
@@ -34,6 +35,16 @@ class _StubDBManager:
 
     def get_db_for_image(self, _path: str) -> _StubDB:
         return self.db
+
+
+def _wrapped_line_count(widget: KeywordsEdit) -> int:
+    total = 0
+    block = widget.document().begin()
+    while block.isValid():
+        block_layout = block.layout()
+        total += max(1, block_layout.lineCount() if block_layout else 1)
+        block = block.next()
+    return total
 
 
 @pytest.fixture
@@ -182,6 +193,47 @@ def test_lens_fields_follow_hidden_non_empty_setting_and_db_value_priority(qapp)
 
     assert panel.lens_make_edit.isHidden() is True
     assert panel.lens_model_edit.isHidden() is True
+
+
+def test_keywords_edit_keeps_hidden_scroll_position_pinned(qapp):
+    edit = KeywordsEdit()
+    edit.show()
+    qapp.processEvents()
+
+    keywords = "alpha, beta, gamma, delta, epsilon, zeta"
+    for width in range(180, 361, 10):
+        edit.resize(width, edit.height())
+        qapp.processEvents()
+        edit.set_value(keywords)
+        qapp.processEvents()
+        if _wrapped_line_count(edit) == 2:
+            break
+    else:
+        raise AssertionError("Could not produce a two-line keyword editor layout")
+
+    assert edit.verticalScrollBar().value() == 0
+
+    edit.verticalScrollBar().setRange(0, 1)
+    edit.verticalScrollBar().setValue(1)
+    edit._adjust_height()
+    assert edit.verticalScrollBar().value() == 0
+
+    wheel_event = QWheelEvent(
+        QPointF(edit.viewport().rect().center()),
+        QPointF(edit.viewport().mapToGlobal(edit.viewport().rect().center())),
+        QPoint(0, 0),
+        QPoint(0, -120),
+        Qt.NoButton,
+        Qt.NoModifier,
+        Qt.ScrollUpdate,
+        False,
+    )
+    wheel_event.setAccepted(True)
+
+    QApplication.sendEvent(edit.viewport(), wheel_event)
+
+    assert wheel_event.isAccepted() is False
+    assert edit.verticalScrollBar().value() == 0
 
 
 def test_keywords_height_change_keeps_edit_panel_rows_stable(qapp):
