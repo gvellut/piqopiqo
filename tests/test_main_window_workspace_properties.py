@@ -12,7 +12,9 @@ import pytest
 
 from piqopiqo.background.media_man import FolderPrimingResult
 from piqopiqo.main_window import MainWindow
+from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.model import ImageItem, MapLinkOption
+from piqopiqo.photo_model import SortOrder
 from piqopiqo.ssf.settings_state import (
     APP_NAME,
     StateKey,
@@ -516,6 +518,107 @@ def test_cleanup_finished_requeues_media_loading(window):
     assert item.pixmap is None
     assert item.db_metadata is None
     assert item.exif_data is None
+
+
+def test_metadata_cleanup_initializes_deferred_time_taken_resort(window):
+    item = ImageItem(
+        path="/photos/a.jpg",
+        name="a.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/photos",
+        db_metadata={DBFields.TIME_TAKEN: "old"},
+    )
+    window.photo_model.set_photos([item], ["/photos"])
+    window.photo_model.set_sort_order(SortOrder.TIME_TAKEN, emit_signals=False)
+    window._items_by_path = {item.path: item}
+    window._workspace_cleanup_running = True
+    window._workspace_cleanup_context = {
+        "source_folders": ["/photos"],
+        "file_paths": [item.path],
+        "clear_thumb_cache": False,
+        "clear_metadata": True,
+    }
+    _MediaManagerStub.next_priming_result = FolderPrimingResult({}, {item.path})
+
+    window._on_workspace_cleanup_finished(None)
+
+    state = window._deferred_time_taken_load_resort_state
+    assert state is not None
+    assert state.pending_paths == {item.path}
+    assert state.processed_since_last_resort == 0
+
+
+def test_metadata_only_cleanup_keeps_thumbnail_runtime_state(window):
+    embedded = object()
+    hq = object()
+    display = object()
+    item = ImageItem(
+        path="/photos/a.jpg",
+        name="a.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/photos",
+        embedded_pixmap=embedded,
+        hq_pixmap=hq,
+        pixmap=display,
+        state=7,
+        exif_data={"File:FileName": "a.jpg"},
+        db_metadata={DBFields.TIME_TAKEN: "old"},
+    )
+    item._cache_state_dirty = False
+    window.photo_model.set_photos([item], ["/photos"])
+    window._items_by_path = {item.path: item}
+    window._workspace_cleanup_running = True
+    window._workspace_cleanup_context = {
+        "source_folders": ["/photos"],
+        "file_paths": [item.path],
+        "clear_thumb_cache": False,
+        "clear_metadata": True,
+    }
+    _MediaManagerStub.next_priming_result = FolderPrimingResult({}, {item.path})
+
+    window._on_workspace_cleanup_finished(None)
+
+    assert item.embedded_pixmap is embedded
+    assert item.hq_pixmap is hq
+    assert item.pixmap is display
+    assert item.state == 7
+    assert item._cache_state_dirty is False
+    assert item.db_metadata is None
+    assert item.exif_data is None
+
+
+def test_thumbnail_cleanup_keeps_metadata_runtime_state(window):
+    item = ImageItem(
+        path="/photos/a.jpg",
+        name="a.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/photos",
+        embedded_pixmap=object(),
+        hq_pixmap=object(),
+        pixmap=object(),
+        state=7,
+        exif_data={"File:FileName": "a.jpg"},
+        db_metadata={DBFields.TIME_TAKEN: "old"},
+    )
+    item._cache_state_dirty = False
+    window.photo_model.set_photos([item], ["/photos"])
+    window._items_by_path = {item.path: item}
+    window._workspace_cleanup_running = True
+    window._workspace_cleanup_context = {
+        "source_folders": ["/photos"],
+        "file_paths": [item.path],
+        "clear_thumb_cache": True,
+        "clear_metadata": False,
+    }
+
+    window._on_workspace_cleanup_finished(None)
+
+    assert item.embedded_pixmap is None
+    assert item.hq_pixmap is None
+    assert item.pixmap is None
+    assert item.state == 0
+    assert item.db_metadata == {DBFields.TIME_TAKEN: "old"}
+    assert item.exif_data == {"File:FileName": "a.jpg"}
 
 
 def test_about_dialog_contains_version_date_and_github_link(window, monkeypatch):

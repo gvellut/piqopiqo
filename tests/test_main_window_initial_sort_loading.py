@@ -146,20 +146,46 @@ def test_startup_load_uses_cached_metadata_for_first_time_taken_sort(qapp, monke
 
 
 class _FakeDeferredChunkWindow:
-    def __init__(self, *, batch_size: int, processed: int = 0):
+    def __init__(
+        self,
+        *,
+        batch_size: int,
+        processed: int = 0,
+        pending_paths: set[str] | None = None,
+        dirty_paths: set[str] | None = None,
+        visible_paths: list[str] | None = None,
+    ):
         self._deferred_time_taken_load_resort_state = _DeferredTimeTakenLoadResortState(
-            pending_paths={"/photos/a.jpg", "/photos/b.jpg"},
+            pending_paths=pending_paths or {"/photos/a.jpg", "/photos/b.jpg"},
             processed_since_last_resort=processed,
             batch_size=batch_size,
+            dirty_paths=dirty_paths or set(),
         )
+        self.photo_model = type(
+            "PhotoModel", (), {"sort_order": SortOrder.TIME_TAKEN}
+        )()
+        self._last_visible_paths = list(visible_paths or [])
+        self.media_manager = type(
+            "MediaManager", (), {"update_visible": lambda _self, _paths: None}
+        )()
         self.calls: list[str] = []
 
     def _run_deferred_time_taken_load_resort(self, *, source: str) -> None:
         self.calls.append(source)
 
+    def _maybe_flush_deferred_time_taken_visible_resort(self, *, source: str) -> bool:
+        return MainWindow._maybe_flush_deferred_time_taken_visible_resort(
+            self,
+            source=source,
+        )
+
 
 def test_editable_terminal_resorts_after_batch_threshold():
-    fake_window = _FakeDeferredChunkWindow(batch_size=100, processed=99)
+    fake_window = _FakeDeferredChunkWindow(
+        batch_size=100,
+        processed=99,
+        dirty_paths={"/photos/a.jpg"},
+    )
 
     MainWindow._on_editable_terminal(fake_window, "/photos/a.jpg", True)
 
@@ -167,6 +193,7 @@ def test_editable_terminal_resorts_after_batch_threshold():
     state = fake_window._deferred_time_taken_load_resort_state
     assert state is not None
     assert state.pending_paths == {"/photos/b.jpg"}
+    assert state.dirty_paths == set()
     assert state.processed_since_last_resort == 0
 
 
@@ -180,6 +207,44 @@ def test_editable_terminal_batch_size_zero_waits_for_completion():
     assert state is not None
     assert state.pending_paths == {"/photos/b.jpg"}
     assert state.processed_since_last_resort == 1
+
+
+def test_deferred_visible_area_resorts_when_visible_metadata_is_loaded():
+    fake_window = _FakeDeferredChunkWindow(
+        batch_size=100,
+        processed=1,
+        pending_paths={"/photos/b.jpg", "/photos/c.jpg"},
+        dirty_paths={"/photos/a.jpg", "/photos/b.jpg"},
+        visible_paths=["/photos/a.jpg", "/photos/b.jpg"],
+    )
+
+    MainWindow._on_editable_terminal(fake_window, "/photos/b.jpg", True)
+
+    assert fake_window.calls == ["folder_load_visible"]
+    state = fake_window._deferred_time_taken_load_resort_state
+    assert state is not None
+    assert state.pending_paths == {"/photos/c.jpg"}
+    assert state.dirty_paths == set()
+    assert state.processed_since_last_resort == 0
+
+
+def test_visible_path_change_resorts_when_new_visible_area_is_loaded():
+    fake_window = _FakeDeferredChunkWindow(
+        batch_size=100,
+        pending_paths={"/photos/c.jpg"},
+        dirty_paths={"/photos/a.jpg", "/photos/b.jpg"},
+    )
+
+    MainWindow._on_visible_paths_changed(
+        fake_window,
+        ["/photos/a.jpg", "/photos/b.jpg"],
+    )
+
+    assert fake_window.calls == ["folder_load_visible"]
+    state = fake_window._deferred_time_taken_load_resort_state
+    assert state is not None
+    assert state.dirty_paths == set()
+    assert state.processed_since_last_resort == 0
 
 
 def test_time_taken_load_resort_batch_size_normalization_clamps_invalid_values():
@@ -328,6 +393,22 @@ class _FakeEditableReadyWindow:
         return None
 
 
+class _FakeDeferredEditableReadyWindow(_FakeEditableReadyWindow):
+    def __init__(self):
+        super().__init__()
+        self._deferred_time_taken_load_resort_state = _DeferredTimeTakenLoadResortState(
+            pending_paths={"/photos/a.jpg"},
+            processed_since_last_resort=0,
+            batch_size=100,
+        )
+
+    def _should_defer_time_taken_load_resort_for(self, file_path: str) -> bool:
+        return MainWindow._should_defer_time_taken_load_resort_for(self, file_path)
+
+    def _mark_deferred_time_taken_loaded(self, file_path: str) -> None:
+        MainWindow._mark_deferred_time_taken_loaded(self, file_path)
+
+
 def test_editable_ready_still_schedules_immediate_resort_without_deferred_state(
     monkeypatch,
 ):
@@ -353,3 +434,25 @@ def test_editable_ready_still_schedules_immediate_resort_without_deferred_state(
         DBFields.LABEL,
     }
     assert single_shot_calls == [50]
+
+
+def test_deferred_editable_ready_marks_dirty_without_immediate_resort(monkeypatch):
+    fake_window = _FakeDeferredEditableReadyWindow()
+    single_shot_calls: list[int] = []
+    monkeypatch.setattr(
+        "piqopiqo.main_window.QTimer.singleShot",
+        lambda delay_ms, _callback: single_shot_calls.append(delay_ms),
+    )
+
+    MainWindow._on_editable_ready(
+        fake_window,
+        "/photos/a.jpg",
+        {DBFields.TIME_TAKEN: datetime(2026, 1, 1, 10, 0, 0)},
+    )
+
+    state = fake_window._deferred_time_taken_load_resort_state
+    assert state is not None
+    assert state.dirty_paths == {"/photos/a.jpg"}
+    assert fake_window._model_refresh_scheduled is False
+    assert fake_window._pending_scheduled_sync_fields == set()
+    assert single_shot_calls == []

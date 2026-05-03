@@ -297,9 +297,56 @@ class _FakeFilterRestoreWindow:
             new_photo_list_paths,
         )
 
+    def _restore_grid_viewport_from_snapshot(self, snapshot: dict) -> None:
+        MainWindow._restore_grid_viewport_from_snapshot(self, snapshot)
+
     def _ensure_grid_path_visible(self, path: str | None) -> bool:
         self.visible_calls.append(path)
         return path is not None
+
+
+class _FakeSortRestoreScrollBar:
+    def __init__(self, maximum: int):
+        self._maximum = maximum
+
+    def maximum(self) -> int:
+        return self._maximum
+
+
+class _FakeSortRestoreGrid:
+    def __init__(self, paths: list[str], *, maximum: int = 20):
+        self.items_data = [_Item(path) for path in paths]
+        self.scrollbar = _FakeSortRestoreScrollBar(maximum)
+        self.scroll_calls: list[tuple[int, bool]] = []
+        self.ensure_visible_calls: list[tuple[int, bool]] = []
+
+    def _set_scrollbar_value(
+        self,
+        value: int,
+        *,
+        navigation_activity: bool = True,
+    ) -> None:
+        self.scroll_calls.append((value, navigation_activity))
+
+    def get_index_for_path(self, path: str) -> int | None:
+        for index, item in enumerate(self.items_data):
+            if item.path == path:
+                return index
+        return None
+
+    def _ensure_visible(
+        self,
+        index: int,
+        *,
+        navigation_activity: bool = True,
+    ) -> None:
+        self.ensure_visible_calls.append((index, navigation_activity))
+
+
+class _FakeSortRestoreWindow:
+    def __init__(self, paths: list[str], *, maximum: int = 20):
+        self.images_data = [_Item(path) for path in paths]
+        self.grid = _FakeSortRestoreGrid(paths, maximum=maximum)
 
 
 class _FakeDBManagerForClearAllData:
@@ -589,6 +636,100 @@ def test_grid_viewport_restore_falls_back_to_visibility_when_row_restore_fails()
 
     assert fake_window.grid.calls == [("/b.jpg", 0, False)]
     assert fake_window.visible_calls == ["/b.jpg"]
+
+
+def test_sort_viewport_restore_without_selection_keeps_scroll_row():
+    fake_window = _FakeSortRestoreWindow(["/a.jpg", "/b.jpg", "/c.jpg"], maximum=10)
+    snapshot = {
+        "photo_list_paths": ["/a.jpg", "/b.jpg", "/c.jpg"],
+        "visible_paths": ["/a.jpg"],
+        "selected_visible_paths": [],
+        "visible_rows_by_path": {"/a.jpg": 0},
+        "visible_anchor_path": None,
+        "selected_anchor_path": None,
+        "selected_anchor_viewport_row": None,
+        "top_scroll_row": 7,
+    }
+
+    MainWindow._restore_grid_viewport_after_sort_change(fake_window, snapshot)
+
+    assert fake_window.grid.scroll_calls == [(7, False)]
+    assert fake_window.grid.ensure_visible_calls == []
+
+
+def test_sort_viewport_restore_without_selection_clamps_scroll_row():
+    fake_window = _FakeSortRestoreWindow(["/a.jpg", "/b.jpg", "/c.jpg"], maximum=4)
+    snapshot = {
+        "photo_list_paths": ["/a.jpg", "/b.jpg", "/c.jpg"],
+        "visible_paths": ["/a.jpg"],
+        "selected_visible_paths": [],
+        "visible_rows_by_path": {"/a.jpg": 0},
+        "visible_anchor_path": None,
+        "selected_anchor_path": None,
+        "selected_anchor_viewport_row": None,
+        "top_scroll_row": 9,
+    }
+
+    MainWindow._restore_grid_viewport_after_sort_change(fake_window, snapshot)
+
+    assert fake_window.grid.scroll_calls == [(4, False)]
+
+
+def test_sort_viewport_restore_keeps_visible_selected_anchor_row():
+    fake_window = _FakeFilterRestoreWindow(["/a.jpg", "/b.jpg", "/c.jpg"])
+    snapshot = {
+        "photo_list_paths": ["/a.jpg", "/b.jpg", "/c.jpg"],
+        "visible_paths": ["/a.jpg", "/b.jpg"],
+        "selected_visible_paths": ["/b.jpg"],
+        "visible_rows_by_path": {"/a.jpg": 0, "/b.jpg": 1},
+        "visible_anchor_path": "/b.jpg",
+        "selected_anchor_path": "/b.jpg",
+        "selected_anchor_viewport_row": 1,
+        "top_scroll_row": 3,
+    }
+
+    MainWindow._restore_grid_viewport_after_sort_change(fake_window, snapshot)
+
+    assert fake_window.grid.calls == [("/b.jpg", 1, False)]
+    assert fake_window.visible_calls == []
+
+
+def test_sort_viewport_restore_reveals_offscreen_selected_anchor():
+    fake_window = _FakeFilterRestoreWindow(["/a.jpg", "/b.jpg", "/c.jpg"])
+    snapshot = {
+        "photo_list_paths": ["/a.jpg", "/b.jpg", "/c.jpg"],
+        "visible_paths": ["/a.jpg"],
+        "selected_visible_paths": [],
+        "visible_rows_by_path": {"/a.jpg": 0},
+        "visible_anchor_path": None,
+        "selected_anchor_path": "/c.jpg",
+        "selected_anchor_viewport_row": None,
+        "top_scroll_row": 0,
+    }
+
+    MainWindow._restore_grid_viewport_after_sort_change(fake_window, snapshot)
+
+    assert fake_window.grid.calls == []
+    assert fake_window.visible_calls == ["/c.jpg"]
+
+
+def test_sort_viewport_restore_falls_back_when_selected_anchor_disappears():
+    fake_window = _FakeFilterRestoreWindow(["/a.jpg", "/b.jpg"])
+    snapshot = {
+        "photo_list_paths": ["/a.jpg", "/gone.jpg", "/b.jpg"],
+        "visible_paths": ["/gone.jpg", "/b.jpg"],
+        "selected_visible_paths": ["/gone.jpg"],
+        "visible_rows_by_path": {"/gone.jpg": 0, "/b.jpg": 1},
+        "visible_anchor_path": "/gone.jpg",
+        "selected_anchor_path": "/gone.jpg",
+        "selected_anchor_viewport_row": 0,
+        "top_scroll_row": 5,
+    }
+
+    MainWindow._restore_grid_viewport_after_sort_change(fake_window, snapshot)
+
+    assert fake_window.grid.calls == [("/b.jpg", 1, False)]
+    assert fake_window.visible_calls == []
 
 
 def test_on_model_changed_forwards_fast_first_paint_and_resets_flag():

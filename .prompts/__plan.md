@@ -129,3 +129,5 @@
 ! [apply gpx show number of georeferenced warning if none](Vc_tasks/Yc_apply_gpx_show_number_of_georeferenced_warning_i.md)
 ! [detect folder move](Vc_tasks/Cd_detect_folder_move.md)
 ! [Correct Lens info disply](Vc_tasks/Dd_Correct_Lens_info_disply.md)
+! [Review initial loading](Vc_tasks/Ed_Review_initial_loading.md)
+    ? [Keep scroll position](Vc_tasks/Ed.A_Keep_scroll_position.md)

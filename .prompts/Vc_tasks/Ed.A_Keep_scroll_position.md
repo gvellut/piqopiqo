@@ -1,0 +1,2 @@
+When reordering : keep the scroll position. Currently jumps around, it looks a bit random (evem though it may simply follow the first visible)
+Unless items are selected : in this case, then keep the last selected visible (according to what the last selected is : the one for which the arrows work) or make it visible (if used had scrolled after selecting so not visible before the reordering happens)
