@@ -179,6 +179,7 @@ def test_preflight_label_scope_defaults_checked_when_label_scope_available(
     )
 
     assert dialog.scope_checkbox is not None
+    assert dialog.scope_checkbox.text() == "Use lifecycle"
     assert dialog.scope_checkbox.isChecked() is True
     assert dialog.count_label.text() == "Photos to upload: 2"
     assert dialog.selected_use_label_scope is True

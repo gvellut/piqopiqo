@@ -22,7 +22,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .label_transitions_editor import LabelTransitionsEditor, StatusLabelProvider
+from .label_transitions_editor import (
+    LabelTransitionsEditor,
+    StatusLabelComboEditor,
+    StatusLabelProvider,
+)
 from .manual_lenses_editor import ManualLensesEditor
 from .map_links_editor import MapLinksEditor
 from .schema import ChoiceOption, EditorKind
@@ -432,6 +436,40 @@ class LabelTransitionsEditorAdapter(BaseEditor):
         return self._editor.is_valid()
 
 
+class StatusLabelComboEditorAdapter(BaseEditor):
+    def __init__(self, status_label_provider: StatusLabelProvider | None = None):
+        super().__init__()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self._editor = StatusLabelComboEditor(
+            status_label_provider=status_label_provider
+        )
+        self._editor.value_changed.connect(self.value_changed)
+        layout.addWidget(self._editor)
+
+    def set_status_label_provider(
+        self,
+        provider: StatusLabelProvider | None,
+    ) -> None:
+        self._editor.set_status_label_provider(provider)
+
+    def refresh_status_labels(self) -> None:
+        self._editor.refresh_status_labels()
+
+    def set_required(self, required: bool) -> None:
+        self._editor.set_required(required)
+
+    def set_value(self, value):
+        self._editor.set_value(value)
+
+    def get_value(self):
+        return self._editor.get_value()
+
+    def is_valid(self) -> bool:
+        return self._editor.is_valid()
+
+
 def build_editor(kind: EditorKind, **kwargs) -> BaseEditor:
     if kind == EditorKind.TEXT:
         return TextEditor()
@@ -462,5 +500,7 @@ def build_editor(kind: EditorKind, **kwargs) -> BaseEditor:
         return MapLinksEditorAdapter()
     if kind == EditorKind.LABEL_TRANSITIONS:
         return LabelTransitionsEditorAdapter()
+    if kind == EditorKind.STATUS_LABEL_COMBO:
+        return StatusLabelComboEditorAdapter()
 
     raise ValueError(f"Unsupported editor kind: {kind}")

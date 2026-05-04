@@ -91,8 +91,10 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE",
         "PIQO_OCR_TIME_SHIFT_PROVIDER",
         "PIQO_MAP_LINKS",
+        "PIQO_FLICKR_UPLOAD_USE_LIFECYCLE",
         "PIQO_FLICKR_UPLOAD_LABEL_TRANSITIONS",
         "PIQO_FLICKR_UPLOAD_APPLY_TRANSITIONS",
+        "PIQO_FLICKR_UPLOAD_USE_LIFECYCLE_SCOPE",
     ):
         monkeypatch.delenv(env_name, raising=False)
 
@@ -433,6 +435,7 @@ def test_time_taken_load_resort_batch_size_default_and_env_override(
 def test_flickr_settings_defaults_and_roundtrip(isolated_settings):
     assert get_user_setting(UserSettingKey.FLICKR_API_KEY) == ""
     assert get_user_setting(UserSettingKey.FLICKR_API_SECRET) == ""
+    assert get_user_setting(UserSettingKey.FLICKR_UPLOAD_USE_LIFECYCLE) is False
     assert get_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL) == ""
     assert (
         get_user_setting(UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS)
@@ -440,9 +443,11 @@ def test_flickr_settings_defaults_and_roundtrip(isolated_settings):
     )
     assert get_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS) == []
     assert get_state_value(StateKey.FLICKR_UPLOAD_APPLY_TRANSITIONS) is True
+    assert get_state_value(StateKey.FLICKR_UPLOAD_USE_LIFECYCLE_SCOPE) is True
 
     set_user_setting(UserSettingKey.FLICKR_API_KEY, "key123")
     set_user_setting(UserSettingKey.FLICKR_API_SECRET, "secret456")
+    set_user_setting(UserSettingKey.FLICKR_UPLOAD_USE_LIFECYCLE, True)
     set_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL, "Approved")
     set_user_setting(UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS, True)
     rules = [
@@ -451,9 +456,11 @@ def test_flickr_settings_defaults_and_roundtrip(isolated_settings):
     ]
     set_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS, rules)
     set_state_value(StateKey.FLICKR_UPLOAD_APPLY_TRANSITIONS, False)
+    set_state_value(StateKey.FLICKR_UPLOAD_USE_LIFECYCLE_SCOPE, False)
 
     assert get_user_setting(UserSettingKey.FLICKR_API_KEY) == "key123"
     assert get_user_setting(UserSettingKey.FLICKR_API_SECRET) == "secret456"
+    assert get_user_setting(UserSettingKey.FLICKR_UPLOAD_USE_LIFECYCLE) is True
     assert get_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL) == "Approved"
     assert (
         get_user_setting(UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS)
@@ -461,6 +468,7 @@ def test_flickr_settings_defaults_and_roundtrip(isolated_settings):
     )
     assert get_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS) == rules
     assert get_state_value(StateKey.FLICKR_UPLOAD_APPLY_TRANSITIONS) is False
+    assert get_state_value(StateKey.FLICKR_UPLOAD_USE_LIFECYCLE_SCOPE) is False
 
 
 def test_flickr_label_transition_rules_env_override(isolated_settings, monkeypatch):

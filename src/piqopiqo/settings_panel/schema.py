@@ -25,6 +25,7 @@ class EditorKind(Enum):
     MANUAL_LENSES = auto()
     MAP_LINKS = auto()
     LABEL_TRANSITIONS = auto()
+    STATUS_LABEL_COMBO = auto()
 
 
 @define(frozen=True)
@@ -41,6 +42,7 @@ class FieldSpec:
     choices: list[ChoiceOption] = ()
     min_value: int | None = None
     max_value: int | None = None
+    subgroup: str | None = None
 
 
 @define(frozen=True)
@@ -317,19 +319,27 @@ SETTINGS_TABS: list[TabSpec] = [
                         editor=EditorKind.TEXT,
                     ),
                     FieldSpec(
-                        key=UserSettingKey.FLICKR_UPLOAD_LABEL,
-                        label="Upload label override",
-                        editor=EditorKind.TEXT,
-                    ),
-                    FieldSpec(
                         key=UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS,
                         label="Reject upload if title or keywords missing",
                         editor=EditorKind.BOOL,
                     ),
                     FieldSpec(
+                        key=UserSettingKey.FLICKR_UPLOAD_USE_LIFECYCLE,
+                        label="Use lifecycle",
+                        editor=EditorKind.BOOL,
+                        subgroup="Lifecycle",
+                    ),
+                    FieldSpec(
+                        key=UserSettingKey.FLICKR_UPLOAD_LABEL,
+                        label="Upload all with label",
+                        editor=EditorKind.STATUS_LABEL_COMBO,
+                        subgroup="Lifecycle",
+                    ),
+                    FieldSpec(
                         key=UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS,
                         label="Transitions",
                         editor=EditorKind.LABEL_TRANSITIONS,
+                        subgroup="Lifecycle",
                     ),
                 ],
             ),

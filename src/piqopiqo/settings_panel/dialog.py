@@ -90,11 +90,30 @@ class _SettingsFormLayout(QGridLayout):
         super().__init__(parent)
         self._row_spacing = max(0, int(row_spacing))
         self._minimum_center_delta = 0
-        self._rows: list[tuple[QLabel, QWidget, Qt.AlignmentFlag]] = []
+        self._rows: list[tuple[int, QLabel, QWidget, Qt.AlignmentFlag]] = []
+        self._next_row = 0
         self.setProperty("settingsPanelRowSpacing", self._row_spacing)
         self.setColumnStretch(1, 1)
         self.setHorizontalSpacing(8)
         self.setVerticalSpacing(0)
+
+    def add_subgroup_title(self, title: str) -> None:
+        label = QLabel(str(title), self.parentWidget())
+        label.setStyleSheet("font-weight: 600;")
+        content_row = self._next_row
+        self.addWidget(
+            label,
+            content_row,
+            0,
+            1,
+            2,
+            alignment=Qt.AlignmentFlag.AlignLeft,
+        )
+        self._rows.append(
+            (content_row, label, label, Qt.AlignmentFlag.AlignVCenter)
+        )
+        self._next_row = content_row + 2
+        self._update_gap_rows()
 
     def add_settings_row(
         self,
@@ -103,7 +122,7 @@ class _SettingsFormLayout(QGridLayout):
         *,
         vertical_alignment: Qt.AlignmentFlag,
     ) -> None:
-        content_row = len(self._rows) * 2
+        content_row = self._next_row
         alignment = Qt.AlignmentFlag.AlignLeft | vertical_alignment
         label.setAlignment(alignment)
         self.addWidget(
@@ -113,7 +132,8 @@ class _SettingsFormLayout(QGridLayout):
             alignment=alignment,
         )
         self.addWidget(editor, content_row, 1)
-        self._rows.append((label, editor, vertical_alignment))
+        self._rows.append((content_row, label, editor, vertical_alignment))
+        self._next_row = content_row + 2
         self._update_gap_rows()
 
     def setGeometry(self, rect) -> None:  # noqa: N802
@@ -126,7 +146,7 @@ class _SettingsFormLayout(QGridLayout):
 
         row_heights = [
             max(_natural_height(label), _natural_height(editor))
-            for label, editor, _alignment in self._rows
+            for _row, label, editor, _alignment in self._rows
         ]
         return max(
             (
@@ -138,7 +158,8 @@ class _SettingsFormLayout(QGridLayout):
                     self._rows[1:],
                     strict=True,
                 )
-                if previous_row[2] == current_row[2] == Qt.AlignmentFlag.AlignVCenter
+                if current_row[0] == previous_row[0] + 2
+                and previous_row[3] == current_row[3] == Qt.AlignmentFlag.AlignVCenter
             ),
             default=0,
         )
@@ -146,7 +167,7 @@ class _SettingsFormLayout(QGridLayout):
     def centered_row_count(self) -> int:
         return sum(
             1
-            for _label, _editor, alignment in self._rows
+            for _row, _label, _editor, alignment in self._rows
             if alignment == Qt.AlignmentFlag.AlignVCenter
         )
 
@@ -160,7 +181,7 @@ class _SettingsFormLayout(QGridLayout):
 
         row_heights = [
             max(_natural_height(label), _natural_height(editor))
-            for label, editor, _alignment in self._rows
+            for _row, label, editor, _alignment in self._rows
         ]
         minimum_center_delta = max(
             self._minimum_center_delta,
@@ -168,21 +189,21 @@ class _SettingsFormLayout(QGridLayout):
         )
         target_center_delta = minimum_center_delta + self._row_spacing
 
-        for row_index, (previous, current, previous_row, current_row) in enumerate(
-            zip(
-                row_heights[:-1],
-                row_heights[1:],
-                self._rows[:-1],
-                self._rows[1:],
-                strict=True,
-            ),
-            start=1,
+        for previous, current, previous_row, current_row in zip(
+            row_heights[:-1],
+            row_heights[1:],
+            self._rows[:-1],
+            self._rows[1:],
+            strict=True,
         ):
-            gap_row = row_index * 2 - 1
-            if previous_row[2] != current_row[2]:
+            if current_row[0] != previous_row[0] + 2:
+                continue
+
+            gap_row = previous_row[0] + 1
+            if previous_row[3] != current_row[3]:
                 self.setRowMinimumHeight(gap_row, self._row_spacing)
                 continue
-            if current_row[2] == Qt.AlignmentFlag.AlignTop:
+            if current_row[3] == Qt.AlignmentFlag.AlignTop:
                 self.setRowMinimumHeight(gap_row, self._row_spacing)
                 continue
 
@@ -305,7 +326,15 @@ class SettingsDialog(QDialog):
                 )
                 tab_form_layouts.append(group_layout)
 
+                current_subgroup: str | None = None
                 for field in visible_fields:
+                    subgroup = str(field.subgroup or "").strip()
+                    if subgroup and subgroup != current_subgroup:
+                        group_layout.add_subgroup_title(subgroup)
+                        current_subgroup = subgroup
+                    elif not subgroup:
+                        current_subgroup = None
+
                     editor = build_editor(
                         field.editor,
                         choices=field.choices,
@@ -370,14 +399,19 @@ class SettingsDialog(QDialog):
         transitions_editor = self._editors.get(
             UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS
         )
-        if labels_editor is None or transitions_editor is None:
-            return
+        upload_label_editor = self._editors.get(UserSettingKey.FLICKR_UPLOAD_LABEL)
+        if labels_editor is not None:
+            def provider():
+                return list(labels_editor.get_value() or [])
 
-        set_provider = getattr(transitions_editor, "set_status_label_provider", None)
-        if not callable(set_provider):
-            return
+            for editor in (transitions_editor, upload_label_editor):
+                if editor is None:
+                    continue
+                set_provider = getattr(editor, "set_status_label_provider", None)
+                if callable(set_provider):
+                    set_provider(provider)
 
-        set_provider(lambda: list(labels_editor.get_value() or []))
+        self._sync_flickr_lifecycle_editors()
 
     def _should_include_field(self, field: FieldSpec) -> bool:
         if field.key not in _GCP_OCR_FIELD_KEYS:
@@ -435,12 +469,17 @@ class SettingsDialog(QDialog):
                 self._initial_values[key] = value
         finally:
             self._loading = False
+        self._sync_flickr_lifecycle_editors()
         self._update_save_enabled()
 
     def _on_field_changed(self, key: UserSettingKey):
         if self._loading:
             return
         self._editors[key].clear_error_hint()
+        if key == UserSettingKey.STATUS_LABELS:
+            self._refresh_status_label_dependents()
+        if key == UserSettingKey.FLICKR_UPLOAD_USE_LIFECYCLE:
+            self._sync_flickr_lifecycle_editors()
         self._dirty = self._compute_dirty()
         self._update_save_enabled()
 
@@ -457,20 +496,45 @@ class SettingsDialog(QDialog):
         return True
 
     def _should_validate_editor(self, key: UserSettingKey, value: object) -> bool:
+        if key == UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS:
+            return False
+        if key == UserSettingKey.FLICKR_UPLOAD_LABEL:
+            return self._flickr_lifecycle_enabled()
         if value != self._initial_values.get(key):
             return True
-        return (
-            key == UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS
-            and self._status_labels_changed()
+        return False
+
+    def _flickr_lifecycle_enabled(self) -> bool:
+        editor = self._editors.get(UserSettingKey.FLICKR_UPLOAD_USE_LIFECYCLE)
+        return bool(editor is not None and editor.get_value())
+
+    def _sync_flickr_lifecycle_editors(self) -> None:
+        enabled = self._flickr_lifecycle_enabled()
+        upload_label_editor = self._editors.get(UserSettingKey.FLICKR_UPLOAD_LABEL)
+        transitions_editor = self._editors.get(
+            UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS
         )
 
-    def _status_labels_changed(self) -> bool:
-        editor = self._editors.get(UserSettingKey.STATUS_LABELS)
-        if editor is None:
-            return False
-        return editor.get_value() != self._initial_values.get(
-            UserSettingKey.STATUS_LABELS
-        )
+        set_required = getattr(upload_label_editor, "set_required", None)
+        if callable(set_required):
+            set_required(enabled)
+        elif upload_label_editor is not None:
+            upload_label_editor.setEnabled(enabled)
+
+        if transitions_editor is not None:
+            transitions_editor.setEnabled(enabled)
+
+    def _refresh_status_label_dependents(self) -> None:
+        for key in (
+            UserSettingKey.FLICKR_UPLOAD_LABEL,
+            UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS,
+        ):
+            editor = self._editors.get(key)
+            if editor is None:
+                continue
+            refresh = getattr(editor, "refresh_status_labels", None)
+            if callable(refresh):
+                refresh()
 
     def _update_save_enabled(self) -> None:
         if hasattr(self, "_save_btn"):
@@ -580,15 +644,17 @@ class SettingsDialog(QDialog):
         for key, editor in self._editors.items():
             value = editor.get_value()
             is_changed = value != self._initial_values.get(key)
-            if not is_changed and not self._should_validate_editor(key, value):
+            should_validate = self._should_validate_editor(key, value)
+            if not is_changed and not should_validate:
                 continue
-            if not editor.is_valid():
+            if should_validate and not editor.is_valid():
                 return
-            validation_error = self._validate_field(key, value)
-            if validation_error is not None:
-                errors.append(validation_error)
-                self._show_mandatory_field_error_hint(key, validation_error)
-                continue
+            if should_validate:
+                validation_error = self._validate_field(key, value)
+                if validation_error is not None:
+                    errors.append(validation_error)
+                    self._show_mandatory_field_error_hint(key, validation_error)
+                    continue
             if is_changed:
                 changed[key] = value
 

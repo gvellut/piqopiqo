@@ -29,6 +29,7 @@ from piqopiqo.ssf.settings_state import UserSettingKey, get_user_setting
 from .map_links_editor import _build_edit_icon, _build_minus_icon, _build_plus_icon
 
 _NO_LABEL_DISPLAY = "No Label"
+_CHOOSE_LABEL_DISPLAY = "Choose label..."
 _TRANSITION_ARROW = "→"
 StatusLabelProvider = Callable[[], list[StatusLabel]]
 
@@ -93,6 +94,171 @@ def _build_swatch_icon(color: str) -> QIcon:
     painter.end()
 
     return QIcon(pixmap)
+
+
+def _status_label_names(status_labels: list[StatusLabel]) -> set[str]:
+    return {
+        str(label.name).strip()
+        for label in status_labels
+        if str(label.name).strip()
+    }
+
+
+def _populate_status_label_combo(
+    combo: QComboBox,
+    status_labels: list[StatusLabel],
+    *,
+    include_no_label: bool,
+    invalid_value: str = "",
+) -> None:
+    combo.clear()
+    combo.addItem(_CHOOSE_LABEL_DISPLAY, None)
+    if include_no_label:
+        combo.addItem(_build_swatch_icon(""), _NO_LABEL_DISPLAY, "")
+
+    names = set()
+    for label in status_labels:
+        name = str(label.name).strip()
+        if not name or name in names:
+            continue
+        names.add(name)
+        combo.addItem(_build_swatch_icon(str(label.color or "")), name, name)
+
+    missing_value = str(invalid_value or "").strip()
+    if missing_value and missing_value not in names:
+        combo.addItem(_build_swatch_icon(""), missing_value, missing_value)
+
+
+def _select_status_label_combo_value(combo: QComboBox, value: str) -> None:
+    expected = str(value or "").strip()
+    for row in range(combo.count()):
+        if combo.itemData(row) == expected:
+            combo.setCurrentIndex(row)
+            return
+    combo.setCurrentIndex(0)
+
+
+def _selected_status_label_combo_value(combo: QComboBox) -> str | None:
+    value = combo.currentData()
+    if value is None:
+        return None
+    return str(value or "").strip()
+
+
+class StatusLabelComboEditor(QWidget):
+    """Single-row status-label combobox with live validation."""
+
+    value_changed = Signal()
+
+    def __init__(
+        self,
+        parent=None,
+        *,
+        status_label_provider: StatusLabelProvider | None = None,
+        required: bool = True,
+    ):
+        super().__init__(parent)
+        self._status_label_provider = status_label_provider or _current_status_labels
+        self._required = bool(required)
+        self._value = ""
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        self._combo = QComboBox(self)
+        self._combo.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        self._combo.currentIndexChanged.connect(self._on_combo_changed)
+        layout.addWidget(self._combo, 1)
+
+        self._error_label = QLabel(self)
+        self._error_label.setStyleSheet("color: #b00020;")
+        self._error_label.setWordWrap(False)
+        self._error_label.hide()
+        layout.addWidget(self._error_label)
+
+        self.refresh_status_labels()
+        self.set_required(self._required)
+
+    def set_status_label_provider(
+        self,
+        provider: StatusLabelProvider | None,
+    ) -> None:
+        self._status_label_provider = provider or _current_status_labels
+        self.refresh_status_labels()
+
+    def refresh_status_labels(self) -> None:
+        status_labels = self._status_labels()
+        invalid_value = (
+            self._value
+            if self._value not in _status_label_names(status_labels)
+            else ""
+        )
+        self._combo.blockSignals(True)
+        _populate_status_label_combo(
+            self._combo,
+            status_labels,
+            include_no_label=False,
+            invalid_value=invalid_value,
+        )
+        _select_status_label_combo_value(self._combo, self._value)
+        self._combo.blockSignals(False)
+        self._update_validity()
+
+    def set_required(self, required: bool) -> None:
+        self._required = bool(required)
+        self._combo.setEnabled(self._required)
+        self._update_validity()
+
+    def set_value(self, value: str | None) -> None:
+        self._value = str(value or "").strip()
+        self.refresh_status_labels()
+
+    def get_value(self) -> str:
+        value = _selected_status_label_combo_value(self._combo)
+        return str(value or "").strip() if value is not None else ""
+
+    def is_valid(self) -> bool:
+        if not self._required:
+            return True
+        value = self.get_value()
+        return bool(value) and value in _status_label_names(self._status_labels())
+
+    def _status_labels(self) -> list[StatusLabel]:
+        return _status_labels_from_provider(self._status_label_provider)
+
+    def _on_combo_changed(self, *_args) -> None:
+        self._value = self.get_value()
+        self._update_validity()
+        self.value_changed.emit()
+
+    def _update_validity(self) -> None:
+        if not self._required:
+            self._error_label.clear()
+            self._error_label.hide()
+            self._combo.setStyleSheet("")
+            return
+
+        value = self.get_value()
+        if not value:
+            error = "Choose a label."
+        elif value not in _status_label_names(self._status_labels()):
+            error = "Label no longer exists."
+        else:
+            error = ""
+
+        if error:
+            self._error_label.setText(error)
+            self._error_label.show()
+            self._combo.setStyleSheet("QComboBox { border: 1px solid #b00020; }")
+            return
+
+        self._error_label.clear()
+        self._error_label.hide()
+        self._combo.setStyleSheet("")
 
 
 def _configure_action_button(
@@ -206,32 +372,17 @@ class _LabelTransitionRuleDialog(QDialog):
         )
 
     def _populate_label_combo(self, combo: QComboBox) -> None:
-        combo.addItem("Choose label...", None)
-        entries = [("", _NO_LABEL_DISPLAY, "")]
-        entries.extend(
-            (label.name, label.name, label.color)
-            for label in self._status_labels
-            if str(label.name).strip()
+        _populate_status_label_combo(
+            combo,
+            self._status_labels,
+            include_no_label=True,
         )
-        for value, text, color in entries:
-            combo.addItem(
-                _build_swatch_icon(str(color)),
-                str(text),
-                str(value).strip(),
-            )
 
     def _select_value(self, combo: QComboBox, value: str) -> None:
-        expected = str(value or "").strip()
-        for row in range(combo.count()):
-            if combo.itemData(row) == expected:
-                combo.setCurrentIndex(row)
-                return
+        _select_status_label_combo_value(combo, value)
 
     def _selected_value(self, combo: QComboBox) -> str | None:
-        value = combo.currentData()
-        if value is None:
-            return None
-        return str(value or "").strip()
+        return _selected_status_label_combo_value(combo)
 
     def _duplicate_from_values(self) -> set[str]:
         values: set[str] = set()

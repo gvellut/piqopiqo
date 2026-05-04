@@ -79,10 +79,13 @@ def test_external_tools_tab_flickr_group_contains_required_metadata_toggle():
     assert [field.key for field in group_by_title["Flickr"].fields] == [
         UserSettingKey.FLICKR_API_KEY,
         UserSettingKey.FLICKR_API_SECRET,
-        UserSettingKey.FLICKR_UPLOAD_LABEL,
         UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS,
+        UserSettingKey.FLICKR_UPLOAD_USE_LIFECYCLE,
+        UserSettingKey.FLICKR_UPLOAD_LABEL,
         UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS,
     ]
+    lifecycle_fields = group_by_title["Flickr"].fields[3:]
+    assert {field.subgroup for field in lifecycle_fields} == {"Lifecycle"}
 
 
 def test_labels_and_shortcuts_tabs_layout_matches_expected_groups_and_fields():
@@ -115,6 +118,9 @@ def test_settings_tab_title_lookup_maps_external_tools_keys():
     assert get_settings_tab_title_for_key(UserSettingKey.FLICKR_API_KEY) == (
         "External/Tools"
     )
+    assert get_settings_tab_title_for_key(
+        UserSettingKey.FLICKR_UPLOAD_USE_LIFECYCLE
+    ) == ("External/Tools")
     assert get_settings_tab_title_for_key(UserSettingKey.FLICKR_UPLOAD_LABEL) == (
         "External/Tools"
     )

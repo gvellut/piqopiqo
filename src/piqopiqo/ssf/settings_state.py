@@ -62,6 +62,7 @@ class StateKey(StrEnum):
     SORT_ORDER = "sortOrder"
     COPY_SD_EJECT = "copySDEject"
     FLICKR_UPLOAD_APPLY_TRANSITIONS = "flickrUploadApplyTransitions"
+    FLICKR_UPLOAD_USE_LIFECYCLE_SCOPE = "flickrUploadUseLifecycleScope"
     COPY_SD_NAME_SUFFIX = "copySdNameSuffix"
     COPY_SD_DATE_SPEC = "copySdDateSpec"
     LAST_TIMESHIFT_BY_FOLDERS = "lastTimeshiftByFolders"
@@ -102,6 +103,7 @@ class UserSettingKey(StrEnum):
     GCP_SA_KEY_PATH = "gcpSaKeyPath"
     FLICKR_API_KEY = "flickrApiKey"
     FLICKR_API_SECRET = "flickrApiSecret"
+    FLICKR_UPLOAD_USE_LIFECYCLE = "flickrUploadUseLifecycle"
     FLICKR_UPLOAD_LABEL = "flickrUploadLabel"
     FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS = "flickrUploadRequireTitleAndKeywords"
     FLICKR_UPLOAD_LABEL_TRANSITIONS = "flickrUploadLabelTransitions"
@@ -517,6 +519,11 @@ _STATE_REGISTRY: dict[StateKey, SettingDef] = {
         read_type=bool,
         default=True,
     ),
+    StateKey.FLICKR_UPLOAD_USE_LIFECYCLE_SCOPE: SettingDef(
+        group=StateGroup.APP_STATE,
+        read_type=bool,
+        default=True,
+    ),
     StateKey.COPY_SD_NAME_SUFFIX: SettingDef(
         group=StateGroup.APP_STATE,
         read_type=str,
@@ -744,6 +751,11 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         group=SettingsGroup.SETTINGS,
         default="",
         read_type=str,
+    ),
+    UserSettingKey.FLICKR_UPLOAD_USE_LIFECYCLE: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default=False,
+        read_type=bool,
     ),
     UserSettingKey.FLICKR_UPLOAD_LABEL: SettingDef(
         group=SettingsGroup.SETTINGS,

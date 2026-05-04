@@ -7,7 +7,13 @@ import pytest
 
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.model import LabelTransitionRule, StatusLabel
-from piqopiqo.ssf.settings_state import UserSettingKey
+from piqopiqo.ssf.settings_state import (
+    StateKey,
+    UserSettingKey,
+    get_state_value,
+    init_qsettings_store,
+    set_state_value,
+)
 from piqopiqo.tools.flickr_upload import dialogs
 
 
@@ -109,10 +115,14 @@ def _patch_settings(
     *,
     require_metadata: bool,
     label_override: str = "",
+    use_lifecycle: bool | None = None,
 ) -> None:
+    if use_lifecycle is None:
+        use_lifecycle = bool(label_override)
     values = {
         UserSettingKey.FLICKR_API_KEY: "key",
         UserSettingKey.FLICKR_API_SECRET: "secret",
+        UserSettingKey.FLICKR_UPLOAD_USE_LIFECYCLE: use_lifecycle,
         UserSettingKey.FLICKR_UPLOAD_LABEL: label_override,
         UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS: require_metadata,
         UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS: [],
@@ -142,6 +152,7 @@ def test_launch_flickr_upload_passes_visible_scope_without_blocking_precheck(
         *,
         api_key,
         api_secret,
+        use_lifecycle,
         visible_upload_items,
         label_upload_items,
         label_override_text,
@@ -149,8 +160,10 @@ def test_launch_flickr_upload_passes_visible_scope_without_blocking_precheck(
     ):
         assert api_key == "key"
         assert api_secret == "secret"
+        assert use_lifecycle is False
         launch_calls.append(
             {
+                "use_lifecycle": use_lifecycle,
                 "visible_upload_items": visible_upload_items,
                 "label_upload_items": label_upload_items,
                 "label_override_text": label_override_text,
@@ -209,6 +222,39 @@ def test_launch_flickr_upload_builds_label_scope_from_all_photos_in_sort_order(
     assert [entry["file_path"] for entry in label_scope] == ["/b.jpg", "/c.jpg"]
     assert parent.photo_model.sort_calls == [["/c.jpg", "/b.jpg"]]
     assert hidden_from_db.db_metadata == {"label": "Approved"}
+
+
+def test_launch_flickr_upload_ignores_lifecycle_label_when_setting_is_off(
+    qapp,
+    monkeypatch,
+) -> None:  # noqa: ARG001
+    visible = _FakeItem("/a.jpg", {"label": "Rejected"})
+    hidden_match = _FakeItem("/b.jpg", {"label": "Approved"})
+    parent = _FakeParent(
+        visible_items=[visible],
+        all_items=[visible, hidden_match],
+        db_manager=_FakeDbManager(),
+    )
+    _patch_settings(
+        monkeypatch,
+        require_metadata=False,
+        label_override="Approved",
+        use_lifecycle=False,
+    )
+
+    launch_calls: list[dict] = []
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs._launch_flickr_upload_flow",
+        lambda _parent, **kwargs: launch_calls.append(kwargs),
+    )
+
+    dialogs.launch_flickr_upload(parent)
+
+    assert len(launch_calls) == 1
+    assert launch_calls[0]["use_lifecycle"] is False
+    assert launch_calls[0]["label_override_text"] == ""
+    assert launch_calls[0]["label_upload_items"] == []
+    assert parent.photo_model.sort_calls == []
 
 
 def test_flickr_upload_flow_uses_all_loaded_photos_for_transition_scope(
@@ -300,6 +346,7 @@ def test_flickr_upload_flow_uses_all_loaded_photos_for_transition_scope(
         parent,
         api_key="key",
         api_secret="secret",
+        use_lifecycle=True,
         visible_upload_items=dialogs._build_upload_scope_items([approved]),
         label_upload_items=dialogs._build_upload_scope_items([approved]),
         label_override_text="Approved",
@@ -319,6 +366,109 @@ def test_flickr_upload_flow_uses_all_loaded_photos_for_transition_scope(
         "/review.jpg",
     ]
     assert upload_kwargs["transition_rules"] == rules
+
+
+def test_flickr_upload_flow_hides_transitions_when_lifecycle_state_unchecked(
+    qapp,
+    monkeypatch,
+) -> None:  # noqa: ARG001
+    init_qsettings_store(dyn=True)
+    set_state_value(StateKey.FLICKR_UPLOAD_USE_LIFECYCLE_SCOPE, True)
+    approved = _FakeItem("/approved.jpg", {DBFields.LABEL: "Approved"})
+    rejected = _FakeItem("/rejected.jpg", {DBFields.LABEL: "Rejected"})
+    parent = _FakeParent(
+        visible_items=[rejected],
+        all_items=[approved, rejected],
+        db_manager=_FakeDbManager(),
+    )
+    rules = [LabelTransitionRule("Approved", "Uploaded")]
+    status_labels = [
+        StatusLabel("Approved", "#ff0000", 0),
+        StatusLabel("Uploaded", "#00ff00", 1),
+    ]
+    values = {
+        UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS: rules,
+        UserSettingKey.STATUS_LABELS: status_labels,
+        UserSettingKey.EXIFTOOL_PATH: "/opt/homebrew/bin/exiftool",
+    }
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.get_user_setting",
+        lambda key: values[key],
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.get_flickr_token_file_path",
+        lambda: "/tmp/flickr-token.sqlite",
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.token_file_exists",
+        lambda _path: True,
+    )
+
+    class _Signal:
+        def connect(self, _callback) -> None:
+            return
+
+    class _ScopeCheckbox:
+        def isEnabled(self) -> bool:
+            return True
+
+    class _Preflight:
+        selected_album_text = ""
+        selected_use_label_scope = False
+        selected_action = "upload"
+        scope_checkbox = _ScopeCheckbox()
+
+        def __init__(self, **kwargs):
+            self._visible_upload_items = list(kwargs["visible_upload_items"])
+
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+
+        def selected_upload_scope_items(self) -> list[dict]:
+            return list(self._visible_upload_items)
+
+    created_upload_dialogs: list[object] = []
+
+    class _UploadDialog:
+        invalid_token = False
+        album_validation_error = ""
+        resolved_album_plan = None
+
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.manager_started = _Signal()
+            self.manager_finished = _Signal()
+            created_upload_dialogs.append(self)
+
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.FlickrPreflightDialog",
+        _Preflight,
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.FlickrUploadProgressDialog",
+        _UploadDialog,
+    )
+
+    dialogs._launch_flickr_upload_flow(
+        parent,
+        api_key="key",
+        api_secret="secret",
+        use_lifecycle=True,
+        visible_upload_items=dialogs._build_upload_scope_items([rejected]),
+        label_upload_items=dialogs._build_upload_scope_items([approved]),
+        label_override_text="Approved",
+        should_require_metadata=False,
+    )
+
+    upload_kwargs = created_upload_dialogs[0].kwargs
+    assert [entry["file_path"] for entry in upload_kwargs["upload_items"]] == [
+        "/rejected.jpg"
+    ]
+    assert upload_kwargs["transition_rules"] == []
+    assert get_state_value(StateKey.FLICKR_UPLOAD_USE_LIFECYCLE_SCOPE) is False
 
 
 def test_launch_flickr_upload_warns_when_both_scopes_are_empty(
@@ -362,6 +512,7 @@ def test_launch_flickr_upload_missing_credentials_opens_settings(
     values = {
         UserSettingKey.FLICKR_API_KEY: "",
         UserSettingKey.FLICKR_API_SECRET: "",
+        UserSettingKey.FLICKR_UPLOAD_USE_LIFECYCLE: False,
         UserSettingKey.FLICKR_UPLOAD_LABEL: "",
         UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS: False,
         UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS: [],

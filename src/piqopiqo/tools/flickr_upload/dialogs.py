@@ -141,10 +141,7 @@ class FlickrPreflightDialog(QDialog):
             scope_section.setContentsMargins(0, 0, 0, 0)
             scope_section.setSpacing(0)
 
-            checkbox = QCheckBox(
-                f"Upload all the {self._label_override_text} images",
-                self,
-            )
+            checkbox = QCheckBox("Use lifecycle", self)
             checkbox.stateChanged.connect(self._on_scope_toggle_changed)
             checkbox.blockSignals(True)
             if self._label_count > 0:
@@ -1404,6 +1401,7 @@ def _launch_flickr_upload_flow(
     *,
     api_key: str,
     api_secret: str,
+    use_lifecycle: bool,
     visible_upload_items: list[dict],
     label_upload_items: list[dict],
     label_override_text: str,
@@ -1417,10 +1415,12 @@ def _launch_flickr_upload_flow(
     session_use_label_scope: bool | None = None
     cached_album_plan: FlickrAlbumPlan | None = None
     cached_album_from_folder_data = False
-    transition_rules = filter_valid_label_transition_rules(
-        get_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS) or [],
-        status_labels=list(get_user_setting(UserSettingKey.STATUS_LABELS) or []),
-    )
+    transition_rules = []
+    if use_lifecycle:
+        transition_rules = filter_valid_label_transition_rules(
+            get_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS) or [],
+            status_labels=list(get_user_setting(UserSettingKey.STATUS_LABELS) or []),
+        )
 
     while True:
         token_exists = token_file_exists(token_path)
@@ -1441,7 +1441,11 @@ def _launch_flickr_upload_flow(
             token_exists=token_exists,
             label_upload_items=label_upload_items,
             label_override_text=label_override_text,
-            initial_use_label_scope=session_use_label_scope,
+            initial_use_label_scope=(
+                session_use_label_scope
+                if session_use_label_scope is not None
+                else bool(get_state_value(StateKey.FLICKR_UPLOAD_USE_LIFECYCLE_SCOPE))
+            ),
             require_metadata=should_require_metadata,
             db_manager=parent.db_manager if should_require_metadata else None,
             album_text=session_album_text,
@@ -1457,6 +1461,12 @@ def _launch_flickr_upload_flow(
 
         session_album_text = preflight.selected_album_text
         session_use_label_scope = preflight.selected_use_label_scope
+        scope_checkbox = getattr(preflight, "scope_checkbox", None)
+        if use_lifecycle and scope_checkbox is not None and scope_checkbox.isEnabled():
+            set_state_value(
+                StateKey.FLICKR_UPLOAD_USE_LIFECYCLE_SCOPE,
+                bool(session_use_label_scope),
+            )
 
         if preflight.selected_action == "login":
             worker = FlickrLoginWorker(api_key=api_key, api_secret=api_secret)
@@ -1489,6 +1499,7 @@ def _launch_flickr_upload_flow(
         ):
             cached_plan_for_upload = cached_album_plan
 
+        active_transition_rules = transition_rules if session_use_label_scope else []
         upload_dialog = FlickrUploadProgressDialog(
             api_key=api_key,
             api_secret=api_secret,
@@ -1501,7 +1512,7 @@ def _launch_flickr_upload_flow(
                 source_folders,
                 album_id,
             ),
-            transition_rules=transition_rules,
+            transition_rules=active_transition_rules,
             transition_scope_items=transition_scope_items,
             parent=parent,
         )
@@ -1560,9 +1571,14 @@ def launch_flickr_upload(parent: MainWindow) -> None:
     should_require_metadata = bool(
         get_user_setting(UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS)
     )
-    label_override_text = str(
-        get_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL) or ""
-    ).strip()
+    use_lifecycle = bool(
+        get_user_setting(UserSettingKey.FLICKR_UPLOAD_USE_LIFECYCLE)
+    )
+    label_override_text = ""
+    if use_lifecycle:
+        label_override_text = str(
+            get_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL) or ""
+        ).strip()
 
     visible_upload_items = _build_upload_scope_items(visible_items)
     label_upload_items: list[dict] = []
@@ -1584,6 +1600,7 @@ def launch_flickr_upload(parent: MainWindow) -> None:
         parent,
         api_key=api_key,
         api_secret=api_secret,
+        use_lifecycle=use_lifecycle,
         visible_upload_items=visible_upload_items,
         label_upload_items=label_upload_items,
         label_override_text=label_override_text,
