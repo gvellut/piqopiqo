@@ -46,6 +46,12 @@ class MapLinkOption:
     url_template: str
 
 
+@define(frozen=True)
+class LabelTransitionRule:
+    from_label: str
+    to_label: str
+
+
 @define
 class FilterCriteria:
     """Filter criteria for the photo model.

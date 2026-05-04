@@ -13,6 +13,7 @@ import pytest
 from piqopiqo.color_management import ScreenColorProfileMode
 from piqopiqo.model import (
     ExifField,
+    LabelTransitionRule,
     ManualLensPreset,
     MapLinkOption,
     StatusLabel,
@@ -90,6 +91,8 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE",
         "PIQO_OCR_TIME_SHIFT_PROVIDER",
         "PIQO_MAP_LINKS",
+        "PIQO_FLICKR_UPLOAD_LABEL_TRANSITIONS",
+        "PIQO_FLICKR_UPLOAD_APPLY_TRANSITIONS",
     ):
         monkeypatch.delenv(env_name, raising=False)
 
@@ -435,11 +438,19 @@ def test_flickr_settings_defaults_and_roundtrip(isolated_settings):
         get_user_setting(UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS)
         is False
     )
+    assert get_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS) == []
+    assert get_state_value(StateKey.FLICKR_UPLOAD_APPLY_TRANSITIONS) is True
 
     set_user_setting(UserSettingKey.FLICKR_API_KEY, "key123")
     set_user_setting(UserSettingKey.FLICKR_API_SECRET, "secret456")
     set_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL, "Approved")
     set_user_setting(UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS, True)
+    rules = [
+        LabelTransitionRule("Approved", "Uploaded"),
+        LabelTransitionRule("Rejected", ""),
+    ]
+    set_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS, rules)
+    set_state_value(StateKey.FLICKR_UPLOAD_APPLY_TRANSITIONS, False)
 
     assert get_user_setting(UserSettingKey.FLICKR_API_KEY) == "key123"
     assert get_user_setting(UserSettingKey.FLICKR_API_SECRET) == "secret456"
@@ -448,6 +459,24 @@ def test_flickr_settings_defaults_and_roundtrip(isolated_settings):
         get_user_setting(UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS)
         is True
     )
+    assert get_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS) == rules
+    assert get_state_value(StateKey.FLICKR_UPLOAD_APPLY_TRANSITIONS) is False
+
+
+def test_flickr_label_transition_rules_env_override(isolated_settings, monkeypatch):
+    monkeypatch.setenv(
+        "PIQO_FLICKR_UPLOAD_LABEL_TRANSITIONS",
+        (
+            '[{"from_label":"Approved","to_label":"Uploaded"},'
+            '{"from_label":"Rejected","to_label":""}]'
+        ),
+    )
+    init_qsettings_store(dyn=False)
+
+    assert get_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS) == [
+        LabelTransitionRule("Approved", "Uploaded"),
+        LabelTransitionRule("Rejected", ""),
+    ]
 
 
 def test_flickr_runtime_workers_env_override(isolated_settings, monkeypatch):

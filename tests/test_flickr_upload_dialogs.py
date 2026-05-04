@@ -5,6 +5,14 @@ from __future__ import annotations
 from PySide6.QtWidgets import QApplication
 import pytest
 
+from piqopiqo.label_transitions import LabelTransitionChange, LabelTransitionPlan
+from piqopiqo.model import LabelTransitionRule
+from piqopiqo.ssf.settings_state import (
+    StateKey,
+    get_state_value,
+    init_qsettings_store,
+    set_state_value,
+)
 from piqopiqo.tools.flickr_upload.albums import FlickrAlbumPlan
 from piqopiqo.tools.flickr_upload.constants import FlickrStage
 from piqopiqo.tools.flickr_upload.dialogs import (
@@ -417,6 +425,148 @@ def test_upload_progress_completion_hides_running_widgets_and_shows_summary(  # 
     assert dialog.progress_text_label.isHidden() is True
     assert dialog.status_label.isHidden() is False
     assert dialog.details.isHidden() is False
+    assert dialog.ok_btn.isHidden() is False
+    assert dialog.ok_btn.isEnabled() is True
+
+
+def test_upload_progress_hides_transition_checkbox_without_rules(
+    qapp,
+) -> None:  # noqa: ARG001
+    dialog = _mk_upload_dialog()
+
+    dialog._on_finished(
+        FlickrUploadResult(
+            total_photos=2,
+            uploaded_count=2,
+            reset_date_count=2,
+            made_public_count=2,
+        )
+    )
+
+    assert dialog.apply_transitions_checkbox.isHidden() is True
+
+
+def test_upload_progress_transition_checkbox_uses_state_on_clean_success(
+    qapp,
+) -> None:  # noqa: ARG001
+    init_qsettings_store(dyn=True)
+    set_state_value(StateKey.FLICKR_UPLOAD_APPLY_TRANSITIONS, True)
+    dialog = FlickrUploadProgressDialog(
+        api_key="k",
+        api_secret="s",
+        exiftool_path="/opt/homebrew/bin/exiftool",
+        upload_items=[{"file_path": "/a.jpg", "order": 0, "db_metadata": None}],
+        album_text="",
+        cached_album_plan=None,
+        set_folder_album_id_callback=lambda _album_id: None,
+        transition_rules=[LabelTransitionRule("Approved", "Uploaded")],
+        apply_transitions_callback=lambda _rules, _items: LabelTransitionPlan(),
+    )
+
+    dialog._on_finished(
+        FlickrUploadResult(
+            total_photos=1,
+            uploaded_count=1,
+            reset_date_count=1,
+            made_public_count=1,
+        )
+    )
+
+    assert dialog.apply_transitions_checkbox.isHidden() is False
+    assert dialog.apply_transitions_checkbox.isEnabled() is True
+    assert dialog.apply_transitions_checkbox.isChecked() is True
+
+
+def test_upload_progress_transition_checkbox_disabled_after_non_clean_result(
+    qapp,
+) -> None:  # noqa: ARG001
+    init_qsettings_store(dyn=True)
+    set_state_value(StateKey.FLICKR_UPLOAD_APPLY_TRANSITIONS, True)
+    dialog = FlickrUploadProgressDialog(
+        api_key="k",
+        api_secret="s",
+        exiftool_path="/opt/homebrew/bin/exiftool",
+        upload_items=[{"file_path": "/a.jpg", "order": 0, "db_metadata": None}],
+        album_text="",
+        cached_album_plan=None,
+        set_folder_album_id_callback=lambda _album_id: None,
+        transition_rules=[LabelTransitionRule("Approved", "Uploaded")],
+        apply_transitions_callback=lambda _rules, _items: LabelTransitionPlan(),
+    )
+
+    dialog._on_finished(
+        FlickrUploadResult(
+            total_photos=1,
+            uploaded_count=1,
+            reset_date_count=1,
+            made_public_count=1,
+            failures=[
+                FlickrUploadPhotoFailure(
+                    file_path="/a.jpg",
+                    stage=FlickrStage.STAGE_UPLOAD.label,
+                    message="warning",
+                )
+            ],
+        )
+    )
+    dialog._on_ok()
+
+    assert dialog.apply_transitions_checkbox.isHidden() is False
+    assert dialog.apply_transitions_checkbox.isEnabled() is False
+    assert dialog.apply_transitions_checkbox.isChecked() is False
+    assert get_state_value(StateKey.FLICKR_UPLOAD_APPLY_TRANSITIONS) is True
+
+
+def test_upload_progress_ok_applies_transitions_and_shows_result(
+    qapp,
+) -> None:
+    init_qsettings_store(dyn=True)
+    rules = [LabelTransitionRule("Approved", "Uploaded")]
+    scope_items = [{"file_path": "/a.jpg", "order": 0, "db_metadata": None}]
+    calls: list[tuple[list[LabelTransitionRule], list[dict]]] = []
+
+    def _apply(rules_arg, items_arg):
+        calls.append((list(rules_arg), list(items_arg)))
+        return LabelTransitionPlan(
+            changes=[
+                LabelTransitionChange(
+                    file_path="/a.jpg",
+                    from_label="Approved",
+                    to_label="Uploaded",
+                    rule_index=0,
+                )
+            ],
+            per_rule_counts=[1],
+        )
+
+    dialog = FlickrUploadProgressDialog(
+        api_key="k",
+        api_secret="s",
+        exiftool_path="/opt/homebrew/bin/exiftool",
+        upload_items=scope_items,
+        album_text="",
+        cached_album_plan=None,
+        set_folder_album_id_callback=lambda _album_id: None,
+        transition_rules=rules,
+        transition_scope_items=scope_items,
+        apply_transitions_callback=_apply,
+    )
+    dialog._on_finished(
+        FlickrUploadResult(
+            total_photos=1,
+            uploaded_count=1,
+            reset_date_count=1,
+            made_public_count=1,
+        )
+    )
+
+    dialog._on_ok()
+    qapp.processEvents()
+
+    assert calls == [(rules, scope_items)]
+    assert get_state_value(StateKey.FLICKR_UPLOAD_APPLY_TRANSITIONS) is True
+    assert dialog.progress_bar.isHidden() is True
+    assert dialog.status_label.text() == "Transitions complete. 1 image(s) changed."
     assert dialog.ok_btn.isHidden() is False
     assert dialog.ok_btn.isEnabled() is True
 

@@ -18,6 +18,7 @@ from PySide6.QtCore import QByteArray, QSettings
 from piqopiqo.color_management import ScreenColorProfileMode
 from piqopiqo.model import (
     ExifField,
+    LabelTransitionRule,
     ManualLensPreset,
     MapLinkOption,
     OnFullscreenExitMultipleSelected,
@@ -60,6 +61,7 @@ class StateKey(StrEnum):
     ARCHIVE_SAVE_EXIF = "archiveSaveExif"
     SORT_ORDER = "sortOrder"
     COPY_SD_EJECT = "copySDEject"
+    FLICKR_UPLOAD_APPLY_TRANSITIONS = "flickrUploadApplyTransitions"
     COPY_SD_NAME_SUFFIX = "copySdNameSuffix"
     COPY_SD_DATE_SPEC = "copySdDateSpec"
     LAST_TIMESHIFT_BY_FOLDERS = "lastTimeshiftByFolders"
@@ -102,6 +104,7 @@ class UserSettingKey(StrEnum):
     FLICKR_API_SECRET = "flickrApiSecret"
     FLICKR_UPLOAD_LABEL = "flickrUploadLabel"
     FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS = "flickrUploadRequireTitleAndKeywords"
+    FLICKR_UPLOAD_LABEL_TRANSITIONS = "flickrUploadLabelTransitions"
     MANUAL_LENSES = "manualLenses"
 
 
@@ -343,6 +346,35 @@ def _deserialize_map_links(data: Any) -> list[MapLinkOption]:
     return out
 
 
+def _serialize_label_transition_rules(
+    value: list[LabelTransitionRule],
+) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    for rule in value:
+        out.append({
+            "from_label": str(rule.from_label).strip(),
+            "to_label": str(rule.to_label).strip(),
+        })
+    return out
+
+
+def _deserialize_label_transition_rules(data: Any) -> list[LabelTransitionRule]:
+    if not isinstance(data, list):
+        raise ValueError("Expected a list for label transition rules")
+
+    out: list[LabelTransitionRule] = []
+    for row in data:
+        if not isinstance(row, dict):
+            continue
+        out.append(
+            LabelTransitionRule(
+                from_label=str(row.get("from_label", "")).strip(),
+                to_label=str(row.get("to_label", "")).strip(),
+            )
+        )
+    return out
+
+
 def _deserialize_exif_fields(data: Any) -> list[ExifField]:
     if not isinstance(data, list):
         raise ValueError("Expected a list for exif fields")
@@ -476,6 +508,11 @@ _STATE_REGISTRY: dict[StateKey, SettingDef] = {
         default=SortOrder.FILE_NAME.name,
     ),
     StateKey.COPY_SD_EJECT: SettingDef(
+        group=StateGroup.APP_STATE,
+        read_type=bool,
+        default=True,
+    ),
+    StateKey.FLICKR_UPLOAD_APPLY_TRANSITIONS: SettingDef(
         group=StateGroup.APP_STATE,
         read_type=bool,
         default=True,
@@ -717,6 +754,15 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         group=SettingsGroup.SETTINGS,
         default=False,
         read_type=bool,
+    ),
+    UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default=[],
+        read_type=str,
+        json_storage=True,
+        serializer=_serialize_label_transition_rules,
+        deserializer=_deserialize_label_transition_rules,
+        env_parser=lambda raw: _deserialize_label_transition_rules(_parse_json(raw)),
     ),
     UserSettingKey.MANUAL_LENSES: SettingDef(
         group=SettingsGroup.SETTINGS,

@@ -6,7 +6,7 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, QThreadPool, Signal
+from PySide6.QtCore import Qt, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -26,13 +26,23 @@ from piqopiqo.cache_paths import get_flickr_cache_dir, get_flickr_token_file_pat
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
+from piqopiqo.label_transitions import (
+    LabelTransitionPlan,
+    filter_valid_label_transition_rules,
+    plan_label_transition_changes,
+)
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBUnavailableError
+from piqopiqo.metadata.save_workers import MetadataSaveWorker
+from piqopiqo.model import LabelTransitionRule
 from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
+    StateKey,
     UserSettingKey,
     get_runtime_setting,
+    get_state_value,
     get_user_setting,
+    set_state_value,
 )
 from piqopiqo.tools.tool_flow import (
     ToolButton,
@@ -609,6 +619,9 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         album_text: str,
         cached_album_plan: FlickrAlbumPlan | None,
         set_folder_album_id_callback,
+        transition_rules: list[LabelTransitionRule] | None = None,
+        transition_scope_items: list[dict] | None = None,
+        apply_transitions_callback=None,
         parent=None,
     ):
         self._api_key = api_key
@@ -618,18 +631,25 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         self._album_text = str(album_text or "")
         self._cached_album_plan = cached_album_plan
         self._set_folder_album_id_callback = set_folder_album_id_callback
+        self._transition_rules = list(transition_rules or [])
+        self._transition_scope_items = list(transition_scope_items or upload_items)
+        self._apply_transitions_callback = apply_transitions_callback
 
         self._manager: FlickrUploadManager | None = None
         self._token_worker: FlickrTokenValidationWorker | None = None
         self._album_worker: FlickrAlbumCheckWorker | None = None
         self._finished = False
         self._started = False
+        self._applying_transitions = False
+        self._transition_result_shown = False
+        self._clean_upload_success = False
         self._current_stage = "Validating Flickr token..."
         self._album_action_text = ""
         self._check_status_text = ""
 
         self.invalid_token = False
         self.result: FlickrUploadResult | None = None
+        self.transition_result: LabelTransitionPlan | None = None
         self.album_validation_error: str = ""
         self.resolved_album_plan: FlickrAlbumPlan | None = None
         workflow = ToolWorkflow(
@@ -649,7 +669,7 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
             },
             transitions={
                 ("main", "cancel"): lambda dialog, event: dialog._on_cancel(),
-                ("main", "ok"): lambda dialog, event: dialog.accept(),
+                ("main", "ok"): lambda dialog, event: dialog._on_ok(),
                 ("*", "token_validated"): lambda dialog, event: (
                     dialog._on_token_validated(*event.args)
                 ),
@@ -712,6 +732,10 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         self.details.setReadOnly(True)
         self.details.hide()
         layout.addWidget(self.details)
+
+        self.apply_transitions_checkbox = QCheckBox("Apply transitions", widget)
+        self.apply_transitions_checkbox.hide()
+        layout.addWidget(self.apply_transitions_checkbox)
         return widget
 
     def _update_stage_label(self) -> None:
@@ -910,6 +934,119 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         self.album_action_label.hide()
         self.sync_size_to_content()
 
+    def _is_clean_upload_success(self, result: FlickrUploadResult) -> bool:
+        if result.cancelled or result.fatal_error or result.failures:
+            return False
+        if result.total_photos <= 0:
+            return False
+        return result.uploaded_count == result.total_photos
+
+    def _configure_transition_checkbox(self, result: FlickrUploadResult) -> None:
+        if not self._transition_rules:
+            self.apply_transitions_checkbox.hide()
+            return
+
+        self._clean_upload_success = self._is_clean_upload_success(result)
+        self.apply_transitions_checkbox.show()
+        if self._clean_upload_success:
+            self.apply_transitions_checkbox.setEnabled(True)
+            self.apply_transitions_checkbox.setChecked(
+                bool(get_state_value(StateKey.FLICKR_UPLOAD_APPLY_TRANSITIONS))
+            )
+            return
+
+        self.apply_transitions_checkbox.setChecked(False)
+        self.apply_transitions_checkbox.setEnabled(False)
+
+    def _on_ok(self) -> None:
+        if self._transition_result_shown:
+            self.accept()
+            return
+
+        should_apply = (
+            self._clean_upload_success
+            and not self.apply_transitions_checkbox.isHidden()
+            and self.apply_transitions_checkbox.isEnabled()
+            and self.apply_transitions_checkbox.isChecked()
+        )
+        if (
+            self._clean_upload_success
+            and not self.apply_transitions_checkbox.isHidden()
+        ):
+            set_state_value(
+                StateKey.FLICKR_UPLOAD_APPLY_TRANSITIONS,
+                bool(self.apply_transitions_checkbox.isChecked()),
+            )
+
+        if should_apply:
+            self._start_label_transitions()
+            return
+
+        self.accept()
+
+    def _start_label_transitions(self) -> None:
+        if self._applying_transitions:
+            return
+        if self._apply_transitions_callback is None or not self._transition_rules:
+            self.accept()
+            return
+
+        self._applying_transitions = True
+        self.status_label.hide()
+        self.details.hide()
+        self.apply_transitions_checkbox.hide()
+        self.album_action_label.hide()
+        self.cancel_btn.setEnabled(True)
+        self.cancel_btn.setVisible(True)
+        self.ok_btn.setEnabled(False)
+        self.ok_btn.setVisible(False)
+        self._current_stage = f"Applying {len(self._transition_rules)} rules..."
+        self._album_action_text = ""
+        self._check_status_text = ""
+        self._update_stage_label()
+        self.stage_label.show()
+        self.progress_row.show()
+        self.progress_text_label.hide()
+        self.set_progress(0, 0)
+        self.sync_size_to_content()
+        QTimer.singleShot(0, self._apply_label_transitions)
+
+    def _apply_label_transitions(self) -> None:
+        if not self._applying_transitions:
+            return
+
+        try:
+            result = self._apply_transitions_callback(
+                self._transition_rules,
+                self._transition_scope_items,
+            )
+        except Exception as ex:  # pragma: no cover - defensive UI fallback
+            result = LabelTransitionPlan()
+            self.details.setPlainText(str(ex))
+            self.details.show()
+
+        self.transition_result = result
+        self._show_label_transition_result(result)
+
+    def _show_label_transition_result(self, result: LabelTransitionPlan) -> None:
+        self._applying_transitions = False
+        self._transition_result_shown = True
+        self.stage_label.hide()
+        self.progress_row.hide()
+        self.progress_bar.hide()
+        self.progress_text_label.hide()
+        self.apply_transitions_checkbox.hide()
+        self.status_label.setText(
+            f"Transitions complete. {result.changed_count} image(s) changed."
+        )
+        self.status_label.show()
+        self.cancel_btn.setEnabled(False)
+        self.ok_btn.setEnabled(True)
+        self.ok_btn.setVisible(True)
+        self.ok_btn.setDefault(True)
+        self.ok_btn.setFocus()
+        self.sync_size_to_content()
+
     def _on_finished(self, result: FlickrUploadResult) -> None:
         self._finished = True
         self.result = result
@@ -989,6 +1126,7 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
             self.details.setPlainText("\n".join(lines))
             self.details.show()
 
+        self._configure_transition_checkbox(result)
         self.ok_btn.setEnabled(True)
         self.ok_btn.setVisible(True)
         self.ok_btn.setDefault(True)
@@ -996,6 +1134,10 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         self.sync_size_to_content()
 
     def _on_cancel(self) -> None:
+        if self._applying_transitions:
+            self._applying_transitions = False
+            self.reject()
+            return
         if self._token_worker is not None:
             self.stop_task("flickr_token_validation", cancel=True)
         if self._album_worker is not None:
@@ -1088,6 +1230,121 @@ def _build_upload_items(
     return upload_items
 
 
+def _save_transition_metadata(
+    parent: MainWindow,
+    file_path: str,
+    metadata: dict,
+) -> None:
+    submit_background_save = getattr(parent, "_submit_background_metadata_save", None)
+    if callable(submit_background_save):
+        submit_background_save(
+            file_path=file_path,
+            data=metadata.copy(),
+            changed_fields={DBFields.LABEL},
+            source="flickr_label_transitions",
+        )
+        return
+
+    pool = getattr(parent, "_background_db_save_pool", None)
+    if pool is not None:
+        pool.start(
+            MetadataSaveWorker(
+                parent.db_manager,
+                file_path,
+                metadata.copy(),
+                changed_fields={DBFields.LABEL},
+                source="flickr_label_transitions",
+            )
+        )
+        return
+
+    db = parent.db_manager.get_db_for_image(file_path)
+    db.save_metadata(file_path, metadata.copy())
+
+
+def _apply_flickr_label_transitions(
+    parent: MainWindow,
+    transition_scope_items: list[dict],
+    rules: list[LabelTransitionRule],
+) -> LabelTransitionPlan:
+    all_photos = list(getattr(parent.photo_model, "all_photos", []) or [])
+    items_by_path = {
+        item.path: item for item in all_photos if getattr(item, "path", "")
+    }
+    metadata_by_path: dict[str, dict] = {}
+    plan_entries: list[dict] = []
+
+    for entry in transition_scope_items:
+        file_path = str(entry.get("file_path") or "").strip()
+        if not file_path:
+            continue
+
+        item = items_by_path.get(file_path)
+        metadata = getattr(item, "db_metadata", None) if item is not None else None
+        if not isinstance(metadata, dict):
+            metadata = entry.get("db_metadata")
+        if not isinstance(metadata, dict):
+            metadata = parent.db_manager.get_db_for_image(file_path).get_metadata(
+                file_path
+            )
+        if not isinstance(metadata, dict):
+            metadata = {DBFields.LABEL: None}
+
+        metadata_copy = metadata.copy()
+        metadata_by_path[file_path] = metadata_copy
+        if item is not None and not isinstance(
+            getattr(item, "db_metadata", None),
+            dict,
+        ):
+            item.db_metadata = metadata_copy.copy()
+        plan_entries.append({"file_path": file_path, "db_metadata": metadata_copy})
+
+    plan = plan_label_transition_changes(plan_entries, rules)
+    if not plan.changes:
+        return plan
+
+    refresh_item = getattr(parent, "_refresh_grid_item_if_visible", None)
+    for change in plan.changes:
+        metadata = metadata_by_path.get(change.file_path)
+        if metadata is None:
+            continue
+
+        updated = metadata.copy()
+        updated[DBFields.LABEL] = change.to_label or None
+
+        item = items_by_path.get(change.file_path)
+        if item is not None:
+            item.db_metadata = updated
+
+        _save_transition_metadata(parent, change.file_path, updated)
+
+        if callable(refresh_item):
+            refresh_item(change.file_path)
+
+    overlay = getattr(parent, "_fullscreen_overlay", None)
+    if overlay is not None:
+        update_swatch = getattr(overlay, "_update_color_swatch", None)
+        if callable(update_swatch):
+            update_swatch()
+        update = getattr(overlay, "update", None)
+        if callable(update):
+            update()
+
+    edit_panel = getattr(parent, "edit_panel", None)
+    get_selected = getattr(parent.photo_model, "get_selected_photos", None)
+    if edit_panel is not None and callable(get_selected):
+        selected_items = list(get_selected())
+        if selected_items:
+            edit_panel.update_for_selection(selected_items)
+
+    parent.sync_model_after_metadata_update(
+        {DBFields.LABEL},
+        source="flickr_label_transitions",
+        allow_fullscreen_filter=True,
+    )
+    return plan
+
+
 def _set_album_for_folders(
     parent: MainWindow,
     source_folders: list[str],
@@ -1169,6 +1426,10 @@ def _launch_flickr_upload_flow(
     session_use_label_scope: bool | None = None
     cached_album_plan: FlickrAlbumPlan | None = None
     cached_album_from_folder_data = False
+    transition_rules = filter_valid_label_transition_rules(
+        get_user_setting(UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS) or [],
+        status_labels=list(get_user_setting(UserSettingKey.STATUS_LABELS) or []),
+    )
 
     while True:
         token_exists = token_file_exists(token_path)
@@ -1247,6 +1508,11 @@ def _launch_flickr_upload_flow(
                 parent,
                 source_folders,
                 album_id,
+            ),
+            transition_rules=transition_rules,
+            transition_scope_items=upload_items,
+            apply_transitions_callback=lambda rules, scope_items: (
+                _apply_flickr_label_transitions(parent, scope_items, rules)
             ),
             parent=parent,
         )

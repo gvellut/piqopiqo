@@ -81,6 +81,7 @@ def test_external_tools_tab_flickr_group_contains_required_metadata_toggle():
         UserSettingKey.FLICKR_API_SECRET,
         UserSettingKey.FLICKR_UPLOAD_LABEL,
         UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS,
+        UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS,
     ]
 
 

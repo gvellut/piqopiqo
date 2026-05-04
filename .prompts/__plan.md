@@ -1,4 +1,3 @@
-* [Flickr set labels after upload](Vc_tasks/Fd_Flickr_set_labels_after_upload.md)
 - [Flickr max workers diff for upload and set date public](Yb_tasks/Cc_Flickr_max_workers_diff_for_upload_and_set_date_.md)
 - [Copy SD display the list of dates in multiline text field](Kc_tasks/Pc_Copy_SD_display_the_list_of_dates_in_multiline_t.md)
 - [Make copy sd and flickr not modal](Kc_tasks/Qc_Make_copy_sd_and_flickr_not_modal.md)
@@ -132,3 +131,4 @@
 ! [Review initial loading](Vc_tasks/Ed_Review_initial_loading.md)
     ? [Keep scroll position](Vc_tasks/Ed.A_Keep_scroll_position.md)
 ! [Keyword tree should display half checkd](Kc_tasks/Kc_Keyword_tree_should_display_half_chcekd.md)
+! [Flickr set labels after upload](Vc_tasks/Fd_Flickr_set_labels_after_upload.md)

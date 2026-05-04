@@ -24,6 +24,7 @@ class EditorKind(Enum):
     SHORTCUTS = auto()
     MANUAL_LENSES = auto()
     MAP_LINKS = auto()
+    LABEL_TRANSITIONS = auto()
 
 
 @define(frozen=True)
@@ -324,6 +325,11 @@ SETTINGS_TABS: list[TabSpec] = [
                         key=UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS,
                         label="Reject upload if title or keywords missing",
                         editor=EditorKind.BOOL,
+                    ),
+                    FieldSpec(
+                        key=UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS,
+                        label="Transitions",
+                        editor=EditorKind.LABEL_TRANSITIONS,
                     ),
                 ],
             ),

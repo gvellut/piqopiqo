@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .label_transitions_editor import LabelTransitionsEditor
 from .manual_lenses_editor import ManualLensesEditor
 from .map_links_editor import MapLinksEditor
 from .schema import ChoiceOption, EditorKind
@@ -403,6 +404,26 @@ class MapLinksEditorAdapter(BaseEditor):
         return self._editor.is_valid()
 
 
+class LabelTransitionsEditorAdapter(BaseEditor):
+    def __init__(self):
+        super().__init__()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self._editor = LabelTransitionsEditor()
+        self._editor.value_changed.connect(self.value_changed)
+        layout.addWidget(self._editor)
+
+    def set_value(self, value):
+        self._editor.set_value(value)
+
+    def get_value(self):
+        return self._editor.get_value()
+
+    def is_valid(self) -> bool:
+        return self._editor.is_valid()
+
+
 def build_editor(kind: EditorKind, **kwargs) -> BaseEditor:
     if kind == EditorKind.TEXT:
         return TextEditor()
@@ -431,5 +452,7 @@ def build_editor(kind: EditorKind, **kwargs) -> BaseEditor:
         return ManualLensesEditorAdapter()
     if kind == EditorKind.MAP_LINKS:
         return MapLinksEditorAdapter()
+    if kind == EditorKind.LABEL_TRANSITIONS:
+        return LabelTransitionsEditorAdapter()
 
     raise ValueError(f"Unsupported editor kind: {kind}")

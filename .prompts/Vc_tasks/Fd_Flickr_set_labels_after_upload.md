@@ -16,3 +16,7 @@ usage : add at the end of a Flickr Upload tool session :
 Checkbox below the summary Text field / paragraph at the end of a Flickr Upload session (state in settings_state so can be left unchecked or not in a row ; similar to the Copy SD Eject checkbox) : text  "Apply transitions"
 If checked : Apply the transitions : they must apply all at the same time : that is if a rule is Label 1 to Label 2 and another rule is Label 2 to Label 3 : the images with Label 1 must not be transitioned to Label 3, just to Label 2. So find the images first for each rule then apply, not serially. Set the screen of the dialog to : label Applying x rules... + progress bar with no total / Cancel button ; when done : end screen dialog : total number of images whose state was changed (no need to detail for each rule ; but keep that data so can change my mind later) OK button focused
 When exiting if transitions were applied : make sure to refresh the grid so filters are applied for the new labels of the images.
+
+
+
+test if label renamed in settings. How do the rules behave?
