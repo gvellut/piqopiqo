@@ -423,7 +423,7 @@ def test_upload_progress_completion_hides_running_widgets_and_shows_summary(  # 
     assert dialog.stage_label.isHidden() is True
     assert dialog.progress_bar.isHidden() is True
     assert dialog.progress_text_label.isHidden() is True
-    assert dialog.status_label.isHidden() is False
+    assert dialog.upload_status_label.isHidden() is False
     assert dialog.details.isHidden() is False
     assert dialog.ok_btn.isHidden() is False
     assert dialog.ok_btn.isEnabled() is True
@@ -460,7 +460,6 @@ def test_upload_progress_transition_checkbox_uses_state_on_clean_success(
         cached_album_plan=None,
         set_folder_album_id_callback=lambda _album_id: None,
         transition_rules=[LabelTransitionRule("Approved", "Uploaded")],
-        apply_transitions_callback=lambda _rules, _items: LabelTransitionPlan(),
     )
 
     dialog._on_finished(
@@ -491,7 +490,6 @@ def test_upload_progress_transition_checkbox_disabled_after_non_clean_result(
         cached_album_plan=None,
         set_folder_album_id_callback=lambda _album_id: None,
         transition_rules=[LabelTransitionRule("Approved", "Uploaded")],
-        apply_transitions_callback=lambda _rules, _items: LabelTransitionPlan(),
     )
 
     dialog._on_finished(
@@ -519,13 +517,14 @@ def test_upload_progress_transition_checkbox_disabled_after_non_clean_result(
 
 def test_upload_progress_ok_applies_transitions_and_shows_result(
     qapp,
+    monkeypatch,
 ) -> None:
     init_qsettings_store(dyn=True)
     rules = [LabelTransitionRule("Approved", "Uploaded")]
     scope_items = [{"file_path": "/a.jpg", "order": 0, "db_metadata": None}]
     calls: list[tuple[list[LabelTransitionRule], list[dict]]] = []
 
-    def _apply(rules_arg, items_arg):
+    def _apply(parent_arg, items_arg, rules_arg):  # noqa: ARG001
         calls.append((list(rules_arg), list(items_arg)))
         return LabelTransitionPlan(
             changes=[
@@ -539,6 +538,10 @@ def test_upload_progress_ok_applies_transitions_and_shows_result(
             per_rule_counts=[1],
         )
 
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs._apply_flickr_label_transitions",
+        _apply,
+    )
     dialog = FlickrUploadProgressDialog(
         api_key="k",
         api_secret="s",
@@ -549,7 +552,6 @@ def test_upload_progress_ok_applies_transitions_and_shows_result(
         set_folder_album_id_callback=lambda _album_id: None,
         transition_rules=rules,
         transition_scope_items=scope_items,
-        apply_transitions_callback=_apply,
     )
     dialog._on_finished(
         FlickrUploadResult(
@@ -561,14 +563,33 @@ def test_upload_progress_ok_applies_transitions_and_shows_result(
     )
 
     dialog._on_ok()
+    assert dialog.current_screen_id == "transition_applying"
+    assert dialog.stage_label.text() == "Applying 1 rules..."
+    assert dialog.progress_bar.minimum() == 0
+    assert dialog.progress_bar.maximum() == 0
+    assert dialog.progress_text_label.isHidden() is True
+    assert dialog.ok_btn is None
+    assert dialog.cancel_btn is not None
+    assert dialog.cancel_btn.isHidden() is False
+
     qapp.processEvents()
 
     assert calls == [(rules, scope_items)]
     assert get_state_value(StateKey.FLICKR_UPLOAD_APPLY_TRANSITIONS) is True
+    assert dialog.current_screen_id == "transition_result"
     assert dialog.progress_bar.isHidden() is True
-    assert dialog.status_label.text() == "Transitions complete. 1 image(s) changed."
+    assert dialog.transition_result_label.text() == (
+        "Transitions complete. 1 image(s) changed."
+    )
+    assert dialog.ok_btn is not None
     assert dialog.ok_btn.isHidden() is False
     assert dialog.ok_btn.isEnabled() is True
+    assert dialog.ok_btn.isDefault() is True
+
+    accepted: list[bool] = []
+    monkeypatch.setattr(dialog, "accept", lambda: accepted.append(True))
+    dialog.emit_event("ok")
+    assert accepted == [True]
 
 
 def test_upload_progress_height_tracks_content_changes(qapp) -> None:

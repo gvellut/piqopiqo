@@ -250,6 +250,7 @@ class SettingsDialog(QDialog):
         self._mode = get_runtime_setting(RuntimeSettingKey.SETTINGS_PANEL_SAVE_MODE)
 
         self._build_ui()
+        self._wire_editor_dependencies()
         self._install_line_edit_filters()
         self._load_initial_values()
 
@@ -364,6 +365,20 @@ class SettingsDialog(QDialog):
         self._button_box.rejected.connect(self._on_cancel)
         root.addWidget(self._button_box)
 
+    def _wire_editor_dependencies(self) -> None:
+        labels_editor = self._editors.get(UserSettingKey.STATUS_LABELS)
+        transitions_editor = self._editors.get(
+            UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS
+        )
+        if labels_editor is None or transitions_editor is None:
+            return
+
+        set_provider = getattr(transitions_editor, "set_status_label_provider", None)
+        if not callable(set_provider):
+            return
+
+        set_provider(lambda: list(labels_editor.get_value() or []))
+
     def _should_include_field(self, field: FieldSpec) -> bool:
         if field.key not in _GCP_OCR_FIELD_KEYS:
             return True
@@ -434,11 +449,28 @@ class SettingsDialog(QDialog):
 
     def _changed_editors_valid(self) -> bool:
         for key, editor in self._editors.items():
-            if editor.get_value() == self._initial_values.get(key):
+            value = editor.get_value()
+            if not self._should_validate_editor(key, value):
                 continue
             if not editor.is_valid():
                 return False
         return True
+
+    def _should_validate_editor(self, key: UserSettingKey, value: object) -> bool:
+        if value != self._initial_values.get(key):
+            return True
+        return (
+            key == UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS
+            and self._status_labels_changed()
+        )
+
+    def _status_labels_changed(self) -> bool:
+        editor = self._editors.get(UserSettingKey.STATUS_LABELS)
+        if editor is None:
+            return False
+        return editor.get_value() != self._initial_values.get(
+            UserSettingKey.STATUS_LABELS
+        )
 
     def _update_save_enabled(self) -> None:
         if hasattr(self, "_save_btn"):
@@ -547,7 +579,8 @@ class SettingsDialog(QDialog):
 
         for key, editor in self._editors.items():
             value = editor.get_value()
-            if value == self._initial_values.get(key):
+            is_changed = value != self._initial_values.get(key)
+            if not is_changed and not self._should_validate_editor(key, value):
                 continue
             if not editor.is_valid():
                 return
@@ -556,7 +589,8 @@ class SettingsDialog(QDialog):
                 errors.append(validation_error)
                 self._show_mandatory_field_error_hint(key, validation_error)
                 continue
-            changed[key] = value
+            if is_changed:
+                changed[key] = value
 
         if errors:
             QMessageBox.warning(self, "Invalid Settings", "\n\n".join(errors))

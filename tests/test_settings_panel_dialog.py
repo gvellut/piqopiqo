@@ -8,6 +8,7 @@ import uuid
 from PySide6.QtCore import QCoreApplication, Qt
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QFrame,
     QGridLayout,
     QGroupBox,
@@ -21,6 +22,8 @@ import pytest
 
 from piqopiqo.color_management import ScreenColorProfileMode
 from piqopiqo.main_window import MainWindow
+from piqopiqo.model import LabelTransitionRule, StatusLabel
+from piqopiqo.settings_panel import label_transitions_editor as lte
 from piqopiqo.settings_panel.dialog import (
     SettingsDialog,
     _native_group_box_background_color,
@@ -32,6 +35,7 @@ from piqopiqo.ssf.settings_state import (
     UserSettingKey,
     get_user_setting,
     init_qsettings_store,
+    set_user_setting,
 )
 
 
@@ -189,6 +193,83 @@ def test_settings_dialog_builds_favorite_folder_editor(qapp, monkeypatch):
     dialog = SettingsDialog(initial_tab_title="Interface")
 
     assert UserSettingKey.FAVORITE_FOLDER in dialog._editors
+
+
+def test_settings_dialog_uses_unsaved_status_labels_for_transition_validation(
+    qapp,  # noqa: ARG001
+    monkeypatch,
+):
+    monkeypatch.delenv("PIQO_SETTINGS_PANEL_SAVE_MODE", raising=False)
+    init_qsettings_store(dyn=True)
+    set_user_setting(
+        UserSettingKey.STATUS_LABELS,
+        [
+            StatusLabel("Approved", "#ff0000", 1),
+            StatusLabel("Uploaded", "#00ff00", 2),
+        ],
+    )
+    set_user_setting(
+        UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS,
+        [LabelTransitionRule("Approved", "Uploaded")],
+    )
+
+    dialog = SettingsDialog(initial_tab_title="External/Tools")
+    labels_editor = dialog._editors[UserSettingKey.STATUS_LABELS]
+    transitions_editor = dialog._editors[
+        UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS
+    ]
+
+    labels_editor.set_value([StatusLabel("Approved", "#ff0000", 1)])
+    dialog._on_field_changed(UserSettingKey.STATUS_LABELS)
+
+    assert transitions_editor.is_valid() is False
+    assert dialog._save_btn.isEnabled() is False
+
+
+def test_settings_dialog_passes_unsaved_labels_to_transition_dialog(
+    qapp,  # noqa: ARG001
+    monkeypatch,
+):
+    monkeypatch.delenv("PIQO_SETTINGS_PANEL_SAVE_MODE", raising=False)
+    init_qsettings_store(dyn=True)
+    set_user_setting(
+        UserSettingKey.STATUS_LABELS,
+        [StatusLabel("Approved", "#ff0000", 1)],
+    )
+
+    dialog = SettingsDialog(initial_tab_title="External/Tools")
+    labels_editor = dialog._editors[UserSettingKey.STATUS_LABELS]
+    labels_editor.set_value(
+        [
+            StatusLabel("Approved", "#ff0000", 1),
+            StatusLabel("Unsaved", "#123456", 2),
+        ]
+    )
+    dialog._on_field_changed(UserSettingKey.STATUS_LABELS)
+
+    captured: dict[str, list[StatusLabel]] = {}
+
+    class _DialogStub:
+        def __init__(self, _rules, *, status_labels, parent=None):  # noqa: ARG002
+            captured["status_labels"] = list(status_labels)
+
+        def exec(self):
+            return QDialog.DialogCode.Rejected
+
+        def get_value(self):
+            return []
+
+    monkeypatch.setattr(lte, "_LabelTransitionsDialog", _DialogStub)
+
+    transitions_editor = dialog._editors[
+        UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS
+    ]
+    transitions_editor._editor._on_edit()
+
+    assert [label.name for label in captured["status_labels"]] == [
+        "Approved",
+        "Unsaved",
+    ]
 
 
 def test_settings_dialog_keeps_form_labels_vertically_centered(qapp, monkeypatch):

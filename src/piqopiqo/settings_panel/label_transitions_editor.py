@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
@@ -28,6 +30,7 @@ from .map_links_editor import _build_edit_icon, _build_minus_icon, _build_plus_i
 
 _NO_LABEL_DISPLAY = "No Label"
 _TRANSITION_ARROW = "→"
+StatusLabelProvider = Callable[[], list[StatusLabel]]
 
 
 def format_label_transitions_summary(count: int) -> str:
@@ -59,6 +62,10 @@ def _as_rule(value: object) -> LabelTransitionRule | None:
 
 def _current_status_labels() -> list[StatusLabel]:
     return list(get_user_setting(UserSettingKey.STATUS_LABELS) or [])
+
+
+def _status_labels_from_provider(provider: StatusLabelProvider) -> list[StatusLabel]:
+    return list(provider() or [])
 
 
 def _status_label_color(status_labels: list[StatusLabel], value: str) -> str:
@@ -110,6 +117,7 @@ class _LabelTransitionRuleDialog(QDialog):
         *,
         title: str,
         rules: list[LabelTransitionRule],
+        status_labels: list[StatusLabel] | None = None,
         editing_index: int | None = None,
         parent=None,
     ):
@@ -117,7 +125,9 @@ class _LabelTransitionRuleDialog(QDialog):
         self.setWindowTitle(title)
         self.setModal(True)
         self.setMinimumWidth(340)
-        self._status_labels = _current_status_labels()
+        self._status_labels = list(
+            status_labels if status_labels is not None else _current_status_labels()
+        )
         self._editing_index = editing_index
         self._rules = list(rules)
 
@@ -267,13 +277,21 @@ class _LabelTransitionRuleDialog(QDialog):
 
 
 class _LabelTransitionsDialog(QDialog):
-    def __init__(self, rules: list[LabelTransitionRule] | None = None, parent=None):
+    def __init__(
+        self,
+        rules: list[LabelTransitionRule] | None = None,
+        *,
+        status_labels: list[StatusLabel] | None = None,
+        parent=None,
+    ):
         super().__init__(parent)
         self.setWindowTitle("Transitions")
         self.setModal(True)
         self.setMinimumWidth(520)
         self._rules: list[LabelTransitionRule] = []
-        self._status_labels = _current_status_labels()
+        self._status_labels = list(
+            status_labels if status_labels is not None else _current_status_labels()
+        )
 
         layout = QVBoxLayout(self)
 
@@ -455,6 +473,7 @@ class _LabelTransitionsDialog(QDialog):
         dialog = _LabelTransitionRuleDialog(
             title="Add Transition",
             rules=self._rules,
+            status_labels=self._status_labels,
             parent=self,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
@@ -471,6 +490,7 @@ class _LabelTransitionsDialog(QDialog):
         dialog = _LabelTransitionRuleDialog(
             title="Edit Transition",
             rules=self._rules,
+            status_labels=self._status_labels,
             editing_index=index,
             parent=self,
         )
@@ -491,7 +511,7 @@ class _LabelTransitionsDialog(QDialog):
     def is_valid(self) -> bool:
         return is_valid_label_transition_rules(
             self._rules,
-            status_labels=_current_status_labels(),
+            status_labels=self._status_labels,
         )
 
     def set_value(self, value: list[LabelTransitionRule] | None) -> None:
@@ -512,9 +532,15 @@ class LabelTransitionsEditor(QWidget):
 
     value_changed = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(
+        self,
+        parent=None,
+        *,
+        status_label_provider: StatusLabelProvider | None = None,
+    ):
         super().__init__(parent)
         self._rules: list[LabelTransitionRule] = []
+        self._status_label_provider = status_label_provider or _current_status_labels
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -542,8 +568,21 @@ class LabelTransitionsEditor(QWidget):
     def _refresh_summary(self) -> None:
         self._summary_label.setText(format_label_transitions_summary(len(self._rules)))
 
+    def set_status_label_provider(
+        self,
+        provider: StatusLabelProvider | None,
+    ) -> None:
+        self._status_label_provider = provider or _current_status_labels
+
+    def _status_labels(self) -> list[StatusLabel]:
+        return _status_labels_from_provider(self._status_label_provider)
+
     def _on_edit(self) -> None:
-        dialog = _LabelTransitionsDialog(self._rules, parent=self)
+        dialog = _LabelTransitionsDialog(
+            self._rules,
+            status_labels=self._status_labels(),
+            parent=self,
+        )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
@@ -554,7 +593,7 @@ class LabelTransitionsEditor(QWidget):
     def is_valid(self) -> bool:
         return is_valid_label_transition_rules(
             self._rules,
-            status_labels=_current_status_labels(),
+            status_labels=self._status_labels(),
         )
 
     def set_value(self, value: list[LabelTransitionRule] | None) -> None:

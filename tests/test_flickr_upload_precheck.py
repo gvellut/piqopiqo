@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 import pytest
 
 from piqopiqo.metadata.db_fields import DBFields
-from piqopiqo.model import LabelTransitionRule
+from piqopiqo.model import LabelTransitionRule, StatusLabel
 from piqopiqo.ssf.settings_state import UserSettingKey
 from piqopiqo.tools.flickr_upload import dialogs
 
@@ -27,19 +27,40 @@ class _FakeItem:
 
 
 class _FakeDb:
-    def __init__(self, by_path: dict[str, dict | None]):
+    def __init__(
+        self,
+        by_path: dict[str, dict | None],
+        saved: list[tuple[str, dict]],
+    ):
         self._by_path = by_path
+        self._saved = saved
 
     def get_metadata(self, file_path: str):
         return self._by_path.get(file_path)
+
+    def save_metadata(self, file_path: str, data: dict) -> None:
+        self._by_path[file_path] = data.copy()
+        self._saved.append((file_path, data.copy()))
 
 
 class _FakeDbManager:
     def __init__(self, by_path: dict[str, dict | None] | None = None):
         self._by_path = by_path or {}
+        self.saved: list[tuple[str, dict]] = []
 
     def get_db_for_image(self, _file_path: str):
-        return _FakeDb(self._by_path)
+        return _FakeDb(self._by_path, self.saved)
+
+    def get_db_for_folder(self, _folder: str):
+        return _FakeFolderDb()
+
+
+class _FakeFolderDb:
+    def get_folder_value(self, _key: str):
+        return None
+
+    def set_folder_value(self, _key: str, _value: str | None) -> None:
+        pass
 
 
 class _FakePhotoModel:
@@ -77,6 +98,7 @@ class _FakeParent:
             sorted_paths=sorted_paths,
         )
         self.open_settings_calls: list[UserSettingKey] = []
+        self._active_flickr_upload_manager = None
 
     def open_settings_for_key(self, key: UserSettingKey) -> None:
         self.open_settings_calls.append(key)
@@ -187,6 +209,116 @@ def test_launch_flickr_upload_builds_label_scope_from_all_photos_in_sort_order(
     assert [entry["file_path"] for entry in label_scope] == ["/b.jpg", "/c.jpg"]
     assert parent.photo_model.sort_calls == [["/c.jpg", "/b.jpg"]]
     assert hidden_from_db.db_metadata == {"label": "Approved"}
+
+
+def test_flickr_upload_flow_uses_all_loaded_photos_for_transition_scope(
+    qapp,
+    monkeypatch,
+) -> None:  # noqa: ARG001
+    approved = _FakeItem("/approved.jpg", {DBFields.LABEL: "Approved"})
+    rejected = _FakeItem("/rejected.jpg", {DBFields.LABEL: "Rejected"})
+    review = _FakeItem("/review.jpg", {DBFields.LABEL: "Review"})
+    parent = _FakeParent(
+        visible_items=[approved],
+        all_items=[approved, rejected, review],
+        db_manager=_FakeDbManager(),
+    )
+    rules = [
+        LabelTransitionRule("Approved", "Uploaded"),
+        LabelTransitionRule("Rejected", "Done"),
+        LabelTransitionRule("Review", "Done"),
+    ]
+    status_labels = [
+        StatusLabel("Approved", "#ff0000", 0),
+        StatusLabel("Uploaded", "#00ff00", 1),
+        StatusLabel("Rejected", "#0000ff", 2),
+        StatusLabel("Review", "#ffff00", 3),
+        StatusLabel("Done", "#00ffff", 4),
+    ]
+    values = {
+        UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS: rules,
+        UserSettingKey.STATUS_LABELS: status_labels,
+        UserSettingKey.EXIFTOOL_PATH: "/opt/homebrew/bin/exiftool",
+    }
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.get_user_setting",
+        lambda key: values[key],
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.get_flickr_token_file_path",
+        lambda: "/tmp/flickr-token.sqlite",
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.token_file_exists",
+        lambda _path: True,
+    )
+
+    class _Signal:
+        def connect(self, _callback) -> None:
+            return
+
+    class _Preflight:
+        selected_album_text = ""
+        selected_use_label_scope = True
+        selected_action = "upload"
+
+        def __init__(self, **kwargs):
+            self._label_upload_items = list(kwargs["label_upload_items"])
+
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+
+        def selected_upload_scope_items(self) -> list[dict]:
+            return list(self._label_upload_items)
+
+    created_upload_dialogs: list[object] = []
+
+    class _UploadDialog:
+        invalid_token = False
+        album_validation_error = ""
+        resolved_album_plan = None
+
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.manager_started = _Signal()
+            self.manager_finished = _Signal()
+            created_upload_dialogs.append(self)
+
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.FlickrPreflightDialog",
+        _Preflight,
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.FlickrUploadProgressDialog",
+        _UploadDialog,
+    )
+
+    dialogs._launch_flickr_upload_flow(
+        parent,
+        api_key="key",
+        api_secret="secret",
+        visible_upload_items=dialogs._build_upload_scope_items([approved]),
+        label_upload_items=dialogs._build_upload_scope_items([approved]),
+        label_override_text="Approved",
+        should_require_metadata=False,
+    )
+
+    assert len(created_upload_dialogs) == 1
+    upload_kwargs = created_upload_dialogs[0].kwargs
+    assert [entry["file_path"] for entry in upload_kwargs["upload_items"]] == [
+        "/approved.jpg"
+    ]
+    assert [
+        entry["file_path"] for entry in upload_kwargs["transition_scope_items"]
+    ] == [
+        "/approved.jpg",
+        "/rejected.jpg",
+        "/review.jpg",
+    ]
+    assert upload_kwargs["transition_rules"] == rules
 
 
 def test_launch_flickr_upload_warns_when_both_scopes_are_empty(
@@ -305,21 +437,10 @@ def test_apply_flickr_label_transitions_updates_scope_and_syncs(qapp):  # noqa: 
         ],
         db_manager=_FakeDbManager(),
     )
-    parent.saved: list[tuple[str, dict, set[str], str]] = []
     parent.synced: list[tuple[set[str], str, bool]] = []
     parent.refreshed: list[str] = []
     parent.edit_panel = None
     parent._fullscreen_overlay = None
-
-    def _submit_background_metadata_save(
-        *,
-        file_path,
-        data,
-        changed_fields,
-        source,
-        safe_to_replay=True,  # noqa: ARG001
-    ):
-        parent.saved.append((file_path, data.copy(), set(changed_fields), source))
 
     def _sync_model_after_metadata_update(
         changed_fields,
@@ -328,7 +449,6 @@ def test_apply_flickr_label_transitions_updates_scope_and_syncs(qapp):  # noqa: 
     ):
         parent.synced.append((set(changed_fields), source, allow_fullscreen_filter))
 
-    parent._submit_background_metadata_save = _submit_background_metadata_save
     parent.sync_model_after_metadata_update = _sync_model_after_metadata_update
     parent._refresh_grid_item_if_visible = parent.refreshed.append
 
@@ -363,22 +483,63 @@ def test_apply_flickr_label_transitions_updates_scope_and_syncs(qapp):  # noqa: 
     assert out_of_scope.db_metadata[DBFields.LABEL] == "Approved"
     assert [
         (path, data[DBFields.LABEL])
-        for path, data, _fields, _source in parent.saved
+        for path, data in parent.db_manager.saved
     ] == [
         ("/a.jpg", "Uploaded"),
         ("/b.jpg", "Rejected"),
         ("/d.jpg", "Rejected"),
     ]
-    assert all(
-        fields == {DBFields.LABEL}
-        for _path, _data, fields, _source in parent.saved
-    )
-    assert [source for _path, _data, _fields, source in parent.saved] == [
-        "flickr_label_transitions",
-        "flickr_label_transitions",
-        "flickr_label_transitions",
-    ]
     assert parent.refreshed == ["/a.jpg", "/b.jpg", "/d.jpg"]
     assert parent.synced == [
         ({DBFields.LABEL}, "flickr_label_transitions", True)
     ]
+
+
+def test_apply_flickr_label_transitions_changes_non_uploaded_loaded_images(
+    qapp,
+) -> None:  # noqa: ARG001
+    uploaded = _FakeItem("/uploaded.jpg", {DBFields.LABEL: "Approved"})
+    not_uploaded_rejected = _FakeItem("/not_uploaded_rejected.jpg", None)
+    not_uploaded_review = _FakeItem(
+        "/not_uploaded_review.jpg",
+        {DBFields.LABEL: "Review"},
+    )
+    parent = _FakeParent(
+        visible_items=[uploaded],
+        all_items=[uploaded, not_uploaded_rejected, not_uploaded_review],
+        db_manager=_FakeDbManager(
+            {
+                "/not_uploaded_rejected.jpg": {DBFields.LABEL: "Rejected"},
+            }
+        ),
+    )
+    parent.synced: list[tuple[set[str], str, bool]] = []
+    parent.refreshed: list[str] = []
+    parent.edit_panel = None
+    parent._fullscreen_overlay = None
+
+    def _sync_model_after_metadata_update(
+        changed_fields,
+        source,
+        allow_fullscreen_filter=False,
+    ):
+        parent.synced.append((set(changed_fields), source, allow_fullscreen_filter))
+
+    parent.sync_model_after_metadata_update = _sync_model_after_metadata_update
+    parent._refresh_grid_item_if_visible = parent.refreshed.append
+
+    result = dialogs._apply_flickr_label_transitions(
+        parent,
+        dialogs._build_transition_scope_items(parent),
+        [
+            LabelTransitionRule("Approved", "Uploaded"),
+            LabelTransitionRule("Rejected", "Done"),
+            LabelTransitionRule("Review", "Done"),
+        ],
+    )
+
+    assert result.changed_count == 3
+    assert result.per_rule_counts == [1, 1, 1]
+    assert uploaded.db_metadata[DBFields.LABEL] == "Uploaded"
+    assert not_uploaded_rejected.db_metadata[DBFields.LABEL] == "Done"
+    assert not_uploaded_review.db_metadata[DBFields.LABEL] == "Done"

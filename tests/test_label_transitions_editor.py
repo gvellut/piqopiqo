@@ -48,6 +48,12 @@ def _center_y(widget):
     return widget.geometry().center().y()
 
 
+def _swatch_center_color_name(label: QLabel) -> str:
+    pixmap = label.pixmap()
+    assert pixmap is not None
+    return pixmap.toImage().pixelColor(8, 8).name()
+
+
 def test_label_transition_rule_dialog_validation(qapp):  # noqa: ARG001
     dialog = lte._LabelTransitionRuleDialog(
         title="Add Transition",
@@ -115,6 +121,22 @@ def test_label_transition_rule_dialog_validation(qapp):  # noqa: ARG001
         _widget_xy(dialog.to_label),
         _widget_xy(dialog.to_combo),
     ) == initial_positions
+
+
+def test_label_transition_rule_dialog_uses_supplied_status_labels(
+    qapp,  # noqa: ARG001
+):
+    dialog = lte._LabelTransitionRuleDialog(
+        title="Add Transition",
+        rules=[],
+        status_labels=[StatusLabel("Fresh", "#123456", 1)],
+    )
+
+    assert dialog.from_combo.count() == 3
+    assert dialog.from_combo.itemText(2) == "Fresh"
+    assert dialog.from_combo.itemData(2) == "Fresh"
+    icon = dialog.from_combo.itemIcon(2)
+    assert icon.pixmap(16, 16).toImage().pixelColor(8, 8).name() == "#123456"
 
 
 def test_label_transitions_dialog_add_edit_delete_and_button_state(
@@ -189,6 +211,36 @@ def test_label_transitions_dialog_add_edit_delete_and_button_state(
     assert dialog._delete_btn.isEnabled() is False
 
 
+def test_label_transitions_dialog_uses_supplied_status_label_colors(
+    qapp,  # noqa: ARG001
+):
+    dialog = lte._LabelTransitionsDialog(
+        [LabelTransitionRule("Approved", "Uploaded")],
+        status_labels=[
+            StatusLabel("Approved", "#123456", 1),
+            StatusLabel("Uploaded", "#654321", 2),
+        ],
+    )
+    item = dialog._list.item(0)
+    row = dialog._list.itemWidget(item)
+    assert row is not None
+
+    assert _swatch_center_color_name(row.findChild(QLabel, "from_color")) == "#123456"
+    assert _swatch_center_color_name(row.findChild(QLabel, "to_color")) == "#654321"
+
+
+def test_label_transitions_dialog_invalidates_removed_labels(
+    qapp,  # noqa: ARG001
+):
+    dialog = lte._LabelTransitionsDialog(
+        [LabelTransitionRule("Approved", "Uploaded")],
+        status_labels=[StatusLabel("Uploaded", "#00ff00", 1)],
+    )
+
+    assert dialog.is_valid() is False
+    assert dialog.ok_btn.isEnabled() is False
+
+
 def test_label_transitions_editor_summary_updates_after_dialog_accept(
     monkeypatch,
     qapp,  # noqa: ARG001
@@ -202,7 +254,7 @@ def test_label_transitions_editor_summary_updates_after_dialog_accept(
     ]
 
     class _DialogStub:
-        def __init__(self, _rules, parent=None):  # noqa: ARG002
+        def __init__(self, _rules, *, status_labels, parent=None):  # noqa: ARG002
             pass
 
         def exec(self):
@@ -220,3 +272,30 @@ def test_label_transitions_editor_summary_updates_after_dialog_accept(
     assert editor._summary_label.text() == "2 rules"
     assert editor.get_value() == returned_rules
     assert emitted == [True]
+
+
+def test_label_transitions_editor_passes_provider_status_labels(
+    monkeypatch,
+    qapp,  # noqa: ARG001
+):
+    supplied_labels = [StatusLabel("Unsaved", "#abcdef", 1)]
+    editor = lte.LabelTransitionsEditor(
+        status_label_provider=lambda: list(supplied_labels)
+    )
+    captured: dict[str, list[StatusLabel]] = {}
+
+    class _DialogStub:
+        def __init__(self, _rules, *, status_labels, parent=None):  # noqa: ARG002
+            captured["status_labels"] = list(status_labels)
+
+        def exec(self):
+            return QDialog.DialogCode.Rejected
+
+        def get_value(self):
+            return []
+
+    monkeypatch.setattr(lte, "_LabelTransitionsDialog", _DialogStub)
+
+    editor._on_edit()
+
+    assert captured["status_labels"] == supplied_labels

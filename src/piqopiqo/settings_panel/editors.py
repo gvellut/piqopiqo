@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .label_transitions_editor import LabelTransitionsEditor
+from .label_transitions_editor import LabelTransitionsEditor, StatusLabelProvider
 from .manual_lenses_editor import ManualLensesEditor
 from .map_links_editor import MapLinksEditor
 from .schema import ChoiceOption, EditorKind
@@ -405,14 +405,22 @@ class MapLinksEditorAdapter(BaseEditor):
 
 
 class LabelTransitionsEditorAdapter(BaseEditor):
-    def __init__(self):
+    def __init__(self, status_label_provider: StatusLabelProvider | None = None):
         super().__init__()
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self._editor = LabelTransitionsEditor()
+        self._editor = LabelTransitionsEditor(
+            status_label_provider=status_label_provider
+        )
         self._editor.value_changed.connect(self.value_changed)
         layout.addWidget(self._editor)
+
+    def set_status_label_provider(
+        self,
+        provider: StatusLabelProvider | None,
+    ) -> None:
+        self._editor.set_status_label_provider(provider)
 
     def set_value(self, value):
         self._editor.set_value(value)
