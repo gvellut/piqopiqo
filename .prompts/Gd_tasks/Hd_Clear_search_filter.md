@@ -1,0 +1,1 @@
+Add button x (standard icon) to remove just text search filter in filter bar : add right of text field : currently need to remove content of field with Del or backspace + press enter => one click to do both

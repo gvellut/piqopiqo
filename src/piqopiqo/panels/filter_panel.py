@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QStyle,
     QStyleOptionButton,
+    QToolButton,
     QWidget,
 )
 
@@ -175,7 +176,20 @@ class FilterPanel(ScrollableStrip):
         self.search_field.setMaximumWidth(200)
         self.search_field.returnPressed.connect(self._on_search_submitted)
         self.search_field.editingFinished.connect(self._on_search_changed)
+        self.search_field.textChanged.connect(self._sync_search_clear_button_enabled)
         self.add_widget(self.search_field)
+
+        self.search_clear_button = QToolButton()
+        self.search_clear_button.setObjectName("filter_search_clear_button")
+        self.search_clear_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_LineEditClearButton)
+        )
+        self.search_clear_button.setToolTip("Clear search")
+        self.search_clear_button.setAutoRaise(True)
+        self.search_clear_button.setFocusPolicy(Qt.NoFocus)
+        self.search_clear_button.clicked.connect(self._on_clear_search_filter)
+        self.add_widget(self.search_clear_button)
+        self._sync_search_clear_button_enabled()
 
         # Add stretch to keep all widgets left-aligned
         self.add_stretch()
@@ -229,6 +243,7 @@ class FilterPanel(ScrollableStrip):
         self.clear_button.setEnabled(enabled)
         self.folder_combo.setEnabled(enabled)
         self.search_field.setEnabled(enabled)
+        self._sync_search_clear_button_enabled()
         if self._no_label_checkbox:
             self._no_label_checkbox.setEnabled(enabled)
         for checkbox in self._label_checkboxes.values():
@@ -306,6 +321,20 @@ class FilterPanel(ScrollableStrip):
     def _on_search_submitted(self):
         """Handle search field Enter key."""
         self._on_search_changed()
+        self.interaction_finished.emit()
+
+    def _sync_search_clear_button_enabled(self):
+        """Enable the search clear button only when it can do useful work."""
+        self.search_clear_button.setEnabled(
+            self.search_field.isEnabled() and bool(self.search_field.text())
+        )
+
+    def _on_clear_search_filter(self):
+        """Clear only the text search filter and apply immediately."""
+        if self._updating or not self.search_field.text():
+            return
+        self.search_field.clear()
+        self._emit_filter()
         self.interaction_finished.emit()
 
     def _on_clear_filter(self):

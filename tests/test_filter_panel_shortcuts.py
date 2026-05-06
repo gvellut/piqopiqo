@@ -103,3 +103,42 @@ def test_focus_search_field_selects_text(qapp):
     qapp.processEvents()
     assert panel.search_field.hasFocus() is True
     assert panel.search_field.selectedText() == "abc"
+
+
+def test_search_clear_button_clears_only_search_and_applies(qapp):
+    init_qsettings_store(dyn=True)
+    panel = FilterPanel()
+    folders = ["/photos/a", "/photos/b"]
+    panel.set_folders(folders)
+
+    label_name = get_user_setting(UserSettingKey.STATUS_LABELS)[0].name
+    panel.folder_combo.setCurrentIndex(1)
+    assert panel.toggle_label_filter(label_name) is True
+    panel.search_field.setText("sunset")
+    qapp.processEvents()
+
+    assert panel.search_clear_button.objectName() == "filter_search_clear_button"
+    assert panel.search_clear_button.isEnabled() is True
+
+    emitted_filters = []
+    finished = []
+    panel.filter_changed.connect(emitted_filters.append)
+    panel.interaction_finished.connect(lambda: finished.append(True))
+
+    panel.search_clear_button.click()
+    qapp.processEvents()
+
+    assert panel.search_field.text() == ""
+    assert panel.search_clear_button.isEnabled() is False
+
+    criteria = panel.get_current_filter()
+    assert criteria.folder == folders[0]
+    assert criteria.labels == {label_name}
+    assert criteria.search_text == ""
+
+    assert len(emitted_filters) == 1
+    emitted = emitted_filters[0]
+    assert emitted.folder == folders[0]
+    assert emitted.labels == {label_name}
+    assert emitted.search_text == ""
+    assert finished == [True]

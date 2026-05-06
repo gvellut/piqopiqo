@@ -133,3 +133,4 @@
 ! [Keyword tree should display half checkd](Kc_tasks/Kc_Keyword_tree_should_display_half_chcekd.md)
 ! [Flickr set labels after upload](Vc_tasks/Fd_Flickr_set_labels_after_upload.md)
 ! [Lifecycle for flickr](Gd_tasks/Gd_Lifecycle_for_flickr.md)
+! [Clear search filter](Gd_tasks/Hd_Clear_search_filter.md)
