@@ -1,0 +1,1 @@
+When doing Move to trash : add a confirmation dialog. Display how many photos too.

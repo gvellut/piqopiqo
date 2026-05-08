@@ -2988,6 +2988,23 @@ class MainWindow(QMainWindow):
             deleted.append(old_path)
             added.append(new_path)
 
+        replacement_candidates = (set(deleted) & set(added)) | {
+            path for path in added if path in self._items_by_path
+        }
+        replacement_paths = sorted(
+            path
+            for path in replacement_candidates
+            if path in self._items_by_path and os.path.isfile(path)
+        )
+        if replacement_paths:
+            replacement_set = set(replacement_paths)
+            modified_set = set(modified)
+            deleted = [path for path in deleted if path not in replacement_set]
+            added = [path for path in added if path not in replacement_set]
+            modified.extend(
+                path for path in replacement_paths if path not in modified_set
+            )
+
         # Deletions first to handle renames (delete+add)
         for path in deleted:
             self.photo_model.remove_photo(path)
@@ -3023,6 +3040,11 @@ class MainWindow(QMainWindow):
             item.embedded_pixmap = None
             item.hq_pixmap = None
             item.pixmap = None
+            item.exif_data = None
+            if hasattr(item, "_pixmap_source"):
+                item._pixmap_source = None
+            if hasattr(item, "_pixmap_orientation"):
+                item._pixmap_orientation = None
             modified_paths.append(path)
             self.grid.refresh_item(item._global_index)
 

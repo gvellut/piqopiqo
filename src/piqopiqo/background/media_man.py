@@ -18,6 +18,7 @@ from attrs import define
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from piqopiqo.cache_paths import ensure_thumb_dir
+from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBManager, MetadataDBUnavailableError
 from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
@@ -31,6 +32,9 @@ from . import media_worker
 
 logger = logging.getLogger(__name__)
 
+COMBINED_RETRY_DELAY_MS = 750
+COMBINED_MAX_RETRIES = 4
+
 
 def _unique_field_keys(field_keys: list[str]) -> list[str]:
     seen: set[str] = set()
@@ -41,6 +45,29 @@ def _unique_field_keys(field_keys: list[str]) -> list[str]:
         seen.add(key)
         out.append(key)
     return out
+
+
+def _metadata_has_preservable_values(metadata: dict) -> bool:
+    for field in (
+        DBFields.TITLE,
+        DBFields.DESCRIPTION,
+        DBFields.LATITUDE,
+        DBFields.LONGITUDE,
+        DBFields.KEYWORDS,
+        DBFields.TIME_TAKEN,
+        DBFields.LABEL,
+        *DBFields.MANUAL_LENS_FIELDS,
+    ):
+        if metadata.get(field) not in (None, "", []):
+            return True
+
+    orientation = metadata.get(DBFields.ORIENTATION)
+    if orientation in (None, ""):
+        return False
+    try:
+        return int(orientation) not in (0, 1)
+    except (TypeError, ValueError):
+        return True
 
 
 @define
@@ -73,6 +100,8 @@ class _CombinedNeed:
     want_editable: bool = False
     want_panel: bool = False
     force: bool = False
+    allow_empty_editable: bool = False
+    retry_count: int = 0
 
 
 @define
@@ -412,7 +441,7 @@ class MediaManager(QObject):
         """Refresh existing files after an on-disk change.
 
         This clears thumbnail caches and re-queues one combined reload for:
-        - editable metadata
+        - editable metadata, only if no preservable DB metadata exists yet
         - EXIF panel fields
         - embedded thumbnail extraction
 
@@ -446,11 +475,21 @@ class MediaManager(QObject):
             self._queue_combined(
                 file_path,
                 want_embedded=True,
-                want_editable=True,
+                want_editable=self._should_refresh_editable_metadata(file_path, info),
                 want_panel=True,
                 to_visible=file_path in self._visible_paths,
                 force=True,
             )
+
+    def _should_refresh_editable_metadata(
+        self, file_path: str, info: _FileInfo
+    ) -> bool:
+        db = self._db_manager.get_db_for_folder(info.source_folder)
+        try:
+            metadata = db.get_metadata(file_path)
+        except MetadataDBUnavailableError:
+            return False
+        return metadata is None or not _metadata_has_preservable_values(metadata)
 
     def reload_exif(self, file_paths: list[str]) -> None:
         """Re-read EXIF for editable + panel fields and overwrite DB values."""
@@ -461,6 +500,7 @@ class MediaManager(QObject):
                 want_panel=True,
                 to_visible=file_path in self._visible_paths,
                 force=True,
+                allow_empty_editable=True,
             )
 
     # --- EXIF writing (Save EXIF dialog) ---
@@ -580,7 +620,7 @@ class MediaManager(QObject):
             # Editable metadata
             db = self._db_manager.get_db_for_folder(info.source_folder)
             meta = db.get_metadata(file_path)
-            if meta is not None:
+            if meta is not None and _metadata_has_preservable_values(meta):
                 self._editable_done.add(file_path)
                 self._exif_completed += 1
                 cached_editable_metadata[file_path] = dict(meta)
@@ -634,6 +674,8 @@ class MediaManager(QObject):
         want_panel: bool = False,
         to_visible: bool = False,
         force: bool = False,
+        allow_empty_editable: bool = False,
+        retry_count: int = 0,
     ) -> None:
         if file_path not in self._file_infos:
             return
@@ -644,6 +686,10 @@ class MediaManager(QObject):
             need.want_editable = need.want_editable or want_editable
             need.want_panel = need.want_panel or want_panel
             need.force = need.force or force
+            need.allow_empty_editable = (
+                need.allow_empty_editable or allow_empty_editable
+            )
+            need.retry_count = max(need.retry_count, int(retry_count))
             self._deferred_combined[file_path] = need
             return
 
@@ -659,11 +705,8 @@ class MediaManager(QObject):
         need.want_editable = need.want_editable or want_editable
         need.want_panel = need.want_panel or want_panel
         need.force = need.force or force
-
-        # Force means "overwrite DB" so we must actually re-read.
-        if force:
-            need.want_editable = True
-            need.want_panel = True
+        need.allow_empty_editable = need.allow_empty_editable or allow_empty_editable
+        need.retry_count = max(need.retry_count, int(retry_count))
 
         target[file_path] = need
 
@@ -932,6 +975,8 @@ class MediaManager(QObject):
                     "want_embedded": bool(need.want_embedded),
                     "want_editable": bool(need.want_editable),
                     "want_panel": bool(need.want_panel),
+                    "allow_empty_editable": bool(need.allow_empty_editable),
+                    "retry_count": int(need.retry_count),
                 }
             )
 
@@ -967,6 +1012,32 @@ class MediaManager(QObject):
     # Internal: results handling
     # -------------------------------------------------------------------------
 
+    def _schedule_combined_retry(self, file_path: str, entry: dict) -> bool:
+        retry_count = int(entry.get("retry_count") or 0)
+        if retry_count >= COMBINED_MAX_RETRIES:
+            return False
+        if file_path not in self._file_infos or not os.path.exists(file_path):
+            return False
+
+        next_retry_count = retry_count + 1
+
+        def _retry() -> None:
+            if file_path not in self._file_infos or not os.path.exists(file_path):
+                return
+            self._queue_combined(
+                file_path,
+                want_embedded=bool(entry.get("want_embedded")),
+                want_editable=bool(entry.get("want_editable")),
+                want_panel=bool(entry.get("want_panel")),
+                to_visible=file_path in self._visible_paths,
+                force=True,
+                allow_empty_editable=bool(entry.get("allow_empty_editable")),
+                retry_count=next_retry_count,
+            )
+
+        QTimer.singleShot(COMBINED_RETRY_DELAY_MS, _retry)
+        return True
+
     def _handle_combined_result(self, result: dict) -> None:
         items = list(result.get("items") or [])
 
@@ -980,7 +1051,11 @@ class MediaManager(QObject):
 
             entry_error = entry.get("error") or result.get("error")
             if entry_error:
+                if self._schedule_combined_retry(file_path, entry):
+                    continue
                 self._exif_errors[file_path] = str(entry_error)
+            else:
+                self._exif_errors.pop(file_path, None)
 
             # Editable metadata
             editable_meta = entry.get("editable_metadata")
@@ -989,8 +1064,12 @@ class MediaManager(QObject):
             if isinstance(editable_meta, dict):
                 db = self._db_manager.get_db_for_folder(info.source_folder)
                 try:
-                    db.save_metadata(file_path, editable_meta)
-                    self.editable_ready.emit(file_path, editable_meta)
+                    should_save_editable = bool(
+                        entry.get("allow_empty_editable")
+                    ) or _metadata_has_preservable_values(editable_meta)
+                    if should_save_editable:
+                        db.save_metadata(file_path, editable_meta)
+                        self.editable_ready.emit(file_path, editable_meta)
                     if file_path not in self._editable_done:
                         self._editable_done.add(file_path)
                         self._exif_completed += 1
@@ -1040,6 +1119,8 @@ class MediaManager(QObject):
                         want_panel=deferred.want_panel,
                         to_visible=file_path in self._visible_paths,
                         force=True,
+                        allow_empty_editable=deferred.allow_empty_editable,
+                        retry_count=deferred.retry_count,
                     )
                 else:
                     still_want_embedded = deferred.want_embedded and not os.path.exists(
@@ -1058,6 +1139,8 @@ class MediaManager(QObject):
                             want_editable=still_want_editable,
                             want_panel=still_want_panel,
                             to_visible=file_path in self._visible_paths,
+                            allow_empty_editable=deferred.allow_empty_editable,
+                            retry_count=deferred.retry_count,
                         )
 
     def _handle_hq_result(self, result: dict) -> None:

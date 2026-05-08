@@ -1,3 +1,4 @@
+- [Move to trash add confirmation](Gd_tasks/Jd_Move_to_trash_add_confirmation.md)
 - [Flickr max workers diff for upload and set date public](Yb_tasks/Cc_Flickr_max_workers_diff_for_upload_and_set_date_.md)
 - [Copy SD display the list of dates in multiline text field](Kc_tasks/Pc_Copy_SD_display_the_list_of_dates_in_multiline_t.md)
 - [Make copy sd and flickr not modal](Kc_tasks/Qc_Make_copy_sd_and_flickr_not_modal.md)
@@ -134,3 +135,4 @@
 ! [Flickr set labels after upload](Vc_tasks/Fd_Flickr_set_labels_after_upload.md)
 ! [Lifecycle for flickr](Gd_tasks/Gd_Lifecycle_for_flickr.md)
 ! [Clear search filter](Gd_tasks/Hd_Clear_search_filter.md)
+! [Edit in copy should copy all the metadata](Gd_tasks/Id_Edit_in_copy_should_copy_all_the_metadata.md)

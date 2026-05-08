@@ -405,7 +405,7 @@ After completing a feature, update this file AGENTS.md with the updated project 
 
 ## Do not read any file in .prompts folder or subfolder / Completely ignore those files
 
-Do not read any file from the .prompts folder or any subfolder. Do not mention or remark on changes to them or ask the user about any file or changes in those. Completely ignore those files. Never deviate from those rules.
+Do not read any file from the .prompts folder or any subfolder. Do not mention or remark on changes to them or ask the user about any file or changes in those. Completely ignore those files, even after git status. Never deviate from those rules.
 
 ## English
 

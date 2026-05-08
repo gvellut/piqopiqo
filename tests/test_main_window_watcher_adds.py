@@ -12,6 +12,7 @@ import pytest
 
 from piqopiqo.background.media_man import FolderPrimingResult
 from piqopiqo.main_window import MainWindow
+from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.ssf.settings_state import init_qsettings_store
 
 
@@ -268,6 +269,94 @@ def test_watcher_modified_batch_uses_combined_media_refresh_once(
 
     assert window.media_manager.refresh_files_calls == [modified_paths]
     assert len(refresh_item_calls) == 2
+
+
+def test_watcher_same_path_replace_keeps_metadata_and_refreshes(
+    window: MainWindow,
+):
+    item = window.photo_model.all_photos[5]
+    path = item.path
+    metadata = {
+        DBFields.TITLE: "Edited title",
+        DBFields.DESCRIPTION: "Edited description",
+        DBFields.LATITUDE: 48.8566,
+        DBFields.LONGITUDE: 2.3522,
+        DBFields.KEYWORDS: "alpha, beta",
+        DBFields.TIME_TAKEN: datetime(2026, 1, 1, 10, 0, 0),
+        DBFields.LABEL: "Approved",
+        DBFields.ORIENTATION: 6,
+    }
+    db = window.db_manager.get_db_for_folder(item.source_folder)
+    db.save_metadata(path, metadata)
+    item.db_metadata = metadata.copy()
+    item.state = 2
+    item._cache_state_dirty = False
+    item.embedded_pixmap = object()
+    item.hq_pixmap = object()
+    item.pixmap = object()
+    item._pixmap_source = item.hq_pixmap
+    item._pixmap_orientation = 6
+    item.exif_data = {"File:FileName": "old.jpg"}
+
+    original_item_count = len(window.photo_model.all_photos)
+    window.media_manager.add_files_calls.clear()
+    window.media_manager.remove_files_calls.clear()
+    window.media_manager.refresh_files_calls.clear()
+
+    Path(path).write_bytes(b"replacement image bytes")
+
+    window._on_folder_changes([("deleted", path), ("added", path)])
+
+    assert len(window.photo_model.all_photos) == original_item_count
+    assert window._items_by_path[path] is item
+    assert item.db_metadata == metadata
+    stored = db.get_metadata(path)
+    assert stored is not None
+    for field, expected in metadata.items():
+        assert stored[field] == expected
+    assert window.media_manager.remove_files_calls == []
+    assert window.media_manager.add_files_calls == []
+    assert window.media_manager.refresh_files_calls == [[path]]
+    assert item.state == 0
+    assert item.embedded_pixmap is None
+    assert item.hq_pixmap is None
+    assert item.pixmap is None
+    assert item.exif_data is None
+    assert item._pixmap_source is None
+
+
+def test_watcher_existing_path_added_event_refreshes_thumbnail_state(
+    window: MainWindow,
+):
+    item = window.photo_model.all_photos[5]
+    path = item.path
+    item.state = 2
+    item._cache_state_dirty = False
+    item.embedded_pixmap = object()
+    item.hq_pixmap = object()
+    item.pixmap = object()
+    item._pixmap_source = item.hq_pixmap
+    item._pixmap_orientation = 1
+    item.exif_data = {"File:FileName": "old.jpg"}
+
+    window.media_manager.add_files_calls.clear()
+    window.media_manager.remove_files_calls.clear()
+    window.media_manager.refresh_files_calls.clear()
+
+    Path(path).write_bytes(b"replacement image bytes")
+
+    window._on_folder_changes([("added", path)])
+
+    assert window.media_manager.remove_files_calls == []
+    assert window.media_manager.add_files_calls == []
+    assert window.media_manager.refresh_files_calls == [[path]]
+    assert item.state == 0
+    assert item.embedded_pixmap is None
+    assert item.hq_pixmap is None
+    assert item.pixmap is None
+    assert item.exif_data is None
+    assert item._pixmap_source is None
+    assert item._pixmap_orientation is None
 
 
 def test_watcher_delete_removes_subfolder_image_and_keeps_surviving_selection(

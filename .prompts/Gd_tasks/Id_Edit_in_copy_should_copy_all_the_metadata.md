@@ -1,0 +1,1 @@
+When doing Edit in .... : the metadata is copied. This is expected. However, after doing the edit and saving the file in the external editor, the metadata is reverted to the content of the EXIF and the edited metadata (like GPS or time taken or title or label...) is discarded. This is incorrect: if a file is replaced with the same name : it should keep the same metadata.
