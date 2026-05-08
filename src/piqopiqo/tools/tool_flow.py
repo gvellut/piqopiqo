@@ -144,6 +144,11 @@ def _apply_dialog_size_to_content(
         return
 
     _release_applied_size_constraints(dialog)
+    base_min_width = dialog.minimumWidth()
+    base_max_width = dialog.maximumWidth()
+    base_min_height = dialog.minimumHeight()
+    base_max_height = dialog.maximumHeight()
+
     _polish_widget_tree(dialog)
     _invalidate_layout_tree(dialog)
     _activate_layout_tree(dialog)
@@ -166,16 +171,16 @@ def _apply_dialog_size_to_content(
     target_height = _clamp_dialog_height(dialog, target_height)
     constraints: dict[str, int | bool] = {
         "height": True,
-        "min_height": dialog.minimumHeight(),
-        "max_height": dialog.maximumHeight(),
+        "min_height": base_min_height,
+        "max_height": base_max_height,
     }
 
     if sizing == "fixed":
         constraints.update(
             {
                 "width": True,
-                "min_width": dialog.minimumWidth(),
-                "max_width": dialog.maximumWidth(),
+                "min_width": base_min_width,
+                "max_width": base_max_width,
             }
         )
         dialog.resize(target_width, target_height)

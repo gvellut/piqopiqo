@@ -243,13 +243,23 @@ def test_copy_eject_success_shows_safe_remove_screen(qapp, monkeypatch):  # noqa
         target_dirs=[],
         should_eject=True,
     )
+    dialog._started = True
+    dialog.show()
+    qapp.processEvents()
+
     dialog._on_finished(1, 1, False, 0)
     dialog._on_ok()
+    qapp.processEvents()
+    ejecting_height = dialog.height()
 
     dialog._on_eject_done("")
+    qapp.processEvents()
 
     assert dialog.current_screen_id == "ejected"
+    assert dialog.progress_row.isHidden() is True
     assert dialog.progress_bar.isHidden() is True
+    assert dialog.height() < ejecting_height
+    assert dialog.minimumHeight() == dialog.maximumHeight() == dialog.height()
     assert any(
         label.text() == "You can remove the SD Card safely"
         for label in dialog.findChildren(QLabel)

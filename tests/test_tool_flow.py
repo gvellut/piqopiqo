@@ -124,6 +124,44 @@ def test_content_sizing_can_preserve_current_width(qapp):
     assert dialog.minimumHeight() == dialog.maximumHeight() == dialog.height()
 
 
+def test_non_progress_screen_shrinks_after_progress_screen(qapp):
+    workflow = ToolWorkflow(
+        initial_screen="progress",
+        screens={
+            "progress": ToolScreen(
+                id="progress",
+                build=lambda _dialog: None,
+                buttons=(ToolButton("cancel", "Cancel"),),
+                show_progress=True,
+            ),
+            "done": ToolScreen(
+                id="done",
+                build=lambda _dialog: _widget_with_text("Done"),
+                buttons=(ToolButton("ok", "OK"),),
+                show_progress=False,
+            ),
+        },
+    )
+
+    dialog = ToolFlowDialog(workflow)
+    dialog.show()
+    qapp.processEvents()
+
+    dialog.set_status("Working...")
+    dialog.set_progress(0, 0)
+    qapp.processEvents()
+    progress_height = dialog.height()
+
+    dialog.transition_to("done")
+    qapp.processEvents()
+
+    assert dialog.progress_row.isHidden() is True
+    assert dialog.progress_bar.isHidden() is True
+    assert dialog.height() < progress_height
+    assert dialog.height() == dialog.sizeHint().height()
+    assert dialog.minimumHeight() == dialog.maximumHeight() == dialog.height()
+
+
 def test_none_body_does_not_reserve_space_above_progress(qapp):
     workflow = ToolWorkflow(
         initial_screen="progress",
