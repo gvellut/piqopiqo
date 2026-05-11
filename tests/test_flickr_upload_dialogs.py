@@ -368,6 +368,33 @@ def _mk_upload_dialog() -> FlickrUploadProgressDialog:
     )
 
 
+def test_upload_progress_uses_busy_bar_for_token_and_album_check(
+    qapp,  # noqa: ARG001
+    monkeypatch,
+) -> None:
+    dialog = _mk_upload_dialog()
+
+    assert dialog.stage_label.text() == "Validating Flickr token..."
+    assert dialog.progress_bar.minimum() == 0
+    assert dialog.progress_bar.maximum() == 0
+    assert dialog.progress_text_label.isHidden() is True
+
+    started_tasks: list[str] = []
+    monkeypatch.setattr(
+        dialog,
+        "start_task",
+        lambda name, _task: started_tasks.append(name),
+    )
+
+    dialog._on_token_validated(True)
+
+    assert started_tasks == ["flickr_album_check"]
+    assert dialog.stage_label.text() == FlickrStage.STAGE_ALBUM_CHECK.label
+    assert dialog.progress_bar.minimum() == 0
+    assert dialog.progress_bar.maximum() == 0
+    assert dialog.progress_text_label.isHidden() is True
+
+
 def test_upload_progress_shows_single_running_step_line(qapp) -> None:  # noqa: ARG001
     dialog = _mk_upload_dialog()
 
@@ -395,7 +422,12 @@ def test_upload_progress_shows_single_running_step_line(qapp) -> None:  # noqa: 
 
 def test_upload_progress_add_to_album_uses_merged_step_text(qapp) -> None:  # noqa: ARG001
     dialog = _mk_upload_dialog()
+    dialog.set_progress(2, 2)
+
     dialog._on_stage_changed(FlickrStage.STAGE_ADD_TO_ALBUM.label)
+    assert dialog.progress_bar.minimum() == 0
+    assert dialog.progress_bar.maximum() == 0
+    assert dialog.progress_text_label.isHidden() is True
 
     dialog._on_album_status("Creating album 'Trip'...")
     assert "Add to album - Creating album 'Trip'" in dialog.stage_label.text()

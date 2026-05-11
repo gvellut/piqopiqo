@@ -1,1 +1,2 @@
 Flickr upload : Album check : Change the progress bar : use no total (currently does progress bar thatr seems to advance but too quick => weird).
+Review other progress bar in the tools : list them and see if a progress bar with total makes sense or not.

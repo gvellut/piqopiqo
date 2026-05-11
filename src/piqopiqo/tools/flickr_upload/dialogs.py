@@ -726,6 +726,7 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         self.cancel_btn = self.button("cancel")
         self.ok_btn = self.button("ok")
         self._update_stage_label()
+        self._set_busy_progress()
         self.sync_size_to_content()
 
     def transition_to(self, screen_id: str) -> None:
@@ -780,6 +781,9 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
             stage_text = f"{stage_text} - {self._album_action_text}"
         self.stage_label.setText(stage_text)
 
+    def _set_busy_progress(self) -> None:
+        self.set_progress(0, 0)
+
     def start(self) -> None:
         if self._started:
             return
@@ -818,7 +822,7 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         self._album_action_text = ""
         self._check_status_text = ""
         self._update_stage_label()
-        self.set_progress(0, 0)
+        self._set_busy_progress()
         self.sync_size_to_content()
 
         album_text = self._album_text.strip()
@@ -927,8 +931,11 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
             self._check_status_text = ""
         self._update_stage_label()
 
-        if stage == FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label:
-            self.set_progress(0, 0)
+        if stage in (
+            FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label,
+            FlickrStage.STAGE_ADD_TO_ALBUM.label,
+        ):
+            self._set_busy_progress()
 
         self.album_action_label.clear()
         self.album_action_label.hide()
@@ -938,7 +945,7 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         if self._finished:
             return
         if int(total) <= 0:
-            self.set_progress(0, 0)
+            self._set_busy_progress()
             return
         self.set_progress(completed, total)
 
@@ -1021,7 +1028,7 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         self._check_status_text = ""
         self.transition_to("transition_applying")
         self._update_stage_label()
-        self.set_progress(0, 0)
+        self._set_busy_progress()
         self.sync_size_to_content()
         QTimer.singleShot(0, self._apply_label_transitions)
 
