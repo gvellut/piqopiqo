@@ -6,10 +6,11 @@ from dataclasses import dataclass
 from datetime import datetime
 import threading
 
-from PySide6.QtCore import QObject, QRunnable, Signal
+from PySide6.QtCore import QObject, Signal
 
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBUnavailableError
+from piqopiqo.qt_workers import PythonOwnedRunnable
 
 from .ocr_time_shift import extract_time_shift_from_photo
 from .service import apply_gpx_to_folders
@@ -20,7 +21,7 @@ class ExtractGpsTimeShiftWorkerSignals(QObject):
     error = Signal(str)
 
 
-class ExtractGpsTimeShiftWorker(QRunnable):
+class ExtractGpsTimeShiftWorker(PythonOwnedRunnable):
     def __init__(
         self,
         *,
@@ -61,7 +62,7 @@ class ApplyGpxWorkerSignals(QObject):
     error = Signal(str)
 
 
-class ApplyGpxWorker(QRunnable):
+class ApplyGpxWorker(PythonOwnedRunnable):
     def __init__(
         self,
         *,
@@ -135,7 +136,7 @@ class ClearGpsWorkerSignals(QObject):
     error = Signal(str)
 
 
-class ClearGpsWorker(QRunnable):
+class ClearGpsWorker(PythonOwnedRunnable):
     def __init__(self, *, db_manager, file_paths: list[str]):
         super().__init__()
         self._db_manager = db_manager

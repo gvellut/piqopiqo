@@ -204,7 +204,9 @@ def qapp(monkeypatch):
     core.setOrganizationName("PiqoPiqoTests")
     core.setOrganizationDomain("tests.local")
     core.setApplicationName(f"piqopiqo-test-archive-{uuid.uuid4().hex}")
-    return app
+    yield app
+    app.closeAllWindows()
+    app.processEvents()
 
 
 @pytest.fixture
@@ -396,12 +398,15 @@ def test_archive_dialog_checkbox_state_round_trip(qapp, settings_store):  # noqa
         items=[],
         source_folders=[],
     )
-    dialog.save_exif_checkbox.setChecked(False)
-    dialog._start_move_stage = lambda: None
+    try:
+        dialog.save_exif_checkbox.setChecked(False)
+        dialog._start_move_stage = lambda: None
 
-    dialog._start_archive()
+        dialog._start_archive()
 
-    assert get_state_value(StateKey.ARCHIVE_SAVE_EXIF) is False
+        assert get_state_value(StateKey.ARCHIVE_SAVE_EXIF) is False
+    finally:
+        dialog.close()
 
 
 def test_archive_dialog_initial_focus_is_ok_button(qapp, settings_store):  # noqa: ARG001

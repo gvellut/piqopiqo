@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
+from PySide6.QtCore import QObject, QThreadPool, Signal
+
+from piqopiqo.qt_workers import PythonOwnedRunnable
 
 from .metadata_db import MetadataDBUnavailableError
 
@@ -24,7 +26,7 @@ def drain_qthread_pool(
     return bool(pool.waitForDone(max(0, int(timeout_ms))))
 
 
-class MetadataSaveWorker(QRunnable):
+class MetadataSaveWorker(PythonOwnedRunnable):
     """Background worker to save metadata to database without blocking the UI.
 
     This unified worker replaces both _LabelSaveWorker and DBSaveWorker.

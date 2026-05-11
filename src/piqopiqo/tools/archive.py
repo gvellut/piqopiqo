@@ -8,7 +8,7 @@ from pathlib import Path
 import shutil
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QLabel,
@@ -27,6 +27,7 @@ from piqopiqo.dialogs.settings_redirect import (
 )
 from piqopiqo.metadata.exif_write import build_exif_tags
 from piqopiqo.model import ImageItem
+from piqopiqo.qt_workers import PythonOwnedRunnable
 from piqopiqo.ssf.settings_state import (
     StateKey,
     UserSettingKey,
@@ -67,7 +68,7 @@ class ArchiveMoveWorkerSignals(QObject):
     finished = Signal(object)  # ArchiveMoveResult
 
 
-class ArchiveMoveWorker(QRunnable):
+class ArchiveMoveWorker(PythonOwnedRunnable):
     def __init__(
         self,
         *,

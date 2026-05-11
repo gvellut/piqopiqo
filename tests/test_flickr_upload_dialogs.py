@@ -595,6 +595,7 @@ def test_upload_progress_ok_applies_transitions_and_shows_result(
 
 def test_upload_progress_height_tracks_content_changes(qapp) -> None:
     dialog = _mk_upload_dialog()
+    dialog._started = True
     dialog.show()
     qapp.processEvents()
 

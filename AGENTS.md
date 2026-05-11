@@ -413,7 +413,7 @@ Always reply in English even if the request is in French.
 
 ## Dialogs
 
-When creating dialogs : do not just center the labels and the fields and leave the sides empty. Maximise the use of space : The labels must be aligned to the left, the fields must take the reamining space and aligned on the left. Just add some space between the labels and the fields to make that happen.
+When creating dialogs : do not just center the labels and the fields and leave the sides empty. Maximise the use of space : The labels must be aligned to the left, the fields must take the reamining space and aligned on the left. Just add some space between the labels and the fields to make that happen. Adjust the size of the dialogs so they take minimun space in height (so if components are removed or added depending on the screens, make the dialog smaller or bigger: do not just remove the components). See the existing dialogs in tools module.
 
 When using the OK Cancel buttons : Always put the OK on the right (or other positive action) and the Cancel on the left.
 

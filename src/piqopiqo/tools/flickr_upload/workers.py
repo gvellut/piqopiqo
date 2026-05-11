@@ -5,9 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 import threading
 
-from PySide6.QtCore import QObject, QRunnable, Signal
+from PySide6.QtCore import QObject, Signal
 
 from piqopiqo.cache_paths import get_flickr_cache_dir, get_flickr_token_file_path
+from piqopiqo.qt_workers import PythonOwnedRunnable
 
 from .albums import FlickrAlbumPlan, resolve_album_plan
 from .auth import (
@@ -24,7 +25,7 @@ class FlickrLoginWorkerSignals(QObject):
     error = Signal(str)
 
 
-class FlickrLoginWorker(QRunnable):
+class FlickrLoginWorker(PythonOwnedRunnable):
     """Background Flickr browser-auth worker."""
 
     def __init__(self, *, api_key: str, api_secret: str):
@@ -77,7 +78,7 @@ class FlickrTokenValidationWorkerSignals(QObject):
     error = Signal(str)
 
 
-class FlickrTokenValidationWorker(QRunnable):
+class FlickrTokenValidationWorker(PythonOwnedRunnable):
     """Background token validation worker."""
 
     def __init__(self, *, api_key: str, api_secret: str):
@@ -123,7 +124,7 @@ class FlickrAlbumCheckWorkerSignals(QObject):
     error = Signal(str)
 
 
-class FlickrAlbumCheckWorker(QRunnable):
+class FlickrAlbumCheckWorker(PythonOwnedRunnable):
     """Background worker resolving Flickr album input."""
 
     def __init__(
@@ -184,7 +185,7 @@ class FlickrMetadataPrecheckWorkerSignals(QObject):
     error = Signal(str)
 
 
-class FlickrMetadataPrecheckWorker(QRunnable):
+class FlickrMetadataPrecheckWorker(PythonOwnedRunnable):
     """Background worker that validates required upload metadata per photo."""
 
     def __init__(self, *, db_manager, upload_items: list[dict]):

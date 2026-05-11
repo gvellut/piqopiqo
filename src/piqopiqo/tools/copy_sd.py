@@ -15,7 +15,7 @@ import time
 from typing import Any
 
 from attrs import define
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
+from PySide6.QtCore import QObject, QThreadPool, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
+from piqopiqo.qt_workers import PythonOwnedRunnable
 from piqopiqo.folder_watcher import WorkspaceWatcherController
 from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
@@ -523,7 +524,7 @@ class CopySdWorkerSignals(QObject):
     finished = Signal(int, int, bool, int)  # copied, total, cancelled, error_count
 
 
-class CopySdWorker(QRunnable):
+class CopySdWorker(PythonOwnedRunnable):
     def __init__(
         self,
         volume: PhotoVolume,
@@ -1033,7 +1034,7 @@ class _ResolveDatesSignals(QObject):
     error = Signal(str)
 
 
-class _ResolveDatesWorker(QRunnable):
+class _ResolveDatesWorker(PythonOwnedRunnable):
     def __init__(self, date_spec: str, volume: PhotoVolume):
         super().__init__()
         self._date_spec = date_spec

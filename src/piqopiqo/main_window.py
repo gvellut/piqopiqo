@@ -9,7 +9,7 @@ import subprocess
 import time
 
 from attrs import define, field
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -61,6 +61,7 @@ from .model import (
 from .orientation import rotate_orientation_left, rotate_orientation_right
 from .panels import EditPanel, ExifPanel, FilterPanel
 from .photo_model import PhotoListModel, SortOrder
+from .qt_workers import PythonOwnedRunnable
 from .settings_panel import SettingsDialog
 from .settings_panel.schema import get_settings_tab_title_for_key
 from .ssf.settings_state import (
@@ -101,7 +102,7 @@ class _WorkspaceCleanupWorkerSignals(QObject):
     finished = Signal(object)  # error string or None
 
 
-class _WorkspaceCleanupWorker(QRunnable):
+class _WorkspaceCleanupWorker(PythonOwnedRunnable):
     def __init__(
         self,
         source_folders: list[str],
