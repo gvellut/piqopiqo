@@ -1,5 +1,6 @@
 """Status bar with loading progress and counts."""
 
+from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -10,7 +11,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.components.ellided_label import EllidedLabel
 from piqopiqo.ssf.settings_state import RuntimeSettingKey, get_runtime_setting
+
+NO_FOLDER_LOADED_TEXT = "No folder loaded"
+_FOLDER_LABEL_SIDE_GAP = 8
 
 
 class LoadingStatusBar(QStatusBar):
@@ -27,6 +32,8 @@ class LoadingStatusBar(QStatusBar):
         self._filtered_count = 0
         self._selected_count = 0
         self._has_errors = False
+        self._folder_label_max_width_ratio = self._read_folder_label_max_width_ratio()
+        self._has_temporary_message = False
 
         self._setup_ui()
 
@@ -69,7 +76,17 @@ class LoadingStatusBar(QStatusBar):
         )
         self.addPermanentWidget(self._right_cluster)
 
+        self.folder_label = EllidedLabel(NO_FOLDER_LOADED_TEXT, self)
+        self.folder_label.setObjectName("status_bar_folder_label")
+        self.folder_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.folder_label.setToolTip(NO_FOLDER_LOADED_TEXT)
+        self.folder_label.raise_()
+
         self.setSizeGripEnabled(False)
+        self.messageChanged.connect(self._on_message_changed)
+        self._schedule_folder_label_geometry_update()
 
     def _read_side_padding(self) -> int:
         try:
@@ -79,6 +96,24 @@ class LoadingStatusBar(QStatusBar):
         except Exception:
             padding = 10
         return max(0, padding)
+
+    def _read_folder_label_max_width_ratio(self) -> float:
+        try:
+            ratio = float(
+                get_runtime_setting(
+                    RuntimeSettingKey.STATUS_BAR_FOLDER_LABEL_MAX_WIDTH_RATIO
+                )
+            )
+        except Exception:
+            ratio = 0.5
+        return max(0.0, min(1.0, ratio))
+
+    def set_folder_label(self, text: str | None):
+        """Set the centered folder label display."""
+        display_text = str(text or "").strip() or NO_FOLDER_LOADED_TEXT
+        self.folder_label.setText(display_text)
+        self.folder_label.setToolTip(display_text)
+        self._schedule_folder_label_geometry_update()
 
     def set_photo_count(
         self,
@@ -100,6 +135,7 @@ class LoadingStatusBar(QStatusBar):
             self.count_label.setText(
                 f"{int(total)} photos / {self._selected_count} selected"
             )
+        self._schedule_folder_label_geometry_update()
 
     def set_thumb_progress(self, completed: int, total: int):
         """Update thumbnail loading progress."""
@@ -120,6 +156,7 @@ class LoadingStatusBar(QStatusBar):
 
         if total == 0:
             self.progress_bar.hide()
+            self._schedule_folder_label_geometry_update()
             return
 
         if completed >= total:
@@ -129,11 +166,13 @@ class LoadingStatusBar(QStatusBar):
             self.progress_bar.setMaximum(total)
             self.progress_bar.setValue(completed)
             self.progress_bar.setFormat(f"{completed}/{total}")
+        self._schedule_folder_label_geometry_update()
 
     def set_has_errors(self, has_errors: bool):
         """Show or hide the error button."""
         self._has_errors = has_errors
         self.error_btn.setVisible(has_errors)
+        self._schedule_folder_label_geometry_update()
 
     def reset(self):
         """Reset all progress for new folder load."""
@@ -144,3 +183,61 @@ class LoadingStatusBar(QStatusBar):
         self._has_errors = False
         self.progress_bar.hide()
         self.error_btn.hide()
+        self._schedule_folder_label_geometry_update()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_folder_label_geometry()
+
+    def _on_message_changed(self, message: str) -> None:
+        self._has_temporary_message = bool(message)
+        self.folder_label.setVisible(not self._has_temporary_message)
+        if not self._has_temporary_message:
+            self._schedule_folder_label_geometry_update()
+
+    def _schedule_folder_label_geometry_update(self) -> None:
+        self._update_folder_label_geometry()
+        QTimer.singleShot(0, self._update_folder_label_geometry)
+
+    def _update_folder_label_geometry(self) -> None:
+        if not hasattr(self, "folder_label") or self._has_temporary_message:
+            return
+
+        status_rect = self.contentsRect()
+        if status_rect.width() <= 0 or status_rect.height() <= 0:
+            return
+
+        center_x = status_rect.x() + status_rect.width() // 2
+        max_ratio_width = int(status_rect.width() * self._folder_label_max_width_ratio)
+
+        left_limit = status_rect.left()
+        if self.count_label.isVisible():
+            count_pos = self.count_label.mapTo(self, QPoint(0, 0))
+            left_limit = max(
+                left_limit,
+                count_pos.x() + self.count_label.width() + _FOLDER_LABEL_SIDE_GAP,
+            )
+
+        right_limit = status_rect.right() + 1
+        visible_right_widgets = [
+            widget
+            for widget in (self.progress_bar, self.error_btn)
+            if widget.isVisible()
+        ]
+        for widget in visible_right_widgets:
+            widget_pos = widget.mapTo(self, QPoint(0, 0))
+            right_limit = min(right_limit, widget_pos.x() - _FOLDER_LABEL_SIDE_GAP)
+
+        centered_available = max(
+            0,
+            2 * min(center_x - left_limit, right_limit - center_x),
+        )
+        metrics = self.folder_label.fontMetrics()
+        text_width = metrics.horizontalAdvance(self.folder_label.full_text)
+        label_width = max(0, min(text_width, max_ratio_width, centered_available))
+        label_height = min(self.folder_label.sizeHint().height(), status_rect.height())
+        label_x = center_x - label_width // 2
+        label_y = status_rect.y() + max(0, (status_rect.height() - label_height) // 2)
+
+        self.folder_label.setGeometry(label_x, label_y, label_width, label_height)
+        self.folder_label.raise_()

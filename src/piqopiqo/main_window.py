@@ -328,6 +328,7 @@ class MainWindow(QMainWindow):
         self.status_bar = LoadingStatusBar()
         self.status_bar.error_btn.clicked.connect(self._show_error_dialog)
         self.setStatusBar(self.status_bar)
+        self._update_status_bar_folder_label()
 
         # Unified background manager (multiprocessing)
         self.media_manager = MediaManager(self.db_manager, parent=self)
@@ -2296,6 +2297,7 @@ class MainWindow(QMainWindow):
         if UserSettingKey.FAVORITE_FOLDER in changed_keys:
             self._refresh_open_from_favorite_action_visibility()
             self._refresh_open_recent_menu()
+            self._update_status_bar_folder_label()
 
         if UserSettingKey.CUSTOM_EXIF_FIELDS in changed_keys:
             self.media_manager.refresh_exif_field_keys(
@@ -2451,6 +2453,37 @@ class MainWindow(QMainWindow):
         except ValueError:
             return False
 
+    @staticmethod
+    def _format_folder_label_for_display(
+        folder_path: str | None,
+        favorite_folder_path: str | None,
+    ) -> str:
+        canonical = MainWindow._canonicalize_recent_folder_path(folder_path)
+        if not canonical:
+            return ""
+
+        favorite_folder = MainWindow._canonicalize_recent_folder_path(
+            favorite_folder_path
+        )
+        if favorite_folder and MainWindow._is_strict_descendant_path(
+            canonical,
+            favorite_folder,
+        ):
+            return os.path.relpath(canonical, favorite_folder)
+
+        home_folder = MainWindow._canonicalize_recent_folder_path(
+            os.path.expanduser("~")
+        )
+        if home_folder and MainWindow._is_strict_descendant_path(
+            canonical,
+            home_folder,
+        ):
+            return f"~/{os.path.relpath(canonical, home_folder)}"
+
+        if canonical == os.sep:
+            return canonical
+        return canonical.rstrip(os.sep)
+
     def _get_recent_folder_menu_limit(self) -> int:
         try:
             limit = int(
@@ -2504,31 +2537,10 @@ class MainWindow(QMainWindow):
         return visible_entries
 
     def _format_recent_folder_label(self, folder_path: str) -> str:
-        canonical = MainWindow._canonicalize_recent_folder_path(folder_path)
-        if not canonical:
-            return ""
-
-        favorite_folder = MainWindow._canonicalize_recent_folder_path(
-            self._get_configured_favorite_folder()
+        return MainWindow._format_folder_label_for_display(
+            folder_path,
+            self._get_configured_favorite_folder(),
         )
-        if favorite_folder and MainWindow._is_strict_descendant_path(
-            canonical,
-            favorite_folder,
-        ):
-            return os.path.relpath(canonical, favorite_folder)
-
-        home_folder = MainWindow._canonicalize_recent_folder_path(
-            os.path.expanduser("~")
-        )
-        if home_folder and MainWindow._is_strict_descendant_path(
-            canonical,
-            home_folder,
-        ):
-            return f"~/{os.path.relpath(canonical, home_folder)}"
-
-        if canonical == os.sep:
-            return canonical
-        return canonical.rstrip(os.sep)
 
     def _refresh_open_recent_menu(self) -> None:
         menu = getattr(self, "_open_recent_menu", None)
@@ -2608,6 +2620,17 @@ class MainWindow(QMainWindow):
 
     def _get_configured_favorite_folder(self) -> str:
         return str(get_user_setting(UserSettingKey.FAVORITE_FOLDER) or "").strip()
+
+    def _update_status_bar_folder_label(self) -> None:
+        status_bar = getattr(self, "status_bar", None)
+        if status_bar is None:
+            return
+        status_bar.set_folder_label(
+            MainWindow._format_folder_label_for_display(
+                self.root_folder,
+                self._get_configured_favorite_folder(),
+            )
+        )
 
     def _get_favorite_folder_dialog_start_directory(self) -> str:
         favorite_folder = MainWindow._get_configured_favorite_folder(self)
@@ -2852,6 +2875,7 @@ class MainWindow(QMainWindow):
         self._label_undo_entry = None
         self._label_undo_is_redo = False
         self._refresh_undo_label_action_enabled_for_context()
+        self._update_status_bar_folder_label()
 
         self.filter_panel.set_no_folders()
         self.photo_model.set_filter(None, emit_signals=False)
@@ -2891,6 +2915,7 @@ class MainWindow(QMainWindow):
 
         # Reset progress tracking
         self.status_bar.reset()
+        self._update_status_bar_folder_label()
 
         # Update photo model (replaces old _all_images_data and images_data)
         photos = self._prepare_photos_for_folder_load(images, source_folders)

@@ -139,6 +139,7 @@ class RuntimeSettingKey(StrEnum):
     GRID_NUM_COLUMNS_MAX = "gridNumColumnsMax"
     GRID_LOWRES_ONLY = "gridLowresOnly"
     STATUS_BAR_SIDE_PADDING = "statusBarSidePadding"
+    STATUS_BAR_FOLDER_LABEL_MAX_WIDTH_RATIO = "statusBarFolderLabelMaxWidthRatio"
     COLOR_MANAGE_EMBEDDED_THUMBNAILS = "colorManageEmbeddedThumbnails"
     COLOR_MANAGE_HQ_THUMBNAILS = "colorManageHqThumbnails"
     PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE = "pillowForExtractImageColorProfile"
@@ -846,6 +847,10 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.GRID_NUM_COLUMNS_MAX: SettingDef(default=10, read_type=int),
     RuntimeSettingKey.GRID_LOWRES_ONLY: SettingDef(default=False, read_type=bool),
     RuntimeSettingKey.STATUS_BAR_SIDE_PADDING: SettingDef(default=10, read_type=int),
+    RuntimeSettingKey.STATUS_BAR_FOLDER_LABEL_MAX_WIDTH_RATIO: SettingDef(
+        default=0.5,
+        read_type=float,
+    ),
     RuntimeSettingKey.COLOR_MANAGE_EMBEDDED_THUMBNAILS: SettingDef(
         default=True,
         read_type=bool,

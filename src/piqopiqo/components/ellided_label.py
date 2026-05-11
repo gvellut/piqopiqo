@@ -14,6 +14,10 @@ class EllidedLabel(QLabel):
         self._full_text = text
         self.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
+    @property
+    def full_text(self) -> str:
+        return self._full_text
+
     def setText(self, text: str):
         self._full_text = text
         self._update_elided_text()

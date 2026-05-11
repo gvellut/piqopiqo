@@ -72,6 +72,7 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_GRID_NUM_COLUMNS_MIN",
         "PIQO_GRID_NUM_COLUMNS_MAX",
         "PIQO_STATUS_BAR_SIDE_PADDING",
+        "PIQO_STATUS_BAR_FOLDER_LABEL_MAX_WIDTH_RATIO",
         "PIQO_SETTINGS_PANEL_SAVE_MODE",
         "PIQO_SETTINGS_PANEL_ROW_SPACING",
         "PIQO_FONT_SIZE",
@@ -334,15 +335,24 @@ def test_grid_column_runtime_bounds_and_status_bar_padding_defaults_and_env_over
     assert get_runtime_setting(RuntimeSettingKey.GRID_NUM_COLUMNS_MIN) == 3
     assert get_runtime_setting(RuntimeSettingKey.GRID_NUM_COLUMNS_MAX) == 10
     assert get_runtime_setting(RuntimeSettingKey.STATUS_BAR_SIDE_PADDING) == 10
+    assert (
+        get_runtime_setting(RuntimeSettingKey.STATUS_BAR_FOLDER_LABEL_MAX_WIDTH_RATIO)
+        == 0.5
+    )
 
     monkeypatch.setenv("PIQO_GRID_NUM_COLUMNS_MIN", "4")
     monkeypatch.setenv("PIQO_GRID_NUM_COLUMNS_MAX", "12")
     monkeypatch.setenv("PIQO_STATUS_BAR_SIDE_PADDING", "16")
+    monkeypatch.setenv("PIQO_STATUS_BAR_FOLDER_LABEL_MAX_WIDTH_RATIO", "0.35")
     init_qsettings_store(dyn=False)
 
     assert get_runtime_setting(RuntimeSettingKey.GRID_NUM_COLUMNS_MIN) == 4
     assert get_runtime_setting(RuntimeSettingKey.GRID_NUM_COLUMNS_MAX) == 12
     assert get_runtime_setting(RuntimeSettingKey.STATUS_BAR_SIDE_PADDING) == 16
+    assert (
+        get_runtime_setting(RuntimeSettingKey.STATUS_BAR_FOLDER_LABEL_MAX_WIDTH_RATIO)
+        == 0.35
+    )
 
 
 def test_recent_folders_menu_limit_default_and_env_override(

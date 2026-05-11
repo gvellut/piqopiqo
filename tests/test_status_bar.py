@@ -8,7 +8,7 @@ from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import QApplication, QMainWindow
 import pytest
 
-from piqopiqo.components.status_bar import LoadingStatusBar
+from piqopiqo.components.status_bar import NO_FOLDER_LOADED_TEXT, LoadingStatusBar
 from piqopiqo.ssf.settings_state import init_qsettings_store
 
 
@@ -26,6 +26,11 @@ def qapp(monkeypatch):
     return app
 
 
+def _label_center_x(status_bar: LoadingStatusBar) -> float:
+    rect = status_bar.folder_label.geometry()
+    return rect.x() + rect.width() / 2
+
+
 def test_photo_count_format_includes_selected_for_filtered_and_unfiltered(qapp):
     init_qsettings_store(dyn=True)
     status_bar = LoadingStatusBar()
@@ -37,6 +42,26 @@ def test_photo_count_format_includes_selected_for_filtered_and_unfiltered(qapp):
     assert status_bar.count_label.text() == "4 of 10 photos / 2 selected"
 
 
+def test_status_bar_folder_label_defaults_to_no_folder_loaded(qapp):
+    init_qsettings_store(dyn=True)
+    status_bar = LoadingStatusBar()
+
+    assert status_bar.folder_label.full_text == NO_FOLDER_LOADED_TEXT
+    assert status_bar.folder_label.toolTip() == NO_FOLDER_LOADED_TEXT
+
+
+def test_status_bar_folder_label_updates_and_resets_empty_values(qapp):
+    init_qsettings_store(dyn=True)
+    status_bar = LoadingStatusBar()
+
+    status_bar.set_folder_label("trip/shoot")
+    assert status_bar.folder_label.full_text == "trip/shoot"
+    assert status_bar.folder_label.toolTip() == "trip/shoot"
+
+    status_bar.set_folder_label("")
+    assert status_bar.folder_label.full_text == NO_FOLDER_LOADED_TEXT
+
+
 def test_status_bar_side_padding_runtime_setting_is_applied(qapp, monkeypatch):
     monkeypatch.setenv("PIQO_STATUS_BAR_SIDE_PADDING", "16")
     init_qsettings_store(dyn=True)
@@ -46,6 +71,22 @@ def test_status_bar_side_padding_runtime_setting_is_applied(qapp, monkeypatch):
     right_layout = status_bar._right_cluster.layout()
     assert left_layout.contentsMargins().left() == 16
     assert right_layout.contentsMargins().right() == 16
+
+
+def test_status_bar_folder_label_max_width_ratio_is_applied(qapp, monkeypatch):
+    monkeypatch.setenv("PIQO_STATUS_BAR_FOLDER_LABEL_MAX_WIDTH_RATIO", "0.25")
+    init_qsettings_store(dyn=True)
+    window = QMainWindow()
+    window.resize(800, 120)
+    status_bar = LoadingStatusBar()
+    window.setStatusBar(status_bar)
+    status_bar.set_folder_label("/" + "/".join(["very-long-folder-name"] * 20))
+    window.show()
+    qapp.processEvents()
+
+    assert status_bar.folder_label.width() <= int(
+        status_bar.contentsRect().width() * 0.25
+    )
 
 
 def test_status_bar_height_stays_stable_when_progress_or_errors_appear(qapp):
@@ -66,3 +107,29 @@ def test_status_bar_height_stays_stable_when_progress_or_errors_appear(qapp):
     status_bar.set_has_errors(True)
     qapp.processEvents()
     assert status_bar.height() == initial_height
+
+
+def test_status_bar_folder_label_center_stays_stable_when_controls_change(qapp):
+    init_qsettings_store(dyn=True)
+    window = QMainWindow()
+    window.resize(900, 120)
+    status_bar = LoadingStatusBar()
+    window.setStatusBar(status_bar)
+    status_bar.set_folder_label("trip/shoot")
+    status_bar.set_photo_count(10, selected=0)
+    window.show()
+    qapp.processEvents()
+
+    initial_center = _label_center_x(status_bar)
+
+    status_bar.set_photo_count(10000, 999, selected=777)
+    qapp.processEvents()
+    assert _label_center_x(status_bar) == pytest.approx(initial_center, abs=0.5)
+
+    status_bar.set_thumb_progress(1, 10)
+    qapp.processEvents()
+    assert _label_center_x(status_bar) == pytest.approx(initial_center, abs=0.5)
+
+    status_bar.set_has_errors(True)
+    qapp.processEvents()
+    assert _label_center_x(status_bar) == pytest.approx(initial_center, abs=0.5)

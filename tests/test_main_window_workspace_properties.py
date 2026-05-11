@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 import pytest
 
 from piqopiqo.background.media_man import FolderPrimingResult
+from piqopiqo.components.status_bar import NO_FOLDER_LOADED_TEXT
 from piqopiqo.main_window import MainWindow
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.model import ImageItem, MapLinkOption
@@ -234,6 +235,10 @@ def test_favorite_folder_action_updates_visibility_when_setting_changes(window):
     assert action.isVisible() is False
 
 
+def test_status_bar_folder_label_defaults_to_no_folder_loaded(window):
+    assert window.status_bar.folder_label.full_text == NO_FOLDER_LOADED_TEXT
+
+
 def test_open_recent_menu_excludes_current_folder(window, tmp_path):
     current_folder = tmp_path / "current"
     other_a = tmp_path / "other-a"
@@ -281,6 +286,58 @@ def test_open_recent_menu_relabels_when_favorite_folder_changes(window, tmp_path
     window._apply_settings_changes({UserSettingKey.FAVORITE_FOLDER})
 
     assert _submenu_action_texts(window, "File", "Open Recent") == ["trip/shoot"]
+
+
+def test_status_bar_folder_label_relabels_when_favorite_folder_changes(
+    window,
+    tmp_path,
+):
+    favorite_folder = tmp_path / "favorite"
+    recent_folder = favorite_folder / "trip" / "shoot"
+    window.root_folder = str(recent_folder)
+
+    set_user_setting(UserSettingKey.FAVORITE_FOLDER, "")
+    window._update_status_bar_folder_label()
+    assert (
+        window.status_bar.folder_label.full_text
+        == MainWindow._canonicalize_recent_folder_path(str(recent_folder))
+    )
+
+    set_user_setting(UserSettingKey.FAVORITE_FOLDER, str(favorite_folder))
+    window._apply_settings_changes({UserSettingKey.FAVORITE_FOLDER})
+
+    assert window.status_bar.folder_label.full_text == "trip/shoot"
+
+
+def test_status_bar_folder_label_uses_favorite_relative_after_load(
+    window,
+    monkeypatch,
+    tmp_path,
+):
+    favorite_folder = tmp_path / "favorite"
+    loaded_folder = favorite_folder / "trip" / "shoot"
+    loaded_folder.mkdir(parents=True)
+    set_user_setting(UserSettingKey.FAVORITE_FOLDER, str(favorite_folder))
+    monkeypatch.setattr(
+        "piqopiqo.main_window.scan_folder",
+        lambda folder: ([], [folder]),
+    )
+    monkeypatch.setattr(window, "_start_folder_watcher", lambda: None)
+    monkeypatch.setattr(window, "_stop_folder_watcher", lambda: None)
+
+    window._load_folder(str(loaded_folder))
+
+    assert window.status_bar.folder_label.full_text == "trip/shoot"
+
+
+def test_status_bar_folder_label_resets_when_workspace_unloads(window):
+    window.root_folder = "/Volumes/Archive/photos"
+    window._update_status_bar_folder_label()
+    assert window.status_bar.folder_label.full_text == "/Volumes/Archive/photos"
+
+    window._unload_workspace(clear_last_folder=True)
+
+    assert window.status_bar.folder_label.full_text == NO_FOLDER_LOADED_TEXT
 
 
 def test_format_recent_folder_label_prefers_favorite_relative(window, tmp_path):
