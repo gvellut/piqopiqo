@@ -105,9 +105,27 @@ class _FakeParent:
         )
         self.open_settings_calls: list[UserSettingKey] = []
         self._active_flickr_upload_manager = None
+        self.selection_calls: list[dict] = []
 
     def open_settings_for_key(self, key: UserSettingKey) -> None:
         self.open_settings_calls.append(key)
+
+    def select_paths_in_grid(
+        self,
+        paths: list[str],
+        *,
+        anchor_path: str | None = None,
+        reveal_path: str | None = None,
+        clear_filter_for_hidden: bool = False,
+    ) -> None:
+        self.selection_calls.append(
+            {
+                "paths": list(paths),
+                "anchor_path": anchor_path,
+                "reveal_path": reveal_path,
+                "clear_filter_for_hidden": clear_filter_for_hidden,
+            }
+        )
 
 
 def _patch_settings(
@@ -255,6 +273,194 @@ def test_launch_flickr_upload_ignores_lifecycle_label_when_setting_is_off(
     assert launch_calls[0]["label_override_text"] == ""
     assert launch_calls[0]["label_upload_items"] == []
     assert parent.photo_model.sort_calls == []
+
+
+def test_flickr_upload_cancel_selects_visible_missing_metadata_paths(
+    qapp,
+    monkeypatch,
+) -> None:  # noqa: ARG001
+    a = _FakeItem("/a.jpg", {DBFields.TITLE: "A", DBFields.KEYWORDS: "one"})
+    b = _FakeItem("/b.jpg", {DBFields.TITLE: "", DBFields.KEYWORDS: "two"})
+    c = _FakeItem("/c.jpg", {DBFields.TITLE: "C", DBFields.KEYWORDS: ""})
+    parent = _FakeParent(
+        visible_items=[a, b, c],
+        all_items=[a, b, c],
+        db_manager=_FakeDbManager(),
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.get_flickr_token_file_path",
+        lambda: "/tmp/flickr-token.sqlite",
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.token_file_exists",
+        lambda _path: True,
+    )
+
+    class _Preflight:
+        selected_album_text = ""
+        selected_use_label_scope = False
+        selected_action = None
+        scope_checkbox = None
+
+        def __init__(self, **kwargs):
+            assert kwargs["require_metadata"] is True
+
+        def exec(self):
+            return QDialog.DialogCode.Rejected
+
+        def active_metadata_validation_missing_paths(self) -> list[str]:
+            return ["/b.jpg", "/c.jpg"]
+
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.FlickrPreflightDialog",
+        _Preflight,
+    )
+
+    dialogs._launch_flickr_upload_flow(
+        parent,
+        api_key="key",
+        api_secret="secret",
+        use_lifecycle=False,
+        visible_upload_items=dialogs._build_upload_scope_items([a, b, c]),
+        label_upload_items=[],
+        label_override_text="",
+        should_require_metadata=True,
+    )
+
+    assert parent.selection_calls == [
+        {
+            "paths": ["/b.jpg", "/c.jpg"],
+            "anchor_path": "/b.jpg",
+            "reveal_path": "/b.jpg",
+            "clear_filter_for_hidden": True,
+        }
+    ]
+
+
+def test_flickr_upload_cancel_selects_lifecycle_missing_metadata_paths(
+    qapp,
+    monkeypatch,
+) -> None:  # noqa: ARG001
+    visible = _FakeItem(
+        "/visible.jpg",
+        {DBFields.TITLE: "Visible", DBFields.KEYWORDS: "one"},
+    )
+    hidden = _FakeItem("/hidden.jpg", {DBFields.TITLE: "", DBFields.KEYWORDS: "two"})
+    parent = _FakeParent(
+        visible_items=[visible],
+        all_items=[visible, hidden],
+        db_manager=_FakeDbManager(),
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.get_flickr_token_file_path",
+        lambda: "/tmp/flickr-token.sqlite",
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.token_file_exists",
+        lambda _path: True,
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.get_user_setting",
+        lambda _key: [],
+    )
+
+    class _Preflight:
+        selected_album_text = ""
+        selected_use_label_scope = True
+        selected_action = None
+
+        class _ScopeCheckbox:
+            def isEnabled(self) -> bool:
+                return True
+
+        scope_checkbox = _ScopeCheckbox()
+
+        def __init__(self, **kwargs):
+            assert kwargs["label_override_text"] == "Approved"
+
+        def exec(self):
+            return QDialog.DialogCode.Rejected
+
+        def active_metadata_validation_missing_paths(self) -> list[str]:
+            return ["/hidden.jpg", "/visible.jpg"]
+
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.FlickrPreflightDialog",
+        _Preflight,
+    )
+
+    dialogs._launch_flickr_upload_flow(
+        parent,
+        api_key="key",
+        api_secret="secret",
+        use_lifecycle=True,
+        visible_upload_items=dialogs._build_upload_scope_items([visible]),
+        label_upload_items=dialogs._build_upload_scope_items([hidden, visible]),
+        label_override_text="Approved",
+        should_require_metadata=True,
+    )
+
+    assert parent.selection_calls == [
+        {
+            "paths": ["/hidden.jpg", "/visible.jpg"],
+            "anchor_path": "/hidden.jpg",
+            "reveal_path": "/hidden.jpg",
+            "clear_filter_for_hidden": True,
+        }
+    ]
+
+
+def test_flickr_upload_cancel_without_missing_metadata_leaves_grid_unchanged(
+    qapp,
+    monkeypatch,
+) -> None:  # noqa: ARG001
+    item = _FakeItem("/a.jpg", {DBFields.TITLE: "A", DBFields.KEYWORDS: "one"})
+    parent = _FakeParent(
+        visible_items=[item],
+        all_items=[item],
+        db_manager=_FakeDbManager(),
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.get_flickr_token_file_path",
+        lambda: "/tmp/flickr-token.sqlite",
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.token_file_exists",
+        lambda _path: True,
+    )
+
+    class _Preflight:
+        selected_album_text = ""
+        selected_use_label_scope = False
+        selected_action = None
+        scope_checkbox = None
+
+        def __init__(self, **_kwargs):
+            pass
+
+        def exec(self):
+            return QDialog.DialogCode.Rejected
+
+        def active_metadata_validation_missing_paths(self) -> list[str]:
+            return []
+
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.FlickrPreflightDialog",
+        _Preflight,
+    )
+
+    dialogs._launch_flickr_upload_flow(
+        parent,
+        api_key="key",
+        api_secret="secret",
+        use_lifecycle=False,
+        visible_upload_items=dialogs._build_upload_scope_items([item]),
+        label_upload_items=[],
+        label_override_text="",
+        should_require_metadata=True,
+    )
+
+    assert parent.selection_calls == []
 
 
 def test_flickr_upload_flow_uses_all_loaded_photos_for_transition_scope(

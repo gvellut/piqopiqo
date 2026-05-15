@@ -30,7 +30,7 @@ dependencies = [
 piqopiqo = "piqopiqo.__main__:cli"
 
 [tool.uv.sources]
-pyqtauto = { path = "/Users/guilhem/Documents/projects/github/pyqtauto" }
+pyqtauto = { path = "/Users/guilhem/dev/projects/github/pyqtauto" }
 
 # [tool.uv.sources]
 # pyqtauto = { git = "https://github.com/gvellut/pyqtauto.git" }

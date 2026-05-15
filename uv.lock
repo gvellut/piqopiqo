@@ -553,7 +553,7 @@ dev = [
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "taskipy", specifier = ">=1.14.1" },
 ]
-pyqtauto = [{ name = "pyqtauto", directory = "/Users/guilhem/Documents/projects/github/pyqtauto" }]
+pyqtauto = [{ name = "pyqtauto", directory = "/Users/guilhem/dev/projects/github/pyqtauto" }]
 
 [[package]]
 name = "pluggy"
@@ -777,7 +777,7 @@ wheels = [
 [[package]]
 name = "pyqtauto"
 version = "0.1.0"
-source = { directory = "/Users/guilhem/Documents/projects/github/pyqtauto" }
+source = { directory = "/Users/guilhem/dev/projects/github/pyqtauto" }
 dependencies = [
     { name = "click" },
     { name = "pyside6" },

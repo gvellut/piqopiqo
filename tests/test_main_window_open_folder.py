@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox
+import pytest
 
 from piqopiqo.main_window import MainWindow
+
+
+@pytest.fixture
+def qapp(monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+    return app
 
 
 class _FakeMainWindow:
@@ -77,6 +87,75 @@ class _Item:
     def __init__(self, path: str, *, selected: bool = False):
         self.path = path
         self.is_selected = selected
+
+
+class _FakeGridSelection:
+    def __init__(self, items: list[_Item]):
+        self.items_data = list(items)
+        self.select_calls: list[tuple[list[str], str | None]] = []
+        self.ensure_calls: list[tuple[int, bool]] = []
+
+    def select_paths(self, paths, *, anchor_path=None):
+        selected = set(paths)
+        for item in self.items_data:
+            item.is_selected = item.path in selected
+        self.select_calls.append((list(paths), anchor_path))
+
+    def get_index_for_path(self, path: str):
+        for index, item in enumerate(self.items_data):
+            if item.path == path:
+                return index
+        return None
+
+    def _ensure_visible(self, index: int, *, navigation_activity: bool = True) -> None:
+        self.ensure_calls.append((index, navigation_activity))
+
+
+class _FakePhotoModelAll:
+    def __init__(self, all_photos: list[_Item]):
+        self.all_photos = list(all_photos)
+
+
+class _FakeFilterPanelClear:
+    def __init__(self, window):
+        self.window = window
+        self.clear_calls = 0
+
+    def clear_filter(self) -> None:
+        self.clear_calls += 1
+        all_photos = list(self.window.photo_model.all_photos)
+        self.window.images_data = all_photos
+        self.window.grid.items_data = all_photos
+
+
+class _FakeSelectionWindow:
+    def __init__(self, *, visible_items: list[_Item], all_items: list[_Item]):
+        self.images_data = list(visible_items)
+        self.photo_model = _FakePhotoModelAll(all_items)
+        self.grid = _FakeGridSelection(visible_items)
+        self.filter_panel = _FakeFilterPanelClear(self)
+
+    def _selection_paths_include_hidden_loaded_items(self, paths: list[str]) -> bool:
+        return MainWindow._selection_paths_include_hidden_loaded_items(self, paths)
+
+    def _ensure_grid_path_visible(self, path: str | None) -> bool:
+        return MainWindow._ensure_grid_path_visible(self, path)
+
+    def select_paths_in_grid(
+        self,
+        paths: list[str],
+        *,
+        anchor_path: str | None = None,
+        reveal_path: str | None = None,
+        clear_filter_for_hidden: bool = False,
+    ) -> None:
+        MainWindow.select_paths_in_grid(
+            self,
+            paths,
+            anchor_path=anchor_path,
+            reveal_path=reveal_path,
+            clear_filter_for_hidden=clear_filter_for_hidden,
+        )
 
 
 class _FakePhotoModelForModelChange:
@@ -548,6 +627,57 @@ def test_ensure_grid_path_visible_returns_false_for_missing_path():
 
     assert MainWindow._ensure_grid_path_visible(fake_window, "/missing.jpg") is False
     assert fake_window.grid.calls == []
+
+
+def test_select_paths_in_grid_does_not_clear_filter_when_targets_visible(qapp):
+    visible = _Item("/visible.jpg")
+    other_visible = _Item("/other.jpg")
+    fake_window = _FakeSelectionWindow(
+        visible_items=[visible, other_visible],
+        all_items=[visible, other_visible],
+    )
+
+    MainWindow.select_paths_in_grid(
+        fake_window,
+        ["/visible.jpg", "/other.jpg"],
+        anchor_path="/visible.jpg",
+        reveal_path="/visible.jpg",
+        clear_filter_for_hidden=True,
+    )
+    qapp.processEvents()
+
+    assert fake_window.filter_panel.clear_calls == 0
+    assert fake_window.grid.select_calls == [
+        (["/visible.jpg", "/other.jpg"], "/visible.jpg")
+    ]
+    assert fake_window.grid.ensure_calls == [(0, False)]
+
+
+def test_select_paths_in_grid_clears_filter_before_hidden_selection(qapp):
+    visible = _Item("/visible.jpg")
+    hidden = _Item("/hidden.jpg")
+    fake_window = _FakeSelectionWindow(
+        visible_items=[visible],
+        all_items=[visible, hidden],
+    )
+
+    MainWindow.select_paths_in_grid(
+        fake_window,
+        ["/hidden.jpg", "/visible.jpg"],
+        anchor_path="/hidden.jpg",
+        reveal_path="/hidden.jpg",
+        clear_filter_for_hidden=True,
+    )
+
+    assert fake_window.filter_panel.clear_calls == 1
+    assert fake_window.grid.select_calls == []
+
+    qapp.processEvents()
+
+    assert fake_window.grid.select_calls == [
+        (["/hidden.jpg", "/visible.jpg"], "/hidden.jpg")
+    ]
+    assert fake_window.grid.ensure_calls == [(1, False)]
 
 
 def test_grid_viewport_restore_prefers_visible_anchor_and_keeps_row():

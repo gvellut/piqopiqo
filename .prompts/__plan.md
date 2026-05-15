@@ -138,3 +138,4 @@
 ! [Edit in copy should copy all the metadata](Gd_tasks/Id_Edit_in_copy_should_copy_all_the_metadata.md)
 ! [Show loaded folder](Gd_tasks/Kd_Show_loaded_folder.md)
 ! [No total for album check](Gd_tasks/Ld_No_total_for_album_check.md)
+! [Select photos missing fields](Gd_tasks/Md_Select_photos_missing_fields.md)

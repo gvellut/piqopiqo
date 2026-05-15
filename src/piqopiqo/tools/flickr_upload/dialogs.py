@@ -269,6 +269,13 @@ class FlickrPreflightDialog(QDialog):
             return list(self._label_upload_items)
         return list(self._visible_upload_items)
 
+    def active_metadata_validation_missing_paths(self) -> list[str]:
+        if not self._require_metadata:
+            return []
+        return _normalize_missing_paths(
+            self._get_validation_missing_paths(self._get_selected_use_label_scope())
+        )
+
     def _scope_count(self, use_label_scope: bool) -> int:
         return len(self._scope_items(use_label_scope))
 
@@ -1403,6 +1410,31 @@ def _resolve_prefill_album_plan(
     )
 
 
+def _select_missing_metadata_paths_on_cancel(
+    parent: MainWindow,
+    missing_paths: list[str],
+) -> None:
+    normalized_paths = _normalize_missing_paths(missing_paths)
+    if not normalized_paths:
+        return
+
+    loaded_paths = {
+        str(getattr(item, "path", "") or "")
+        for item in getattr(parent.photo_model, "all_photos", [])
+    }
+    target_paths = [path for path in normalized_paths if path in loaded_paths]
+    if not target_paths:
+        return
+
+    anchor_path = target_paths[0]
+    parent.select_paths_in_grid(
+        target_paths,
+        anchor_path=anchor_path,
+        reveal_path=anchor_path,
+        clear_filter_for_hidden=True,
+    )
+
+
 def _launch_flickr_upload_flow(
     parent: MainWindow,
     *,
@@ -1464,6 +1496,10 @@ def _launch_flickr_upload_flow(
             parent=parent,
         )
         if preflight.exec() != QDialog.DialogCode.Accepted:
+            _select_missing_metadata_paths_on_cancel(
+                parent,
+                preflight.active_metadata_validation_missing_paths(),
+            )
             return
 
         session_album_text = preflight.selected_album_text

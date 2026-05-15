@@ -286,6 +286,42 @@ def test_preflight_metadata_warning_and_controls_follow_selected_scope(
     assert dialog.album_input.isEnabled() is True
 
 
+def test_preflight_active_missing_paths_follow_selected_scope(
+    qapp,
+    monkeypatch,
+) -> None:  # noqa: ARG001
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.QThreadPool.globalInstance",
+        lambda: _ImmediateThreadPool(),
+    )
+
+    dialog = FlickrPreflightDialog(
+        visible_upload_items=_scope_items(
+            ("/visible_missing.jpg", {"title": "", "keywords": "one"}),
+            ("/visible_ok.jpg", {"title": "Visible", "keywords": "one"}),
+        ),
+        label_upload_items=_scope_items(
+            ("/label_missing.jpg", {"title": "Label", "keywords": ""}),
+            ("/label_ok.jpg", {"title": "Label", "keywords": "two"}),
+        ),
+        token_exists=True,
+        label_override_text="Approved",
+        require_metadata=True,
+        db_manager=object(),
+    )
+
+    assert dialog.scope_checkbox is not None
+    assert dialog.scope_checkbox.isChecked() is True
+    assert dialog.active_metadata_validation_missing_paths() == [
+        "/label_missing.jpg"
+    ]
+
+    dialog.scope_checkbox.setChecked(False)
+    assert dialog.active_metadata_validation_missing_paths() == [
+        "/visible_missing.jpg"
+    ]
+
+
 def test_preflight_disables_upload_while_metadata_validation_is_pending(
     qapp,
     monkeypatch,

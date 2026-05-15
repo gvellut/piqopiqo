@@ -1848,13 +1848,42 @@ class MainWindow(QMainWindow):
     def _restore_grid_viewport_after_filter_change(self, snapshot: dict) -> None:
         self._restore_grid_viewport_from_snapshot(snapshot)
 
+    def _selection_paths_include_hidden_loaded_items(self, paths: list[str]) -> bool:
+        if not paths:
+            return False
+
+        visible_paths = {item.path for item in self.images_data}
+        loaded_paths = {item.path for item in self.photo_model.all_photos}
+        return any(path in loaded_paths and path not in visible_paths for path in paths)
+
     def select_paths_in_grid(
         self,
         paths: list[str],
         *,
         anchor_path: str | None = None,
         reveal_path: str | None = None,
+        clear_filter_for_hidden: bool = False,
     ) -> None:
+        if clear_filter_for_hidden:
+            has_hidden_loaded_items = self._selection_paths_include_hidden_loaded_items(
+                paths
+            )
+            if has_hidden_loaded_items:
+                self.filter_panel.clear_filter()
+                deferred_paths = list(paths)
+                deferred_anchor_path = anchor_path
+                deferred_reveal_path = reveal_path
+
+                def _select_after_filter_clear() -> None:
+                    self.select_paths_in_grid(
+                        deferred_paths,
+                        anchor_path=deferred_anchor_path,
+                        reveal_path=deferred_reveal_path,
+                    )
+
+                QTimer.singleShot(0, _select_after_filter_clear)
+                return
+
         if not self.images_data:
             self.grid.select_paths([], anchor_path=None)
             return
