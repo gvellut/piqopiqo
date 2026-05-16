@@ -1,0 +1,1 @@
+on a very large screen : the indicator NO_FOLDER_LOADED_TEXT has ellipsis. The name of hte folder does not even though it is bigger length. Find out why and correct.

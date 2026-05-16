@@ -139,3 +139,4 @@
 ! [Show loaded folder](Gd_tasks/Kd_Show_loaded_folder.md)
 ! [No total for album check](Gd_tasks/Ld_No_total_for_album_check.md)
 ! [Select photos missing fields](Gd_tasks/Md_Select_photos_missing_fields.md)
+! [NO_FOLDER_LOADED_TEXT ellipsis](Gd_tasks/Nd_NO_FOLDER_LOADED_TEXT_ellipsis.md)

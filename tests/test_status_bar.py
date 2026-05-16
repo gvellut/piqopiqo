@@ -31,6 +31,21 @@ def _label_center_x(status_bar: LoadingStatusBar) -> float:
     return rect.x() + rect.width() / 2
 
 
+def _show_status_bar(
+    qapp: QApplication,
+    status_bar: LoadingStatusBar,
+    *,
+    width: int = 1600,
+) -> QMainWindow:
+    window = QMainWindow()
+    window.resize(width, 120)
+    window.setStatusBar(status_bar)
+    window.show()
+    qapp.processEvents()
+    qapp.processEvents()
+    return window
+
+
 def test_photo_count_format_includes_selected_for_filtered_and_unfiltered(qapp):
     init_qsettings_store(dyn=True)
     status_bar = LoadingStatusBar()
@@ -60,6 +75,39 @@ def test_status_bar_folder_label_updates_and_resets_empty_values(qapp):
 
     status_bar.set_folder_label("")
     assert status_bar.folder_label.full_text == NO_FOLDER_LOADED_TEXT
+
+
+def test_status_bar_folder_label_wide_default_text_is_not_elided(qapp):
+    init_qsettings_store(dyn=True)
+    status_bar = LoadingStatusBar()
+    window = _show_status_bar(qapp, status_bar)
+
+    assert window.isVisible()
+    assert status_bar.folder_label.text() == NO_FOLDER_LOADED_TEXT
+
+
+def test_status_bar_folder_label_wide_folder_name_is_not_elided(qapp):
+    init_qsettings_store(dyn=True)
+    status_bar = LoadingStatusBar()
+    status_bar.set_folder_label("20260509_miribel")
+    window = _show_status_bar(qapp, status_bar)
+
+    assert window.isVisible()
+    assert status_bar.folder_label.text() == "20260509_miribel"
+
+
+def test_status_bar_folder_label_still_elides_when_constrained(qapp, monkeypatch):
+    monkeypatch.setenv("PIQO_STATUS_BAR_FOLDER_LABEL_MAX_WIDTH_RATIO", "0.1")
+    init_qsettings_store(dyn=True)
+    status_bar = LoadingStatusBar()
+    long_folder = "/" + "/".join(["very-long-folder-name"] * 20)
+    status_bar.set_folder_label(long_folder)
+    window = _show_status_bar(qapp, status_bar, width=800)
+
+    assert window.isVisible()
+    assert status_bar.folder_label.full_text == long_folder
+    assert status_bar.folder_label.text().endswith("\u2026")
+    assert status_bar.folder_label.text() != long_folder
 
 
 def test_status_bar_side_padding_runtime_setting_is_applied(qapp, monkeypatch):

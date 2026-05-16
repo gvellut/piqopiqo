@@ -233,7 +233,10 @@ class LoadingStatusBar(QStatusBar):
             2 * min(center_x - left_limit, right_limit - center_x),
         )
         metrics = self.folder_label.fontMetrics()
-        text_width = metrics.horizontalAdvance(self.folder_label.full_text)
+        text_width = metrics.size(
+            Qt.TextFlag.TextSingleLine,
+            self.folder_label.full_text,
+        ).width()
         label_width = max(0, min(text_width, max_ratio_width, centered_available))
         label_height = min(self.folder_label.sizeHint().height(), status_rect.height())
         label_x = center_x - label_width // 2
