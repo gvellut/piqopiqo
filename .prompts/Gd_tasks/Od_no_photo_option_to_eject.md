@@ -1,0 +1,1 @@
+Copy from SD tool: When no photo is found, add a checkbox to eject. Presentation + principle similar to when a copy is finished. Also do the same workflow.

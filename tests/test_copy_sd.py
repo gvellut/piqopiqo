@@ -233,6 +233,23 @@ def test_copy_no_images_result_shows_eject_checkbox(qapp):  # noqa: ARG001
     )
 
 
+def test_copy_no_images_result_uses_custom_message(qapp):  # noqa: ARG001
+    dialog = CopySdProgressDialog(
+        volume=PhotoVolume("CARD", "/Volumes/CARD"),
+        dates=[],
+        target_dirs=[],
+        should_eject=True,
+        no_images_message="No new photo found since last copied date 2026-02-01.",
+    )
+
+    dialog._on_finished(0, 0, False, 0)
+
+    assert (
+        dialog.status_label.text()
+        == "No new photo found since last copied date 2026-02-01."
+    )
+
+
 def test_copy_eject_success_shows_safe_remove_screen(qapp, monkeypatch):  # noqa: ARG001
     monkeypatch.setattr(
         CopySdProgressDialog, "_start_eject_thread", lambda _dialog: None
@@ -418,6 +435,104 @@ class _WatcherControlSpy:
 
     def resume_and_refresh(self) -> None:
         self.resume_calls += 1
+
+
+def test_launch_copy_sd_empty_resolved_dates_uses_result_eject_dialog(
+    monkeypatch, tmp_path
+):
+    output_root = tmp_path / "exports"
+    output_root.mkdir()
+    state = _FakeState()
+    state.values[StateKey.COPY_SD_EJECT] = True
+    volume = PhotoVolume("CARD", "/Volumes/CARD")
+    parent = SimpleNamespace()
+    captured: dict[str, object] = {}
+    information_calls: list[tuple[object, ...]] = []
+    confirm_calls: list[tuple[object, ...]] = []
+
+    class _FakeInputDialog:
+        def __init__(self, *args, **kwargs) -> None:  # noqa: ARG002
+            return None
+
+        def exec(self) -> int:
+            return QDialog.DialogCode.Accepted
+
+        def get_values(self):
+            return ("annecy", "since:last")
+
+    class _FakeProgressDialog:
+        def __init__(
+            self,
+            volume,
+            dates,
+            target_dirs,
+            should_eject,
+            parent=None,
+            no_images_message=None,
+        ) -> None:
+            captured["volume"] = volume
+            captured["dates"] = list(dates)
+            captured["target_dirs"] = list(target_dirs)
+            captured["should_eject"] = should_eject
+            captured["parent"] = parent
+            captured["no_images_message"] = no_images_message
+            self.eject_requested = False
+
+        def exec(self) -> int:
+            captured["exec_called"] = True
+            return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(
+        "piqopiqo.tools.copy_sd.get_sd_volume",
+        lambda: volume,
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.copy_sd.get_user_setting",
+        lambda key: [] if key == UserSettingKey.SDCARD_NAMES else str(output_root),
+    )
+    monkeypatch.setattr("piqopiqo.tools.copy_sd.get_state", lambda: state)
+    monkeypatch.setattr(
+        "piqopiqo.tools.copy_sd.CopySdInputDialog",
+        _FakeInputDialog,
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.copy_sd._resolve_dates_with_progress",
+        lambda *_args, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.copy_sd._get_since_last_copied_date_label",
+        lambda _volume: "2026-02-01",
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.copy_sd._confirm_copy",
+        lambda *args, **_kwargs: confirm_calls.append(args) or True,
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.copy_sd.CopySdProgressDialog",
+        _FakeProgressDialog,
+    )
+    monkeypatch.setattr(
+        QMessageBox,
+        "information",
+        lambda *args, **_kwargs: information_calls.append(args),
+    )
+
+    launch_copy_sd(parent)
+
+    assert captured == {
+        "volume": volume,
+        "dates": [],
+        "target_dirs": [],
+        "should_eject": True,
+        "parent": parent,
+        "no_images_message": "No new photo found since last copied date 2026-02-01.",
+        "exec_called": True,
+    }
+    assert information_calls == []
+    assert confirm_calls == []
+    assert state.values[StateKey.COPY_SD_NAME_SUFFIX] == "annecy"
+    assert state.values[StateKey.COPY_SD_DATE_SPEC] == "since:last"
+    assert state.values[StateKey.COPY_SD_EJECT] is False
 
 
 def test_launch_copy_sd_suspends_and_resumes_watcher_control(monkeypatch, tmp_path):

@@ -677,6 +677,7 @@ class CopySdProgressDialog(ToolFlowDialog):
         target_dirs: list[str],
         should_eject: bool,
         parent=None,
+        no_images_message: str | None = None,
     ):
         self._volume = volume
         self._worker = CopySdWorker(volume, dates, target_dirs)
@@ -689,6 +690,9 @@ class CopySdProgressDialog(ToolFlowDialog):
         self._eject_error_message = ""
         self._ignore_eject_result = False
         self._eject_thread: threading.Thread | None = None
+        self._no_images_message = (
+            no_images_message or "No images found for the selected date(s)."
+        )
         self.status_warning_icon_label: QLabel | None = None
         self.eject_checkbox: QCheckBox | None = None
 
@@ -905,7 +909,7 @@ class CopySdProgressDialog(ToolFlowDialog):
         self._was_cancelled = bool(cancelled)
         self.transition_to("result")
         if total == 0:
-            status = "No images found for the selected date(s)."
+            status = self._no_images_message
             self._set_status_warning_icon_visible(True)
         elif cancelled:
             status = f"Copy cancelled ({copied}/{total} file(s) copied)."
@@ -1176,12 +1180,19 @@ def launch_copy_sd(
 
         dates = result
         if not dates:
-            QMessageBox.information(
-                parent,
-                "Copy from SD",
-                _build_no_images_message(date_spec, volume),
+            progress_dialog = CopySdProgressDialog(
+                volume,
+                [],
+                [],
+                should_eject=state.get(StateKey.COPY_SD_EJECT),
+                parent=parent,
+                no_images_message=_build_no_images_message(date_spec, volume),
             )
-            continue
+            progress_dialog.exec()
+            state.set(StateKey.COPY_SD_NAME_SUFFIX, name)
+            state.set(StateKey.COPY_SD_DATE_SPEC, date_spec)
+            state.set(StateKey.COPY_SD_EJECT, progress_dialog.eject_requested)
+            return
 
         if not isinstance(dates, list):
             dates = [dates]
