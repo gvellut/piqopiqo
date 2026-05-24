@@ -141,3 +141,4 @@
 ! [Select photos missing fields](Gd_tasks/Md_Select_photos_missing_fields.md)
 ! [NO_FOLDER_LOADED_TEXT ellipsis](Gd_tasks/Nd_NO_FOLDER_LOADED_TEXT_ellipsis.md)
 ! [no photo option to eject](Gd_tasks/Od_no_photo_option_to_eject.md)
+! [Select lifecyle label](Gd_tasks/Pd_Select_lifecyle_label.md)

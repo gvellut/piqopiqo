@@ -120,9 +120,11 @@ class _FakeFilterPanelClear:
     def __init__(self, window):
         self.window = window
         self.clear_calls = 0
+        self.clear_label_calls: list[str | None] = []
 
-    def clear_filter(self) -> None:
+    def clear_filter(self, *, label_name: str | None = None) -> None:
         self.clear_calls += 1
+        self.clear_label_calls.append(label_name)
         all_photos = list(self.window.photo_model.all_photos)
         self.window.images_data = all_photos
         self.window.grid.items_data = all_photos
@@ -148,6 +150,7 @@ class _FakeSelectionWindow:
         anchor_path: str | None = None,
         reveal_path: str | None = None,
         clear_filter_for_hidden: bool = False,
+        label_filter_after_clear: str | None = None,
     ) -> None:
         MainWindow.select_paths_in_grid(
             self,
@@ -155,6 +158,7 @@ class _FakeSelectionWindow:
             anchor_path=anchor_path,
             reveal_path=reveal_path,
             clear_filter_for_hidden=clear_filter_for_hidden,
+            label_filter_after_clear=label_filter_after_clear,
         )
 
 
@@ -677,6 +681,33 @@ def test_select_paths_in_grid_clears_filter_before_hidden_selection(qapp):
     assert fake_window.grid.select_calls == [
         (["/hidden.jpg", "/visible.jpg"], "/hidden.jpg")
     ]
+    assert fake_window.grid.ensure_calls == [(1, False)]
+
+
+def test_select_paths_in_grid_clears_to_label_before_hidden_selection(qapp):
+    visible = _Item("/visible.jpg")
+    hidden = _Item("/hidden.jpg")
+    fake_window = _FakeSelectionWindow(
+        visible_items=[visible],
+        all_items=[visible, hidden],
+    )
+
+    MainWindow.select_paths_in_grid(
+        fake_window,
+        ["/hidden.jpg"],
+        anchor_path="/hidden.jpg",
+        reveal_path="/hidden.jpg",
+        clear_filter_for_hidden=True,
+        label_filter_after_clear="Approved",
+    )
+
+    assert fake_window.filter_panel.clear_calls == 1
+    assert fake_window.filter_panel.clear_label_calls == ["Approved"]
+    assert fake_window.grid.select_calls == []
+
+    qapp.processEvents()
+
+    assert fake_window.grid.select_calls == [(["/hidden.jpg"], "/hidden.jpg")]
     assert fake_window.grid.ensure_calls == [(1, False)]
 
 

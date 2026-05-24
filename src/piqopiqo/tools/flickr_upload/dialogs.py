@@ -1413,6 +1413,8 @@ def _resolve_prefill_album_plan(
 def _select_missing_metadata_paths_on_cancel(
     parent: MainWindow,
     missing_paths: list[str],
+    *,
+    label_filter_after_clear: str | None = None,
 ) -> None:
     normalized_paths = _normalize_missing_paths(missing_paths)
     if not normalized_paths:
@@ -1432,7 +1434,15 @@ def _select_missing_metadata_paths_on_cancel(
         anchor_path=anchor_path,
         reveal_path=anchor_path,
         clear_filter_for_hidden=True,
+        label_filter_after_clear=label_filter_after_clear,
     )
+
+
+def _preflight_has_active_label_scope(preflight: FlickrPreflightDialog) -> bool:
+    get_selected_scope = getattr(preflight, "_get_selected_use_label_scope", None)
+    if callable(get_selected_scope):
+        return bool(get_selected_scope())
+    return bool(getattr(preflight, "selected_use_label_scope", False))
 
 
 def _launch_flickr_upload_flow(
@@ -1496,9 +1506,17 @@ def _launch_flickr_upload_flow(
             parent=parent,
         )
         if preflight.exec() != QDialog.DialogCode.Accepted:
+            label_filter_after_clear = None
+            if (
+                use_lifecycle
+                and label_override_text
+                and _preflight_has_active_label_scope(preflight)
+            ):
+                label_filter_after_clear = label_override_text
             _select_missing_metadata_paths_on_cancel(
                 parent,
                 preflight.active_metadata_validation_missing_paths(),
+                label_filter_after_clear=label_filter_after_clear,
             )
             return
 

@@ -337,8 +337,8 @@ class FilterPanel(ScrollableStrip):
         self._emit_filter()
         self.interaction_finished.emit()
 
-    def _on_clear_filter(self):
-        """Reset all filters to default state."""
+    def _on_clear_filter(self, *, label_name: str | None = None):
+        """Reset filters, optionally keeping a single status label active."""
         self._updating = True
 
         # Reset folder to "All folders"
@@ -347,8 +347,14 @@ class FilterPanel(ScrollableStrip):
         # Uncheck all label checkboxes
         if self._no_label_checkbox:
             self._no_label_checkbox.setChecked(False)
+        active_label_name = str(label_name or "").strip()
+        active_label_checkbox = (
+            self._label_checkboxes.get(active_label_name)
+            if active_label_name
+            else None
+        )
         for checkbox in self._label_checkboxes.values():
-            checkbox.setChecked(False)
+            checkbox.setChecked(checkbox is active_label_checkbox)
 
         # Clear search field
         self.search_field.clear()
@@ -395,9 +401,9 @@ class FilterPanel(ScrollableStrip):
             search_text=search_text,
         )
 
-    def clear_filter(self):
-        """Clear all filters (called externally)."""
-        self._on_clear_filter()
+    def clear_filter(self, *, label_name: str | None = None):
+        """Clear all filters, optionally leaving one label filter active."""
+        self._on_clear_filter(label_name=label_name)
 
     def toggle_label_filter(self, label_name: str | None) -> bool:
         """Toggle the target label filter checkbox."""

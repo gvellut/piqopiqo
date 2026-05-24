@@ -1863,13 +1863,14 @@ class MainWindow(QMainWindow):
         anchor_path: str | None = None,
         reveal_path: str | None = None,
         clear_filter_for_hidden: bool = False,
+        label_filter_after_clear: str | None = None,
     ) -> None:
         if clear_filter_for_hidden:
             has_hidden_loaded_items = self._selection_paths_include_hidden_loaded_items(
                 paths
             )
             if has_hidden_loaded_items:
-                self.filter_panel.clear_filter()
+                self.filter_panel.clear_filter(label_name=label_filter_after_clear)
                 deferred_paths = list(paths)
                 deferred_anchor_path = anchor_path
                 deferred_reveal_path = reveal_path

@@ -23,6 +23,7 @@ def qapp(monkeypatch):
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
+    init_qsettings_store(dyn=True)
     return app
 
 
@@ -117,15 +118,17 @@ class _FakeParent:
         anchor_path: str | None = None,
         reveal_path: str | None = None,
         clear_filter_for_hidden: bool = False,
+        label_filter_after_clear: str | None = None,
     ) -> None:
-        self.selection_calls.append(
-            {
-                "paths": list(paths),
-                "anchor_path": anchor_path,
-                "reveal_path": reveal_path,
-                "clear_filter_for_hidden": clear_filter_for_hidden,
-            }
-        )
+        call = {
+            "paths": list(paths),
+            "anchor_path": anchor_path,
+            "reveal_path": reveal_path,
+            "clear_filter_for_hidden": clear_filter_for_hidden,
+        }
+        if label_filter_after_clear is not None:
+            call["label_filter_after_clear"] = label_filter_after_clear
+        self.selection_calls.append(call)
 
 
 def _patch_settings(
@@ -403,6 +406,80 @@ def test_flickr_upload_cancel_selects_lifecycle_missing_metadata_paths(
     assert parent.selection_calls == [
         {
             "paths": ["/hidden.jpg", "/visible.jpg"],
+            "anchor_path": "/hidden.jpg",
+            "reveal_path": "/hidden.jpg",
+            "clear_filter_for_hidden": True,
+            "label_filter_after_clear": "Approved",
+        }
+    ]
+
+
+def test_flickr_upload_cancel_lifecycle_unchecked_uses_plain_missing_selection(
+    qapp,
+    monkeypatch,
+) -> None:  # noqa: ARG001
+    visible = _FakeItem(
+        "/visible.jpg",
+        {DBFields.TITLE: "Visible", DBFields.KEYWORDS: "one"},
+    )
+    hidden = _FakeItem("/hidden.jpg", {DBFields.TITLE: "", DBFields.KEYWORDS: "two"})
+    parent = _FakeParent(
+        visible_items=[visible],
+        all_items=[visible, hidden],
+        db_manager=_FakeDbManager(),
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.get_flickr_token_file_path",
+        lambda: "/tmp/flickr-token.sqlite",
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.token_file_exists",
+        lambda _path: True,
+    )
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.get_user_setting",
+        lambda _key: [],
+    )
+
+    class _Preflight:
+        selected_album_text = ""
+        selected_use_label_scope = False
+        selected_action = None
+
+        class _ScopeCheckbox:
+            def isEnabled(self) -> bool:
+                return True
+
+        scope_checkbox = _ScopeCheckbox()
+
+        def __init__(self, **kwargs):
+            assert kwargs["label_override_text"] == "Approved"
+
+        def exec(self):
+            return QDialog.DialogCode.Rejected
+
+        def active_metadata_validation_missing_paths(self) -> list[str]:
+            return ["/hidden.jpg"]
+
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_upload.dialogs.FlickrPreflightDialog",
+        _Preflight,
+    )
+
+    dialogs._launch_flickr_upload_flow(
+        parent,
+        api_key="key",
+        api_secret="secret",
+        use_lifecycle=True,
+        visible_upload_items=dialogs._build_upload_scope_items([visible]),
+        label_upload_items=dialogs._build_upload_scope_items([hidden]),
+        label_override_text="Approved",
+        should_require_metadata=True,
+    )
+
+    assert parent.selection_calls == [
+        {
+            "paths": ["/hidden.jpg"],
             "anchor_path": "/hidden.jpg",
             "reveal_path": "/hidden.jpg",
             "clear_filter_for_hidden": True,

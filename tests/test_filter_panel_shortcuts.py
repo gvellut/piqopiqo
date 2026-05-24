@@ -142,3 +142,61 @@ def test_search_clear_button_clears_only_search_and_applies(qapp):
     assert emitted.labels == {label_name}
     assert emitted.search_text == ""
     assert finished == [True]
+
+
+def test_clear_filter_can_leave_single_label_active(qapp):
+    init_qsettings_store(dyn=True)
+    panel = FilterPanel()
+    folders = ["/photos/a", "/photos/b"]
+    panel.set_folders(folders)
+
+    status_labels = get_user_setting(UserSettingKey.STATUS_LABELS)
+    active_label = status_labels[0].name
+    other_label = status_labels[1].name
+    panel.folder_combo.setCurrentIndex(1)
+    assert panel.toggle_label_filter(other_label) is True
+    assert panel.toggle_label_filter(None) is True
+    panel.search_field.setText("sunset")
+
+    emitted_filters = []
+    finished = []
+    panel.filter_changed.connect(emitted_filters.append)
+    panel.interaction_finished.connect(lambda: finished.append(True))
+
+    panel.clear_filter(label_name=active_label)
+    qapp.processEvents()
+
+    criteria = panel.get_current_filter()
+    assert criteria.folder is None
+    assert criteria.labels == {active_label}
+    assert criteria.include_no_label is False
+    assert criteria.search_text == ""
+    assert panel._label_checkboxes[active_label].isChecked() is True
+    assert panel._label_checkboxes[other_label].isChecked() is False
+
+    assert len(emitted_filters) == 1
+    assert emitted_filters[0].labels == {active_label}
+    assert emitted_filters[0].search_text == ""
+    assert finished == [True]
+
+
+def test_clear_filter_with_unknown_label_falls_back_to_full_clear(qapp):
+    init_qsettings_store(dyn=True)
+    panel = FilterPanel()
+    folders = ["/photos/a", "/photos/b"]
+    panel.set_folders(folders)
+
+    label_name = get_user_setting(UserSettingKey.STATUS_LABELS)[0].name
+    panel.folder_combo.setCurrentIndex(1)
+    assert panel.toggle_label_filter(label_name) is True
+    assert panel.toggle_label_filter(None) is True
+    panel.search_field.setText("sunset")
+
+    panel.clear_filter(label_name="does-not-exist")
+    qapp.processEvents()
+
+    criteria = panel.get_current_filter()
+    assert criteria.folder is None
+    assert criteria.labels == set()
+    assert criteria.include_no_label is False
+    assert criteria.search_text == ""
