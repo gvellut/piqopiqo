@@ -1,0 +1,1 @@
+In the Copy from SD tool dialog : if using since:last in date spec, the dialog that displays the dates to copy appears after. Instead of putting the dates with a - bullet point in the normal dialog text, put the dates without the - inside QTextEdit (read only) visually distinct from the rest of the dialog

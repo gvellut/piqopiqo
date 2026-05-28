@@ -1,6 +1,7 @@
+- [change tool workflow](Gd_tasks/Rd_change_tool_workflow.md)
+* [Copy from SD display dates](Gd_tasks/Qd_Copy_from_SD_display_dates.md)
 - [Move to trash add confirmation](Gd_tasks/Jd_Move_to_trash_add_confirmation.md)
 - [Flickr max workers diff for upload and set date public](Yb_tasks/Cc_Flickr_max_workers_diff_for_upload_and_set_date_.md)
-- [Copy SD display the list of dates in multiline text field](Kc_tasks/Pc_Copy_SD_display_the_list_of_dates_in_multiline_t.md)
 - [Make copy sd and flickr not modal](Kc_tasks/Qc_Make_copy_sd_and_flickr_not_modal.md)
 - [Apply recommend refactor](Vc_tasks/Vc_Apply_recommend_refactor.md)
 - [Stacks](Vc_tasks/Wc_Stacks.md)

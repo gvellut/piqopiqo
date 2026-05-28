@@ -1,0 +1,5 @@
+
+Correct ToolWorkflow > ToolSCreeen : should be easy to go to the dialog definition : currently it is terrible : generic _build_body : not even possible to see where it is defined (in VSCode : the reference does not work) and impossible to see the definition: build=lambda dialog: dialog._build_body(), => change so the _build_body is unambiguous and a click goes to the correct definition instead of having to search (which is horrible ux since multiple functions called build_body)
+Change everywhere
+Also the workflow definition should include all dialogs and transition. Currently mix of 2 things : the dialogs themselves ouside the workflow + the updates of the dialogs inside the workflow. A tool should have a workflow definition at the top level and well defined location inside a tool that includes everything : I should be able to look at it and see everything that happens.
+Move all the tools into their own modules : put the workflow of every tool at a well-known and easily accessible location (not having to search inside some other class where it is).

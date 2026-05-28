@@ -16,6 +16,7 @@ from typing import Any
 
 from attrs import define
 from PySide6.QtCore import QObject, QThreadPool, Signal
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -27,6 +28,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QStyle,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -34,8 +36,8 @@ from PySide6.QtWidgets import (
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
-from piqopiqo.qt_workers import PythonOwnedRunnable
 from piqopiqo.folder_watcher import WorkspaceWatcherController
+from piqopiqo.qt_workers import PythonOwnedRunnable
 from piqopiqo.ssf.settings_state import (
     RuntimeSettingKey,
     StateKey,
@@ -1012,25 +1014,67 @@ class CopySdProgressDialog(ToolFlowDialog):
         super().closeEvent(event)
 
 
+class _CopySdConfirmDialog(QDialog):
+    def __init__(
+        self,
+        parent,
+        volume: PhotoVolume,
+        dates: list,
+        base_name: str,
+    ):
+        super().__init__(parent)
+        self.setWindowTitle("Copy from SD")
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+
+        summary_label = QLabel(
+            f"The images will be copied from: {volume.name} to <date>_{base_name}.",
+            self,
+        )
+        summary_label.setWordWrap(True)
+        layout.addWidget(summary_label)
+
+        layout.addWidget(QLabel("Dates:", self))
+
+        self.dates_text = QTextEdit(self)
+        self.dates_text.setObjectName("copySdConfirmDatesText")
+        self.dates_text.setReadOnly(True)
+        self.dates_text.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        self.dates_text.setPlainText("\n".join(date_to_str(d) for d in dates))
+        palette = self.dates_text.palette()
+        palette.setColor(
+            QPalette.ColorRole.Base,
+            palette.color(QPalette.ColorRole.AlternateBase),
+        )
+        self.dates_text.setPalette(palette)
+        visible_lines = min(max(len(dates), 2), 8)
+        text_height = self.dates_text.fontMetrics().lineSpacing() * visible_lines
+        frame_height = self.dates_text.frameWidth() * 2
+        self.dates_text.setFixedHeight(text_height + frame_height + 16)
+        layout.addWidget(self.dates_text)
+
+        confirm_label = QLabel("Confirm?", self)
+        confirm_label.setWordWrap(True)
+        layout.addWidget(confirm_label)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            self,
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+
 def _confirm_copy(
     parent,
     volume: PhotoVolume,
     dates: list,
     base_name: str,
 ):
-    text_date = "- " + "\n- ".join([date_to_str(d) for d in dates])
-    confirm_text = (
-        f"The images will be copied from : {volume.name} to <date>_{base_name}. "
-        f"Dates:\n{text_date}\n"
-        "Confirm?"
-    )
-    result = QMessageBox.question(
-        parent,
-        "Copy from SD",
-        confirm_text,
-        QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
-    )
-    return result == QMessageBox.StandardButton.Ok
+    dialog = _CopySdConfirmDialog(parent, volume, dates, base_name)
+    return dialog.exec() == QDialog.DialogCode.Accepted
 
 
 class _ResolveDatesSignals(QObject):
