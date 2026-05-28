@@ -827,9 +827,7 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.MIN_IDLE_WORKERS: SettingDef(default=1, read_type=int),
     RuntimeSettingKey.MAX_EXIFTOOLS_IMAGE_BATCH: SettingDef(default=8, read_type=int),
     RuntimeSettingKey.SHUTDOWN_TIMEOUT_S: SettingDef(default=5.0, read_type=float),
-    RuntimeSettingKey.COPY_SD_EJECT_TIMEOUT_S: SettingDef(
-        default=5.0, read_type=float
-    ),
+    RuntimeSettingKey.COPY_SD_EJECT_TIMEOUT_S: SettingDef(default=5.0, read_type=float),
     RuntimeSettingKey.PADDING: SettingDef(default=10, read_type=int),
     RuntimeSettingKey.FONT_SIZE: SettingDef(default=12, read_type=int),
     RuntimeSettingKey.GRID_ITEM_TEXT_FIELDS_TOP_PADDING: SettingDef(

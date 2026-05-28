@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QApplication
 import pytest
 
 import piqopiqo.background.media_man as media_man
-from piqopiqo.background.media_man import _FileInfo, MediaManager
+from piqopiqo.background.media_man import MediaManager, _FileInfo
 from piqopiqo.cache_paths import set_cache_base_dir
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBManager
@@ -60,9 +60,7 @@ def _register_file(manager: MediaManager, image_path: str, thumb_dir: str) -> No
     )
 
 
-def test_refresh_files_retries_editable_metadata_when_db_row_missing(
-    manager, tmp_path
-):
+def test_refresh_files_retries_editable_metadata_when_db_row_missing(manager, tmp_path):
     image_path = str(tmp_path / "a.jpg")
     thumb_dir = str(tmp_path / "thumbs")
     _register_file(manager, image_path, thumb_dir)
@@ -130,17 +128,15 @@ def test_empty_automatic_editable_result_does_not_update_db(manager, tmp_path):
     thumb_dir = str(tmp_path / "thumbs")
     _register_file(manager, image_path, thumb_dir)
 
-    manager._handle_combined_result(
-        {
-            "items": [
-                {
-                    "file_path": image_path,
-                    "editable_metadata": {DBFields.ORIENTATION: 1},
-                    "allow_empty_editable": False,
-                }
-            ]
-        }
-    )
+    manager._handle_combined_result({
+        "items": [
+            {
+                "file_path": image_path,
+                "editable_metadata": {DBFields.ORIENTATION: 1},
+                "allow_empty_editable": False,
+            }
+        ]
+    })
 
     db = manager._db_manager.get_db_for_folder(str(tmp_path))
     assert db.get_metadata(image_path) is None
@@ -152,20 +148,18 @@ def test_non_empty_automatic_editable_result_updates_db(manager, tmp_path):
     _register_file(manager, image_path, thumb_dir)
     time_taken = datetime(2026, 1, 1, 10, 0, 0)
 
-    manager._handle_combined_result(
-        {
-            "items": [
-                {
-                    "file_path": image_path,
-                    "editable_metadata": {
-                        DBFields.TIME_TAKEN: time_taken,
-                        DBFields.ORIENTATION: 1,
-                    },
-                    "allow_empty_editable": False,
-                }
-            ]
-        }
-    )
+    manager._handle_combined_result({
+        "items": [
+            {
+                "file_path": image_path,
+                "editable_metadata": {
+                    DBFields.TIME_TAKEN: time_taken,
+                    DBFields.ORIENTATION: 1,
+                },
+                "allow_empty_editable": False,
+            }
+        ]
+    })
 
     db = manager._db_manager.get_db_for_folder(str(tmp_path))
     metadata = db.get_metadata(image_path)
@@ -173,24 +167,20 @@ def test_non_empty_automatic_editable_result_updates_db(manager, tmp_path):
     assert metadata[DBFields.TIME_TAKEN] == time_taken
 
 
-def test_explicit_reload_can_update_db_with_empty_editable_result(
-    manager, tmp_path
-):
+def test_explicit_reload_can_update_db_with_empty_editable_result(manager, tmp_path):
     image_path = str(tmp_path / "a.jpg")
     thumb_dir = str(tmp_path / "thumbs")
     _register_file(manager, image_path, thumb_dir)
 
-    manager._handle_combined_result(
-        {
-            "items": [
-                {
-                    "file_path": image_path,
-                    "editable_metadata": {DBFields.ORIENTATION: 1},
-                    "allow_empty_editable": True,
-                }
-            ]
-        }
-    )
+    manager._handle_combined_result({
+        "items": [
+            {
+                "file_path": image_path,
+                "editable_metadata": {DBFields.ORIENTATION: 1},
+                "allow_empty_editable": True,
+            }
+        ]
+    })
 
     db = manager._db_manager.get_db_for_folder(str(tmp_path))
     metadata = db.get_metadata(image_path)
@@ -213,23 +203,21 @@ def test_combined_error_schedules_retry_without_saving_empty_metadata(
         lambda _delay_ms, callback: retry_callbacks.append(callback),
     )
 
-    manager._handle_combined_result(
-        {
-            "items": [
-                {
-                    "file_path": image_path,
-                    "want_embedded": True,
-                    "want_editable": True,
-                    "want_panel": True,
-                    "editable_metadata": {DBFields.ORIENTATION: 1},
-                    "allow_empty_editable": False,
-                    "panel_fields": {"File:FileName": None},
-                    "retry_count": 0,
-                    "error": "exiftool status 1",
-                }
-            ]
-        }
-    )
+    manager._handle_combined_result({
+        "items": [
+            {
+                "file_path": image_path,
+                "want_embedded": True,
+                "want_editable": True,
+                "want_panel": True,
+                "editable_metadata": {DBFields.ORIENTATION: 1},
+                "allow_empty_editable": False,
+                "panel_fields": {"File:FileName": None},
+                "retry_count": 0,
+                "error": "exiftool status 1",
+            }
+        ]
+    })
 
     db = manager._db_manager.get_db_for_folder(str(tmp_path))
     assert db.get_metadata(image_path) is None
@@ -260,23 +248,21 @@ def test_combined_error_records_error_after_retry_limit(manager, tmp_path, monke
         ),
     )
 
-    manager._handle_combined_result(
-        {
-            "items": [
-                {
-                    "file_path": image_path,
-                    "want_embedded": True,
-                    "want_editable": True,
-                    "want_panel": True,
-                    "editable_metadata": {DBFields.ORIENTATION: 1},
-                    "allow_empty_editable": False,
-                    "panel_fields": {"File:FileName": None},
-                    "retry_count": media_man.COMBINED_MAX_RETRIES,
-                    "error": "exiftool status 1",
-                }
-            ]
-        }
-    )
+    manager._handle_combined_result({
+        "items": [
+            {
+                "file_path": image_path,
+                "want_embedded": True,
+                "want_editable": True,
+                "want_panel": True,
+                "editable_metadata": {DBFields.ORIENTATION: 1},
+                "allow_empty_editable": False,
+                "panel_fields": {"File:FileName": None},
+                "retry_count": media_man.COMBINED_MAX_RETRIES,
+                "error": "exiftool status 1",
+            }
+        ]
+    })
 
     assert manager.get_exif_errors() == {image_path: "exiftool status 1"}
 

@@ -109,9 +109,7 @@ class _SettingsFormLayout(QGridLayout):
             2,
             alignment=Qt.AlignmentFlag.AlignLeft,
         )
-        self._rows.append(
-            (content_row, label, label, Qt.AlignmentFlag.AlignVCenter)
-        )
+        self._rows.append((content_row, label, label, Qt.AlignmentFlag.AlignVCenter))
         self._next_row = content_row + 2
         self._update_gap_rows()
 
@@ -401,6 +399,7 @@ class SettingsDialog(QDialog):
         )
         upload_label_editor = self._editors.get(UserSettingKey.FLICKR_UPLOAD_LABEL)
         if labels_editor is not None:
+
             def provider():
                 return list(labels_editor.get_value() or [])
 

@@ -177,12 +177,10 @@ class _FakeRecoveryWindow:
         self.invalidate_calls += 1
 
     def _apply_cached_editable_metadata_for_items(self, items_by_path, priming) -> None:
-        self.cached_apply_calls.append(
-            {
-                "items": dict(items_by_path),
-                "priming": priming,
-            }
-        )
+        self.cached_apply_calls.append({
+            "items": dict(items_by_path),
+            "priming": priming,
+        })
 
     def sync_model_after_metadata_update(self, fields: set[str], source: str) -> None:
         self.sync_calls.append((set(fields), source))
@@ -223,16 +221,14 @@ def test_transient_db_recovery_replays_pending_metadata_save(monkeypatch) -> Non
     fault = _fault(classification="transient_unavailable", path_available=False)
 
     window._on_db_fault_reported(fault)
-    window._on_metadata_save_worker_failure(
-        {
-            "file_path": "/photos/folder_a/image.jpg",
-            "data": {DBFields.TITLE: "Recovered title"},
-            "changed_fields": {DBFields.TITLE},
-            "fault": fault,
-            "safe_to_replay": True,
-            "source": "edit_panel",
-        }
-    )
+    window._on_metadata_save_worker_failure({
+        "file_path": "/photos/folder_a/image.jpg",
+        "data": {DBFields.TITLE: "Recovered title"},
+        "changed_fields": {DBFields.TITLE},
+        "fault": fault,
+        "safe_to_replay": True,
+        "source": "edit_panel",
+    })
 
     window._probe_db_recovery()
 

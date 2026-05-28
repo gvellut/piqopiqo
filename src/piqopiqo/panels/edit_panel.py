@@ -273,9 +273,7 @@ class EditPanel(QWidget):
             row += 1
         self.lens_make_edit = self._lens_edit_widgets[DBFields.MANUAL_LENS_MAKE]
         self.lens_model_edit = self._lens_edit_widgets[DBFields.MANUAL_LENS_MODEL]
-        self.focal_length_edit = self._lens_edit_widgets[
-            DBFields.MANUAL_FOCAL_LENGTH
-        ]
+        self.focal_length_edit = self._lens_edit_widgets[DBFields.MANUAL_FOCAL_LENGTH]
         self.focal_length_35mm_edit = self._lens_edit_widgets[
             DBFields.MANUAL_FOCAL_LENGTH_35MM
         ]
@@ -728,9 +726,7 @@ class EditPanel(QWidget):
                 if is_add is False
                 for clean_keyword in normalize_keyword_list([keyword])
             }
-            result_kws = [
-                kw for kw in current_kws if kw.casefold() not in removed
-            ]
+            result_kws = [kw for kw in current_kws if kw.casefold() not in removed]
 
             # Apply additions (add new keywords at the end)
             existing = {kw.casefold() for kw in result_kws}

@@ -32,30 +32,24 @@ def test_format_flickr_tags_rejects_double_quote() -> None:
 
 
 def test_has_required_flickr_upload_metadata_accepts_title_and_keywords() -> None:
-    assert has_required_flickr_upload_metadata(
-        {
-            DBFields.TITLE: "Title",
-            DBFields.KEYWORDS: "one, two",
-        }
-    )
+    assert has_required_flickr_upload_metadata({
+        DBFields.TITLE: "Title",
+        DBFields.KEYWORDS: "one, two",
+    })
 
 
 def test_has_required_flickr_upload_metadata_rejects_empty_title() -> None:
-    assert not has_required_flickr_upload_metadata(
-        {
-            DBFields.TITLE: "   ",
-            DBFields.KEYWORDS: "one, two",
-        }
-    )
+    assert not has_required_flickr_upload_metadata({
+        DBFields.TITLE: "   ",
+        DBFields.KEYWORDS: "one, two",
+    })
 
 
 def test_has_required_flickr_upload_metadata_rejects_empty_keyword_tokens() -> None:
-    assert not has_required_flickr_upload_metadata(
-        {
-            DBFields.TITLE: "Title",
-            DBFields.KEYWORDS: " , , ",
-        }
-    )
+    assert not has_required_flickr_upload_metadata({
+        DBFields.TITLE: "Title",
+        DBFields.KEYWORDS: " , , ",
+    })
 
 
 def test_has_required_flickr_upload_metadata_rejects_missing_metadata_dict() -> None:

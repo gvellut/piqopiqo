@@ -1,5 +1,4 @@
 - [change tool workflow](Gd_tasks/Rd_change_tool_workflow.md)
-* [Copy from SD display dates](Gd_tasks/Qd_Copy_from_SD_display_dates.md)
 - [Move to trash add confirmation](Gd_tasks/Jd_Move_to_trash_add_confirmation.md)
 - [Flickr max workers diff for upload and set date public](Yb_tasks/Cc_Flickr_max_workers_diff_for_upload_and_set_date_.md)
 - [Make copy sd and flickr not modal](Kc_tasks/Qc_Make_copy_sd_and_flickr_not_modal.md)
@@ -143,3 +142,4 @@
 ! [NO_FOLDER_LOADED_TEXT ellipsis](Gd_tasks/Nd_NO_FOLDER_LOADED_TEXT_ellipsis.md)
 ! [no photo option to eject](Gd_tasks/Od_no_photo_option_to_eject.md)
 ! [Select lifecyle label](Gd_tasks/Pd_Select_lifecyle_label.md)
+! [Copy from SD display dates](Gd_tasks/Qd_Copy_from_SD_display_dates.md)

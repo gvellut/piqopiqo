@@ -19,6 +19,57 @@ uv run piqopiqo
 PIQO_NUM_COLUMNS=10 uv run piqopiqo /path/to/images
 ```
 
+## Development
+
+The tool uses `uv` for package management and `ruff` for formatting and linint.
+
+!!!!!!! After an edit of the Python code, ALWAYS run linting and formatting as the final step of your work. Fix the issues that come up. !!!!!!!
+
+```bash
+# Run linting and formatting. Always use --fix.
+ruff check --fix
+ruff format
+```
+
+### System dependencies
+
+- `exiftool` is installed on the system
+
+### Considerations
+
+Do not use async.
+
+Never use dataclasses. Use attrs and @define, including frozen=True if relevant.
+
+Do not use .. for relative imports (in parent folder). Use the fully qualified name in that case (piqopiqo.). You can use a relative with single . if in the same folder or below.
+
+Do not use PyqtAuto and do not suggest its use.
+
+Do not use too much abstraction: This software is not a library. Also do not try to maintain compatibility in the code (it is not a library).
+
+## Update of AGENTS.md
+
+After completing a feature, update this file AGENTS.md with the updated project structure. Also add considerations for reference for future work.
+
+## Do not read any file in .prompts folder or subfolder / Completely ignore those files
+
+Do not read any file from the .prompts folder or any subfolder. Do not mention or remark on changes to them or ask the user about any file or changes in those. Completely ignore those files, even after git status. Never deviate from those rules.
+
+## English
+
+Always reply in English even if the request is in French.
+
+## Dialogs
+
+When creating dialogs : do not just center the labels and the fields and leave the sides empty. Maximise the use of space : The labels must be aligned to the left, the fields must take the reamining space and aligned on the left. Just add some space between the labels and the fields to make that happen. Adjust the size of the dialogs so they take minimun space in height (so if components are removed or added depending on the screens, make the dialog smaller or bigger: do not just remove the components). See the existing dialogs in tools module.
+
+When using the OK Cancel buttons : Always put the OK on the right (or other positive action) and the Cancel on the left.
+
+## Tests
+
+When doing refactoring, it is possible the code was changed by the user: config values changed, enum members changed. And the test was not updated. Then ascertain with the user that the change is intended. !!!! IN THAT CASE, DO NOT CHANGE THE CODE TO MAKE THE TESTS PASS !!!!! Especially, when the user requests a change that has nothing to do with the test, it is of paramount importance that you ascertain the intention of the change.
+
+
 ## Project Structure
 
 ```
@@ -369,54 +420,3 @@ Selection behavior:
 - Quit-time cleanup is split in two phases: `MainWindow.closeEvent` stays fast (state persistence only), while heavy teardown runs from `QApplication.aboutToQuit`.
 - Metadata-save `QThreadPool`s (label shortcut saves and edit panel saves) are drained on quit with bounded wait semantics (`clear()` queued tasks, then `waitForDone()` up to `SHUTDOWN_TIMEOUT_S`) before DB connections are closed.
 - On CPython 3.13, app startup patches `threading._DeleteDummyThreadOnDel.__del__` defensively to suppress a known interpreter-shutdown race (`_active_limbo_lock` becoming `None`) that can be triggered by Qt worker threads. Switched the pyproject.toml to 3.14.
-
-
-## Development
-
-The tool uses `uv` for package management and `ruff` for formatting and linint.
-
-Run linting and formatting as the final step of your work. Fix the issues that come up.
-
-```bash
-# Run linting and formatting. Always use --fix.
-ruff check --fix
-ruff format
-```
-
-### System dependencies
-
-- `exiftool` must be installed on the system
-
-### Considerations
-
-Do not use async.
-
-Never use dataclasses. Use attrs and @define, including frozen=True if relevant.
-
-Do not use .. for relative imports (in parent folder). Use the fully qualified name in that case (piqopiqo.). You can use a relative with single . if in the same folder or below.
-
-Do not use PyqtAuto and do not suggest its use.
-
-Do not use too much abstraction: This software is not a library. Also do not try to maintain compatibility in the code (it is not a library).
-
-## Update of AGENTS.md
-
-After completing a feature, update this file AGENTS.md with the updated project structure. Also add considerations for reference for future work.
-
-## Do not read any file in .prompts folder or subfolder / Completely ignore those files
-
-Do not read any file from the .prompts folder or any subfolder. Do not mention or remark on changes to them or ask the user about any file or changes in those. Completely ignore those files, even after git status. Never deviate from those rules.
-
-## English
-
-Always reply in English even if the request is in French.
-
-## Dialogs
-
-When creating dialogs : do not just center the labels and the fields and leave the sides empty. Maximise the use of space : The labels must be aligned to the left, the fields must take the reamining space and aligned on the left. Just add some space between the labels and the fields to make that happen. Adjust the size of the dialogs so they take minimun space in height (so if components are removed or added depending on the screens, make the dialog smaller or bigger: do not just remove the components). See the existing dialogs in tools module.
-
-When using the OK Cancel buttons : Always put the OK on the right (or other positive action) and the Cancel on the left.
-
-## Tests
-
-When doing refactoring, it is possible the code was changed by the user: config values changed, enum members changed. And the test was not updated. Then ascertain with the user that the change is intended. !!!! IN THAT CASE, DO NOT CHANGE THE CODE TO MAKE THE TESTS PASS !!!!! Especially, when the user requests a change that has nothing to do with the test, it is of paramount importance that you ascertain the intention of the change.

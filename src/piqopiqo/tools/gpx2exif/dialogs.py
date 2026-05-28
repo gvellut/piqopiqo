@@ -517,9 +517,7 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
         summary = f"Processed {result.processed} photo(s)."
         if result.cancelled:
             summary = f"Cancelled. {result.processed} photo(s) processed."
-        self.set_status(
-            f"{summary}\nGeoreferenced: {result.matched} / {self._total}"
-        )
+        self.set_status(f"{summary}\nGeoreferenced: {result.matched} / {self._total}")
         self.progress_bar.hide()
 
         details_html = self._build_details_html(result)
@@ -554,11 +552,7 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
                 for photo in result.unmatched_photos
             )
             sections.append(
-                '<div style="'
-                f"{_DETAILS_WARNING_STYLE}"
-                '">'
-                f"{self._html_lines(lines)}"
-                "</div>"
+                f'<div style="{_DETAILS_WARNING_STYLE}">{self._html_lines(lines)}</div>'
             )
 
         return "<br/>".join(sections)

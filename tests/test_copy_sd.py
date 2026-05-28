@@ -6,7 +6,7 @@ from datetime import date
 import subprocess
 from types import SimpleNamespace
 
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QTextEdit
 import pytest
 
 from piqopiqo.ssf.settings_state import StateKey, UserSettingKey
@@ -16,6 +16,7 @@ from piqopiqo.tools.copy_sd import (
     EjectVolumeError,
     PhotoVolume,
     _build_no_images_message,
+    _CopySdConfirmDialog,
     _resolve_dates_with_progress,
     eject_volume,
     launch_copy_sd,
@@ -29,6 +30,23 @@ def qapp(monkeypatch):
     if app is None:
         app = QApplication([])
     return app
+
+
+def test_copy_confirm_dialog_shows_dates_in_read_only_text_edit(qapp):  # noqa: ARG001
+    dialog = _CopySdConfirmDialog(
+        None,
+        PhotoVolume("CARD", "/Volumes/CARD"),
+        [date(2026, 3, 1), date(2026, 3, 2)],
+        "annecy",
+    )
+
+    dates_text = dialog.findChild(QTextEdit, "copySdConfirmDatesText")
+
+    assert dates_text is not None
+    assert dates_text.isReadOnly() is True
+    lines = dates_text.toPlainText().splitlines()
+    assert lines == ["2026-03-01", "2026-03-02"]
+    assert all(not line.startswith("- ") for line in lines)
 
 
 def test_no_images_message_since_last_with_previous_date(monkeypatch):
@@ -120,9 +138,7 @@ def test_copy_worker_creates_target_dir_when_copying_image(monkeypatch):
     worker.run()
 
     assert makedirs_calls == ["/exports/20260201_trip/CARD"]
-    assert copy_calls == [
-        ("/Volumes/CARD/DCIM/a.jpg", "/exports/20260201_trip/CARD")
-    ]
+    assert copy_calls == [("/Volumes/CARD/DCIM/a.jpg", "/exports/20260201_trip/CARD")]
 
 
 def test_copy_progress_counter_label_updates(qapp):  # noqa: ARG001
@@ -178,9 +194,7 @@ def test_copy_complete_result_places_eject_checkbox_at_bottom(qapp):  # noqa: AR
     assert dialog.eject_checkbox.isHidden() is False
 
 
-def test_copy_result_ok_with_eject_shows_ejecting_screen(
-    qapp, monkeypatch
-):  # noqa: ARG001
+def test_copy_result_ok_with_eject_shows_ejecting_screen(qapp, monkeypatch):  # noqa: ARG001
     started: list[bool] = []
     monkeypatch.setattr(
         CopySdProgressDialog,
@@ -305,9 +319,7 @@ def test_copy_eject_failure_shows_error_screen(qapp, monkeypatch):  # noqa: ARG0
     assert "The volume is still mounted." in label_text
 
 
-def test_copy_eject_cancel_closes_and_ignores_late_completion(
-    qapp, monkeypatch
-):  # noqa: ARG001
+def test_copy_eject_cancel_closes_and_ignores_late_completion(qapp, monkeypatch):  # noqa: ARG001
     monkeypatch.setattr(
         CopySdProgressDialog, "_start_eject_thread", lambda _dialog: None
     )

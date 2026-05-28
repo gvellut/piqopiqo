@@ -1042,14 +1042,12 @@ class MainWindow(QMainWindow):
                 or self._current_filter.include_no_label
             )
         if needs_resort:
-            self._pending_scheduled_sync_fields.update(
-                {
-                    DBFields.TIME_TAKEN,
-                    DBFields.TITLE,
-                    DBFields.KEYWORDS,
-                    DBFields.LABEL,
-                }
-            )
+            self._pending_scheduled_sync_fields.update({
+                DBFields.TIME_TAKEN,
+                DBFields.TITLE,
+                DBFields.KEYWORDS,
+                DBFields.LABEL,
+            })
             if not self._model_refresh_scheduled:
                 self._model_refresh_scheduled = True
                 QTimer.singleShot(50, self._flush_scheduled_model_sync)
@@ -3275,9 +3273,7 @@ class MainWindow(QMainWindow):
             return
 
         current_path = rewrite(state.get("current_path"))
-        preferred_path = (
-            current_path if current_path in seen_loop_paths else None
-        )
+        preferred_path = current_path if current_path in seen_loop_paths else None
         if preferred_path is None:
             ordered_paths = [
                 rewritten
@@ -3375,9 +3371,9 @@ class MainWindow(QMainWindow):
             if self.edit_panel:
                 self.edit_panel.update_for_selection(items)
 
-            self.media_manager.ensure_panel_fields_loaded_from_db(
-                [item.path for item in items]
-            )
+            self.media_manager.ensure_panel_fields_loaded_from_db([
+                item.path for item in items
+            ])
             self.exif_panel.update_exif(items)
         finally:
             self._selection_panel_refresh_in_progress = False

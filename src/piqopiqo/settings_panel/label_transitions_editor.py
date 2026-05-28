@@ -98,9 +98,7 @@ def _build_swatch_icon(color: str) -> QIcon:
 
 def _status_label_names(status_labels: list[StatusLabel]) -> set[str]:
     return {
-        str(label.name).strip()
-        for label in status_labels
-        if str(label.name).strip()
+        str(label.name).strip() for label in status_labels if str(label.name).strip()
     }
 
 
@@ -193,9 +191,7 @@ class StatusLabelComboEditor(QWidget):
     def refresh_status_labels(self) -> None:
         status_labels = self._status_labels()
         invalid_value = (
-            self._value
-            if self._value not in _status_label_names(status_labels)
-            else ""
+            self._value if self._value not in _status_label_names(status_labels) else ""
         )
         self._combo.blockSignals(True)
         _populate_status_label_combo(

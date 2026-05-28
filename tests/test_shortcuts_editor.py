@@ -101,14 +101,12 @@ def test_shortcuts_editor_uses_sectioned_two_column_layout(qapp):
 
 def test_shortcuts_editor_accepts_enum_and_string_keys(qapp):
     editor = ShortcutsEditor()
-    editor.set_value(
-        {
-            Shortcut.ZOOM_IN: "=",
-            Shortcut.ZOOM_OUT.name: "-",
-            Shortcut.SELECT_ALL.name: "ctrl+a",
-            Shortcut.FILTER_LABEL_1.name: "Alt+1",
-        }
-    )
+    editor.set_value({
+        Shortcut.ZOOM_IN: "=",
+        Shortcut.ZOOM_OUT.name: "-",
+        Shortcut.SELECT_ALL.name: "ctrl+a",
+        Shortcut.FILTER_LABEL_1.name: "Alt+1",
+    })
 
     value = editor.get_value()
     assert value[Shortcut.ZOOM_IN] == "="

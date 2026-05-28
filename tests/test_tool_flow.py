@@ -182,8 +182,7 @@ def test_none_body_does_not_reserve_space_above_progress(qapp):
 
     assert dialog._content_host.isHidden() is True
     assert (
-        dialog.progress_row.geometry().top()
-        <= dialog.layout().contentsMargins().top()
+        dialog.progress_row.geometry().top() <= dialog.layout().contentsMargins().top()
     )
 
 

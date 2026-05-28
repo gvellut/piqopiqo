@@ -1178,13 +1178,11 @@ def _build_upload_scope_items(items: list[ImageItem]) -> list[dict]:
 
     for order, item in enumerate(items):
         metadata = item.db_metadata
-        scope_items.append(
-            {
-                "file_path": item.path,
-                "order": order,
-                "db_metadata": metadata.copy() if isinstance(metadata, dict) else None,
-            }
-        )
+        scope_items.append({
+            "file_path": item.path,
+            "order": order,
+            "db_metadata": metadata.copy() if isinstance(metadata, dict) else None,
+        })
 
     return scope_items
 
@@ -1239,13 +1237,11 @@ def _build_upload_items(
                 file_path
             )
 
-        upload_items.append(
-            {
-                "file_path": file_path,
-                "order": order,
-                "db_metadata": metadata.copy() if isinstance(metadata, dict) else None,
-            }
-        )
+        upload_items.append({
+            "file_path": file_path,
+            "order": order,
+            "db_metadata": metadata.copy() if isinstance(metadata, dict) else None,
+        })
 
     return upload_items
 
@@ -1632,9 +1628,7 @@ def launch_flickr_upload(parent: MainWindow) -> None:
     should_require_metadata = bool(
         get_user_setting(UserSettingKey.FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS)
     )
-    use_lifecycle = bool(
-        get_user_setting(UserSettingKey.FLICKR_UPLOAD_USE_LIFECYCLE)
-    )
+    use_lifecycle = bool(get_user_setting(UserSettingKey.FLICKR_UPLOAD_USE_LIFECYCLE))
     label_override_text = ""
     if use_lifecycle:
         label_override_text = str(

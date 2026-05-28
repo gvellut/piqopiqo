@@ -214,23 +214,21 @@ def run_combined_task(task: dict) -> dict:
                         key: _safe_str(raw.get(key)) for key in panel_field_keys
                     }
 
-                items.append(
-                    {
-                        "file_path": file_path,
-                        "source_folder": source_folder,
-                        "want_embedded": bool(file_entry.get("want_embedded")),
-                        "want_editable": bool(file_entry.get("want_editable")),
-                        "want_panel": bool(file_entry.get("want_panel")),
-                        "editable_metadata": editable_meta,
-                        "allow_empty_editable": bool(
-                            file_entry.get("allow_empty_editable")
-                        ),
-                        "panel_fields": panel_fields,
-                        "embedded_cache_path": embedded_map.get(file_path),
-                        "retry_count": int(file_entry.get("retry_count") or 0),
-                        "now_iso": now_iso,
-                    }
-                )
+                items.append({
+                    "file_path": file_path,
+                    "source_folder": source_folder,
+                    "want_embedded": bool(file_entry.get("want_embedded")),
+                    "want_editable": bool(file_entry.get("want_editable")),
+                    "want_panel": bool(file_entry.get("want_panel")),
+                    "editable_metadata": editable_meta,
+                    "allow_empty_editable": bool(
+                        file_entry.get("allow_empty_editable")
+                    ),
+                    "panel_fields": panel_fields,
+                    "embedded_cache_path": embedded_map.get(file_path),
+                    "retry_count": int(file_entry.get("retry_count") or 0),
+                    "now_iso": now_iso,
+                })
 
     except Exception as e:
         logger.warning("Combined task failed: %s", e)
@@ -238,30 +236,26 @@ def run_combined_task(task: dict) -> dict:
         # Still return per-file stubs so the parent can mark completion.
         for file_entry in files:
             file_path = str(file_entry["file_path"])
-            items.append(
-                {
-                    "file_path": file_path,
-                    "source_folder": source_folder,
-                    "want_embedded": bool(file_entry.get("want_embedded")),
-                    "want_editable": bool(file_entry.get("want_editable")),
-                    "want_panel": bool(file_entry.get("want_panel")),
-                    "editable_metadata": (
-                        {} if bool(file_entry.get("want_editable")) else None
-                    ),
-                    "allow_empty_editable": bool(
-                        file_entry.get("allow_empty_editable")
-                    ),
-                    "panel_fields": (
-                        {key: None for key in panel_field_keys}
-                        if bool(file_entry.get("want_panel"))
-                        else None
-                    ),
-                    "embedded_cache_path": None,
-                    "retry_count": int(file_entry.get("retry_count") or 0),
-                    "now_iso": now_iso,
-                    "error": error,
-                }
-            )
+            items.append({
+                "file_path": file_path,
+                "source_folder": source_folder,
+                "want_embedded": bool(file_entry.get("want_embedded")),
+                "want_editable": bool(file_entry.get("want_editable")),
+                "want_panel": bool(file_entry.get("want_panel")),
+                "editable_metadata": (
+                    {} if bool(file_entry.get("want_editable")) else None
+                ),
+                "allow_empty_editable": bool(file_entry.get("allow_empty_editable")),
+                "panel_fields": (
+                    {key: None for key in panel_field_keys}
+                    if bool(file_entry.get("want_panel"))
+                    else None
+                ),
+                "embedded_cache_path": None,
+                "retry_count": int(file_entry.get("retry_count") or 0),
+                "now_iso": now_iso,
+                "error": error,
+            })
 
     return {"task_id": task_id, "kind": "combined", "items": items, "error": error}
 
@@ -323,14 +317,18 @@ def run_write_exif_task(task: dict) -> dict:
                     helper.set_tags(file_path, tags)
                     results.append({"file_path": file_path, "ok": True, "error": ""})
                 except Exception as e:
-                    results.append(
-                        {"file_path": file_path, "ok": False, "error": str(e)}
-                    )
+                    results.append({
+                        "file_path": file_path,
+                        "ok": False,
+                        "error": str(e),
+                    })
     except Exception as e:
         for entry in items:
-            results.append(
-                {"file_path": str(entry["file_path"]), "ok": False, "error": str(e)}
-            )
+            results.append({
+                "file_path": str(entry["file_path"]),
+                "ok": False,
+                "error": str(e),
+            })
 
     return {"task_id": task_id, "kind": "write_exif", "results": results}
 

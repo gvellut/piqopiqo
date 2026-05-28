@@ -220,14 +220,12 @@ def _kml_description(
         v2 = "</div>"
     else:
         v1 = v2 = ""
-    return "\n".join(
-        [
-            f"{image_name}<br/><br/>",
-            v1,
-            f'<img src="{src}" width="{int(kml_thumbnail_size)}" {style} />',
-            v2,
-        ]
-    )
+    return "\n".join([
+        f"{image_name}<br/><br/>",
+        v1,
+        f'<img src="{src}" width="{int(kml_thumbnail_size)}" {style} />',
+        v2,
+    ])
 
 
 def write_kml(

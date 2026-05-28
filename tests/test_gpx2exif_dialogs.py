@@ -310,10 +310,7 @@ def test_extract_time_shift_progress_uses_apple_status_text_by_default(
 
     dialog = ExtractGpsTimeShiftProgressDialog()
 
-    assert (
-        dialog.status_label.text()
-        == "Extracting clock time with Apple Vision..."
-    )
+    assert dialog.status_label.text() == "Extracting clock time with Apple Vision..."
 
 
 def test_extract_time_shift_progress_uses_apple_status_text_when_selected(
@@ -359,9 +356,7 @@ def test_apply_gpx_progress_dialog_initially_compact_and_expands_on_details(qapp
     assert dialog.minimumHeight() == dialog.maximumHeight() == final_height
     assert final_height > initial_height
     assert dialog.progress_bar.isHidden() is True
-    assert dialog.status_label.text() == (
-        "Processed 1 photo(s).\nGeoreferenced: 0 / 1"
-    )
+    assert dialog.status_label.text() == ("Processed 1 photo(s).\nGeoreferenced: 0 / 1")
 
 
 def test_apply_gpx_progress_no_match_shows_compact_warning_only(qapp):
@@ -374,10 +369,7 @@ def test_apply_gpx_progress_no_match_shows_compact_warning_only(qapp):
     qapp.processEvents()
 
     assert dialog.no_match_warning_row.isHidden() is False
-    assert (
-        dialog.no_match_warning_label.text()
-        == "The GPX did not match any image"
-    )
+    assert dialog.no_match_warning_label.text() == "The GPX did not match any image"
     assert dialog.no_match_warning_icon.pixmap().isNull() is False
     assert dialog.details_text.isHidden() is True
     assert dialog.folder_label.isHidden() is True
@@ -414,8 +406,7 @@ def test_apply_gpx_progress_mixed_result_shows_kml_then_red_unmatched(qapp):
     plain_text = dialog.details_text.toPlainText()
     assert plain_text.startswith("KML output:\n/tmp/out.kml")
     assert (
-        "Images without georeferencing:\n"
-        "photo-0.jpg - 2026-01-01 09:00:00"
+        "Images without georeferencing:\nphoto-0.jpg - 2026-01-01 09:00:00"
     ) in plain_text
     assert "#b00020" in dialog.details_text.toHtml().lower()
     assert dialog.details_text.height() == 140

@@ -163,12 +163,10 @@ def test_directory_rename_inside_root_dispatches_moved_images(
     subfolder.rename(renamed)
     new_path = str(renamed / "A001.JPG")
 
-    controller._on_watcher_changes(
-        [
-            ("deleted", str(subfolder)),
-            ("added", str(renamed)),
-        ]
-    )
+    controller._on_watcher_changes([
+        ("deleted", str(subfolder)),
+        ("added", str(renamed)),
+    ])
 
     assert callback_changes == [[("moved", existing, new_path)]]
 
@@ -186,12 +184,10 @@ def test_image_rename_inside_root_dispatches_moved_pair(
     renamed = tmp_path / "A002.JPG"
     Path(existing).rename(renamed)
 
-    controller._on_watcher_changes(
-        [
-            ("deleted", existing),
-            ("added", str(renamed)),
-        ]
-    )
+    controller._on_watcher_changes([
+        ("deleted", existing),
+        ("added", str(renamed)),
+    ])
 
     assert callback_changes == [[("moved", existing, str(renamed))]]
 
@@ -210,12 +206,10 @@ def test_suppressed_snapshot_move_is_not_dispatched_and_snapshot_stays_in_sync(
     controller.suppress_paths([existing], duration_s=5.0)
     Path(existing).rename(renamed)
 
-    controller._on_watcher_changes(
-        [
-            ("deleted", existing),
-            ("added", str(renamed)),
-        ]
-    )
+    controller._on_watcher_changes([
+        ("deleted", existing),
+        ("added", str(renamed)),
+    ])
 
     assert callback_changes == []
 

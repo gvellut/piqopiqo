@@ -272,34 +272,32 @@ def test_keywords_height_change_keeps_edit_panel_rows_stable(qapp):
     qapp.processEvents()
     base = snapshot()
 
-    long_keywords = ", ".join(
-        [
-            "alpha",
-            "beta",
-            "gamma",
-            "delta",
-            "epsilon",
-            "zeta",
-            "eta",
-            "theta",
-            "iota",
-            "kappa",
-            "lambda",
-            "mu",
-            "nu",
-            "xi",
-            "omicron",
-            "pi",
-            "rho",
-            "sigma",
-            "tau",
-            "upsilon",
-            "phi",
-            "chi",
-            "psi",
-            "omega",
-        ]
-    )
+    long_keywords = ", ".join([
+        "alpha",
+        "beta",
+        "gamma",
+        "delta",
+        "epsilon",
+        "zeta",
+        "eta",
+        "theta",
+        "iota",
+        "kappa",
+        "lambda",
+        "mu",
+        "nu",
+        "xi",
+        "omicron",
+        "pi",
+        "rho",
+        "sigma",
+        "tau",
+        "upsilon",
+        "phi",
+        "chi",
+        "psi",
+        "omega",
+    ])
 
     panel.keywords_edit.set_value(long_keywords)
     qapp.processEvents()
@@ -676,13 +674,11 @@ def test_keyword_tree_modifications_normalize_existing_keywords(qapp, monkeypatc
 
     monkeypatch.setattr(panel, "_save_field_for_item", _save_field_for_item)
 
-    panel._apply_keyword_modifications(
-        {
-            "BETA": False,
-            "delta": True,
-            "gamma": True,
-        }
-    )
+    panel._apply_keyword_modifications({
+        "BETA": False,
+        "delta": True,
+        "gamma": True,
+    })
 
     assert saved == [(DBFields.KEYWORDS, "alpha, Gamma, delta")]
     assert item.db_metadata[DBFields.KEYWORDS] == "alpha, Gamma, delta"

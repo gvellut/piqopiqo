@@ -349,9 +349,7 @@ def apply_gpx_to_folders(
 
     result.processed = processed
     result.matched = sum(
-        folder.matched
-        for folder in result.folder_results
-        if not folder.cancelled
+        folder.matched for folder in result.folder_results if not folder.cancelled
     )
     result.unmatched_photos = [
         photo

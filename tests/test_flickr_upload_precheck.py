@@ -182,15 +182,13 @@ def test_launch_flickr_upload_passes_visible_scope_without_blocking_precheck(
         assert api_key == "key"
         assert api_secret == "secret"
         assert use_lifecycle is False
-        launch_calls.append(
-            {
-                "use_lifecycle": use_lifecycle,
-                "visible_upload_items": visible_upload_items,
-                "label_upload_items": label_upload_items,
-                "label_override_text": label_override_text,
-                "should_require_metadata": should_require_metadata,
-            }
-        )
+        launch_calls.append({
+            "use_lifecycle": use_lifecycle,
+            "visible_upload_items": visible_upload_items,
+            "label_upload_items": label_upload_items,
+            "label_override_text": label_override_text,
+            "should_require_metadata": should_require_metadata,
+        })
 
     monkeypatch.setattr(
         "piqopiqo.tools.flickr_upload.dialogs._launch_flickr_upload_flow",
@@ -218,11 +216,9 @@ def test_launch_flickr_upload_builds_label_scope_from_all_photos_in_sort_order(
     parent = _FakeParent(
         visible_items=[visible_nonmatch],
         all_items=[hidden_from_db, visible_nonmatch, hidden_match],
-        db_manager=_FakeDbManager(
-            {
-                "/c.jpg": {"label": "Approved"},
-            }
-        ),
+        db_manager=_FakeDbManager({
+            "/c.jpg": {"label": "Approved"},
+        }),
         sorted_paths=["/b.jpg", "/c.jpg", "/a.jpg"],
     )
     _patch_settings(monkeypatch, require_metadata=False, label_override="Approved")
@@ -915,18 +911,13 @@ def test_apply_flickr_label_transitions_updates_scope_and_syncs(qapp):  # noqa: 
     assert scoped_uploaded.db_metadata[DBFields.LABEL] == "Rejected"
     assert scoped_no_metadata.db_metadata[DBFields.LABEL] == "Rejected"
     assert out_of_scope.db_metadata[DBFields.LABEL] == "Approved"
-    assert [
-        (path, data[DBFields.LABEL])
-        for path, data in parent.db_manager.saved
-    ] == [
+    assert [(path, data[DBFields.LABEL]) for path, data in parent.db_manager.saved] == [
         ("/a.jpg", "Uploaded"),
         ("/b.jpg", "Rejected"),
         ("/d.jpg", "Rejected"),
     ]
     assert parent.refreshed == ["/a.jpg", "/b.jpg", "/d.jpg"]
-    assert parent.synced == [
-        ({DBFields.LABEL}, "flickr_label_transitions", True)
-    ]
+    assert parent.synced == [({DBFields.LABEL}, "flickr_label_transitions", True)]
 
 
 def test_apply_flickr_label_transitions_changes_non_uploaded_loaded_images(
@@ -941,11 +932,9 @@ def test_apply_flickr_label_transitions_changes_non_uploaded_loaded_images(
     parent = _FakeParent(
         visible_items=[uploaded],
         all_items=[uploaded, not_uploaded_rejected, not_uploaded_review],
-        db_manager=_FakeDbManager(
-            {
-                "/not_uploaded_rejected.jpg": {DBFields.LABEL: "Rejected"},
-            }
-        ),
+        db_manager=_FakeDbManager({
+            "/not_uploaded_rejected.jpg": {DBFields.LABEL: "Rejected"},
+        }),
     )
     parent.synced: list[tuple[set[str], str, bool]] = []
     parent.refreshed: list[str] = []

@@ -198,9 +198,7 @@ def diff_workspace_snapshots(
 
     changes: list[WorkspaceChange] = []
     changes.extend(sorted(moved, key=lambda item: (item[1], item[2])))
-    changes.extend(
-        ("deleted", path) for path in sorted(deleted_paths - paired_deleted)
-    )
+    changes.extend(("deleted", path) for path in sorted(deleted_paths - paired_deleted))
     changes.extend(("added", path) for path in sorted(added_paths - paired_added))
 
     modified = sorted(

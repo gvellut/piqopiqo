@@ -969,16 +969,14 @@ class MediaManager(QObject):
             if need is None:
                 continue
             self._in_flight_files.add(file_path)
-            files_payload.append(
-                {
-                    "file_path": file_path,
-                    "want_embedded": bool(need.want_embedded),
-                    "want_editable": bool(need.want_editable),
-                    "want_panel": bool(need.want_panel),
-                    "allow_empty_editable": bool(need.allow_empty_editable),
-                    "retry_count": int(need.retry_count),
-                }
-            )
+            files_payload.append({
+                "file_path": file_path,
+                "want_embedded": bool(need.want_embedded),
+                "want_editable": bool(need.want_editable),
+                "want_panel": bool(need.want_panel),
+                "allow_empty_editable": bool(need.allow_empty_editable),
+                "retry_count": int(need.retry_count),
+            })
 
         if not files_payload:
             return None

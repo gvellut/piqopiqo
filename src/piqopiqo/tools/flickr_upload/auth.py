@@ -53,9 +53,9 @@ def create_flickr_client(
         timeout=timeout_s,
     )
 
-    flickr.flickr_oauth.session.headers.update(
-        {"User-Agent": f"{APP_NAME} v{piqopiqo_version}"}
-    )
+    flickr.flickr_oauth.session.headers.update({
+        "User-Agent": f"{APP_NAME} v{piqopiqo_version}"
+    })
     return flickr
 
 

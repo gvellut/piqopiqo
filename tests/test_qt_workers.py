@@ -8,7 +8,6 @@ from pathlib import Path
 import subprocess
 import sys
 
-
 SRC_ROOT = Path(__file__).resolve().parents[1] / "src" / "piqopiqo"
 PROJECT_ROOT = SRC_ROOT.parents[1]
 

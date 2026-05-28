@@ -349,9 +349,7 @@ class FilterPanel(ScrollableStrip):
             self._no_label_checkbox.setChecked(False)
         active_label_name = str(label_name or "").strip()
         active_label_checkbox = (
-            self._label_checkboxes.get(active_label_name)
-            if active_label_name
-            else None
+            self._label_checkboxes.get(active_label_name) if active_label_name else None
         )
         for checkbox in self._label_checkboxes.values():
             checkbox.setChecked(checkbox is active_label_checkbox)

@@ -152,9 +152,9 @@ def test_update_photo_paths_preserves_selection_and_metadata():
     second = _item("/photos/b.jpg", label="Rejected")
     model.set_photos([first, second], ["/photos/old", "/photos"])
 
-    applied = model.update_photo_paths(
-        [("/photos/old/a.jpg", "/photos/new/a-renamed.jpg")]
-    )
+    applied = model.update_photo_paths([
+        ("/photos/old/a.jpg", "/photos/new/a-renamed.jpg")
+    ])
 
     assert applied == [("/photos/old/a.jpg", "/photos/new/a-renamed.jpg")]
     assert first.path == "/photos/new/a-renamed.jpg"

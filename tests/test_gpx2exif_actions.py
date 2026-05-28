@@ -192,9 +192,10 @@ def test_launch_clear_gpx_clears_lat_lon_and_syncs_model(monkeypatch, tmp_path) 
         ),
         _active_apply_gpx_worker=None,
         db_manager=dbm,
-        sync_model_after_metadata_update=lambda fields, source: sync_calls.append(
-            (set(fields), source)
-        ),
+        sync_model_after_metadata_update=lambda fields, source: sync_calls.append((
+            set(fields),
+            source,
+        )),
     )
 
     launch_clear_gps(window)

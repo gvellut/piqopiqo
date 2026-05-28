@@ -40,13 +40,11 @@ def _build_fake_dialog_class(scripted_responses: list[dict]) -> type:
         def __init__(self, pending, *, error_message=None, parent=None):
             index = len(self.calls)
             self._script = scripted_responses[index]
-            self.calls.append(
-                {
-                    "pending_keys": [item.spec.key for item in pending],
-                    "error_message": error_message,
-                    "parent": parent,
-                }
-            )
+            self.calls.append({
+                "pending_keys": [item.spec.key for item in pending],
+                "error_message": error_message,
+                "parent": parent,
+            })
 
         def exec(self):
             return self._script["code"]
@@ -81,23 +79,21 @@ def test_ensure_mandatory_settings_persists_valid_and_retries_invalid(monkeypatc
     cache_pending = _pending(UserSettingKey.CACHE_BASE_DIR, label="Cache")
     exif_pending = _pending(UserSettingKey.EXIFTOOL_PATH, label="Exiftool")
     pending_sequence = [[cache_pending, exif_pending], [exif_pending], []]
-    fake_dialog = _build_fake_dialog_class(
-        [
-            {
-                "code": QDialog.DialogCode.Accepted,
-                "values": {
-                    UserSettingKey.CACHE_BASE_DIR: "/cache/ok",
-                    UserSettingKey.EXIFTOOL_PATH: "/bad/exiftool",
-                },
+    fake_dialog = _build_fake_dialog_class([
+        {
+            "code": QDialog.DialogCode.Accepted,
+            "values": {
+                UserSettingKey.CACHE_BASE_DIR: "/cache/ok",
+                UserSettingKey.EXIFTOOL_PATH: "/bad/exiftool",
             },
-            {
-                "code": QDialog.DialogCode.Accepted,
-                "values": {
-                    UserSettingKey.EXIFTOOL_PATH: "/opt/tools/exiftool",
-                },
+        },
+        {
+            "code": QDialog.DialogCode.Accepted,
+            "values": {
+                UserSettingKey.EXIFTOOL_PATH: "/opt/tools/exiftool",
             },
-        ]
-    )
+        },
+    ])
     saved: list[tuple[UserSettingKey, str]] = []
 
     monkeypatch.setattr(
@@ -143,13 +139,11 @@ def test_ensure_mandatory_settings_persists_valid_and_retries_invalid(monkeypatc
 
 def test_ensure_mandatory_settings_returns_false_on_cancel(monkeypatch):
     cache_pending = _pending(UserSettingKey.CACHE_BASE_DIR, label="Cache")
-    fake_dialog = _build_fake_dialog_class(
-        [
-            {
-                "code": QDialog.DialogCode.Rejected,
-            },
-        ]
-    )
+    fake_dialog = _build_fake_dialog_class([
+        {
+            "code": QDialog.DialogCode.Rejected,
+        },
+    ])
 
     monkeypatch.setattr(
         startup_mandatory_settings,
@@ -168,18 +162,16 @@ def test_ensure_mandatory_settings_returns_false_on_cancel(monkeypatch):
 def test_ensure_mandatory_settings_reopens_with_error_message(monkeypatch):
     cache_pending = _pending(UserSettingKey.CACHE_BASE_DIR, label="Cache")
     pending_sequence = [[cache_pending], [cache_pending], []]
-    fake_dialog = _build_fake_dialog_class(
-        [
-            {
-                "code": QDialog.DialogCode.Accepted,
-                "values": {UserSettingKey.CACHE_BASE_DIR: ""},
-            },
-            {
-                "code": QDialog.DialogCode.Accepted,
-                "values": {UserSettingKey.CACHE_BASE_DIR: "/cache/ok"},
-            },
-        ]
-    )
+    fake_dialog = _build_fake_dialog_class([
+        {
+            "code": QDialog.DialogCode.Accepted,
+            "values": {UserSettingKey.CACHE_BASE_DIR: ""},
+        },
+        {
+            "code": QDialog.DialogCode.Accepted,
+            "values": {UserSettingKey.CACHE_BASE_DIR: "/cache/ok"},
+        },
+    ])
 
     monkeypatch.setattr(
         startup_mandatory_settings,

@@ -316,9 +316,12 @@ class _FakeRunDeferredWindow:
         source: str,
         rebind_fullscreen_loop: bool,
     ) -> None:
-        self.calls.append(
-            ("execute", set(changed_fields), source, rebind_fullscreen_loop)
-        )
+        self.calls.append((
+            "execute",
+            set(changed_fields),
+            source,
+            rebind_fullscreen_loop,
+        ))
 
     def _restore_grid_viewport_after_sort_change(self, snapshot: dict) -> None:
         self.calls.append(("restore", snapshot))

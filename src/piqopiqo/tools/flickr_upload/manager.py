@@ -157,14 +157,12 @@ class FlickrUploadManager(QObject):
         self.progress.emit(0, len(items))
 
         payloads = [
-            self._build_worker_payload(
-                {
-                    "file_path": str(item["file_path"]),
-                    "order": int(item["order"]),
-                    "db_metadata": item.get("db_metadata"),
-                    "exiftool_path": self._exiftool_path,
-                }
-            )
+            self._build_worker_payload({
+                "file_path": str(item["file_path"]),
+                "order": int(item["order"]),
+                "db_metadata": item.get("db_metadata"),
+                "exiftool_path": self._exiftool_path,
+            })
             for item in items
         ]
 
@@ -195,13 +193,11 @@ class FlickrUploadManager(QObject):
             result.fatal_error = "No photos were successfully uploaded."
             return []
 
-        resolve_payload = self._build_worker_payload(
-            {
-                "upload_ts": upload_ts,
-                "upload_entries": upload_successes,
-                "exiftool_path": self._exiftool_path,
-            }
-        )
+        resolve_payload = self._build_worker_payload({
+            "upload_ts": upload_ts,
+            "upload_entries": upload_successes,
+            "exiftool_path": self._exiftool_path,
+        })
 
         self.stage_changed.emit(FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label)
         self.progress.emit(0, 0)
@@ -262,13 +258,11 @@ class FlickrUploadManager(QObject):
 
         timestamps = generate_timestamps(upload_ts, total)
         payloads = [
-            self._build_worker_payload(
-                {
-                    "photo_id": row["photo_id"],
-                    "file_path": row["file_path"],
-                    "timestamp": ts,
-                }
-            )
+            self._build_worker_payload({
+                "photo_id": row["photo_id"],
+                "file_path": row["file_path"],
+                "timestamp": ts,
+            })
             for row, ts in zip(photo_pairs, timestamps, strict=True)
         ]
 
@@ -308,12 +302,10 @@ class FlickrUploadManager(QObject):
         self.progress.emit(0, total)
 
         payloads = [
-            self._build_worker_payload(
-                {
-                    "photo_id": row["photo_id"],
-                    "file_path": row["file_path"],
-                }
-            )
+            self._build_worker_payload({
+                "photo_id": row["photo_id"],
+                "file_path": row["file_path"],
+            })
             for row in photo_pairs
         ]
 
@@ -374,12 +366,10 @@ class FlickrUploadManager(QObject):
                 return
 
             create_row = run_create_album_task(
-                self._build_worker_payload(
-                    {
-                        "album_title": album_title,
-                        "primary_photo_id": str(photo_pairs[0]["photo_id"]),
-                    }
-                )
+                self._build_worker_payload({
+                    "album_title": album_title,
+                    "primary_photo_id": str(photo_pairs[0]["photo_id"]),
+                })
             )
             if not create_row.get("ok"):
                 result.failures.append(
@@ -440,12 +430,10 @@ class FlickrUploadManager(QObject):
         self.album_status.emit(f"Adding to album '{display_title}'...")
 
         add_row = run_add_to_album_task(
-            self._build_worker_payload(
-                {
-                    "album_id": album_id,
-                    "photo_ids": [str(row["photo_id"]) for row in photo_pairs],
-                }
-            )
+            self._build_worker_payload({
+                "album_id": album_id,
+                "photo_ids": [str(row["photo_id"]) for row in photo_pairs],
+            })
         )
 
         if not add_row.get("ok"):

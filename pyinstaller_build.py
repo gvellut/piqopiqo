@@ -10,7 +10,8 @@ from piqopiqo.ssf.settings_state import APP_NAME, ORG_DOMAIN
 # info for the about of the built .app
 try:
     git_sha = (
-        subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+        subprocess
+        .check_output(["git", "rev-parse", "--short", "HEAD"])
         .decode("ascii")
         .strip()
     )
@@ -30,17 +31,15 @@ with open("src/piqopiqo/_build_info.py", "w") as f:
 # (it's ":" on Mac/Linux and ";" on Windows)
 pro_sep = os.pathsep
 
-PyInstaller.__main__.run(
-    [
-        "pyinstaller_main.py",  # The script to bundle
-        f"--name={APP_NAME}",  # App Name
-        "--windowed",  # No console
-        "--noconfirm",  # Replace output folder without asking
-        "--clean",  # Clean cache
-        "--icon=app.icns",  # Icon file
-        "--exclude-module=pyqtauto",  # Exclude specific module
-        "--paths=src",  # Additional import paths
-        f"--add-data=app.icns{pro_sep}.",  # Add data file
-        f"--osx-bundle-identifier=com.{ORG_DOMAIN}.{APP_NAME}",
-    ]
-)
+PyInstaller.__main__.run([
+    "pyinstaller_main.py",  # The script to bundle
+    f"--name={APP_NAME}",  # App Name
+    "--windowed",  # No console
+    "--noconfirm",  # Replace output folder without asking
+    "--clean",  # Clean cache
+    "--icon=app.icns",  # Icon file
+    "--exclude-module=pyqtauto",  # Exclude specific module
+    "--paths=src",  # Additional import paths
+    f"--add-data=app.icns{pro_sep}.",  # Add data file
+    f"--osx-bundle-identifier=com.{ORG_DOMAIN}.{APP_NAME}",
+])

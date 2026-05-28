@@ -26,17 +26,15 @@ def scan_folder(root_path: str) -> tuple[list[dict], list[str]]:
                 continue
 
             path = os.path.join(root, file)
-            images.append(
-                {
-                    "path": path,
-                    "name": file,
-                    "state": 0,  # not processed
-                    "created": datetime.fromtimestamp(os.path.getctime(path)).strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    ),
-                    "source_folder": root,
-                }
-            )
+            images.append({
+                "path": path,
+                "name": file,
+                "state": 0,  # not processed
+                "created": datetime.fromtimestamp(os.path.getctime(path)).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+                "source_folder": root,
+            })
             folder_has_images = True
 
         if folder_has_images:

@@ -32,9 +32,10 @@ class ErrorListDialog(QDialog):
         self.tree.setColumnWidth(0, 250)
 
         if thumb_errors:
-            thumb_item = QTreeWidgetItem(
-                [f"Thumbnail Errors ({len(thumb_errors)})", ""]
-            )
+            thumb_item = QTreeWidgetItem([
+                f"Thumbnail Errors ({len(thumb_errors)})",
+                "",
+            ])
             for path, error in thumb_errors.items():
                 child = QTreeWidgetItem([os.path.basename(path), error])
                 child.setToolTip(0, path)

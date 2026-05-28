@@ -155,9 +155,7 @@ def _apply_dialog_size_to_content(
 
     size_hint = dialog.sizeHint()
     base_width = (
-        dialog.width()
-        if preserve_width and dialog.isVisible()
-        else size_hint.width()
+        dialog.width() if preserve_width and dialog.isVisible() else size_hint.width()
     )
     target_width = _clamp_dialog_width(
         dialog,
@@ -176,13 +174,11 @@ def _apply_dialog_size_to_content(
     }
 
     if sizing == "fixed":
-        constraints.update(
-            {
-                "width": True,
-                "min_width": base_min_width,
-                "max_width": base_max_width,
-            }
-        )
+        constraints.update({
+            "width": True,
+            "min_width": base_min_width,
+            "max_width": base_max_width,
+        })
         dialog.resize(target_width, target_height)
         dialog.setMinimumWidth(target_width)
         dialog.setMaximumWidth(target_width)
@@ -562,9 +558,8 @@ class ToolFlowDialog(QDialog):
     def _sync_content_host_visibility(self) -> None:
         if self._content_host is None:
             return
-        visible = (
-            self._content_widget is not None
-            and _widget_has_visible_content(self._content_widget)
+        visible = self._content_widget is not None and _widget_has_visible_content(
+            self._content_widget
         )
         self._content_host.setVisible(visible)
 

@@ -68,26 +68,22 @@ class MetadataSaveWorker(PythonOwnedRunnable):
             db.save_metadata(self.file_path, self.data)
             self.signals.finished.emit(self.file_path)
         except MetadataDBUnavailableError as exc:
-            self.signals.failed.emit(
-                {
-                    "file_path": self.file_path,
-                    "data": self.data.copy(),
-                    "changed_fields": set(self.changed_fields),
-                    "fault": exc.fault,
-                    "safe_to_replay": self.safe_to_replay,
-                    "source": self.source,
-                }
-            )
+            self.signals.failed.emit({
+                "file_path": self.file_path,
+                "data": self.data.copy(),
+                "changed_fields": set(self.changed_fields),
+                "fault": exc.fault,
+                "safe_to_replay": self.safe_to_replay,
+                "source": self.source,
+            })
         except Exception as e:
             logger.error(f"Failed to save metadata for {self.file_path}: {e}")
-            self.signals.failed.emit(
-                {
-                    "file_path": self.file_path,
-                    "data": self.data.copy(),
-                    "changed_fields": set(self.changed_fields),
-                    "fault": None,
-                    "safe_to_replay": False,
-                    "source": self.source,
-                    "error_message": str(e),
-                }
-            )
+            self.signals.failed.emit({
+                "file_path": self.file_path,
+                "data": self.data.copy(),
+                "changed_fields": set(self.changed_fields),
+                "fault": None,
+                "safe_to_replay": False,
+                "source": self.source,
+                "error_message": str(e),
+            })

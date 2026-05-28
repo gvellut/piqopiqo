@@ -161,12 +161,10 @@ def test_watcher_add_batch_refreshes_grid_once_and_registers_media_once(
     new_one = _touch_image(tmp_path / "P9991.JPG")
     new_two = _touch_image(tmp_path / "P9992.JPG")
 
-    window._on_folder_changes(
-        [
-            ("added", new_one["path"]),
-            ("added", new_two["path"]),
-        ]
-    )
+    window._on_folder_changes([
+        ("added", new_one["path"]),
+        ("added", new_two["path"]),
+    ])
 
     assert window.media_manager.add_files_calls == [[new_one["path"], new_two["path"]]]
     assert len(set_data_calls) == 1
@@ -205,12 +203,10 @@ def test_watcher_add_skips_paths_already_present_in_model(window: MainWindow, tm
     new_image = _touch_image(tmp_path / "P9994.JPG")
     window.media_manager.add_files_calls.clear()
 
-    window._on_folder_changes(
-        [
-            ("added", existing_path),
-            ("added", new_image["path"]),
-        ]
-    )
+    window._on_folder_changes([
+        ("added", existing_path),
+        ("added", new_image["path"]),
+    ])
 
     assert window.media_manager.add_files_calls == [[new_image["path"]]]
     assert (
@@ -439,9 +435,11 @@ class _FakeFullscreenOverlay:
         paths: list[str],
         preferred_path: str | None = None,
     ) -> bool:
-        self.rebind_calls.append(
-            ([item.path for item in all_items], list(paths), preferred_path)
-        )
+        self.rebind_calls.append((
+            [item.path for item in all_items],
+            list(paths),
+            preferred_path,
+        ))
         self.all_paths = [item.path for item in all_items]
         self.loop_paths = list(paths)
         self.current_path = preferred_path or (paths[0] if paths else None)
@@ -476,9 +474,7 @@ def test_watcher_move_inside_root_rebinds_fullscreen_to_new_path(
     assert overlay.current_path == new_path
 
 
-def test_watcher_delete_rebinds_fullscreen_to_next_surviving_path(
-    window: MainWindow
-):
+def test_watcher_delete_rebinds_fullscreen_to_next_surviving_path(window: MainWindow):
     removed = window.photo_model.all_photos[0].path
     survivor = window.photo_model.all_photos[1].path
     overlay = _FakeFullscreenOverlay(

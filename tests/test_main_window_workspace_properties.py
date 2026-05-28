@@ -379,9 +379,11 @@ def test_open_recent_folder_clears_filters_and_loads(window, monkeypatch, tmp_pa
     monkeypatch.setattr(
         window,
         "_load_folder",
-        lambda folder, *, reset_grid_to_top=False: calls.append(
-            ("load", folder, reset_grid_to_top)
-        ),
+        lambda folder, *, reset_grid_to_top=False: calls.append((
+            "load",
+            folder,
+            reset_grid_to_top,
+        )),
     )
 
     window._on_open_recent_folder(str(recent_folder))
@@ -423,9 +425,10 @@ def test_open_recent_folder_missing_keeps_workspace_and_removes_history(
     monkeypatch.setattr(
         window,
         "_load_folder",
-        lambda folder, *, reset_grid_to_top=False: load_calls.append(
-            (folder, reset_grid_to_top)
-        ),
+        lambda folder, *, reset_grid_to_top=False: load_calls.append((
+            folder,
+            reset_grid_to_top,
+        )),
     )
 
     window._on_open_recent_folder(str(missing_folder))

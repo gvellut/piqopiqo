@@ -54,13 +54,11 @@ def _scope_items(*entries: tuple[str, dict | None] | str) -> list[dict]:
             file_path, db_metadata = entry
         else:
             file_path, db_metadata = entry, None
-        scope_items.append(
-            {
-                "file_path": file_path,
-                "order": order,
-                "db_metadata": db_metadata,
-            }
-        )
+        scope_items.append({
+            "file_path": file_path,
+            "order": order,
+            "db_metadata": db_metadata,
+        })
     return scope_items
 
 
@@ -253,12 +251,14 @@ def test_preflight_metadata_warning_and_controls_follow_selected_scope(
     )
 
     dialog = FlickrPreflightDialog(
-        visible_upload_items=_scope_items(
-            ("/visible.jpg", {"title": "", "keywords": "one"})
-        ),
-        label_upload_items=_scope_items(
-            ("/label.jpg", {"title": "Label", "keywords": "two"})
-        ),
+        visible_upload_items=_scope_items((
+            "/visible.jpg",
+            {"title": "", "keywords": "one"},
+        )),
+        label_upload_items=_scope_items((
+            "/label.jpg",
+            {"title": "Label", "keywords": "two"},
+        )),
         token_exists=True,
         label_override_text="Approved",
         require_metadata=True,
@@ -312,14 +312,10 @@ def test_preflight_active_missing_paths_follow_selected_scope(
 
     assert dialog.scope_checkbox is not None
     assert dialog.scope_checkbox.isChecked() is True
-    assert dialog.active_metadata_validation_missing_paths() == [
-        "/label_missing.jpg"
-    ]
+    assert dialog.active_metadata_validation_missing_paths() == ["/label_missing.jpg"]
 
     dialog.scope_checkbox.setChecked(False)
-    assert dialog.active_metadata_validation_missing_paths() == [
-        "/visible_missing.jpg"
-    ]
+    assert dialog.active_metadata_validation_missing_paths() == ["/visible_missing.jpg"]
 
 
 def test_preflight_disables_upload_while_metadata_validation_is_pending(
@@ -333,9 +329,10 @@ def test_preflight_disables_upload_while_metadata_validation_is_pending(
     )
 
     dialog = FlickrPreflightDialog(
-        visible_upload_items=_scope_items(
-            ("/visible.jpg", {"title": "Visible", "keywords": "one"})
-        ),
+        visible_upload_items=_scope_items((
+            "/visible.jpg",
+            {"title": "Visible", "keywords": "one"},
+        )),
         token_exists=True,
         require_metadata=True,
         db_manager=object(),
@@ -355,12 +352,14 @@ def test_preflight_height_tracks_optional_rows(qapp, monkeypatch) -> None:
     )
 
     dialog = FlickrPreflightDialog(
-        visible_upload_items=_scope_items(
-            ("/visible.jpg", {"title": "", "keywords": "one"})
-        ),
-        label_upload_items=_scope_items(
-            ("/label.jpg", {"title": "Label", "keywords": "two"})
-        ),
+        visible_upload_items=_scope_items((
+            "/visible.jpg",
+            {"title": "", "keywords": "one"},
+        )),
+        label_upload_items=_scope_items((
+            "/label.jpg",
+            {"title": "Label", "keywords": "two"},
+        )),
         token_exists=True,
         label_override_text="Approved",
         require_metadata=True,

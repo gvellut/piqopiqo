@@ -546,13 +546,9 @@ class PhotoListModel(QObject):
         self._filtered_photos = filtered
 
     def _rebuild_source_folders(self) -> None:
-        self._source_folders = sorted(
-            {
-                photo.source_folder
-                for photo in self._all_photos
-                if photo.source_folder
-            }
-        )
+        self._source_folders = sorted({
+            photo.source_folder for photo in self._all_photos if photo.source_folder
+        })
 
     def _reindex_from(self, start_index: int):
         """Update _global_index for all photos from start_index onwards."""

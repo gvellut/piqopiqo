@@ -247,9 +247,7 @@ def test_settings_dialog_ignores_invalid_transition_rules_for_save(
 
     dialog = SettingsDialog(initial_tab_title="External/Tools")
     labels_editor = dialog._editors[UserSettingKey.STATUS_LABELS]
-    transitions_editor = dialog._editors[
-        UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS
-    ]
+    transitions_editor = dialog._editors[UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS]
 
     labels_editor.set_value([StatusLabel("Approved", "#ff0000", 1)])
     dialog._on_field_changed(UserSettingKey.STATUS_LABELS)
@@ -272,9 +270,7 @@ def test_settings_dialog_lifecycle_controls_label_and_transition_editors(
     dialog = SettingsDialog(initial_tab_title="External/Tools")
     lifecycle_editor = dialog._editors[UserSettingKey.FLICKR_UPLOAD_USE_LIFECYCLE]
     upload_label_editor = dialog._editors[UserSettingKey.FLICKR_UPLOAD_LABEL]
-    transitions_editor = dialog._editors[
-        UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS
-    ]
+    transitions_editor = dialog._editors[UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS]
 
     assert lifecycle_editor.get_value() is False
     assert upload_label_editor.isEnabled() is True
@@ -304,12 +300,10 @@ def test_settings_dialog_passes_unsaved_labels_to_transition_dialog(
 
     dialog = SettingsDialog(initial_tab_title="External/Tools")
     labels_editor = dialog._editors[UserSettingKey.STATUS_LABELS]
-    labels_editor.set_value(
-        [
-            StatusLabel("Approved", "#ff0000", 1),
-            StatusLabel("Unsaved", "#123456", 2),
-        ]
-    )
+    labels_editor.set_value([
+        StatusLabel("Approved", "#ff0000", 1),
+        StatusLabel("Unsaved", "#123456", 2),
+    ])
     dialog._on_field_changed(UserSettingKey.STATUS_LABELS)
 
     captured: dict[str, list[StatusLabel]] = {}
@@ -326,9 +320,7 @@ def test_settings_dialog_passes_unsaved_labels_to_transition_dialog(
 
     monkeypatch.setattr(lte, "_LabelTransitionsDialog", _DialogStub)
 
-    transitions_editor = dialog._editors[
-        UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS
-    ]
+    transitions_editor = dialog._editors[UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS]
     transitions_editor._editor._on_edit()
 
     assert [label.name for label in captured["status_labels"]] == [
@@ -353,12 +345,10 @@ def test_settings_dialog_updates_lifecycle_label_combo_from_unsaved_labels(
     labels_editor = dialog._editors[UserSettingKey.STATUS_LABELS]
     upload_label_editor = dialog._editors[UserSettingKey.FLICKR_UPLOAD_LABEL]
 
-    labels_editor.set_value(
-        [
-            StatusLabel("Approved", "#ff0000", 1),
-            StatusLabel("Unsaved", "#123456", 2),
-        ]
-    )
+    labels_editor.set_value([
+        StatusLabel("Approved", "#ff0000", 1),
+        StatusLabel("Unsaved", "#123456", 2),
+    ])
     dialog._on_field_changed(UserSettingKey.STATUS_LABELS)
 
     combo = upload_label_editor._editor._combo
@@ -509,9 +499,7 @@ def test_settings_dialog_keeps_simple_rows_at_natural_height(qapp, monkeypatch):
     assert summary_label.alignment() & Qt.AlignmentFlag.AlignVCenter
 
 
-def test_settings_dialog_scroll_area_preserves_manual_lens_minimums(
-    qapp, monkeypatch
-):
+def test_settings_dialog_scroll_area_preserves_manual_lens_minimums(qapp, monkeypatch):
     monkeypatch.delenv("PIQO_SETTINGS_PANEL_SAVE_MODE", raising=False)
     init_qsettings_store(dyn=True)
 
@@ -538,9 +526,7 @@ def test_settings_dialog_scroll_area_preserves_manual_lens_minimums(
     )
 
 
-def test_settings_dialog_section_titles_stay_outside_field_panels(
-    qapp, monkeypatch
-):
+def test_settings_dialog_section_titles_stay_outside_field_panels(qapp, monkeypatch):
     monkeypatch.delenv("PIQO_SETTINGS_PANEL_SAVE_MODE", raising=False)
     init_qsettings_store(dyn=True)
 
@@ -568,9 +554,7 @@ def test_settings_dialog_section_titles_stay_outside_field_panels(
         assert title_labels[0].geometry().bottom() <= panel.geometry().top()
 
 
-def test_settings_dialog_section_panels_are_inset_from_scroll_area(
-    qapp, monkeypatch
-):
+def test_settings_dialog_section_panels_are_inset_from_scroll_area(qapp, monkeypatch):
     monkeypatch.delenv("PIQO_SETTINGS_PANEL_SAVE_MODE", raising=False)
     init_qsettings_store(dyn=True)
 

@@ -82,12 +82,10 @@ def test_select_paths_refreshes_visible_selection_and_anchor_before_signal_handl
     observed_cell_states: list[tuple[tuple[bool, bool], tuple[bool, bool]]] = []
 
     def _record_selection(*_args) -> None:
-        observed_cell_states.append(
-            (
-                (grid.cells[0].is_selected, grid.cells[0].is_last_selected),
-                (grid.cells[1].is_selected, grid.cells[1].is_last_selected),
-            )
-        )
+        observed_cell_states.append((
+            (grid.cells[0].is_selected, grid.cells[0].is_last_selected),
+            (grid.cells[1].is_selected, grid.cells[1].is_last_selected),
+        ))
 
     grid.selection_changed.connect(_record_selection)
 

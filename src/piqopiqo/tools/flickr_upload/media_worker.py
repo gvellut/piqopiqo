@@ -249,13 +249,11 @@ def _reupload_photos_without_tags(
 
         remote_photo_id = str(remote.get("id", "") or "")
         if not remote_photo_id:
-            failures.append(
-                {
-                    "stage": FlickrStage.STAGE_UPLOAD.label,
-                    "file_path": str(local.get("file_path", "")),
-                    "error": "Missing photo id while retrying tag reupload.",
-                }
-            )
+            failures.append({
+                "stage": FlickrStage.STAGE_UPLOAD.label,
+                "file_path": str(local.get("file_path", "")),
+                "error": "Missing photo id while retrying tag reupload.",
+            })
             continue
 
         temp_path = None
@@ -291,13 +289,11 @@ def _reupload_photos_without_tags(
             retry(API_RETRIES, _replace_call)
             retry(API_RETRIES, _add_tags_call)
         except Exception as ex:
-            failures.append(
-                {
-                    "stage": FlickrStage.STAGE_UPLOAD.label,
-                    "file_path": str(local.get("file_path", "")),
-                    "error": f"Reupload failed: {ex}",
-                }
-            )
+            failures.append({
+                "stage": FlickrStage.STAGE_UPLOAD.label,
+                "file_path": str(local.get("file_path", "")),
+                "error": f"Reupload failed: {ex}",
+            })
         finally:
             if temp_path:
                 try:
