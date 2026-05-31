@@ -157,7 +157,7 @@ def test_status_bar_height_stays_stable_when_progress_or_errors_appear(qapp):
     assert status_bar.height() == initial_height
 
 
-def test_status_bar_selection_progress_is_indeterminate_without_text(qapp):
+def test_status_bar_selection_progress_is_full_without_text(qapp):
     init_qsettings_store(dyn=True)
     status_bar = LoadingStatusBar()
 
@@ -165,7 +165,9 @@ def test_status_bar_selection_progress_is_indeterminate_without_text(qapp):
 
     assert status_bar.progress_bar.isHidden() is False
     assert status_bar.progress_bar.minimum() == 0
-    assert status_bar.progress_bar.maximum() == 0
+    assert status_bar.progress_bar.maximum() == 1
+    assert status_bar.progress_bar.value() == 1
+    assert status_bar.progress_bar.format() == ""
     assert status_bar.progress_bar.isTextVisible() is False
 
     status_bar.set_selection_progress_active(False)
@@ -190,7 +192,9 @@ def test_status_bar_loading_progress_takes_precedence_over_selection(qapp):
     status_bar.set_thumb_progress(10, 10)
 
     assert status_bar.progress_bar.isHidden() is False
-    assert status_bar.progress_bar.maximum() == 0
+    assert status_bar.progress_bar.maximum() == 1
+    assert status_bar.progress_bar.value() == 1
+    assert status_bar.progress_bar.format() == ""
     assert status_bar.progress_bar.isTextVisible() is False
 
 

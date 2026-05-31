@@ -151,7 +151,7 @@ class LoadingStatusBar(QStatusBar):
         self._update_progress()
 
     def set_selection_progress_active(self, active: bool) -> None:
-        """Show an indeterminate progress bar while selection panels aggregate."""
+        """Show a full no-text progress bar while selection panels aggregate."""
         next_active = bool(active)
         if self._selection_progress_active == next_active:
             return
@@ -173,7 +173,9 @@ class LoadingStatusBar(QStatusBar):
         elif self._selection_progress_active:
             self.progress_bar.show()
             self.progress_bar.setTextVisible(False)
-            self.progress_bar.setRange(0, 0)
+            self.progress_bar.setRange(0, 1)
+            self.progress_bar.setValue(1)
+            self.progress_bar.setFormat("")
         else:
             self.progress_bar.setTextVisible(True)
             self.progress_bar.hide()
