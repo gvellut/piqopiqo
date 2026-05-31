@@ -943,11 +943,22 @@ class MainWindow(QMainWindow):
         self._selection_panel_refresh_scheduled_serial = None
         if self._selection_panel_refresh_timer.isActive():
             self._selection_panel_refresh_timer.stop()
+        self._set_selection_refresh_progress_active(False)
+
+    def _set_selection_refresh_progress_active(self, active: bool) -> None:
+        set_active = getattr(
+            self.status_bar,
+            "set_selection_progress_active",
+            None,
+        )
+        if callable(set_active):
+            set_active(bool(active))
 
     def _show_selection_panels_pending(self, count: int) -> None:
         if self.edit_panel:
             self.edit_panel.show_selection_pending(count)
         self.exif_panel.show_selection_pending(count)
+        self._set_selection_refresh_progress_active(True)
 
     def _clear_selection_panels_pending(self) -> None:
         if self.edit_panel:
@@ -967,7 +978,10 @@ class MainWindow(QMainWindow):
         self._selection_panel_refresh_scheduled_serial = None
         selected_items = self.photo_model.get_selected_photos()
         self._set_selected_cache_from_items(selected_items)
-        self._update_panels_for_selection(selected_items)
+        try:
+            self._update_panels_for_selection(selected_items)
+        finally:
+            self._set_selection_refresh_progress_active(False)
 
     def _should_defer_selection_panel_refresh(
         self,

@@ -394,11 +394,8 @@ class EditPanel(QWidget):
         self._current_items = []
         self._is_multi_select = bool(count > 1)
         self._has_missing_data = False
-        self._clear_fields()
         self._set_editing_enabled(False)
-        noun = "photo" if count == 1 else "photos"
-        self.reading_label.setText(f"{count} {noun} selected (updating...)")
-        self.reading_label.show()
+        self.reading_label.hide()
         self._update_map_button_state()
 
     def clear_selection_pending(self) -> None:

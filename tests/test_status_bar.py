@@ -157,6 +157,43 @@ def test_status_bar_height_stays_stable_when_progress_or_errors_appear(qapp):
     assert status_bar.height() == initial_height
 
 
+def test_status_bar_selection_progress_is_indeterminate_without_text(qapp):
+    init_qsettings_store(dyn=True)
+    status_bar = LoadingStatusBar()
+
+    status_bar.set_selection_progress_active(True)
+
+    assert status_bar.progress_bar.isHidden() is False
+    assert status_bar.progress_bar.minimum() == 0
+    assert status_bar.progress_bar.maximum() == 0
+    assert status_bar.progress_bar.isTextVisible() is False
+
+    status_bar.set_selection_progress_active(False)
+
+    assert status_bar.progress_bar.isHidden() is True
+    assert status_bar.progress_bar.isTextVisible() is True
+
+
+def test_status_bar_loading_progress_takes_precedence_over_selection(qapp):
+    init_qsettings_store(dyn=True)
+    status_bar = LoadingStatusBar()
+
+    status_bar.set_selection_progress_active(True)
+    status_bar.set_thumb_progress(1, 10)
+
+    assert status_bar.progress_bar.isHidden() is False
+    assert status_bar.progress_bar.maximum() == 10
+    assert status_bar.progress_bar.value() == 1
+    assert status_bar.progress_bar.format() == "1/10"
+    assert status_bar.progress_bar.isTextVisible() is True
+
+    status_bar.set_thumb_progress(10, 10)
+
+    assert status_bar.progress_bar.isHidden() is False
+    assert status_bar.progress_bar.maximum() == 0
+    assert status_bar.progress_bar.isTextVisible() is False
+
+
 def test_status_bar_folder_label_center_stays_stable_when_controls_change(qapp):
     init_qsettings_store(dyn=True)
     window = QMainWindow()

@@ -347,14 +347,43 @@ def test_keywords_height_change_keeps_edit_panel_rows_stable(qapp):
     assert short_state["keyword_label_h"] == base["keyword_label_h"]
 
 
-def test_selection_pending_summary_disables_editors_then_clears_on_update(qapp):
+def test_selection_pending_disables_editors_without_clearing_fields(qapp):
     init_qsettings_store(dyn=True)
 
     panel = EditPanel(_StubDBManager())
-    panel.show_selection_pending(1234)
+    keywords = ", ".join([
+        "alpha",
+        "beta",
+        "gamma",
+        "delta",
+        "epsilon",
+        "zeta",
+        "eta",
+        "theta",
+    ])
+    initial_item = ImageItem(
+        path="/tmp/initial.jpg",
+        name="initial.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={
+            DBFields.TITLE: "Initial",
+            DBFields.KEYWORDS: keywords,
+        },
+    )
+    panel.resize(320, 600)
+    panel.show()
+    panel.update_for_selection([initial_item])
+    qapp.processEvents()
+    initial_height = panel.keywords_edit.height()
 
-    assert panel.reading_label.isHidden() is False
-    assert panel.reading_label.text() == "1234 photos selected (updating...)"
+    panel.show_selection_pending(1234)
+    qapp.processEvents()
+
+    assert panel.reading_label.isHidden() is True
+    assert panel.title_edit.text() == "Initial"
+    assert panel.keywords_edit.text() == keywords
+    assert panel.keywords_edit.height() == initial_height
     assert panel.title_edit.isEnabled() is False
     assert panel.keywords_edit.isEnabled() is False
 
@@ -370,6 +399,108 @@ def test_selection_pending_summary_disables_editors_then_clears_on_update(qapp):
     assert panel.reading_label.isHidden() is True
     assert panel.title_edit.isEnabled() is True
     assert panel.keywords_edit.isEnabled() is True
+
+
+def test_pending_same_keywords_keeps_multiline_keyword_height(qapp):
+    init_qsettings_store(dyn=True)
+
+    panel = EditPanel(_StubDBManager())
+    panel.resize(300, 600)
+    panel.show()
+    qapp.processEvents()
+
+    keywords = ", ".join([
+        "alpha",
+        "beta",
+        "gamma",
+        "delta",
+        "epsilon",
+        "zeta",
+        "eta",
+        "theta",
+        "iota",
+        "kappa",
+        "lambda",
+        "mu",
+    ])
+    item1 = ImageItem(
+        path="/tmp/same-a.jpg",
+        name="same-a.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={DBFields.KEYWORDS: keywords},
+    )
+    item2 = ImageItem(
+        path="/tmp/same-b.jpg",
+        name="same-b.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={DBFields.KEYWORDS: keywords},
+    )
+    panel.update_for_selection([item1])
+    qapp.processEvents()
+    initial_height = panel.keywords_edit.height()
+
+    panel.show_selection_pending(2)
+    qapp.processEvents()
+    assert panel.keywords_edit.text() == keywords
+    assert panel.keywords_edit.height() == initial_height
+
+    panel.update_for_selection([item1, item2])
+    qapp.processEvents()
+    assert panel.keywords_edit.text() == keywords
+    assert panel.keywords_edit.height() == initial_height
+
+
+def test_pending_different_keywords_changes_height_only_on_final_update(qapp):
+    init_qsettings_store(dyn=True)
+
+    panel = EditPanel(_StubDBManager())
+    panel.resize(300, 600)
+    panel.show()
+    qapp.processEvents()
+
+    keywords = ", ".join([
+        "alpha",
+        "beta",
+        "gamma",
+        "delta",
+        "epsilon",
+        "zeta",
+        "eta",
+        "theta",
+        "iota",
+        "kappa",
+        "lambda",
+        "mu",
+    ])
+    item1 = ImageItem(
+        path="/tmp/different-a.jpg",
+        name="different-a.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={DBFields.KEYWORDS: keywords},
+    )
+    item2 = ImageItem(
+        path="/tmp/different-b.jpg",
+        name="different-b.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={DBFields.KEYWORDS: "other"},
+    )
+    panel.update_for_selection([item1])
+    qapp.processEvents()
+    initial_height = panel.keywords_edit.height()
+
+    panel.show_selection_pending(2)
+    qapp.processEvents()
+    assert panel.keywords_edit.text() == keywords
+    assert panel.keywords_edit.height() == initial_height
+
+    panel.update_for_selection([item1, item2])
+    qapp.processEvents()
+    assert panel.keywords_edit.text() == MULTIPLE_VALUES
+    assert panel.keywords_edit.height() < initial_height
 
 
 def test_non_text_protection_read_only_toggle(qapp):

@@ -230,9 +230,8 @@ class ExifPanel(QWidget):
         return super().eventFilter(watched, event)
 
     def show_selection_pending(self, count: int) -> None:
-        noun = "photo" if count == 1 else "photos"
-        self._status_label.setText(f"{count} {noun} selected (updating...)")
-        self._status_label.show()
+        del count
+        self._status_label.hide()
 
     def clear_selection_pending(self) -> None:
         self._status_label.hide()

@@ -32,6 +32,7 @@ class LoadingStatusBar(QStatusBar):
         self._filtered_count = 0
         self._selected_count = 0
         self._has_errors = False
+        self._selection_progress_active = False
         self._folder_label_max_width_ratio = self._read_folder_label_max_width_ratio()
         self._has_temporary_message = False
 
@@ -149,23 +150,33 @@ class LoadingStatusBar(QStatusBar):
         self._exif_total = total
         self._update_progress()
 
+    def set_selection_progress_active(self, active: bool) -> None:
+        """Show an indeterminate progress bar while selection panels aggregate."""
+        next_active = bool(active)
+        if self._selection_progress_active == next_active:
+            return
+        self._selection_progress_active = next_active
+        self._update_progress()
+
     def _update_progress(self):
         """Update the combined progress bar."""
         total = self._thumb_total + self._exif_total
         completed = self._thumb_completed + self._exif_completed
+        loading_active = total > 0 and completed < total
 
-        if total == 0:
-            self.progress_bar.hide()
-            self._schedule_folder_label_geometry_update()
-            return
-
-        if completed >= total:
-            self.progress_bar.hide()
-        else:
+        if loading_active:
             self.progress_bar.show()
-            self.progress_bar.setMaximum(total)
+            self.progress_bar.setTextVisible(True)
+            self.progress_bar.setRange(0, total)
             self.progress_bar.setValue(completed)
             self.progress_bar.setFormat(f"{completed}/{total}")
+        elif self._selection_progress_active:
+            self.progress_bar.show()
+            self.progress_bar.setTextVisible(False)
+            self.progress_bar.setRange(0, 0)
+        else:
+            self.progress_bar.setTextVisible(True)
+            self.progress_bar.hide()
         self._schedule_folder_label_geometry_update()
 
     def set_has_errors(self, has_errors: bool):
@@ -181,7 +192,9 @@ class LoadingStatusBar(QStatusBar):
         self._exif_total = 0
         self._exif_completed = 0
         self._has_errors = False
+        self._selection_progress_active = False
         self.progress_bar.hide()
+        self.progress_bar.setTextVisible(True)
         self.error_btn.hide()
         self._schedule_folder_label_geometry_update()
 

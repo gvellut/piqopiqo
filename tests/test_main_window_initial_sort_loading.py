@@ -10,7 +10,11 @@ from PySide6.QtWidgets import QApplication
 import pytest
 
 from piqopiqo.background.media_man import FolderPrimingResult
-from piqopiqo.main_window import MainWindow, _DeferredTimeTakenLoadResortState
+from piqopiqo.main_window import (
+    SELECTION_PANEL_DEBOUNCE_MS,
+    MainWindow,
+    _DeferredTimeTakenLoadResortState,
+)
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.model import ImageItem
 from piqopiqo.photo_model import SortOrder
@@ -352,6 +356,179 @@ def test_run_deferred_time_taken_load_resort_restores_viewport():
             },
         ),
     ]
+
+
+class _SelectionRefreshTimer:
+    def __init__(self):
+        self.active = False
+        self.starts: list[int] = []
+        self.stop_count = 0
+
+    def isActive(self) -> bool:
+        return self.active
+
+    def start(self, delay_ms: int) -> None:
+        self.active = True
+        self.starts.append(delay_ms)
+
+    def stop(self) -> None:
+        self.active = False
+        self.stop_count += 1
+
+
+class _SelectionRefreshStatusBar:
+    def __init__(self):
+        self.active = False
+        self.calls: list[bool] = []
+
+    def set_selection_progress_active(self, active: bool) -> None:
+        active = bool(active)
+        if self.active == active:
+            return
+        self.active = active
+        self.calls.append(active)
+
+
+class _SelectionRefreshPanel:
+    def __init__(self):
+        self.pending_counts: list[int] = []
+        self.clear_count = 0
+        self.update_calls: list[list[ImageItem]] = []
+
+    def show_selection_pending(self, count: int) -> None:
+        self.pending_counts.append(int(count))
+
+    def clear_selection_pending(self) -> None:
+        self.clear_count += 1
+
+    def update_for_selection(self, items: list[ImageItem]) -> None:
+        self.update_calls.append(list(items))
+
+    def update_exif(self, items: list[ImageItem]) -> None:
+        self.update_calls.append(list(items))
+
+
+class _SelectionRefreshMediaManager:
+    def __init__(self):
+        self.panel_loads: list[list[str]] = []
+
+    def ensure_panel_fields_loaded_from_db(self, paths: list[str]) -> None:
+        self.panel_loads.append(list(paths))
+
+
+class _SelectionRefreshPhotoModel:
+    def __init__(self, items: list[ImageItem]):
+        self._items = items
+
+    def get_selected_photos(self) -> list[ImageItem]:
+        return [item for item in self._items if item.is_selected]
+
+
+class _SelectionRefreshWindow:
+    def __init__(self, items: list[ImageItem]):
+        self.images_data = items
+        self.photo_model = _SelectionRefreshPhotoModel(items)
+        self.status_bar = _SelectionRefreshStatusBar()
+        self.edit_panel = _SelectionRefreshPanel()
+        self.exif_panel = _SelectionRefreshPanel()
+        self.media_manager = _SelectionRefreshMediaManager()
+        self._selected_paths_cache: set[str] = set()
+        self._selected_count_cache = 0
+        self._selection_panel_refresh_serial = 0
+        self._selection_panel_refresh_scheduled_serial: int | None = None
+        self._selection_panel_refresh_in_progress = False
+        self._selection_panel_refresh_timer = _SelectionRefreshTimer()
+        self.status_count_updates = 0
+
+    def _update_status_bar_count(self) -> None:
+        self.status_count_updates += 1
+
+    def _set_selected_cache_from_indices(self, selected_indices) -> int:
+        return MainWindow._set_selected_cache_from_indices(self, selected_indices)
+
+    def _set_selected_cache_from_items(self, items: list[ImageItem]) -> None:
+        MainWindow._set_selected_cache_from_items(self, items)
+
+    def _set_selection_refresh_progress_active(self, active: bool) -> None:
+        MainWindow._set_selection_refresh_progress_active(self, active)
+
+    def _show_selection_panels_pending(self, count: int) -> None:
+        MainWindow._show_selection_panels_pending(self, count)
+
+    def _clear_selection_panels_pending(self) -> None:
+        MainWindow._clear_selection_panels_pending(self)
+
+    def _schedule_deferred_selection_panel_refresh(self) -> None:
+        MainWindow._schedule_deferred_selection_panel_refresh(self)
+
+    def _should_defer_selection_panel_refresh(
+        self,
+        selected_count: int | None = None,
+        *,
+        include_active_timer: bool = True,
+    ) -> bool:
+        return MainWindow._should_defer_selection_panel_refresh(
+            self,
+            selected_count,
+            include_active_timer=include_active_timer,
+        )
+
+    def _cancel_deferred_selection_panel_refresh(self) -> None:
+        MainWindow._cancel_deferred_selection_panel_refresh(self)
+
+    def _apply_or_defer_panel_refresh(
+        self,
+        *,
+        selected_items: list[ImageItem] | None = None,
+        selected_count: int | None = None,
+        coalesce_with_active_timer: bool = False,
+    ) -> None:
+        MainWindow._apply_or_defer_panel_refresh(
+            self,
+            selected_items=selected_items,
+            selected_count=selected_count,
+            coalesce_with_active_timer=coalesce_with_active_timer,
+        )
+
+    def _update_panels_for_selection(self, items: list[ImageItem]) -> None:
+        MainWindow._update_panels_for_selection(self, items)
+
+
+def test_repeated_large_selection_defers_panels_until_single_flush():
+    items = []
+    for index in range(201):
+        item = ImageItem(
+            path=f"/photos/{index}.jpg",
+            name=f"{index}.jpg",
+            created="2020-01-01 00:00:00",
+            source_folder="/photos",
+            db_metadata={DBFields.KEYWORDS: "same"},
+        )
+        item.is_selected = True
+        item.exif_data = {}
+        items.append(item)
+    selected_indices = set(range(len(items)))
+    window = _SelectionRefreshWindow(items)
+
+    MainWindow.on_selection_changed(window, selected_indices)
+    MainWindow.on_selection_changed(window, selected_indices)
+
+    assert window.status_bar.calls == [True]
+    assert window._selection_panel_refresh_timer.starts == [
+        SELECTION_PANEL_DEBOUNCE_MS,
+        SELECTION_PANEL_DEBOUNCE_MS,
+    ]
+    assert window.edit_panel.update_calls == []
+    assert window.exif_panel.update_calls == []
+
+    window._selection_panel_refresh_timer.active = False
+    MainWindow._flush_deferred_selection_panel_refresh(window)
+
+    assert window.status_bar.calls == [True, False]
+    assert len(window.edit_panel.update_calls) == 1
+    assert len(window.exif_panel.update_calls) == 1
+    assert len(window.edit_panel.update_calls[0]) == len(items)
+    assert len(window.media_manager.panel_loads[0]) == len(items)
 
 
 class _FakeGrid:

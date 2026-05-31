@@ -128,16 +128,31 @@ def test_exif_panel_custom_field_labels_can_skip_auto_format(qapp, monkeypatch):
     assert labels_by_key["File:FileSize"] == "File:FileSize"
 
 
-def test_exif_panel_pending_summary_clears_on_update(qapp, monkeypatch):
+def test_exif_panel_pending_preserves_values_until_update(qapp, monkeypatch):
     _init_dyn_settings(monkeypatch, exif_auto_format=True)
     panel = ExifPanel()
 
-    panel.show_selection_pending(42)
-    assert panel._status_label.isHidden() is False
-    assert panel._status_label.text() == "42 photos selected (updating...)"
+    initial_item = ImageItem(path="/tmp/a.jpg", name="a.jpg", created="2025-01-01")
+    initial_item.exif_data = {"File:FileName": "a.jpg"}
+    panel.update_exif([initial_item])
 
-    item = ImageItem(path="/tmp/a.jpg", name="a.jpg", created="2025-01-01")
-    item.exif_data = {"File:FileName": "a.jpg"}
+    panel.show_selection_pending(42)
+    assert panel._status_label.isHidden() is True
+
+    keys = [label.toolTip() for label in panel.field_labels]
+    values_by_key = {
+        key: panel.value_labels[i]._full_text  # type: ignore[attr-defined]
+        for i, key in enumerate(keys)
+    }
+    assert values_by_key["File:FileName"] == "a.jpg"
+
+    item = ImageItem(path="/tmp/b.jpg", name="b.jpg", created="2025-01-01")
+    item.exif_data = {"File:FileName": "b.jpg"}
     panel.update_exif([item])
 
     assert panel._status_label.isHidden() is True
+    values_by_key = {
+        key: panel.value_labels[i]._full_text  # type: ignore[attr-defined]
+        for i, key in enumerate(keys)
+    }
+    assert values_by_key["File:FileName"] == "b.jpg"

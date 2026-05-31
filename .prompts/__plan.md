@@ -1,3 +1,4 @@
+- [Undo label do not record if label not changed](Sd_tasks/Sd_Undo_label_do_not_record_if_label_not_changed.md)
 - [change tool workflow](Gd_tasks/Rd_change_tool_workflow.md)
 - [Move to trash add confirmation](Gd_tasks/Jd_Move_to_trash_add_confirmation.md)
 - [Flickr max workers diff for upload and set date public](Yb_tasks/Cc_Flickr_max_workers_diff_for_upload_and_set_date_.md)
@@ -143,3 +144,4 @@
 ! [no photo option to eject](Gd_tasks/Od_no_photo_option_to_eject.md)
 ! [Select lifecyle label](Gd_tasks/Pd_Select_lifecyle_label.md)
 ! [Copy from SD display dates](Gd_tasks/Qd_Copy_from_SD_display_dates.md)
+! [multiple selected](Sd_tasks/Td_multiple_selected.md)

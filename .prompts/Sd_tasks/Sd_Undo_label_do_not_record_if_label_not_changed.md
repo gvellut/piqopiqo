@@ -1,0 +1,1 @@
+If setting the label with shortcut and the photo is already of that label, do not record it in the undo / redo stack. Ignore it.
