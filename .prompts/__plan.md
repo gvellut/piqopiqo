@@ -1,3 +1,4 @@
+* [Clear GPS also clears the updated date time](Sd_tasks/Ud_Clear_GPS_also_clears_the_updated_date_time.md)
 - [Undo label do not record if label not changed](Sd_tasks/Sd_Undo_label_do_not_record_if_label_not_changed.md)
 - [change tool workflow](Gd_tasks/Rd_change_tool_workflow.md)
 - [Move to trash add confirmation](Gd_tasks/Jd_Move_to_trash_add_confirmation.md)

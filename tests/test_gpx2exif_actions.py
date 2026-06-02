@@ -19,6 +19,7 @@ from piqopiqo.tools.gpx2exif.actions import (
 )
 from piqopiqo.tools.gpx2exif.constants import FOLDER_STATE_LAST_GPX_PATH
 import piqopiqo.tools.gpx2exif.dialogs as gpx_dialogs
+import piqopiqo.tools.gpx2exif.workers as gpx_workers
 
 
 def test_set_gpx_path_for_folders_writes_trimmed_value(tmp_path) -> None:
@@ -146,7 +147,10 @@ def test_launch_apply_gpx_passes_last_folder_and_persists_browse_selection(
     assert state_set_calls == [(StateKey.LAST_GPX_FOLDER, "/tmp/chosen")]
 
 
-def test_launch_clear_gpx_clears_lat_lon_and_syncs_model(monkeypatch, tmp_path) -> None:
+def test_launch_clear_gpx_clears_lat_lon_restores_time_and_syncs_model(
+    monkeypatch,
+    tmp_path,
+) -> None:
     set_cache_base_dir(tmp_path / "cache")
 
     photos_root = tmp_path / "photos"
@@ -173,6 +177,14 @@ def test_launch_clear_gpx_clears_lat_lon_and_syncs_model(monkeypatch, tmp_path) 
     }
     db.save_metadata(file_a, metadata_a)
     db.save_metadata(file_b, metadata_b)
+    db.save_exif_fields(
+        file_a,
+        {"EXIF:DateTimeOriginal": "2026:02:01 10:30:00"},
+    )
+    db.save_exif_fields(
+        file_b,
+        {"EXIF:DateTimeOriginal": "2026:02:02 10:30:00"},
+    )
 
     sync_calls: list[tuple[set[str], str]] = []
 
@@ -181,6 +193,7 @@ def test_launch_clear_gpx_clears_lat_lon_and_syncs_model(monkeypatch, tmp_path) 
         "question",
         lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
     )
+    monkeypatch.setattr(gpx_actions, "get_user_setting", lambda _key: "")
 
     item_a = SimpleNamespace(path=file_a, db_metadata=metadata_a.copy())
     item_b = SimpleNamespace(path=file_b, db_metadata=None)
@@ -210,17 +223,86 @@ def test_launch_clear_gpx_clears_lat_lon_and_syncs_model(monkeypatch, tmp_path) 
     assert meta_b[DBFields.LATITUDE] is None
     assert meta_b[DBFields.LONGITUDE] is None
 
-    assert meta_a[DBFields.TIME_TAKEN] == datetime(2026, 2, 1, 12, 0, 0)
-    assert meta_b[DBFields.TIME_TAKEN] == datetime(2026, 2, 2, 12, 0, 0)
+    assert meta_a[DBFields.TIME_TAKEN] == datetime(2026, 2, 1, 10, 30, 0)
+    assert meta_b[DBFields.TIME_TAKEN] == datetime(2026, 2, 2, 10, 30, 0)
 
     assert item_a.db_metadata[DBFields.LATITUDE] is None
     assert item_a.db_metadata[DBFields.LONGITUDE] is None
+    assert item_a.db_metadata[DBFields.TIME_TAKEN] == datetime(2026, 2, 1, 10, 30, 0)
     assert item_b.db_metadata is not None
     assert item_b.db_metadata[DBFields.LATITUDE] is None
     assert item_b.db_metadata[DBFields.LONGITUDE] is None
+    assert item_b.db_metadata[DBFields.TIME_TAKEN] == datetime(2026, 2, 2, 10, 30, 0)
 
     assert sync_calls == [
-        ({DBFields.LATITUDE, DBFields.LONGITUDE}, "clear_gpx"),
+        ({DBFields.TIME_TAKEN, DBFields.LATITUDE, DBFields.LONGITUDE}, "clear_gpx"),
     ]
+
+    dbm.close_all()
+
+
+def test_clear_gps_worker_clears_lat_lon_and_restores_exif_time(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    set_cache_base_dir(tmp_path / "cache")
+
+    folder = tmp_path / "photos"
+    folder.mkdir(parents=True, exist_ok=True)
+    file_a = str(folder / "a.jpg")
+    file_b = str(folder / "b.jpg")
+
+    dbm = MetadataDBManager()
+    db = dbm.get_db_for_folder(str(folder))
+    shifted_time = datetime(2026, 2, 1, 12, 0, 0)
+    original_time_a = datetime(2026, 2, 1, 10, 30, 0)
+    original_time_b = datetime(2026, 2, 2, 10, 30, 0)
+    for file_path in (file_a, file_b):
+        db.save_metadata(
+            file_path,
+            {
+                DBFields.TITLE: "A",
+                DBFields.LATITUDE: 48.1,
+                DBFields.LONGITUDE: 2.3,
+                DBFields.TIME_TAKEN: shifted_time,
+            },
+        )
+
+    exif_calls: list[list[str]] = []
+
+    def _read_original_time_taken_from_exif(
+        file_paths: list[str],
+        _exiftool_path: str | None,
+    ) -> dict[str, datetime | None]:
+        exif_calls.append(list(file_paths))
+        return {
+            file_a: original_time_a,
+            file_b: original_time_b,
+        }
+
+    monkeypatch.setattr(
+        gpx_workers,
+        "_read_original_time_taken_from_exif",
+        _read_original_time_taken_from_exif,
+    )
+
+    worker = gpx_workers.ClearGpsWorker(
+        db_manager=dbm,
+        file_paths=[file_a, file_b],
+        exiftool_path=None,
+    )
+    worker.run()
+
+    meta_a = db.get_metadata(file_a)
+    meta_b = db.get_metadata(file_b)
+    assert meta_a is not None
+    assert meta_b is not None
+    assert meta_a[DBFields.LATITUDE] is None
+    assert meta_a[DBFields.LONGITUDE] is None
+    assert meta_a[DBFields.TIME_TAKEN] == original_time_a
+    assert meta_b[DBFields.LATITUDE] is None
+    assert meta_b[DBFields.LONGITUDE] is None
+    assert meta_b[DBFields.TIME_TAKEN] == original_time_b
+    assert exif_calls == [[file_a, file_b]]
 
     dbm.close_all()

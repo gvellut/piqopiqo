@@ -368,6 +368,7 @@ Selection behavior:
 - Manual lens focal values are normalized to `.` decimal separator when writing EXIF/Flickr temp EXIF (`focallength`, `lens`, `LensInfo`, `FocalLengthIn35mmFormat`).
 - GPX workflows are DB-first: "Update images" mode label is kept for compatibility, but normal processing updates SQLite metadata and KML outputs; it does not write EXIF.
 - Apply GPX scope ignores grid selection/filter and always processes all photos in all loaded source folders.
+- Clear GPS scope ignores grid selection/filter and always processes all photos in all loaded source folders; it clears DB latitude/longitude and restores DB `time_taken` from image `EXIF:DateTimeOriginal` (or cached EXIF data if direct EXIF read fails).
 - Empty time shift means "not set"; Apply GPX shows an empty field and treats it as `0` during processing.
 - Apply GPX initial shift precedence per folder is: folder DB `TIME_SHIFT` -> state cache `LAST_TIMESHIFT_BY_FOLDERS[relative_folder]` -> global `LAST_TIMESHIFT` (unless `TIME_SHIFT_UNKNOWN_FOLDER_IGNORE` is enabled).
 - Apply GPX pre-fills the GPX path input from the first non-empty folder `GPX_PATH` value among loaded source folders.

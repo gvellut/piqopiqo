@@ -588,7 +588,7 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
 
 
 class ClearGpsProgressDialog(ToolFlowDialog):
-    """Progress dialog for clearing GPS coordinates."""
+    """Progress dialog for clearing GPS coordinates and restoring time taken."""
 
     cancel_requested = Signal()
 
@@ -618,7 +618,7 @@ class ClearGpsProgressDialog(ToolFlowDialog):
         super().__init__(workflow, parent=parent)
         self.cancel_btn = self.button("cancel")
         self.ok_btn = self.button("ok")
-        self.set_status("Clearing GPS coordinates...")
+        self.set_status("Clearing GPS coordinates and restoring time taken...")
         self.progress_bar.setRange(0, self._total)
         self.progress_bar.setValue(0)
         self.sync_size_to_content()

@@ -1,0 +1,1 @@
+Clear GPS should also clear the updated date time set by Apply GPX

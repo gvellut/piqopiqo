@@ -362,8 +362,9 @@ def launch_clear_gps(window: MainWindow) -> None:
         window,
         "Clear GPS",
         (
-            f"Clear GPS coordinates (latitude/longitude) for {len(items)} loaded "
-            "photo(s)?\n\nThis only updates the metadata database."
+            f"Clear GPS coordinates (latitude/longitude) and restore time taken "
+            f"from EXIF for {len(items)} loaded photo(s)?\n\n"
+            "This only updates the metadata database."
         ),
         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         QMessageBox.StandardButton.No,
@@ -382,6 +383,7 @@ def launch_clear_gps(window: MainWindow) -> None:
     worker = ClearGpsWorker(
         db_manager=window.db_manager,
         file_paths=[item.path for item in items],
+        exiftool_path=str(get_user_setting(UserSettingKey.EXIFTOOL_PATH) or "") or None,
     )
 
     def on_progress(completed: int, total_count: int) -> None:
@@ -417,7 +419,7 @@ def launch_clear_gps(window: MainWindow) -> None:
                 item.db_metadata = metadata.copy()
 
             window.sync_model_after_metadata_update(
-                {DBFields.LATITUDE, DBFields.LONGITUDE},
+                {DBFields.TIME_TAKEN, DBFields.LATITUDE, DBFields.LONGITUDE},
                 source="clear_gpx",
             )
 
@@ -437,6 +439,14 @@ def launch_clear_gps(window: MainWindow) -> None:
 
 
 def _clear_gps_sync(window: MainWindow, items: list) -> None:
+    from .workers import load_original_time_taken_by_path
+
+    exiftool_path = str(get_user_setting(UserSettingKey.EXIFTOOL_PATH) or "") or None
+    original_time_taken_by_path = load_original_time_taken_by_path(
+        [item.path for item in items],
+        window.db_manager,
+        exiftool_path=exiftool_path,
+    )
     updated_count = 0
     for item in items:
         db = window.db_manager.get_db_for_image(item.path)
@@ -449,6 +459,9 @@ def _clear_gps_sync(window: MainWindow, items: list) -> None:
         updated_metadata = metadata.copy()
         updated_metadata[DBFields.LATITUDE] = None
         updated_metadata[DBFields.LONGITUDE] = None
+        updated_metadata[DBFields.TIME_TAKEN] = original_time_taken_by_path.get(
+            item.path
+        )
         try:
             db.save_metadata(item.path, updated_metadata)
         except MetadataDBUnavailableError:
@@ -464,6 +477,6 @@ def _clear_gps_sync(window: MainWindow, items: list) -> None:
         return
 
     window.sync_model_after_metadata_update(
-        {DBFields.LATITUDE, DBFields.LONGITUDE},
+        {DBFields.TIME_TAKEN, DBFields.LATITUDE, DBFields.LONGITUDE},
         source="clear_gpx",
     )

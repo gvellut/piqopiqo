@@ -5,15 +5,105 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import threading
+from typing import Any
 
 from PySide6.QtCore import QObject, Signal
 
 from piqopiqo.metadata.db_fields import DBFields
-from piqopiqo.metadata.metadata_db import MetadataDBUnavailableError
+from piqopiqo.metadata.metadata_db import (
+    MetadataDBUnavailableError,
+    parse_exif_datetime,
+)
 from piqopiqo.qt_workers import PythonOwnedRunnable
 
 from .ocr_time_shift import extract_time_shift_from_photo
 from .service import apply_gpx_to_folders
+
+EXIF_TIME_TAKEN_TAG = "EXIF:DateTimeOriginal"
+
+
+def _parse_original_time_taken(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str):
+        return None
+
+    parsed = parse_exif_datetime(value)
+    if parsed is not None:
+        return parsed
+
+    try:
+        return datetime.strptime(value.strip(), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
+def _read_original_time_taken_from_exif(
+    file_paths: list[str],
+    exiftool_path: str | None,
+) -> dict[str, datetime | None] | None:
+    if not file_paths:
+        return {}
+
+    try:
+        import exiftool
+
+        with exiftool.ExifToolHelper(executable=exiftool_path or None) as helper:
+            rows = helper.get_metadata(
+                file_paths,
+                ["-G", "-n", f"-{EXIF_TIME_TAKEN_TAG}"],
+            )
+    except Exception:
+        return None
+
+    if not rows:
+        return {file_path: None for file_path in file_paths}
+
+    out: dict[str, datetime | None] = {}
+    for index, row in enumerate(rows):
+        if any(str(key).endswith(":Error") or key == "Error" for key in row):
+            continue
+
+        source_file = row.get("SourceFile")
+        if not isinstance(source_file, str) or not source_file:
+            if index >= len(file_paths):
+                continue
+            source_file = file_paths[index]
+
+        out[source_file] = _parse_original_time_taken(row.get(EXIF_TIME_TAKEN_TAG))
+
+    return out
+
+
+def load_original_time_taken_by_path(
+    file_paths: list[str],
+    db_manager,
+    *,
+    exiftool_path: str | None,
+) -> dict[str, datetime | None]:
+    exif_times = _read_original_time_taken_from_exif(
+        file_paths,
+        exiftool_path,
+    )
+    if exif_times is None:
+        exif_times = {}
+
+    out: dict[str, datetime | None] = {}
+    for file_path in file_paths:
+        if file_path in exif_times:
+            out[file_path] = exif_times[file_path]
+            continue
+
+        db = db_manager.get_db_for_image(file_path)
+        cached_fields = db.get_exif_fields(file_path, [EXIF_TIME_TAKEN_TAG])
+        if not cached_fields or EXIF_TIME_TAKEN_TAG not in cached_fields:
+            out[file_path] = None
+            continue
+        out[file_path] = _parse_original_time_taken(
+            cached_fields.get(EXIF_TIME_TAKEN_TAG)
+        )
+
+    return out
 
 
 class ExtractGpsTimeShiftWorkerSignals(QObject):
@@ -137,10 +227,17 @@ class ClearGpsWorkerSignals(QObject):
 
 
 class ClearGpsWorker(PythonOwnedRunnable):
-    def __init__(self, *, db_manager, file_paths: list[str]):
+    def __init__(
+        self,
+        *,
+        db_manager,
+        file_paths: list[str],
+        exiftool_path: str | None,
+    ):
         super().__init__()
         self._db_manager = db_manager
         self._file_paths = list(file_paths)
+        self._exiftool_path = exiftool_path
         self._cancel_requested = threading.Event()
         self.signals = ClearGpsWorkerSignals()
 
@@ -154,6 +251,11 @@ class ClearGpsWorker(PythonOwnedRunnable):
         self.signals.progress.emit(0, total)
 
         try:
+            original_time_taken_by_path = load_original_time_taken_by_path(
+                self._file_paths,
+                self._db_manager,
+                exiftool_path=self._exiftool_path,
+            )
             for file_path in self._file_paths:
                 if self._cancel_requested.is_set():
                     self.signals.finished.emit(
@@ -172,6 +274,9 @@ class ClearGpsWorker(PythonOwnedRunnable):
                     updated_metadata = metadata.copy()
                     updated_metadata[DBFields.LATITUDE] = None
                     updated_metadata[DBFields.LONGITUDE] = None
+                    updated_metadata[DBFields.TIME_TAKEN] = (
+                        original_time_taken_by_path.get(file_path)
+                    )
                     db.save_metadata(file_path, updated_metadata)
                     updated_paths.append(file_path)
 
