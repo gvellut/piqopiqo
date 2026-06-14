@@ -1,4 +1,3 @@
-* [Clear GPS also clears the updated date time](Sd_tasks/Ud_Clear_GPS_also_clears_the_updated_date_time.md)
 - [Undo label do not record if label not changed](Sd_tasks/Sd_Undo_label_do_not_record_if_label_not_changed.md)
 - [change tool workflow](Gd_tasks/Rd_change_tool_workflow.md)
 - [Move to trash add confirmation](Gd_tasks/Jd_Move_to_trash_add_confirmation.md)
@@ -146,3 +145,4 @@
 ! [Select lifecyle label](Gd_tasks/Pd_Select_lifecyle_label.md)
 ! [Copy from SD display dates](Gd_tasks/Qd_Copy_from_SD_display_dates.md)
 ! [multiple selected](Sd_tasks/Td_multiple_selected.md)
+! [Clear GPS also clears the updated date time](Sd_tasks/Ud_Clear_GPS_also_clears_the_updated_date_time.md)
