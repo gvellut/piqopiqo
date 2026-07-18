@@ -63,6 +63,7 @@ class StateKey(StrEnum):
     COPY_SD_EJECT = "copySDEject"
     FLICKR_UPLOAD_APPLY_TRANSITIONS = "flickrUploadApplyTransitions"
     FLICKR_UPLOAD_USE_LIFECYCLE_SCOPE = "flickrUploadUseLifecycleScope"
+    FLICKR_REORDER_SAVE_EXISTING_ORDER = "flickrReorderSaveExistingOrder"
     COPY_SD_NAME_SUFFIX = "copySdNameSuffix"
     COPY_SD_DATE_SPEC = "copySdDateSpec"
     LAST_TIMESHIFT_BY_FOLDERS = "lastTimeshiftByFolders"
@@ -124,6 +125,7 @@ class RuntimeSettingKey(StrEnum):
     MAX_WORKERS = "maxWorkers"
     TIMESHIFT_CACHE_NUM = "timeshiftCacheNum"
     FLICKR_UPLOAD_MAX_WORKERS = "flickrUploadMaxWorkers"
+    FLICKR_REORDER_BACKUP_LIMIT = "flickrReorderBackupLimit"
     MIN_IDLE_WORKERS = "minIdleWorkers"
     MAX_EXIFTOOLS_IMAGE_BATCH = "maxExiftoolsImageBatch"
     SHUTDOWN_TIMEOUT_S = "shutdownTimeoutS"
@@ -525,6 +527,11 @@ _STATE_REGISTRY: dict[StateKey, SettingDef] = {
         read_type=bool,
         default=True,
     ),
+    StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER: SettingDef(
+        group=StateGroup.APP_STATE,
+        read_type=bool,
+        default=True,
+    ),
     StateKey.COPY_SD_NAME_SUFFIX: SettingDef(
         group=StateGroup.APP_STATE,
         read_type=str,
@@ -824,6 +831,10 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.MAX_WORKERS: SettingDef(default=4, read_type=int),
     RuntimeSettingKey.TIMESHIFT_CACHE_NUM: SettingDef(default=10, read_type=int),
     RuntimeSettingKey.FLICKR_UPLOAD_MAX_WORKERS: SettingDef(default=2, read_type=int),
+    RuntimeSettingKey.FLICKR_REORDER_BACKUP_LIMIT: SettingDef(
+        default=3,
+        read_type=int,
+    ),
     RuntimeSettingKey.MIN_IDLE_WORKERS: SettingDef(default=1, read_type=int),
     RuntimeSettingKey.MAX_EXIFTOOLS_IMAGE_BATCH: SettingDef(default=8, read_type=int),
     RuntimeSettingKey.SHUTDOWN_TIMEOUT_S: SettingDef(default=5.0, read_type=float),

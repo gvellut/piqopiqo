@@ -14,7 +14,7 @@ from piqopiqo.ssf.settings_state import (
     init_qsettings_store,
     set_state_value,
 )
-from piqopiqo.tools.flickr_upload import dialogs
+from piqopiqo.tools.flickr_tools.upload import dialogs
 
 
 @pytest.fixture
@@ -150,7 +150,7 @@ def _patch_settings(
         UserSettingKey.STATUS_LABELS: [],
     }
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.get_user_setting",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.get_user_setting",
         lambda key: values[key],
     )
 
@@ -191,7 +191,7 @@ def test_launch_flickr_upload_passes_visible_scope_without_blocking_precheck(
         })
 
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs._launch_flickr_upload_flow",
+        "piqopiqo.tools.flickr_tools.upload.dialogs._launch_flickr_upload_flow",
         _capture_launch,
     )
 
@@ -226,7 +226,7 @@ def test_launch_flickr_upload_builds_label_scope_from_all_photos_in_sort_order(
     launch_calls: list[dict] = []
 
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs._launch_flickr_upload_flow",
+        "piqopiqo.tools.flickr_tools.upload.dialogs._launch_flickr_upload_flow",
         lambda _parent, **kwargs: launch_calls.append(kwargs),
     )
 
@@ -261,7 +261,7 @@ def test_launch_flickr_upload_ignores_lifecycle_label_when_setting_is_off(
 
     launch_calls: list[dict] = []
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs._launch_flickr_upload_flow",
+        "piqopiqo.tools.flickr_tools.upload.dialogs._launch_flickr_upload_flow",
         lambda _parent, **kwargs: launch_calls.append(kwargs),
     )
 
@@ -287,11 +287,11 @@ def test_flickr_upload_cancel_selects_visible_missing_metadata_paths(
         db_manager=_FakeDbManager(),
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.get_flickr_token_file_path",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.get_flickr_token_file_path",
         lambda: "/tmp/flickr-token.sqlite",
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.token_file_exists",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.token_file_exists",
         lambda _path: True,
     )
 
@@ -311,7 +311,7 @@ def test_flickr_upload_cancel_selects_visible_missing_metadata_paths(
             return ["/b.jpg", "/c.jpg"]
 
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.FlickrPreflightDialog",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.FlickrPreflightDialog",
         _Preflight,
     )
 
@@ -351,15 +351,15 @@ def test_flickr_upload_cancel_selects_lifecycle_missing_metadata_paths(
         db_manager=_FakeDbManager(),
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.get_flickr_token_file_path",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.get_flickr_token_file_path",
         lambda: "/tmp/flickr-token.sqlite",
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.token_file_exists",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.token_file_exists",
         lambda _path: True,
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.get_user_setting",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.get_user_setting",
         lambda _key: [],
     )
 
@@ -384,7 +384,7 @@ def test_flickr_upload_cancel_selects_lifecycle_missing_metadata_paths(
             return ["/hidden.jpg", "/visible.jpg"]
 
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.FlickrPreflightDialog",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.FlickrPreflightDialog",
         _Preflight,
     )
 
@@ -425,15 +425,15 @@ def test_flickr_upload_cancel_lifecycle_unchecked_uses_plain_missing_selection(
         db_manager=_FakeDbManager(),
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.get_flickr_token_file_path",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.get_flickr_token_file_path",
         lambda: "/tmp/flickr-token.sqlite",
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.token_file_exists",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.token_file_exists",
         lambda _path: True,
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.get_user_setting",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.get_user_setting",
         lambda _key: [],
     )
 
@@ -458,7 +458,7 @@ def test_flickr_upload_cancel_lifecycle_unchecked_uses_plain_missing_selection(
             return ["/hidden.jpg"]
 
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.FlickrPreflightDialog",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.FlickrPreflightDialog",
         _Preflight,
     )
 
@@ -494,11 +494,11 @@ def test_flickr_upload_cancel_without_missing_metadata_leaves_grid_unchanged(
         db_manager=_FakeDbManager(),
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.get_flickr_token_file_path",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.get_flickr_token_file_path",
         lambda: "/tmp/flickr-token.sqlite",
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.token_file_exists",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.token_file_exists",
         lambda _path: True,
     )
 
@@ -518,7 +518,7 @@ def test_flickr_upload_cancel_without_missing_metadata_leaves_grid_unchanged(
             return []
 
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.FlickrPreflightDialog",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.FlickrPreflightDialog",
         _Preflight,
     )
 
@@ -566,15 +566,15 @@ def test_flickr_upload_flow_uses_all_loaded_photos_for_transition_scope(
         UserSettingKey.EXIFTOOL_PATH: "/opt/homebrew/bin/exiftool",
     }
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.get_user_setting",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.get_user_setting",
         lambda key: values[key],
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.get_flickr_token_file_path",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.get_flickr_token_file_path",
         lambda: "/tmp/flickr-token.sqlite",
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.token_file_exists",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.token_file_exists",
         lambda _path: True,
     )
 
@@ -613,11 +613,11 @@ def test_flickr_upload_flow_uses_all_loaded_photos_for_transition_scope(
             return QDialog.DialogCode.Accepted
 
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.FlickrPreflightDialog",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.FlickrPreflightDialog",
         _Preflight,
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.FlickrUploadProgressDialog",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.FlickrUploadProgressDialog",
         _UploadDialog,
     )
 
@@ -671,15 +671,15 @@ def test_flickr_upload_flow_hides_transitions_when_lifecycle_state_unchecked(
         UserSettingKey.EXIFTOOL_PATH: "/opt/homebrew/bin/exiftool",
     }
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.get_user_setting",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.get_user_setting",
         lambda key: values[key],
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.get_flickr_token_file_path",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.get_flickr_token_file_path",
         lambda: "/tmp/flickr-token.sqlite",
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.token_file_exists",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.token_file_exists",
         lambda _path: True,
     )
 
@@ -723,11 +723,11 @@ def test_flickr_upload_flow_hides_transitions_when_lifecycle_state_unchecked(
             return QDialog.DialogCode.Accepted
 
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.FlickrPreflightDialog",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.FlickrPreflightDialog",
         _Preflight,
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.FlickrUploadProgressDialog",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.FlickrUploadProgressDialog",
         _UploadDialog,
     )
 
@@ -763,13 +763,13 @@ def test_launch_flickr_upload_warns_when_both_scopes_are_empty(
 
     warnings: list[str] = []
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.QMessageBox.warning",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.QMessageBox.warning",
         lambda _parent, _title, text: warnings.append(text),
     )
 
     launch_calls: list[object] = []
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs._launch_flickr_upload_flow",
+        "piqopiqo.tools.flickr_tools.upload.dialogs._launch_flickr_upload_flow",
         lambda *_args, **_kwargs: launch_calls.append("called"),
     )
 
@@ -798,13 +798,13 @@ def test_launch_flickr_upload_missing_credentials_opens_settings(
         UserSettingKey.STATUS_LABELS: [],
     }
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.get_user_setting",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.get_user_setting",
         lambda key: values[key],
     )
 
     prompt_calls: list[tuple[str, str]] = []
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.prompt_open_settings_for_missing_setting",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.prompt_open_settings_for_missing_setting",
         lambda _parent, *, title, text, icon=QMessageBox.Icon.Warning: (
             prompt_calls.append((title, text)) or True
         ),
@@ -812,7 +812,7 @@ def test_launch_flickr_upload_missing_credentials_opens_settings(
 
     launch_calls: list[object] = []
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs._launch_flickr_upload_flow",
+        "piqopiqo.tools.flickr_tools.upload.dialogs._launch_flickr_upload_flow",
         lambda *_args, **_kwargs: launch_calls.append("called"),
     )
 

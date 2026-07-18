@@ -82,6 +82,7 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_TIME_TAKEN_LOAD_RESORT_BATCH_SIZE",
         "PIQO_TIMESHIFT_CACHE_NUM",
         "PIQO_FLICKR_UPLOAD_MAX_WORKERS",
+        "PIQO_FLICKR_REORDER_BACKUP_LIMIT",
         "PIQO_PROTECT_NON_TEXT_METADATA",
         "PIQO_SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY",
         "PIQO_FORCE_SRGB",
@@ -149,6 +150,14 @@ def test_sort_order_state_default_and_roundtrip(isolated_settings):
 
     set_state_value(StateKey.SORT_ORDER, "FILE_NAME_BY_FOLDER")
     assert get_state_value(StateKey.SORT_ORDER) == "FILE_NAME_BY_FOLDER"
+
+
+def test_flickr_reorder_state_and_runtime_defaults(isolated_settings):
+    assert get_state_value(StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER) is True
+    assert get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_BACKUP_LIMIT) == 3
+
+    set_state_value(StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER, False)
+    assert get_state_value(StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER) is False
 
 
 def test_recent_folders_state_default_and_roundtrip(isolated_settings):

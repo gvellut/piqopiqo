@@ -2032,6 +2032,12 @@ class MainWindow(QMainWindow):
         regenerate_exif_action.triggered.connect(self.on_reload_exif)
         edit_menu.addAction(regenerate_exif_action)
 
+        edit_menu.addSeparator()
+
+        find_replace_action = QAction("Find & Replace...", self)
+        find_replace_action.triggered.connect(self._on_local_find_replace)
+        edit_menu.addAction(find_replace_action)
+
         # Image menu
         image_menu = menubar.addMenu("Image")
 
@@ -2099,12 +2105,6 @@ class MainWindow(QMainWindow):
 
         tools_menu.addSeparator()
 
-        upload_flickr_action = QAction("Upload to Flickr...", self)
-        upload_flickr_action.triggered.connect(self._on_upload_to_flickr)
-        tools_menu.addAction(upload_flickr_action)
-
-        tools_menu.addSeparator()
-
         archive_action = QAction("Archive...", self)
         archive_action.triggered.connect(self._on_archive)
         tools_menu.addAction(archive_action)
@@ -2114,6 +2114,22 @@ class MainWindow(QMainWindow):
         save_exif_action = QAction("Save EXIF...", self)
         save_exif_action.triggered.connect(self._on_save_exif)
         tools_menu.addAction(save_exif_action)
+
+        flickr_menu = menubar.addMenu("Flickr")
+
+        upload_flickr_action = QAction("Upload to Flickr...", self)
+        upload_flickr_action.triggered.connect(self._on_upload_to_flickr)
+        flickr_menu.addAction(upload_flickr_action)
+
+        flickr_menu.addSeparator()
+
+        reorder_flickr_action = QAction("Reorder Albums...", self)
+        reorder_flickr_action.triggered.connect(self._on_reorder_flickr_albums)
+        flickr_menu.addAction(reorder_flickr_action)
+
+        flickr_find_replace_action = QAction("Find & Replace...", self)
+        flickr_find_replace_action.triggered.connect(self._on_flickr_find_replace)
+        flickr_menu.addAction(flickr_find_replace_action)
 
         help_menu = menubar.addMenu("Help")
         about_action = QAction(f"About {APP_NAME}", self)
@@ -2439,6 +2455,11 @@ class MainWindow(QMainWindow):
 
         launch_manual_lens(self)
 
+    def _on_local_find_replace(self):
+        from .tools.edit_tools import launch_local_find_replace
+
+        launch_local_find_replace(self)
+
     def _on_upload_to_flickr(self):
         manager = self._active_flickr_upload_manager
         if manager is not None and manager.is_running():
@@ -2456,9 +2477,19 @@ class MainWindow(QMainWindow):
             )
             return
 
-        from .tools.flickr_upload import launch_flickr_upload
+        from .tools.flickr_tools import launch_flickr_upload
 
         launch_flickr_upload(self)
+
+    def _on_reorder_flickr_albums(self):
+        from .tools.flickr_tools import launch_flickr_reorder
+
+        launch_flickr_reorder(self)
+
+    def _on_flickr_find_replace(self):
+        from .tools.flickr_tools import launch_flickr_find_replace
+
+        launch_flickr_find_replace(self)
 
     @staticmethod
     def _canonicalize_recent_folder_path(folder_path: str | None) -> str:

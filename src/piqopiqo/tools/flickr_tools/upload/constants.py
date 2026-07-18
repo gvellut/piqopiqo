@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from enum import Enum, auto
 
-FLICKR_TOKEN_DIR_NAME = "flickr"
-FLICKR_TOKEN_DB_FILENAME = "oauth-tokens.sqlite"
+from piqopiqo.tools.flickr_utils import (
+    FLICKR_REQUIRED_PERMS,
+    FLICKR_TOKEN_DB_FILENAME,
+    FLICKR_TOKEN_DIR_NAME,
+)
 
-FLICKR_REQUIRED_PERMS = "write"
+__all__ = [
+    "FLICKR_REQUIRED_PERMS",
+    "FLICKR_TOKEN_DB_FILENAME",
+    "FLICKR_TOKEN_DIR_NAME",
+]
 
 # Keep aligned with flickr_api_utils defaults.
 API_RETRIES = 6

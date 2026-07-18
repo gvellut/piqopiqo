@@ -13,13 +13,13 @@ from piqopiqo.ssf.settings_state import (
     init_qsettings_store,
     set_state_value,
 )
-from piqopiqo.tools.flickr_upload.albums import FlickrAlbumPlan
-from piqopiqo.tools.flickr_upload.constants import FlickrStage
-from piqopiqo.tools.flickr_upload.dialogs import (
+from piqopiqo.tools.flickr_tools.upload.albums import FlickrAlbumPlan
+from piqopiqo.tools.flickr_tools.upload.constants import FlickrStage
+from piqopiqo.tools.flickr_tools.upload.dialogs import (
     FlickrPreflightDialog,
     FlickrUploadProgressDialog,
 )
-from piqopiqo.tools.flickr_upload.manager import (
+from piqopiqo.tools.flickr_tools.upload.manager import (
     FlickrUploadPhotoFailure,
     FlickrUploadResult,
 )
@@ -246,7 +246,7 @@ def test_preflight_metadata_warning_and_controls_follow_selected_scope(
     monkeypatch,
 ) -> None:  # noqa: ARG001
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.QThreadPool.globalInstance",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.QThreadPool.globalInstance",
         lambda: _ImmediateThreadPool(),
     )
 
@@ -291,7 +291,7 @@ def test_preflight_active_missing_paths_follow_selected_scope(
     monkeypatch,
 ) -> None:  # noqa: ARG001
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.QThreadPool.globalInstance",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.QThreadPool.globalInstance",
         lambda: _ImmediateThreadPool(),
     )
 
@@ -324,7 +324,7 @@ def test_preflight_disables_upload_while_metadata_validation_is_pending(
 ) -> None:  # noqa: ARG001
     pending_pool = _PendingThreadPool()
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.QThreadPool.globalInstance",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.QThreadPool.globalInstance",
         lambda: pending_pool,
     )
 
@@ -347,7 +347,7 @@ def test_preflight_disables_upload_while_metadata_validation_is_pending(
 
 def test_preflight_height_tracks_optional_rows(qapp, monkeypatch) -> None:
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs.QThreadPool.globalInstance",
+        "piqopiqo.tools.flickr_tools.upload.dialogs.QThreadPool.globalInstance",
         lambda: _ImmediateThreadPool(),
     )
 
@@ -607,7 +607,7 @@ def test_upload_progress_ok_applies_transitions_and_shows_result(
         )
 
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.dialogs._apply_flickr_label_transitions",
+        "piqopiqo.tools.flickr_tools.upload.dialogs._apply_flickr_label_transitions",
         _apply,
     )
     dialog = FlickrUploadProgressDialog(

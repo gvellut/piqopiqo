@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-import re
 
 from attrs import define
+
+from piqopiqo.tools.flickr_utils import extract_album_id
 
 from .constants import API_RETRIES, QUICK_TIMEOUT_S
 from .service import retry
@@ -67,22 +68,6 @@ def build_album_url(user_nsid: str, album_id: str) -> str:
     if not nsid or not aid:
         return ""
     return f"https://flickr.com/photos/{nsid}/albums/{aid}"
-
-
-def extract_album_id(value: str) -> str:
-    """Extract Flickr album ID from numeric ID or supported Flickr URL."""
-    text = str(value or "").strip()
-    if not text:
-        raise ValueError("Album value is empty.")
-
-    if text.isdigit():
-        return text
-
-    m = re.search(r"flickr\.com/photos/[^/]+/(?:albums|sets)/(\d+)", text)
-    if m:
-        return str(m.group(1))
-
-    raise ValueError(f"Not a valid Flickr album URL or ID: {text}")
 
 
 def _extract_title(value: object) -> str:

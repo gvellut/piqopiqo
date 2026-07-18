@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from piqopiqo.cache_paths import set_cache_base_dir
 from piqopiqo.metadata.metadata_db import MetadataDB
-from piqopiqo.tools.flickr_upload.constants import FOLDER_STATE_LAST_FLICKR_ALBUM_ID
+from piqopiqo.tools.flickr_tools.upload.constants import (
+    FOLDER_STATE_LAST_FLICKR_ALBUM_ID,
+)
 from piqopiqo.tools.gpx2exif.constants import (
     FOLDER_STATE_LAST_GPX_PATH,
     FOLDER_STATE_LAST_TIME_SHIFT,

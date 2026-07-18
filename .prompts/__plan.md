@@ -147,3 +147,4 @@
 ! [Copy from SD display dates](Gd_tasks/Qd_Copy_from_SD_display_dates.md)
 ! [multiple selected](Sd_tasks/Td_multiple_selected.md)
 ! [Clear GPS also clears the updated date time](Sd_tasks/Ud_Clear_GPS_also_clears_the_updated_date_time.md)
+! [add Flickr Utils tools](Sd_tasks/Wd_add_Flickr_Utils_tools.md)

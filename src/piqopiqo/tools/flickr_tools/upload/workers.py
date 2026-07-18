@@ -9,13 +9,13 @@ from PySide6.QtCore import QObject, Signal
 
 from piqopiqo.cache_paths import get_flickr_cache_dir, get_flickr_token_file_path
 from piqopiqo.qt_workers import PythonOwnedRunnable
-
-from .albums import FlickrAlbumPlan, resolve_album_plan
-from .auth import (
+from piqopiqo.tools.flickr_utils import (
     authenticate_via_browser_cancellable,
     create_flickr_client,
     validate_token_or_cleanup,
 )
+
+from .albums import FlickrAlbumPlan, resolve_album_plan
 from .service import has_required_flickr_upload_metadata
 
 

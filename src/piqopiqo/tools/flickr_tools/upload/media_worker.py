@@ -20,9 +20,9 @@ from attrs import define
 
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.exif_write import build_exif_tags
+from piqopiqo.tools.flickr_utils import create_flickr_client
 
 from .albums import build_album_url
-from .auth import create_flickr_client
 from .constants import (
     API_RETRIES,
     CHECK_TICKETS_SLEEP_S,

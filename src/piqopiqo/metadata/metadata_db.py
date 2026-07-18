@@ -835,6 +835,51 @@ class MetadataDB:
             func=_save,
         )
 
+    def update_title_and_keywords(
+        self,
+        file_path: str,
+        changes: dict[str, str | None],
+    ) -> bool:
+        """Update only title/keywords on an existing metadata row."""
+        allowed_fields = {DBFields.TITLE, DBFields.KEYWORDS}
+        unsupported = set(changes) - allowed_fields
+        if unsupported:
+            raise ValueError(
+                "Unsupported targeted metadata fields: "
+                + ", ".join(sorted(unsupported))
+            )
+        ordered_fields = [
+            field_name
+            for field_name in (DBFields.TITLE, DBFields.KEYWORDS)
+            if field_name in changes
+        ]
+        if not ordered_fields:
+            return False
+
+        def _update(conn: sqlite3.Connection) -> bool:
+            assignments = ", ".join(
+                f"{field_name} = ?" for field_name in ordered_fields
+            )
+            values = [changes[field_name] for field_name in ordered_fields]
+            values.extend([datetime.now().isoformat(), file_path])
+            cursor = conn.execute(
+                f"UPDATE photo_metadata SET {assignments}, updated_at = ? "
+                "WHERE file_path = ?",
+                values,
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+        return bool(
+            self._run_db_operation(
+                operation="update_title_and_keywords",
+                create=False,
+                during_write=True,
+                default=False,
+                func=_update,
+            )
+        )
+
     def has_metadata(self, file_path: str) -> bool:
         """Check if metadata exists for a photo.
 

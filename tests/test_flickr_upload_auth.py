@@ -5,13 +5,13 @@ from __future__ import annotations
 import threading
 
 from piqopiqo.cache_paths import get_flickr_token_file_path, set_cache_base_dir
-from piqopiqo.tools.flickr_upload.auth import (
-    authenticate_via_browser_cancellable,
-    validate_token_or_cleanup,
-)
-from piqopiqo.tools.flickr_upload.constants import (
+from piqopiqo.tools.flickr_tools.upload.constants import (
     FLICKR_TOKEN_DB_FILENAME,
     FLICKR_TOKEN_DIR_NAME,
+)
+from piqopiqo.tools.flickr_utils import (
+    authenticate_via_browser_cancellable,
+    validate_token_or_cleanup,
 )
 
 
@@ -36,7 +36,7 @@ def test_validate_token_or_cleanup_removes_invalid_token_file(
             return False
 
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.auth.create_flickr_client",
+        "piqopiqo.tools.flickr_utils.create_flickr_client",
         lambda *args, **kwargs: _FakeFlickr(),
     )
 
@@ -88,7 +88,7 @@ def test_authenticate_via_browser_cancel_stops_http_server(monkeypatch) -> None:
             raise AssertionError("Should not fetch access token when cancelled")
 
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.auth.webbrowser.open_new_tab",
+        "piqopiqo.tools.flickr_utils.webbrowser.open_new_tab",
         lambda _url: True,
     )
 

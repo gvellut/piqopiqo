@@ -5,9 +5,9 @@ from __future__ import annotations
 from PySide6.QtWidgets import QApplication
 import pytest
 
-from piqopiqo.tools.flickr_upload.albums import FlickrAlbumPlan
-from piqopiqo.tools.flickr_upload.constants import MAX_NUM_CHECKS, FlickrStage
-from piqopiqo.tools.flickr_upload.manager import FlickrUploadManager
+from piqopiqo.tools.flickr_tools.upload.albums import FlickrAlbumPlan
+from piqopiqo.tools.flickr_tools.upload.constants import MAX_NUM_CHECKS, FlickrStage
+from piqopiqo.tools.flickr_tools.upload.manager import FlickrUploadManager
 
 
 @pytest.fixture
@@ -66,7 +66,7 @@ def test_manager_stage_sequence_success(qapp, monkeypatch) -> None:  # noqa: ARG
         return {"ok": True, "photo_ids": ["p1", "p2"], "failures": []}
 
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.manager.run_resolve_tickets_task",
+        "piqopiqo.tools.flickr_tools.upload.manager.run_resolve_tickets_task",
         _fake_resolve,
     )
 
@@ -122,7 +122,7 @@ def test_manager_continues_and_aggregates_failures(qapp, monkeypatch) -> None:  
 
     monkeypatch.setattr(manager, "_run_parallel_pool", _fake_pool)
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.manager.run_resolve_tickets_task",
+        "piqopiqo.tools.flickr_tools.upload.manager.run_resolve_tickets_task",
         lambda _payload, check_progress_callback=None: {
             "ok": True,
             "photo_ids": ["p1"],
@@ -219,7 +219,7 @@ def test_manager_album_stage_create_then_add(qapp, monkeypatch) -> None:  # noqa
 
     monkeypatch.setattr(manager, "_run_parallel_pool", _fake_pool)
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.manager.run_resolve_tickets_task",
+        "piqopiqo.tools.flickr_tools.upload.manager.run_resolve_tickets_task",
         lambda _payload, check_progress_callback=None: {
             "ok": True,
             "photo_ids": ["p1", "p2"],
@@ -227,7 +227,7 @@ def test_manager_album_stage_create_then_add(qapp, monkeypatch) -> None:  # noqa
         },
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.manager.run_create_album_task",
+        "piqopiqo.tools.flickr_tools.upload.manager.run_create_album_task",
         lambda _payload: {
             "ok": True,
             "album_id": "72177720331888267",
@@ -239,7 +239,7 @@ def test_manager_album_stage_create_then_add(qapp, monkeypatch) -> None:  # noqa
         },
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.manager.run_add_to_album_task",
+        "piqopiqo.tools.flickr_tools.upload.manager.run_add_to_album_task",
         lambda _payload: {"ok": True, "added_count": 2},
     )
 
@@ -290,7 +290,7 @@ def test_manager_album_stage_add_failure_is_reported(qapp, monkeypatch) -> None:
 
     monkeypatch.setattr(manager, "_run_parallel_pool", _fake_pool)
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.manager.run_resolve_tickets_task",
+        "piqopiqo.tools.flickr_tools.upload.manager.run_resolve_tickets_task",
         lambda _payload, check_progress_callback=None: {
             "ok": True,
             "photo_ids": ["p1"],
@@ -298,7 +298,7 @@ def test_manager_album_stage_add_failure_is_reported(qapp, monkeypatch) -> None:
         },
     )
     monkeypatch.setattr(
-        "piqopiqo.tools.flickr_upload.manager.run_add_to_album_task",
+        "piqopiqo.tools.flickr_tools.upload.manager.run_add_to_album_task",
         lambda _payload: {"ok": False, "error": "Album update failed"},
     )
 

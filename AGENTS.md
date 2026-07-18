@@ -131,15 +131,18 @@ src/piqopiqo/
     ├── copy_sd.py       # Copy-from-SD workflow (dialogs, scanning, copy worker)
     ├── manual_lens.py   # Dialog + launcher for applying manual lens presets to selected/visible photos
     ├── save_exif.py    # Dialog + launcher for saving metadata to EXIF
-    ├── flickr_upload/   # Flickr auth + upload workflows (filtered scope only)
-    │   ├── constants.py      # Flickr workflow constants (token file name, stages, retries)
-    │   ├── service.py        # Pure Flickr helpers (tags, retry, timestamps, ticket status)
-    │   ├── albums.py         # Album parsing/resolution helpers (ID/URL/title + album info/list)
-    │   ├── auth.py           # Flickr client creation + token validation + browser auth
-    │   ├── workers.py        # QRunnable workers (login + token validation + album check)
-    │   ├── media_worker.py   # Multiprocessing worker entrypoints (upload/date/public + album create/add)
-    │   ├── manager.py        # Flickr upload manager (staged orchestration + cancellation + album stage)
-    │   └── dialogs.py        # Tools dialogs + launch flow for Flickr upload
+    ├── flickr_utils.py  # Shared Flickr auth, token, paging, retry, ID and tag helpers
+    ├── edit_tools/      # Database-only editing tools
+    │   ├── service.py        # Shared title/keyword replacement rules
+    │   └── find_replace.py   # Edit > Find & Replace workflow (selection, else visible)
+    ├── flickr_tools/    # Flickr menu tools
+    │   ├── auth_flow.py      # Shared token-validation/browser-login dialog flow
+    │   ├── find_replace.py   # Remote Flickr title/tag replacement workflow
+    │   ├── reorder.py        # Modal-photo-date album reorder + retained backups
+    │   └── upload/           # Existing Flickr upload workflow (filtered scope only)
+    │       ├── constants.py, service.py, albums.py
+    │       ├── workers.py, media_worker.py, manager.py
+    │       └── dialogs.py
     ├── gpx2exif/        # GPX/OCR time-shift workflows (DB updates + KML, no EXIF write by default)
     │   ├── constants.py      # GPX workflow constants (TIME_SHIFT/GPX_PATH keys, labels, defaults)
     │   ├── time_shift.py     # Time-shift parsing/formatting/validation
@@ -184,7 +187,9 @@ tests/
 - **External app paths**: External Viewer/Editor settings use app paths (e.g. `/Applications/Preview.app`) with Browse support
 - **Extract GPS Time shift**: Grid context menu action runs GCP Vision OCR in background for the clicked photo folder and persists computed shift
 - **Apply GPX**: Tools workflow edits per-folder time shifts, applies fallback from remembered state, then processes all loaded source folders to generate KML and optionally update DB `time_taken` + coordinates (no EXIF writes by default)
-- **Upload to Flickr**: Tools workflow uploads only currently visible (filtered) photos in current sort order, with login/token validation, album preflight input (title/ID/URL), temp EXIF write, upload-date reset, make-public, and optional album add/create step
+- **Find & Replace**: Edit menu workflow updates SQLite title/keywords for selected photos, or all visible photos with an explicit warning when selection is empty; it never reads or writes EXIF
+- **Flickr menu**: Contains Upload to Flickr, album reordering by modal photo-taken date, and remote title/tag Find & Replace with shared login/token handling
+- **Upload to Flickr**: Flickr menu workflow uploads only currently visible (filtered) photos in current sort order, with login/token validation, album preflight input (title/ID/URL), temp EXIF write, upload-date reset, make-public, and optional album add/create step
 - **Fullscreen filter sync**: Optional `FILTER_IN_FULLSCREEN` setting immediately updates fullscreen loop membership after label shortcut changes without leaving fullscreen
 
 ## PhotoListModel Architecture
@@ -213,6 +218,8 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - `UserSettingKey.SCREEN_COLOR_PROFILE` (default `FROM_MAIN_SCREEN`) controls the display conversion target (`From main screen`, `sRGB`, `Display P3`, `Bt2020`, `No conversion`) used by fullscreen and color-managed thumbnails.
 - `UserSettingKey.SHOW_DESCRIPTION_FIELD` (default `True`) controls whether the Description editor row is shown in the Metadata panel (`EditPanel`); hiding it is UI-only and does not change DB/EXIF behavior.
 - `UserSettingKey.MANUAL_LENSES` (default `[]`) stores lens presets used by `Tools > Set Lens Info ...`.
+- `StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER` (default `True`) remembers whether Flickr album reorder saves the current order first.
+- `RuntimeSettingKey.FLICKR_REORDER_BACKUP_LIMIT` (default `3`) controls how many timestamped album-order JSON backups are retained.
 
 Useful env vars for agent testing:
 
@@ -238,6 +245,7 @@ Useful env vars for agent testing:
 - `PIQO_GCP_PROJECT` - Override GCP project used by OCR time extraction
 - `PIQO_GCP_SA_KEY_PATH` - Override service-account key path used by OCR time extraction
 - `PIQO_FLICKR_UPLOAD_MAX_WORKERS` - Flickr upload multiprocessing worker count (default: 2)
+- `PIQO_FLICKR_REORDER_BACKUP_LIMIT` - Number of Flickr album-order backups retained (default: 3)
 
 
 ## EXIF Panel Configuration
@@ -379,6 +387,11 @@ Selection behavior:
 - KML is always generated per completed folder using `photos_<root>_<relative_folder>.kml`; when KML folder setting is empty, output falls back to the loaded root folder.
 - Cancellation during Apply GPX rolls back metadata changes only for the in-progress folder; already completed folders remain committed and keep their generated KML.
 - Flickr API credentials are configured in Settings > External/Workflow > Flickr (`FLICKR_API_KEY`, `FLICKR_API_SECRET` user settings).
+- Flickr Upload, Reorder Albums, and Flickr Find & Replace share the same write-permission OAuth token cache and browser login flow.
+- Flickr Reorder Albums sorts the requested top-album prefix newest-first by each album's modal valid photo-taken date. Empty/fully-undated albums abort before `photosets.orderSets`.
+- When enabled, Flickr reorder writes the complete pre-change album ID order as a JSON array under `Application Support/PiqoPiqo/flickr-album-orders`; only the newest `FLICKR_REORDER_BACKUP_LIMIT` matching files are retained.
+- Flickr Find & Replace supports album order or an exact inclusive photostream range. A title regex, when present, gates both title and tag changes; per-photo failures are reported while remaining photos continue.
+- Edit > Find & Replace targets selected grid photos, or captures all currently visible photos when selection is empty and shows a warning. It updates only SQLite `title`/`keywords`, never reads/writes EXIF, and synchronizes the model after completed or canceled partial changes.
 - If Flickr API credentials are missing when launching upload, the warning dialog offers `Go to settings` and opens Settings on the `External/Workflow` tab.
 - Flickr OAuth token cache is stored in `<cache_base>/flickr/oauth-tokens.sqlite`.
 - Flickr preflight token state is based on physical existence of `oauth-tokens.sqlite`.

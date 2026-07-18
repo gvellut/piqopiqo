@@ -43,6 +43,7 @@ from piqopiqo.ssf.settings_state import (
     get_user_setting,
     set_state_value,
 )
+from piqopiqo.tools.flickr_utils import create_flickr_client, token_file_exists
 from piqopiqo.tools.tool_flow import (
     ToolButton,
     ToolFlowDialog,
@@ -53,7 +54,6 @@ from piqopiqo.tools.tool_flow import (
 )
 
 from .albums import FlickrAlbumPlan, fetch_album_info
-from .auth import create_flickr_client, token_file_exists
 from .constants import (
     FOLDER_STATE_LAST_FLICKR_ALBUM_ID,
     TOKEN_VALIDATION_ERROR_TEXT,
