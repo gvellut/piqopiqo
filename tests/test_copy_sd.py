@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 from datetime import date
+import errno
+from pathlib import Path
 import subprocess
+import threading
 from types import SimpleNamespace
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QTextEdit
 import pytest
 
 from piqopiqo.ssf.settings_state import StateKey, UserSettingKey
+from piqopiqo.storage import StorageWriteFault
 from piqopiqo.tools.copy_sd import (
     CopySdProgressDialog,
     CopySdWorker,
@@ -112,33 +117,144 @@ def test_copy_worker_does_not_create_target_dir_when_no_images(monkeypatch):
     assert finished == [(0, 0, False, 0)]
 
 
-def test_copy_worker_creates_target_dir_when_copying_image(monkeypatch):
-    makedirs_calls: list[str] = []
-    copy_calls: list[tuple[str, str]] = []
+def test_copy_worker_atomically_copies_image(monkeypatch, tmp_path):
+    source = tmp_path / "CARD" / "DCIM" / "a.jpg"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"photo")
+    target_dir = tmp_path / "exports" / "20260201_trip" / "CARD"
+    finished: list[tuple[int, int, bool, int]] = []
 
     monkeypatch.setattr(
         "piqopiqo.tools.copy_sd.iter_files_for_date",
-        lambda _volume, _f_date: iter(("/Volumes/CARD/DCIM/a.jpg",)),
-    )
-    monkeypatch.setattr(
-        "piqopiqo.tools.copy_sd.os.makedirs",
-        lambda path, exist_ok=False: makedirs_calls.append(path),
-    )
-    monkeypatch.setattr(
-        "piqopiqo.tools.copy_sd.shutil.copy2",
-        lambda source, target: copy_calls.append((source, target)),
+        lambda _volume, _f_date: iter((str(source),)),
     )
 
     worker = CopySdWorker(
         PhotoVolume("CARD", "/Volumes/CARD"),
         [date(2026, 2, 1)],
-        ["/exports/20260201_trip/CARD"],
+        [str(target_dir)],
     )
+    worker.signals.finished.connect(lambda *args: finished.append(args))
 
     worker.run()
 
-    assert makedirs_calls == ["/exports/20260201_trip/CARD"]
-    assert copy_calls == [("/Volumes/CARD/DCIM/a.jpg", "/exports/20260201_trip/CARD")]
+    assert (target_dir / "a.jpg").read_bytes() == b"photo"
+    assert not list(target_dir.glob("*.part"))
+    assert not list(target_dir.glob(".*.part"))
+    assert finished == [(1, 1, False, 0)]
+
+
+def test_atomic_copy_failure_preserves_destination_and_removes_partial(
+    monkeypatch, tmp_path
+):
+    source = tmp_path / "a.jpg"
+    source.write_bytes(b"new")
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+    destination = target_dir / "a.jpg"
+    destination.write_bytes(b"old")
+
+    def _partial_copy(_source, temp_path):
+        Path(temp_path).write_bytes(b"partial")
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr("piqopiqo.tools.copy_sd.shutil.copy2", _partial_copy)
+
+    with pytest.raises(OSError, match="No space left"):
+        CopySdWorker._copy_file_atomically(str(source), str(target_dir))
+
+    assert destination.read_bytes() == b"old"
+    assert not list(target_dir.glob("*.part"))
+    assert not list(target_dir.glob(".*.part"))
+
+
+def test_copy_worker_pauses_and_retries_same_file_on_storage_full(monkeypatch):
+    files = ["/card/a.jpg", "/card/b.jpg", "/card/c.jpg"]
+    worker = CopySdWorker(
+        PhotoVolume("CARD", "/Volumes/CARD"),
+        [date(2026, 2, 1)],
+        ["/exports"],
+    )
+    attempts: list[str] = []
+    full_seen = threading.Event()
+    finished: list[tuple[int, int, bool, int]] = []
+    failed_once = {"value": False}
+
+    monkeypatch.setattr(
+        "piqopiqo.tools.copy_sd.iter_files_for_date",
+        lambda _volume, _date: iter(files),
+    )
+
+    def _copy(file_path, _output_folder):
+        attempts.append(file_path)
+        if file_path == "/card/b.jpg" and not failed_once["value"]:
+            failed_once["value"] = True
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(worker, "_copy_file_atomically", _copy)
+    worker.signals.storage_full.connect(
+        lambda _fault: full_seen.set(),
+        Qt.ConnectionType.DirectConnection,
+    )
+    worker.signals.finished.connect(
+        lambda *args: finished.append(args),
+        Qt.ConnectionType.DirectConnection,
+    )
+
+    thread = threading.Thread(target=worker.run)
+    thread.start()
+    assert full_seen.wait(2)
+    assert attempts == ["/card/a.jpg", "/card/b.jpg"]
+
+    worker.request_retry()
+    thread.join(2)
+
+    assert thread.is_alive() is False
+    assert attempts == [
+        "/card/a.jpg",
+        "/card/b.jpg",
+        "/card/b.jpg",
+        "/card/c.jpg",
+    ]
+    assert finished == [(3, 3, False, 0)]
+
+
+def test_copy_worker_exit_wakes_storage_wait_and_cancels(monkeypatch):
+    worker = CopySdWorker(
+        PhotoVolume("CARD", "/Volumes/CARD"),
+        [date(2026, 2, 1)],
+        ["/exports"],
+    )
+    full_seen = threading.Event()
+    finished: list[tuple[int, int, bool, int]] = []
+    monkeypatch.setattr(
+        "piqopiqo.tools.copy_sd.iter_files_for_date",
+        lambda _volume, _date: iter(("/card/a.jpg", "/card/b.jpg")),
+    )
+    monkeypatch.setattr(
+        worker,
+        "_copy_file_atomically",
+        lambda *_args: (_ for _ in ()).throw(
+            OSError(errno.ENOSPC, "No space left on device")
+        ),
+    )
+    worker.signals.storage_full.connect(
+        lambda _fault: full_seen.set(),
+        Qt.ConnectionType.DirectConnection,
+    )
+    worker.signals.finished.connect(
+        lambda *args: finished.append(args),
+        Qt.ConnectionType.DirectConnection,
+    )
+
+    thread = threading.Thread(target=worker.run)
+    thread.start()
+    assert full_seen.wait(2)
+    worker.request_cancel()
+    thread.join(2)
+
+    assert thread.is_alive() is False
+    assert finished == [(0, 2, True, 0)]
 
 
 def test_copy_progress_counter_label_updates(qapp):  # noqa: ARG001
@@ -157,6 +273,91 @@ def test_copy_progress_counter_label_updates(qapp):  # noqa: ARG001
 
     dialog._on_finished(5, 5, False, 0)
     assert dialog.progress_text_label.text() == "5/5"
+
+
+def test_copy_storage_full_screen_places_exit_left_and_retry_right(qapp, tmp_path):  # noqa: ARG001
+    dialog = CopySdProgressDialog(
+        volume=PhotoVolume("CARD", "/Volumes/CARD"),
+        dates=[],
+        target_dirs=[],
+        should_eject=True,
+    )
+    fault = StorageWriteFault(
+        target_path=str(tmp_path),
+        operation="copy_from_sd",
+        error_message="No space left on device",
+    )
+
+    dialog._on_storage_full(fault)
+
+    assert dialog.current_screen_id == "storage_full"
+    assert dialog._button_row.itemAt(0).widget() is dialog.button("exit_app")
+    assert dialog._button_row.itemAt(1).spacerItem() is not None
+    assert dialog._button_row.itemAt(2).widget() is dialog.button("retry")
+    assert dialog.button("retry").isDefault() is True
+
+
+def test_copy_storage_full_retry_resumes_waiting_worker(qapp, tmp_path, monkeypatch):  # noqa: ARG001
+    dialog = CopySdProgressDialog(
+        volume=PhotoVolume("CARD", "/Volumes/CARD"),
+        dates=[],
+        target_dirs=[],
+        should_eject=False,
+    )
+    fault = StorageWriteFault(
+        target_path=str(tmp_path),
+        operation="copy_from_sd",
+        error_message="No space left on device",
+    )
+    retry_calls: list[bool] = []
+    monkeypatch.setattr(
+        dialog._worker,
+        "request_retry",
+        lambda: retry_calls.append(True),
+    )
+    dialog._on_storage_full(fault)
+
+    dialog._on_storage_full_retry()
+
+    assert retry_calls == [True]
+    assert dialog.current_screen_id == "running"
+    assert dialog.status_label.text() == "Retrying copy..."
+
+
+def test_copy_storage_full_exit_quits_without_eject(qapp, tmp_path, monkeypatch):
+    dialog = CopySdProgressDialog(
+        volume=PhotoVolume("CARD", "/Volumes/CARD"),
+        dates=[],
+        target_dirs=[],
+        should_eject=True,
+    )
+    fault = StorageWriteFault(
+        target_path=str(tmp_path),
+        operation="copy_from_sd",
+        error_message="No space left on device",
+    )
+    cancel_calls: list[bool] = []
+    quit_calls: list[bool] = []
+    monkeypatch.setattr(
+        dialog._worker,
+        "request_cancel",
+        lambda: cancel_calls.append(True),
+    )
+    monkeypatch.setattr(
+        CopySdProgressDialog,
+        "_quit_application",
+        staticmethod(lambda: quit_calls.append(True)),
+    )
+    dialog._on_storage_full(fault)
+
+    dialog._on_storage_full_exit()
+    dialog._on_finished(2, 5, True, 0)
+    qapp.processEvents()
+
+    assert cancel_calls == [True]
+    assert quit_calls == [True]
+    assert dialog.eject_requested is False
+    assert dialog.was_cancelled is True
 
 
 def test_copy_result_ok_without_eject_accepts(qapp):  # noqa: ARG001

@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from .background.media_man import FolderPrimingResult, MediaManager
 from .cache_paths import (
     clear_metadata_cache_for_folders,
+    get_cache_base_dir,
     get_folder_cache_id,
     set_cache_base_dir,
 )
@@ -34,6 +35,7 @@ from .components.column_number_selector import ColumnNumberSelector
 from .components.status_bar import LoadingStatusBar
 from .dialogs.about_dialog import show_about
 from .dialogs.error_list_dialog import ErrorListDialog
+from .dialogs.storage_full_dialog import wait_for_storage_retry
 from .dialogs.workspace_properties_dialog import (
     WorkspaceFolderSummary,
     WorkspacePropertiesDialog,
@@ -74,6 +76,12 @@ from .ssf.settings_state import (
     get_state,
     get_user_setting,
     sync_qsettings_store,
+)
+from .storage import (
+    StorageFullError,
+    StorageWriteFault,
+    probe_storage_write,
+    storage_full_fault_from_error,
 )
 
 logger = logging.getLogger(__name__)
@@ -209,6 +217,9 @@ class MainWindow(QMainWindow):
         self._db_recovery_probe_timer = QTimer(self)
         self._db_recovery_probe_timer.setSingleShot(True)
         self._db_recovery_probe_timer.timeout.connect(self._probe_db_recovery)
+        self._storage_full_active = False
+        self._storage_full_dialog_scheduled = False
+        self._storage_full_fault: StorageWriteFault | None = None
 
         # Create metadata database manager
         self.db_manager = MetadataDBManager()
@@ -339,6 +350,9 @@ class MainWindow(QMainWindow):
         self.media_manager.exif_progress_updated.connect(self._on_exif_progress)
         self.media_manager.panel_fields_ready.connect(self._on_panel_fields_ready)
         self.media_manager.all_completed.connect(self._on_loading_complete)
+        storage_full_signal = getattr(self.media_manager, "storage_full", None)
+        if storage_full_signal is not None:
+            storage_full_signal.connect(self._on_storage_full_reported)
 
         self.grid.request_thumb.connect(self.request_thumb_handler)
         self.grid.visible_paths_changed.connect(self._on_visible_paths_changed)
@@ -1461,7 +1475,7 @@ class MainWindow(QMainWindow):
         if (
             safe_to_replay
             and isinstance(fault, MetadataDBFault)
-            and fault.is_transient
+            and (fault.is_transient or fault.is_storage_full)
             and file_path
             and isinstance(data, dict)
         ):
@@ -1484,6 +1498,16 @@ class MainWindow(QMainWindow):
             return
 
         self._db_recovery_affected_folders.add(fault.folder_path)
+        if fault.is_storage_full:
+            self._on_storage_full_reported(
+                StorageWriteFault(
+                    target_path=fault.db_path,
+                    operation=fault.operation,
+                    error_message=fault.error_message,
+                )
+            )
+            return
+
         if not self._db_recovery_active:
             self._db_recovery_active = True
             self._db_recovery_rebuild_attempted = False
@@ -1508,7 +1532,7 @@ class MainWindow(QMainWindow):
                 db = self.db_manager.get_db_for_image(file_path)
                 db.save_metadata(file_path, pending.data)
             except MetadataDBUnavailableError as exc:
-                if exc.fault.is_transient:
+                if exc.fault.is_transient or exc.fault.is_storage_full:
                     return False, changed_fields
                 self._record_db_redo_warning(
                     "Some metadata changes could not be replayed automatically. "
@@ -1630,6 +1654,10 @@ class MainWindow(QMainWindow):
             )
             if healthy:
                 continue
+            if fault is not None and fault.is_storage_full:
+                self._db_recovery_active = False
+                self._on_db_fault_reported(fault)
+                return
             if fault is None or fault.is_transient:
                 self._schedule_db_recovery_probe(immediate=False)
                 return
@@ -1668,6 +1696,189 @@ class MainWindow(QMainWindow):
             return
 
         self._finish_db_recovery()
+
+    def _on_storage_full_reported(self, fault: object) -> None:
+        if self._shutdown_started or not isinstance(fault, StorageWriteFault):
+            return
+
+        self._storage_full_fault = fault
+        if self._storage_full_active:
+            return
+
+        self._storage_full_active = True
+        self.media_manager.pause_processing()
+        self.status_bar.showMessage(
+            "Cache storage is full. Free space, then choose Retry.",
+            0,
+        )
+        if self._db_recovery_probe_timer.isActive():
+            self._db_recovery_probe_timer.stop()
+
+        if self._storage_full_dialog_scheduled:
+            return
+        self._storage_full_dialog_scheduled = True
+        QTimer.singleShot(0, self._show_storage_full_recovery_dialog)
+
+    def _probe_cache_storage_full(self) -> StorageWriteFault | None:
+        try:
+            probe_storage_write(
+                get_cache_base_dir(),
+                operation="probe_cache_storage",
+            )
+        except StorageFullError as exc:
+            return exc.fault
+        return None
+
+    def _retry_after_storage_full(self) -> StorageWriteFault | None:
+        probe_fault = self._probe_cache_storage_full()
+        if probe_fault is not None:
+            self._storage_full_fault = probe_fault
+            return probe_fault
+
+        try:
+            self.db_manager.close_all()
+            for folder_path in sorted(self._db_recovery_affected_folders):
+                healthy, db_fault = self.db_manager.probe_folder_health(
+                    folder_path,
+                    allow_create=True,
+                    require_write=True,
+                )
+                if healthy:
+                    continue
+                if db_fault is None:
+                    fault = StorageWriteFault(
+                        target_path=str(get_cache_base_dir()),
+                        operation="probe_metadata_write",
+                        error_message="The metadata cache is still unavailable.",
+                    )
+                else:
+                    fault = StorageWriteFault(
+                        target_path=db_fault.db_path,
+                        operation=db_fault.operation,
+                        error_message=db_fault.error_message,
+                    )
+                self._storage_full_fault = fault
+                return fault
+
+            replay_completed, changed_fields = self._replay_pending_metadata_saves()
+            if not replay_completed:
+                return self._storage_full_fault or StorageWriteFault(
+                    target_path=str(get_cache_base_dir()),
+                    operation="replay_metadata",
+                    error_message="The metadata cache is still unavailable.",
+                )
+
+            self._refresh_workspace_after_db_recovery(
+                changed_fields=changed_fields,
+            )
+        except StorageFullError as exc:
+            self._storage_full_fault = exc.fault
+            return exc.fault
+        except MetadataDBUnavailableError as exc:
+            if exc.fault.is_storage_full:
+                fault = StorageWriteFault(
+                    target_path=exc.fault.db_path,
+                    operation=exc.fault.operation,
+                    error_message=exc.fault.error_message,
+                )
+                self._storage_full_fault = fault
+                return fault
+            logger.warning(
+                "Cache retry failed because metadata remains unavailable: %s",
+                exc,
+            )
+            return StorageWriteFault(
+                target_path=exc.fault.db_path,
+                operation=exc.fault.operation,
+                error_message=exc.fault.error_message,
+            )
+        except OSError as exc:
+            fault = storage_full_fault_from_error(
+                exc,
+                target_path=get_cache_base_dir(),
+                operation="recover_cache_storage",
+            )
+            if fault is None:
+                fault = StorageWriteFault(
+                    target_path=str(get_cache_base_dir()),
+                    operation="recover_cache_storage",
+                    error_message=str(exc) or exc.__class__.__name__,
+                )
+            self._storage_full_fault = fault
+            return fault
+        except Exception as exc:
+            logger.exception("Failed to recover after cache storage became full")
+            fault = StorageWriteFault(
+                target_path=str(get_cache_base_dir()),
+                operation="recover_cache_storage",
+                error_message=str(exc) or exc.__class__.__name__,
+            )
+            self._storage_full_fault = fault
+            return fault
+
+        self.media_manager.clear_storage_full_fault()
+        self._finish_db_recovery()
+        return None
+
+    def _show_storage_full_recovery_dialog(self) -> None:
+        self._storage_full_dialog_scheduled = False
+        if self._shutdown_started or not self._storage_full_active:
+            return
+
+        fault = self._storage_full_fault
+        if fault is None:
+            self._storage_full_active = False
+            return
+
+        recovered = wait_for_storage_retry(
+            parent=self,
+            fault=fault,
+            retry=self._retry_after_storage_full,
+            title="Cache Storage Full",
+            headline=(
+                "PiqoPiqo cannot write metadata or thumbnails because the "
+                "configured cache storage is full."
+            ),
+            retry_description=(
+                "Free space on the storage volume, then choose Retry. "
+                "Exit PiqoPiqo closes the application safely."
+            ),
+        )
+        self._storage_full_active = False
+        self._storage_full_fault = None
+        if recovered:
+            return
+        self._quit_after_storage_full()
+
+    def _quit_after_storage_full(self) -> None:
+        self.media_manager.pause_processing()
+        self.close()
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
+
+    def _wait_for_cache_storage_before_action(self) -> bool:
+        fault = self._probe_cache_storage_full()
+        if fault is None:
+            return True
+
+        recovered = wait_for_storage_retry(
+            parent=self,
+            fault=fault,
+            retry=self._probe_cache_storage_full,
+            title="Cache Storage Full",
+            headline=(
+                "PiqoPiqo cannot continue because the configured cache storage is full."
+            ),
+            retry_description=(
+                "Free space on the storage volume, then choose Retry. "
+                "Exit PiqoPiqo closes the application safely."
+            ),
+        )
+        if recovered:
+            return True
+        self._quit_after_storage_full()
+        return False
 
     def _handle_interrupted_db_action(self, *, action_name: str) -> None:
         self._record_db_redo_warning(
@@ -2968,6 +3179,8 @@ class MainWindow(QMainWindow):
     def _load_folder(self, folder: str, *, reset_grid_to_top: bool = False):
         """Load images from a folder and update the UI."""
         logger.info(f"Loading folder: {folder}")
+        if not self._wait_for_cache_storage_before_action():
+            return
         self._stop_folder_watcher()
 
         # Scan the folder

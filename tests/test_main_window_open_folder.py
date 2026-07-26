@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from PySide6.QtWidgets import QApplication, QMessageBox
 import pytest
 
@@ -482,6 +484,22 @@ def test_on_open_does_nothing_when_dialog_cancelled(monkeypatch):
     MainWindow.on_open(fake_window)
 
     assert fake_window.events == []
+
+
+def test_load_folder_does_not_replace_workspace_when_cache_probe_fails(
+    monkeypatch,
+):
+    fake_window = SimpleNamespace(
+        _wait_for_cache_storage_before_action=lambda: False,
+    )
+    monkeypatch.setattr(
+        "piqopiqo.main_window.scan_folder",
+        lambda _folder: (_ for _ in ()).throw(
+            AssertionError("folder must not be scanned")
+        ),
+    )
+
+    MainWindow._load_folder(fake_window, "/new-folder", reset_grid_to_top=True)
 
 
 def test_on_open_starts_at_parent_of_current_folder(monkeypatch, tmp_path):

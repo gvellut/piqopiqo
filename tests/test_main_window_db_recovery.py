@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from piqopiqo.main_window import MainWindow
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBFault
+from piqopiqo.storage import StorageWriteFault
 
 
 class _FakeTimer:
@@ -65,6 +66,7 @@ class _FakeMediaManager:
     def __init__(self) -> None:
         self.pause_calls = 0
         self.resume_calls = 0
+        self.clear_storage_full_calls = 0
         self.reset_calls: list[tuple[list[str], list[str]]] = []
 
     def pause_processing(self) -> None:
@@ -82,6 +84,9 @@ class _FakeMediaManager:
 
     def has_errors(self) -> bool:
         return False
+
+    def clear_storage_full_fault(self) -> None:
+        self.clear_storage_full_calls += 1
 
 
 class _FakeReplayDB:
@@ -101,7 +106,7 @@ class _FakeDBManager:
     ) -> None:
         self._probe_results = list(probe_results)
         self._replay_db = replay_db or _FakeReplayDB()
-        self.probe_calls: list[tuple[str, bool]] = []
+        self.probe_calls: list[tuple[str, bool, bool]] = []
         self.close_all_calls = 0
 
     def probe_folder_health(
@@ -109,8 +114,9 @@ class _FakeDBManager:
         folder_path: str,
         *,
         allow_create: bool = False,
+        require_write: bool = False,
     ) -> tuple[bool, MetadataDBFault | None]:
-        self.probe_calls.append((folder_path, bool(allow_create)))
+        self.probe_calls.append((folder_path, bool(allow_create), bool(require_write)))
         if self._probe_results:
             return self._probe_results.pop(0)
         return True, None
@@ -138,6 +144,8 @@ class _FakeRecoveryWindow:
     _record_db_redo_warning = MainWindow._record_db_redo_warning
     _on_metadata_save_worker_failure = MainWindow._on_metadata_save_worker_failure
     _on_db_fault_reported = MainWindow._on_db_fault_reported
+    _on_storage_full_reported = MainWindow._on_storage_full_reported
+    _retry_after_storage_full = MainWindow._retry_after_storage_full
     _schedule_db_recovery_probe = MainWindow._schedule_db_recovery_probe
     _replay_pending_metadata_saves = MainWindow._replay_pending_metadata_saves
     _refresh_workspace_after_db_recovery = (
@@ -156,6 +164,9 @@ class _FakeRecoveryWindow:
         self._db_recovery_pending_metadata_saves = {}
         self._db_recovery_pending_redo_messages: list[str] = []
         self._db_recovery_probe_timer = _FakeTimer()
+        self._storage_full_active = False
+        self._storage_full_dialog_scheduled = False
+        self._storage_full_fault: StorageWriteFault | None = None
         self._launch_command = ["/usr/bin/python3", "-m", "piqopiqo"]
         self.db_manager = db_manager
         self.media_manager = _FakeMediaManager()
@@ -190,6 +201,9 @@ class _FakeRecoveryWindow:
 
     def shutdown_for_quit(self) -> None:
         self.shutdown_calls += 1
+
+    def _show_storage_full_recovery_dialog(self) -> None:
+        return None
 
 
 def _fault(*, classification: str, path_available: bool) -> MetadataDBFault:
@@ -269,6 +283,108 @@ def test_interrupted_db_action_warns_user_after_recovery(monkeypatch) -> None:
             "Please reconnect the cache disk and redo that action after recovery.",
         )
     ]
+
+
+def test_storage_full_db_fault_pauses_once_without_reconnect_probe(monkeypatch):
+    callbacks: list[object] = []
+    monkeypatch.setattr(
+        "piqopiqo.main_window.QTimer.singleShot",
+        lambda _delay_ms, callback: callbacks.append(callback),
+    )
+    window = _FakeRecoveryWindow(_FakeDBManager(probe_results=[]))
+    fault = _fault(classification="storage_full", path_available=True)
+
+    window._on_db_fault_reported(fault)
+    window._on_db_fault_reported(fault)
+
+    assert window.media_manager.pause_calls == 1
+    assert window._db_recovery_probe_timer.start_calls == []
+    assert len(callbacks) == 1
+    assert window._storage_full_active is True
+    assert window._storage_full_fault == StorageWriteFault(
+        target_path=fault.db_path,
+        operation=fault.operation,
+        error_message=fault.error_message,
+    )
+    assert window.status_bar.messages[-1] == (
+        "Cache storage is full. Free space, then choose Retry.",
+        0,
+    )
+
+
+def test_storage_full_metadata_save_is_queued_for_manual_retry():
+    window = _FakeRecoveryWindow(_FakeDBManager(probe_results=[]))
+    fault = _fault(classification="storage_full", path_available=True)
+
+    window._on_metadata_save_worker_failure({
+        "file_path": "/photos/folder_a/image.jpg",
+        "data": {DBFields.TITLE: "Keep me"},
+        "changed_fields": {DBFields.TITLE},
+        "fault": fault,
+        "safe_to_replay": True,
+        "source": "edit_panel",
+    })
+
+    pending = window._db_recovery_pending_metadata_saves["/photos/folder_a/image.jpg"]
+    assert pending.data == {DBFields.TITLE: "Keep me"}
+
+
+def test_storage_full_retry_replays_save_and_refreshes_workspace(monkeypatch):
+    monkeypatch.setattr(
+        "piqopiqo.main_window.QMessageBox.warning",
+        lambda *_args, **_kwargs: None,
+    )
+    replay_db = _FakeReplayDB()
+    window = _FakeRecoveryWindow(_FakeDBManager(probe_results=[], replay_db=replay_db))
+    storage_fault = StorageWriteFault(
+        target_path="/cache",
+        operation="save_metadata",
+        error_message="No space left on device",
+    )
+    window._storage_full_fault = storage_fault
+    window._db_recovery_affected_folders.add("/photos/folder_a")
+    window._probe_cache_storage_full = lambda: None
+    window._queue_replayable_metadata_save(
+        file_path="/photos/folder_a/image.jpg",
+        data={DBFields.TITLE: "Recovered"},
+        changed_fields={DBFields.TITLE},
+        source="edit_panel",
+    )
+
+    retry_fault = window._retry_after_storage_full()
+
+    assert retry_fault is None
+    assert replay_db.save_calls == [
+        (
+            "/photos/folder_a/image.jpg",
+            {DBFields.TITLE: "Recovered"},
+        )
+    ]
+    assert window.media_manager.reset_calls == [
+        (
+            ["/photos/folder_a/image.jpg"],
+            ["/photos/folder_a"],
+        )
+    ]
+    assert window.media_manager.clear_storage_full_calls == 1
+    assert window.sync_calls == [({DBFields.TITLE}, "db_recovery")]
+    assert window.db_manager.probe_calls == [("/photos/folder_a", True, True)]
+
+
+def test_storage_full_retry_stays_blocked_when_probe_still_fails():
+    window = _FakeRecoveryWindow(_FakeDBManager(probe_results=[]))
+    fault = StorageWriteFault(
+        target_path="/cache",
+        operation="probe_cache_storage",
+        error_message="No space left on device",
+    )
+    window._probe_cache_storage_full = lambda: fault
+
+    retry_fault = window._retry_after_storage_full()
+
+    assert retry_fault == fault
+    assert window.db_manager.close_all_calls == 0
+    assert window.media_manager.reset_calls == []
 
 
 def test_unreadable_db_recovery_rebuilds_cache_and_warns(monkeypatch) -> None:

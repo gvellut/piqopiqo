@@ -10,6 +10,8 @@ from datetime import datetime
 import logging
 import os
 from pathlib import Path
+import shutil
+import tempfile
 from typing import Any
 
 from PIL import Image
@@ -17,6 +19,10 @@ from PIL import Image
 from piqopiqo.keyword_utils import format_keywords, parse_keywords
 from piqopiqo.metadata.db_fields import EXIF_TO_DB_MAPPING, GPS_REF_FIELDS, DBFields
 from piqopiqo.metadata.metadata_db import parse_exif_datetime, parse_exif_gps
+from piqopiqo.storage import (
+    StorageFullError,
+    storage_full_fault_from_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -130,10 +136,14 @@ def _extract_embedded_previews(
         return {}
 
     embedded_dir = Path(thumb_dir) / "embedded"
-    embedded_dir.mkdir(parents=True, exist_ok=True)
-    pattern = str(embedded_dir / "%f.jpg")
-
+    staging_dir: Path | None = None
     try:
+        embedded_dir.mkdir(parents=True, exist_ok=True)
+        staging_dir = Path(
+            tempfile.mkdtemp(prefix=".piqopiqo-embedded-", dir=embedded_dir)
+        )
+        pattern = str(staging_dir / "%f.jpg")
+
         # Use ThumbnailImage instead of PreviewImage
         # PreviewImage is fine on Fuji (640x480): but on Panasonic : 1440x1080
         # it seems to create some stutter when displayed on the grid (~50 images)
@@ -141,15 +151,30 @@ def _extract_embedded_previews(
         # So use ThumbnailImage : 160x120 (used only as a placeholder while waiting
         # for the HQ thumbnail to be shown so fine
         helper.execute("-b", "-ThumbnailImage", "-w", pattern, *file_paths)
-    except Exception:
-        pass
 
-    results: dict[str, str | None] = {}
-    for file_path in file_paths:
-        base_name = os.path.splitext(os.path.basename(file_path))[0]
-        cache_path = str(embedded_dir / f"{base_name}.jpg")
-        results[file_path] = cache_path if _is_nonempty_file(cache_path) else None
-    return results
+        results: dict[str, str | None] = {}
+        for file_path in file_paths:
+            base_name = os.path.splitext(os.path.basename(file_path))[0]
+            staged_path = staging_dir / f"{base_name}.jpg"
+            cache_path = embedded_dir / f"{base_name}.jpg"
+            if _is_nonempty_file(str(staged_path)):
+                os.replace(staged_path, cache_path)
+                results[file_path] = str(cache_path)
+            else:
+                results[file_path] = None
+        return results
+    except Exception as exc:
+        fault = storage_full_fault_from_error(
+            exc,
+            target_path=embedded_dir,
+            operation="write_embedded_thumbnail",
+        )
+        if fault is not None:
+            raise StorageFullError(fault) from exc
+        return dict.fromkeys(file_paths)
+    finally:
+        if staging_dir is not None:
+            shutil.rmtree(staging_dir, ignore_errors=True)
 
 
 def run_combined_task(task: dict) -> dict:
@@ -165,6 +190,7 @@ def run_combined_task(task: dict) -> dict:
 
     items: list[dict] = []
     error: str | None = None
+    storage_fault = None
 
     now_iso = datetime.now().isoformat()
 
@@ -233,6 +259,7 @@ def run_combined_task(task: dict) -> dict:
     except Exception as e:
         logger.warning("Combined task failed: %s", e)
         error = str(e)
+        storage_fault = e.fault if isinstance(e, StorageFullError) else None
         # Still return per-file stubs so the parent can mark completion.
         for file_entry in files:
             file_path = str(file_entry["file_path"])
@@ -257,21 +284,37 @@ def run_combined_task(task: dict) -> dict:
                 "error": error,
             })
 
-    return {"task_id": task_id, "kind": "combined", "items": items, "error": error}
+    result = {"task_id": task_id, "kind": "combined", "items": items, "error": error}
+    if error is not None and storage_fault is not None:
+        result["storage_full_fault"] = storage_fault
+    return result
 
 
-def generate_hq_thumbnail(source: str, dest_path: str, max_dim: int) -> bool:
+def generate_hq_thumbnail(source: str, dest_path: str, max_dim: int) -> None:
+    destination = Path(dest_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temp_fd, temp_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.",
+        suffix=".tmp",
+        dir=destination.parent,
+    )
+    os.close(temp_fd)
+    temp_path = Path(temp_name)
     try:
-        img = Image.open(source)
-        icc = img.info.get("icc_profile")
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGB")
-        img.thumbnail((max_dim, max_dim))
-        Path(dest_path).parent.mkdir(parents=True, exist_ok=True)
-        img.save(dest_path, "JPEG", quality=80, icc_profile=icc)
-        return True
-    except Exception:
-        return False
+        with Image.open(source) as source_image:
+            icc = source_image.info.get("icc_profile")
+            if source_image.mode in ("RGBA", "P"):
+                image = source_image.convert("RGB")
+            else:
+                image = source_image.copy()
+        image.thumbnail((max_dim, max_dim))
+        image.save(temp_path, "JPEG", quality=80, icc_profile=icc)
+        os.replace(temp_path, destination)
+    finally:
+        try:
+            temp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def run_hq_thumb_task(task: dict) -> dict:
@@ -283,14 +326,33 @@ def run_hq_thumb_task(task: dict) -> dict:
     base_name = os.path.splitext(os.path.basename(file_path))[0]
     cache_path = str(Path(thumb_dir) / "hq" / f"{base_name}.jpg")
 
-    ok = generate_hq_thumbnail(file_path, cache_path, max_dim)
+    try:
+        generate_hq_thumbnail(file_path, cache_path, max_dim)
+    except Exception as exc:
+        fault = storage_full_fault_from_error(
+            exc,
+            target_path=Path(cache_path).parent,
+            operation="write_hq_thumbnail",
+        )
+        result = {
+            "task_id": task_id,
+            "kind": "hq_thumb",
+            "file_path": file_path,
+            "cache_path": None,
+            "ok": False,
+            "error": str(exc) or exc.__class__.__name__,
+        }
+        if fault is not None:
+            result["storage_full_fault"] = fault
+        return result
+
     return {
         "task_id": task_id,
         "kind": "hq_thumb",
         "file_path": file_path,
-        "cache_path": cache_path if ok else None,
-        "ok": bool(ok),
-        "error": None if ok else "Failed to generate HQ thumbnail",
+        "cache_path": cache_path,
+        "ok": True,
+        "error": None,
     }
 
 

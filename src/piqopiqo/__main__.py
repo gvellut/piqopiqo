@@ -17,6 +17,7 @@ except ImportError:
     start_server = None
 
 from .cache_paths import set_cache_base_dir
+from .dialogs.storage_full_dialog import wait_for_storage_retry
 from .folder_scan import scan_folder
 from .main_window import MainWindow
 from .ssf.settings_state import (
@@ -33,6 +34,12 @@ from .ssf.settings_state import (
     set_state_value,
 )
 from .startup_mandatory_settings import ensure_mandatory_settings_configured
+from .storage import (
+    StorageFullError,
+    StorageWriteFault,
+    probe_storage_write,
+    storage_full_fault_from_error,
+)
 from .utils import setup_logging
 
 
@@ -89,6 +96,71 @@ def patch_cpython_dummy_thread_finalizer() -> None:
     deleter_cls._piqo_safe_del_patched = True
 
 
+def _prepare_cache_storage(
+    cache_base: str | None,
+    *,
+    clear_on_start: bool,
+):
+    target_path = cache_base or "default PiqoPiqo cache"
+    try:
+        cache_path = set_cache_base_dir(cache_base or None)
+        if clear_on_start and cache_path.exists():
+            shutil.rmtree(cache_path)
+            cache_path.mkdir(parents=True, exist_ok=True)
+        probe_storage_write(cache_path, operation="startup_cache_probe")
+        return cache_path
+    except StorageFullError:
+        raise
+    except OSError as exc:
+        fault = storage_full_fault_from_error(
+            exc,
+            target_path=target_path,
+            operation="prepare_cache_storage",
+        )
+        if fault is not None:
+            raise StorageFullError(fault) from exc
+        raise
+
+
+def _prepare_cache_storage_with_retry(
+    cache_base: str | None,
+    *,
+    clear_on_start: bool,
+):
+    cache_path_holder = {"path": None}
+
+    def _attempt() -> StorageWriteFault | None:
+        try:
+            cache_path_holder["path"] = _prepare_cache_storage(
+                cache_base,
+                clear_on_start=clear_on_start,
+            )
+        except StorageFullError as exc:
+            return exc.fault
+        return None
+
+    initial_fault = _attempt()
+    if initial_fault is None:
+        return cache_path_holder["path"]
+
+    recovered = wait_for_storage_retry(
+        parent=None,
+        fault=initial_fault,
+        retry=_attempt,
+        title="Cache Storage Full",
+        headline=(
+            "PiqoPiqo cannot start because the configured cache storage is full."
+        ),
+        retry_description=(
+            "Free space on the storage volume, then choose Retry. "
+            "Exit PiqoPiqo closes the application safely."
+        ),
+    )
+    if not recovered:
+        return None
+    return cache_path_holder["path"]
+
+
 @click.command()
 @click.argument("folder", type=click.Path(exists=True), required=False)
 @click.option("--dyn", is_flag=True, default=False, help="Ignore saved state/settings")
@@ -117,12 +189,15 @@ def cli(folder, dyn):
 
     # Resolve cache base path in parent process and propagate to cache helpers.
     cache_base = get_user_setting(UserSettingKey.CACHE_BASE_DIR)
-    cache_path = set_cache_base_dir(cache_base or None)
-
-    if bool(get_runtime_setting(RuntimeSettingKey.CLEAR_CACHE_ON_START)):
-        if cache_path.exists():
-            shutil.rmtree(cache_path)
-            cache_path.mkdir(parents=True, exist_ok=True)
+    cache_path = _prepare_cache_storage_with_retry(
+        cache_base,
+        clear_on_start=bool(
+            get_runtime_setting(RuntimeSettingKey.CLEAR_CACHE_ON_START)
+        ),
+    )
+    if cache_path is None:
+        logger.warning("Startup canceled because cache storage is full.")
+        sys.exit(1)
 
     # Start pyqtauto server for automation testing
     if start_server is not None:

@@ -216,6 +216,7 @@ class ToolButton:
     enabled: bool = True
     visible: bool = True
     default: bool = False
+    left_aligned: bool = False
 
 
 @dataclass(frozen=True)
@@ -579,5 +580,8 @@ class ToolFlowDialog(QDialog):
             btn.clicked.connect(
                 lambda _checked=False, event=spec.event: self.emit_event(event)
             )
-            self._button_row.addWidget(btn)
+            if spec.left_aligned:
+                self._button_row.insertWidget(0, btn)
+            else:
+                self._button_row.addWidget(btn)
             self._buttons[spec.event] = btn

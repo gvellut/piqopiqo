@@ -6,18 +6,21 @@ from datetime import date, datetime, timedelta
 from enum import Enum, auto
 import logging
 import os
+from pathlib import Path
 import plistlib
 import re
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 from typing import Any
 
 from attrs import define
-from PySide6.QtCore import QObject, QThreadPool, Signal
+from PySide6.QtCore import QObject, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QDialog,
     QDialogButtonBox,
@@ -36,6 +39,7 @@ from PySide6.QtWidgets import (
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
+from piqopiqo.dialogs.storage_full_dialog import wait_for_storage_retry
 from piqopiqo.folder_watcher import WorkspaceWatcherController
 from piqopiqo.qt_workers import PythonOwnedRunnable
 from piqopiqo.ssf.settings_state import (
@@ -45,6 +49,12 @@ from piqopiqo.ssf.settings_state import (
     get_runtime_setting,
     get_state,
     get_user_setting,
+)
+from piqopiqo.storage import (
+    StorageFullError,
+    StorageWriteFault,
+    probe_storage_write,
+    storage_full_fault_from_error,
 )
 from piqopiqo.tools.tool_flow import (
     ToolButton,
@@ -523,6 +533,7 @@ class CopySdWorkerSignals(QObject):
     plan_ready = Signal(int)
     progress = Signal(int, int)  # completed, total
     error = Signal(str)
+    storage_full = Signal(object)  # StorageWriteFault
     finished = Signal(int, int, bool, int)  # copied, total, cancelled, error_count
 
 
@@ -538,13 +549,47 @@ class CopySdWorker(PythonOwnedRunnable):
         self._dates = dates
         self._target_dirs = target_dirs
         self._cancel_requested = threading.Event()
+        self._retry_requested = threading.Event()
         self.signals = CopySdWorkerSignals()
 
     def request_cancel(self):
         self._cancel_requested.set()
+        self._retry_requested.set()
+
+    def request_retry(self):
+        self._retry_requested.set()
 
     def _is_cancelled(self):
         return self._cancel_requested.is_set()
+
+    def _wait_for_storage_retry(self, fault: StorageWriteFault) -> bool:
+        self._retry_requested.clear()
+        self.signals.storage_full.emit(fault)
+        while not self._is_cancelled():
+            if self._retry_requested.wait(0.1):
+                self._retry_requested.clear()
+                return not self._is_cancelled()
+        return False
+
+    @staticmethod
+    def _copy_file_atomically(file_path: str, output_folder: str) -> None:
+        os.makedirs(output_folder, exist_ok=True)
+        destination = Path(output_folder) / os.path.basename(file_path)
+        temp_fd, temp_name = tempfile.mkstemp(
+            prefix=f".{destination.name}.",
+            suffix=".part",
+            dir=output_folder,
+        )
+        os.close(temp_fd)
+        temp_path = Path(temp_name)
+        try:
+            shutil.copy2(file_path, temp_path)
+            os.replace(temp_path, destination)
+        finally:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     def run(self):
         copied = 0
@@ -581,13 +626,38 @@ class CopySdWorker(PythonOwnedRunnable):
             for file_path, output_folder in tasks:
                 if self._is_cancelled():
                     break
-                try:
-                    os.makedirs(output_folder, exist_ok=True)
-                    shutil.copy2(file_path, output_folder)
-                except Exception as exc:
-                    error_count += 1
-                    logger.exception("Error copying %s", file_path)
-                    self.signals.error.emit(f"{file_path}: {exc}")
+
+                copied_current = False
+                while not self._is_cancelled():
+                    try:
+                        self._copy_file_atomically(file_path, output_folder)
+                    except Exception as exc:
+                        fault = storage_full_fault_from_error(
+                            exc,
+                            target_path=output_folder,
+                            operation="copy_from_sd",
+                        )
+                        if fault is not None:
+                            logger.warning(
+                                "Copy from SD paused because storage is full: %s",
+                                exc,
+                            )
+                            if self._wait_for_storage_retry(fault):
+                                self.signals.status.emit("Retrying copy...")
+                                continue
+                            break
+
+                        error_count += 1
+                        logger.exception("Error copying %s", file_path)
+                        self.signals.error.emit(f"{file_path}: {exc}")
+                        break
+                    else:
+                        copied_current = True
+                        break
+
+                if self._is_cancelled():
+                    break
+                if not copied_current:
                     continue
 
                 copied += 1
@@ -691,6 +761,8 @@ class CopySdProgressDialog(ToolFlowDialog):
         self._eject_checked = bool(should_eject)
         self._eject_error_message = ""
         self._ignore_eject_result = False
+        self._exit_application_requested = False
+        self._storage_full_fault: StorageWriteFault | None = None
         self._eject_thread: threading.Thread | None = None
         self._no_images_message = (
             no_images_message or "No images found for the selected date(s)."
@@ -723,6 +795,22 @@ class CopySdProgressDialog(ToolFlowDialog):
                     min_width=520,
                     show_progress=True,
                 ),
+                "storage_full": ToolScreen(
+                    id="storage_full",
+                    title="Copy Destination Full",
+                    build=lambda dialog: dialog._build_storage_full_body(),
+                    buttons=(
+                        ToolButton(
+                            "exit_app",
+                            "Exit PiqoPiqo",
+                            left_aligned=True,
+                        ),
+                        ToolButton("retry", "Retry", default=True),
+                    ),
+                    min_width=560,
+                    show_progress=False,
+                    close_policy="ignore",
+                ),
                 "ejecting": ToolScreen(
                     id="ejecting",
                     title="Copy from SD",
@@ -754,6 +842,12 @@ class CopySdProgressDialog(ToolFlowDialog):
                 ("running", "ok"): lambda dialog, event: dialog._on_ok(),
                 ("result", "cancel"): lambda dialog, event: dialog._on_cancel(),
                 ("result", "ok"): lambda dialog, event: dialog._on_ok(),
+                ("storage_full", "exit_app"): (
+                    lambda dialog, event: dialog._on_storage_full_exit()
+                ),
+                ("storage_full", "retry"): (
+                    lambda dialog, event: dialog._on_storage_full_retry()
+                ),
                 ("ejecting", "cancel"): lambda dialog, event: dialog._on_cancel(),
                 ("ejected", "ok"): lambda dialog, event: dialog.accept(),
                 ("eject_error", "ok"): lambda dialog, event: dialog.accept(),
@@ -765,6 +859,9 @@ class CopySdProgressDialog(ToolFlowDialog):
                     *event.args
                 ),
                 ("*", "error"): lambda dialog, event: dialog._on_error(*event.args),
+                ("*", "storage_full"): (
+                    lambda dialog, event: dialog._on_storage_full(*event.args)
+                ),
                 ("*", "finished"): lambda dialog, event: dialog._on_finished(
                     *event.args
                 ),
@@ -855,6 +952,44 @@ class CopySdProgressDialog(ToolFlowDialog):
         layout.addWidget(label)
         return widget
 
+    def _build_storage_full_body(self) -> QWidget:
+        widget = QWidget(self)
+        layout = QVBoxLayout(widget)
+
+        headline = QLabel(
+            "PiqoPiqo cannot continue copying because the destination storage is full.",
+            widget,
+        )
+        headline.setWordWrap(True)
+        layout.addWidget(headline)
+
+        fault = self._storage_full_fault
+        if fault is not None:
+            path_label = QLabel(
+                f"Storage location:\n{fault.target_path}",
+                widget,
+            )
+            path_label.setWordWrap(True)
+            layout.addWidget(path_label)
+
+            error_label = QLabel(
+                f"Write error: {fault.error_message}",
+                widget,
+            )
+            error_label.setWordWrap(True)
+            error_label.setStyleSheet("color: #b00020;")
+            layout.addWidget(error_label)
+
+        instructions = QLabel(
+            "Completed files have been kept and the incomplete file was removed. "
+            "Free space, then choose Retry to continue with the same image. "
+            "Exit PiqoPiqo stops the copy and does not eject the SD card.",
+            widget,
+        )
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+        return widget
+
     def _set_eject_checked(self, checked: bool) -> None:
         self._eject_checked = bool(checked)
 
@@ -872,6 +1007,7 @@ class CopySdProgressDialog(ToolFlowDialog):
                     self._worker.signals.plan_ready: "plan_ready",
                     self._worker.signals.progress: "progress",
                     self._worker.signals.error: "error",
+                    self._worker.signals.storage_full: "storage_full",
                     self._worker.signals.finished: "finished",
                 },
             ),
@@ -905,10 +1041,38 @@ class CopySdProgressDialog(ToolFlowDialog):
         self.error_label.show()
         logger.error(message)
 
+    def _on_storage_full(self, fault: object):
+        if not isinstance(fault, StorageWriteFault):
+            return
+        self._storage_full_fault = fault
+        self.transition_to("storage_full")
+
+    def _on_storage_full_retry(self):
+        self.transition_to("running")
+        self.set_status("Retrying copy...")
+        self._worker.request_retry()
+
+    def _on_storage_full_exit(self):
+        self._exit_application_requested = True
+        self._eject_checked = False
+        exit_button = self.button("exit_app")
+        retry_button = self.button("retry")
+        if exit_button is not None:
+            exit_button.setEnabled(False)
+        if retry_button is not None:
+            retry_button.setEnabled(False)
+        self._worker.request_cancel()
+
     def _on_finished(self, copied: int, total: int, cancelled: bool, error_count: int):
         self._finished = True
         self._copied_count = max(0, int(copied))
         self._was_cancelled = bool(cancelled)
+        if self._exit_application_requested:
+            self._eject_checked = False
+            QDialog.reject(self)
+            QTimer.singleShot(0, self._quit_application)
+            return
+
         self.transition_to("result")
         if total == 0:
             status = self._no_images_message
@@ -937,6 +1101,12 @@ class CopySdProgressDialog(ToolFlowDialog):
         if not cancelled and self.eject_checkbox is not None:
             self.eject_checkbox.show()
             self.sync_size_to_content()
+
+    @staticmethod
+    def _quit_application() -> None:
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
 
     def _on_ok(self):
         if self.eject_checkbox is not None:
@@ -998,11 +1168,16 @@ class CopySdProgressDialog(ToolFlowDialog):
         self.stop_task("copy_sd", cancel=True)
 
     def reject(self) -> None:
+        if self.current_screen_id == "storage_full":
+            return
         if self.current_screen_id == "ejecting":
             self._ignore_eject_result = True
         super().reject()
 
     def closeEvent(self, event):
+        if self.current_screen_id == "storage_full":
+            event.ignore()
+            return
         if self.current_screen_id == "ejecting":
             self._ignore_eject_result = True
             super().closeEvent(event)
@@ -1155,6 +1330,27 @@ def _resolve_dates_with_progress(parent, date_spec: str, volume: PhotoVolume):
     return result_holder[0] if result_holder else None
 
 
+def _prepare_copy_destination(output_parent_folder: str) -> StorageWriteFault | None:
+    try:
+        os.makedirs(output_parent_folder, exist_ok=True)
+        probe_storage_write(
+            output_parent_folder,
+            operation="copy_from_sd_destination_probe",
+        )
+    except StorageFullError as exc:
+        return exc.fault
+    except OSError as exc:
+        fault = storage_full_fault_from_error(
+            exc,
+            target_path=output_parent_folder,
+            operation="prepare_copy_from_sd_destination",
+        )
+        if fault is not None:
+            return fault
+        raise
+    return None
+
+
 def launch_copy_sd(
     parent=None,
     *,
@@ -1188,7 +1384,7 @@ def launch_copy_sd(
         return
 
     try:
-        os.makedirs(output_parent_folder, exist_ok=True)
+        destination_fault = _prepare_copy_destination(output_parent_folder)
     except OSError as exc:
         QMessageBox.critical(
             parent,
@@ -1196,6 +1392,25 @@ def launch_copy_sd(
             f"Cannot access output folder: {output_parent_folder}\n{exc}",
         )
         return
+    if destination_fault is not None:
+        recovered = wait_for_storage_retry(
+            parent=parent,
+            fault=destination_fault,
+            retry=lambda: _prepare_copy_destination(output_parent_folder),
+            title="Copy Destination Full",
+            headline=(
+                "PiqoPiqo cannot start copying because the destination storage is full."
+            ),
+            retry_description=(
+                "Free space on the destination volume, then choose Retry. "
+                "Exit PiqoPiqo closes the application safely."
+            ),
+        )
+        if not recovered:
+            app = QApplication.instance()
+            if app is not None:
+                app.quit()
+            return
 
     state = get_state()
     name = state.get(StateKey.COPY_SD_NAME_SUFFIX) or ""

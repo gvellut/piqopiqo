@@ -27,6 +27,7 @@ from piqopiqo.ssf.settings_state import (
     get_runtime_setting,
     get_user_setting,
 )
+from piqopiqo.storage import StorageWriteFault, storage_fault_from_payload
 
 from . import media_worker
 
@@ -135,6 +136,7 @@ class MediaManager(QObject):
 
     # Errors / completion
     all_completed = Signal()
+    storage_full = Signal(object)  # StorageWriteFault
 
     # EXIF write signals (Save EXIF dialog)
     write_progress = Signal(int, int)  # completed, total
@@ -164,6 +166,8 @@ class MediaManager(QObject):
 
         self._thumb_errors: dict[str, str] = {}
         self._exif_errors: dict[str, str] = {}
+        self._storage_full_reported = False
+        self._processing_paused = False
 
         # Pending tasks
         self._pending_combined_visible: dict[str, _CombinedNeed] = {}
@@ -210,6 +214,7 @@ class MediaManager(QObject):
         self._editable_done.clear()
         self._thumb_errors.clear()
         self._exif_errors.clear()
+        self._storage_full_reported = False
 
         self._pending_combined_visible.clear()
         self._pending_combined_other.clear()
@@ -405,7 +410,7 @@ class MediaManager(QObject):
         )
 
     def regenerate_thumbnails(self, file_paths: list[str]) -> None:
-        """Clear cached thumbnails and re-queue generation (embedded then HQ)."""
+        """Atomically regenerate thumbnails while retaining valid cached previews."""
         for file_path in file_paths:
             info = self._file_infos.get(file_path)
             if info is None:
@@ -413,29 +418,17 @@ class MediaManager(QObject):
 
             self._migrate_legacy_thumbs(info)
 
-            if file_path in self._thumb_done:
-                self._thumb_done.remove(file_path)
-                self._thumb_completed = max(0, self._thumb_completed - 1)
-                self.thumb_progress_updated.emit(
-                    self._thumb_completed, self._thumb_total
-                )
-
-            for path in (
-                info.embedded_cache_path,
-                info.hq_cache_path,
-                info.legacy_embedded_cache_path,
-                info.legacy_hq_cache_path,
-            ):
-                try:
-                    Path(path).unlink(missing_ok=True)
-                except OSError:
-                    pass
-
             self._queue_combined(
                 file_path,
                 want_embedded=True,
                 to_visible=file_path in self._visible_paths,
+                force=True,
             )
+            if not self._is_lowres_only_mode():
+                self._queue_hq(
+                    file_path,
+                    to_visible=file_path in self._visible_paths,
+                )
 
     def refresh_files(self, file_paths: list[str]) -> None:
         """Refresh existing files after an on-disk change.
@@ -577,11 +570,18 @@ class MediaManager(QObject):
         self._workers.clear()
 
     def pause_processing(self) -> None:
-        self._tick_timer.stop()
-
-    def resume_processing(self) -> None:
+        self._processing_paused = True
         if not self._tick_timer.isActive():
             self._tick_timer.start()
+
+    def resume_processing(self) -> None:
+        self._processing_paused = False
+        if not self._tick_timer.isActive():
+            self._tick_timer.start()
+
+    def clear_storage_full_fault(self) -> None:
+        """Allow a later storage-full incident to be reported after recovery."""
+        self._storage_full_reported = False
 
     # -------------------------------------------------------------------------
     # Internal: priming & queueing
@@ -808,9 +808,10 @@ class MediaManager(QObject):
 
     def _tick(self) -> None:
         self._drain_results()
-        self._schedule_work()
-        self._stop_extra_idle_workers()
-        self._ensure_min_idle_workers()
+        if not self._processing_paused:
+            self._schedule_work()
+            self._stop_extra_idle_workers()
+            self._ensure_min_idle_workers()
 
     def _drain_results(self) -> None:
         while True:
@@ -837,6 +838,9 @@ class MediaManager(QObject):
             self.all_completed.emit()
 
     def _schedule_work(self) -> None:
+        if self._processing_paused:
+            return
+
         # Scale workers up if there's backpressure.
         if self._has_pending_work() and self._get_idle_worker() is None:
             max_workers = int(get_runtime_setting(RuntimeSettingKey.MAX_WORKERS))
@@ -1038,6 +1042,22 @@ class MediaManager(QObject):
 
     def _handle_combined_result(self, result: dict) -> None:
         items = list(result.get("items") or [])
+        storage_fault = storage_fault_from_payload(result.get("storage_full_fault"))
+        if storage_fault is not None:
+            error_message = storage_fault.error_message
+            for entry in items:
+                file_path = str(entry.get("file_path"))
+                self._in_flight_files.discard(file_path)
+                if file_path not in self._file_infos:
+                    continue
+                if bool(entry.get("want_embedded")):
+                    self._thumb_errors[file_path] = error_message
+                if bool(entry.get("want_editable")) or bool(entry.get("want_panel")):
+                    self._exif_errors[file_path] = error_message
+                if isinstance(entry.get("editable_metadata"), dict):
+                    self.editable_terminal.emit(file_path, False)
+            self._report_storage_full(storage_fault)
+            return
 
         for entry in items:
             file_path = str(entry.get("file_path"))
@@ -1147,6 +1167,12 @@ class MediaManager(QObject):
         if info is None:
             return
 
+        storage_fault = storage_fault_from_payload(result.get("storage_full_fault"))
+        if storage_fault is not None:
+            self._thumb_errors[file_path] = storage_fault.error_message
+            self._report_storage_full(storage_fault)
+            return
+
         ok = bool(result.get("ok"))
         if ok:
             cache_path = result.get("cache_path")
@@ -1155,6 +1181,13 @@ class MediaManager(QObject):
                 self._mark_thumb_done(file_path)
         else:
             self._thumb_errors[file_path] = str(result.get("error") or "HQ failed")
+
+    def _report_storage_full(self, fault: StorageWriteFault) -> None:
+        self.pause_processing()
+        if self._storage_full_reported:
+            return
+        self._storage_full_reported = True
+        self.storage_full.emit(fault)
 
     def _handle_write_result(self, result: dict) -> None:
         results = list(result.get("results") or [])

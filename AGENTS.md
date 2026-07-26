@@ -85,6 +85,7 @@ src/piqopiqo/
     ├── settings_state.py # QSettings-backed state + settings registries/accessors
 ├── photo_model.py   # PhotoListModel: filtering, sorting, selection, add/remove photos
 ├── shortcuts.py     # Keyboard shortcut utilities + view-scope shortcut registries
+├── storage.py       # Qt-free storage write probes + full-volume fault payloads/classification
 ├── model.py         # Data models (ImageItem, FilterCriteria, StatusLabel, ExifField)
 ├── external_apps.py # External application integration (file manager, viewer, editor)
 ├── utils.py         # Logging setup and utilities
@@ -99,7 +100,8 @@ src/piqopiqo/
 │   ├── exif_write.py    # Shared DB->EXIF tag builder
 │   └── save_workers.py  # Background worker to save metadata
 ├── dialogs/         # Standalone dialogs not tied to a specific feature
-│   └── error_list_dialog.py # Dialog showing loading errors (thumb/EXIF)
+│   ├── error_list_dialog.py # Dialog showing loading errors (thumb/EXIF)
+│   └── storage_full_dialog.py # Shared cache-full Retry/Exit dialog
 ├── components/      # Reusable UI components
 │   ├── ellided_label.py     # Truncated label with ellipsis
 │   ├── scrollable_strip.py  # Horizontal scrollable strip base class
@@ -191,6 +193,7 @@ tests/
 - **Flickr menu**: Contains Upload to Flickr, album reordering by modal photo-taken date, and remote title/tag Find & Replace with shared login/token handling
 - **Upload to Flickr**: Flickr menu workflow uploads only currently visible (filtered) photos in current sort order, with login/token validation, album preflight input (title/ID/URL), temp EXIF write, upload-date reset, make-public, and optional album add/create step
 - **Fullscreen filter sync**: Optional `FILTER_IN_FULLSCREEN` setting immediately updates fullscreen loop membership after label shortcut changes without leaving fullscreen
+- **Full-storage recovery**: Cache/SQLite/thumbnail and Copy-from-SD writes report a clear Retry/Exit flow; cache work resumes manually after a successful write probe
 
 ## PhotoListModel Architecture
 
@@ -349,6 +352,9 @@ Selection behavior:
 - `between:` returns dates strictly between start and end (exclusive of both sides); missing start resolves to last copied date for the volume (like `since:last`).
 - Synonym prefixes: `s:` expands to `since:`, `b:` expands to `between:`.
 - Copy runs in a background worker with progress and cancel; eject uses `diskutil` and is skipped on cancel.
+- Cache storage-full faults are distinct from removable-cache disconnect faults: concurrent SQLite/thumbnail failures are coalesced into one manual Retry/Exit flow, while genuine disconnects keep automatic reconnect behavior.
+- Embedded and HQ thumbnails are staged and atomically replaced. Regeneration retains the last valid cached preview until its replacement succeeds.
+- Copy-from-SD writes through sibling `.part` files. A full destination pauses on the failed image; Retry continues from that image, while Exit removes the partial file, keeps completed copies, skips eject, and quits PiqoPiqo.
 - `MediaManager` handles EXIF + thumbnails via multiprocessing; DB writes happen in the main process (SQLite single-writer). Filesystem/tool paths are resolved in the parent process and passed explicitly in worker task payloads.
 - Thumbnail cache layout is split by quality under each folder cache:
   - `thumb/embedded/<base>.jpg` (EXIF embedded preview)

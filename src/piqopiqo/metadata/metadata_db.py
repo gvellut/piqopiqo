@@ -14,6 +14,7 @@ from typing import Any
 from PySide6.QtCore import QObject, Signal
 
 from piqopiqo.cache_paths import get_cache_dir_for_folder
+from piqopiqo.storage import storage_full_fault_from_error
 
 from .db_fields import DBFields
 
@@ -23,7 +24,6 @@ logger = logging.getLogger(__name__)
 _TRANSIENT_DB_ERROR_SNIPPETS = (
     "disk i/o error",
     "unable to open database file",
-    "database or disk is full",
     "readonly database",
     "attempt to write a readonly database",
     "bad file descriptor",
@@ -43,6 +43,10 @@ class MetadataDBFault:
     @property
     def is_transient(self) -> bool:
         return self.classification == "transient_unavailable"
+
+    @property
+    def is_storage_full(self) -> bool:
+        return self.classification == "storage_full"
 
 
 class MetadataDBUnavailableError(RuntimeError):
@@ -456,6 +460,23 @@ class MetadataDB:
         message = str(row[0])
         return message == "ok", message
 
+    @staticmethod
+    def _probe_write_connection(connection: sqlite3.Connection) -> None:
+        """Force and roll back a small write against the main database."""
+        row = connection.execute("PRAGMA user_version").fetchone()
+        current_version = int(row[0]) if row is not None else 0
+        probe_version = 0 if current_version else 1
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(f"PRAGMA user_version = {probe_version}")
+            connection.rollback()
+        except Exception:
+            try:
+                connection.rollback()
+            except Exception:
+                pass
+            raise
+
     def _classify_open_failure(
         self,
         *,
@@ -467,7 +488,15 @@ class MetadataDB:
         message = str(exc) or exc.__class__.__name__
         lower_message = message.lower()
         classification = "unreadable_after_reconnect"
-        if (not path_available) or any(
+        storage_fault = storage_full_fault_from_error(
+            exc,
+            target_path=self.db_path.parent,
+            operation=operation,
+            confirm_ambiguous_sqlite=True,
+        )
+        if storage_fault is not None:
+            classification = "storage_full"
+        elif (not path_available) or any(
             snippet in lower_message for snippet in _TRANSIENT_DB_ERROR_SNIPPETS
         ):
             classification = "transient_unavailable"
@@ -621,7 +650,10 @@ class MetadataDB:
         return default
 
     def probe_health(
-        self, *, allow_create: bool = False
+        self,
+        *,
+        allow_create: bool = False,
+        require_write: bool = False,
     ) -> tuple[bool, MetadataDBFault | None]:
         """Probe whether the DB can be re-opened and passes quick_check."""
         self.close()
@@ -633,6 +665,18 @@ class MetadataDB:
         )
         if reopened is None:
             return False, fault
+        if require_write:
+            try:
+                self._probe_write_connection(reopened)
+            except (sqlite3.Error, OSError, RuntimeError) as exc:
+                self._close_connection_for_thread()
+                return False, self._classify_open_failure(
+                    operation="probe_write_health",
+                    exc=exc,
+                    during_write=True,
+                    path_available=self.db_path.parent.exists()
+                    and self.db_path.exists(),
+                )
         return True, None
 
     def get_metadata(self, file_path: str) -> dict | None:
@@ -1212,9 +1256,11 @@ class MetadataDBManager:
         folder_path: str,
         *,
         allow_create: bool = False,
+        require_write: bool = False,
     ) -> tuple[bool, MetadataDBFault | None]:
         return self.get_db_for_folder(folder_path).probe_health(
-            allow_create=allow_create
+            allow_create=allow_create,
+            require_write=require_write,
         )
 
     def close_all(self) -> None:
