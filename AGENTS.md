@@ -28,7 +28,7 @@ The tool uses `uv` for package management and `ruff` for formatting and linint.
 ```bash
 # Run linting and formatting. Always use --fix.
 ruff check --fix
-ruff format
+ruff format src tests
 ```
 
 ### System dependencies
@@ -356,6 +356,7 @@ Selection behavior:
 - Embedded and HQ thumbnails are staged and atomically replaced. Regeneration retains the last valid cached preview until its replacement succeeds.
 - Copy-from-SD writes through sibling `.part` files. A full destination pauses on the failed image; Retry continues from that image, while Exit removes the partial file, keeps completed copies, skips eject, and quits PiqoPiqo.
 - `MediaManager` handles EXIF + thumbnails via multiprocessing; DB writes happen in the main process (SQLite single-writer). Filesystem/tool paths are resolved in the parent process and passed explicitly in worker task payloads.
+- Initial folder priming (`MediaManager.reset_for_folder`) uses one per-folder bulk metadata read, one grouped EXIF-coverage read, and one listing of each thumbnail cache directory. Keep reset-time cache/DB checks batched; incremental watcher additions and explicit refreshes intentionally retain targeted per-file checks.
 - Thumbnail cache layout is split by quality under each folder cache:
   - `thumb/embedded/<base>.jpg` (EXIF embedded preview)
   - `thumb/hq/<base>.jpg` (HQ thumbnail from full image)

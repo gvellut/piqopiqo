@@ -11,7 +11,7 @@ import pytest
 
 import piqopiqo.background.media_man as media_man
 from piqopiqo.background.media_man import MediaManager, _FileInfo
-from piqopiqo.cache_paths import set_cache_base_dir
+from piqopiqo.cache_paths import ensure_thumb_dir, set_cache_base_dir
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBManager
 from piqopiqo.ssf.settings_state import init_qsettings_store
@@ -122,6 +122,212 @@ def test_startup_retries_editable_metadata_when_cached_db_row_is_empty(
     assert priming.missing_editable_paths == {image_path}
     need = manager._pending_combined_other[image_path]
     assert need.want_editable is True
+
+
+def test_startup_bulk_priming_uses_fully_cached_files(manager, tmp_path):
+    source_folder = tmp_path / "photos"
+    source_folder.mkdir()
+    image_paths = [
+        str(source_folder / "a.jpg"),
+        str(source_folder / "b.jpg"),
+    ]
+    db = manager._db_manager.get_db_for_folder(str(source_folder))
+    thumb_dir = ensure_thumb_dir(str(source_folder))
+    for image_path in image_paths:
+        base_name = image_path.rsplit("/", 1)[1].rsplit(".", 1)[0]
+        db.save_metadata(image_path, {DBFields.TITLE: base_name})
+        db.save_exif_fields(
+            image_path,
+            {key: None for key in manager._panel_field_keys},
+        )
+        (thumb_dir / "embedded" / f"{base_name}.jpg").write_bytes(b"embedded")
+        (thumb_dir / "hq" / f"{base_name}.jpg").write_bytes(b"hq")
+
+    priming = manager.reset_for_folder(image_paths, [str(source_folder)])
+
+    assert set(priming.cached_editable_metadata) == set(image_paths)
+    assert priming.missing_editable_paths == set()
+    assert manager._editable_done == set(image_paths)
+    assert manager._thumb_done == set(image_paths)
+    assert manager._pending_combined_other == {}
+    assert manager._pending_hq_other == set()
+
+
+def test_startup_lowres_only_uses_bulk_embedded_cache_snapshot(
+    manager, tmp_path, monkeypatch
+):
+    source_folder = tmp_path / "photos"
+    source_folder.mkdir()
+    image_path = str(source_folder / "a.jpg")
+    db = manager._db_manager.get_db_for_folder(str(source_folder))
+    db.save_metadata(image_path, {DBFields.TITLE: "Cached"})
+    db.save_exif_fields(
+        image_path,
+        {key: None for key in manager._panel_field_keys},
+    )
+    thumb_dir = ensure_thumb_dir(str(source_folder))
+    (thumb_dir / "embedded" / "a.jpg").write_bytes(b"embedded")
+    monkeypatch.setattr(manager, "_is_lowres_only_mode", lambda: True)
+
+    manager.reset_for_folder([image_path], [str(source_folder)])
+
+    assert manager._thumb_done == {image_path}
+    assert manager._pending_combined_other == {}
+    assert manager._pending_hq_other == set()
+
+
+def test_startup_bulk_priming_migrates_known_legacy_thumbnails(manager, tmp_path):
+    source_folder = tmp_path / "photos"
+    source_folder.mkdir()
+    image_path = str(source_folder / "a.jpg")
+    thumb_dir = ensure_thumb_dir(str(source_folder))
+    (thumb_dir / "a_embedded.jpg").write_bytes(b"embedded")
+    (thumb_dir / "a_hq.jpg").write_bytes(b"hq")
+
+    manager.reset_for_folder([image_path], [str(source_folder)])
+
+    assert (thumb_dir / "embedded" / "a.jpg").read_bytes() == b"embedded"
+    assert (thumb_dir / "hq" / "a.jpg").read_bytes() == b"hq"
+    assert manager._thumb_done == {image_path}
+    need = manager._pending_combined_other[image_path]
+    assert need.want_embedded is False
+
+
+def test_startup_failed_legacy_migration_queues_replacement(
+    manager, tmp_path, monkeypatch
+):
+    source_folder = tmp_path / "photos"
+    source_folder.mkdir()
+    image_path = str(source_folder / "a.jpg")
+    thumb_dir = ensure_thumb_dir(str(source_folder))
+    (thumb_dir / "a_embedded.jpg").write_bytes(b"embedded")
+    (thumb_dir / "a_hq.jpg").write_bytes(b"hq")
+    monkeypatch.setattr(
+        manager,
+        "_migrate_known_legacy_thumb",
+        lambda _legacy_path, _new_path: False,
+    )
+
+    manager.reset_for_folder([image_path], [str(source_folder)])
+
+    need = manager._pending_combined_other[image_path]
+    assert need.want_embedded is True
+    assert image_path in manager._pending_hq_other
+
+
+class _BulkReadDB:
+    def __init__(self, file_paths: list[str]):
+        self.file_paths = set(file_paths)
+        self.metadata_calls = 0
+        self.exif_calls = 0
+
+    def get_all_metadata(self) -> dict[str, dict]:
+        self.metadata_calls += 1
+        return {path: {DBFields.TITLE: "Cached"} for path in self.file_paths}
+
+    def get_paths_with_exif_fields(self, _field_keys: list[str]) -> set[str]:
+        self.exif_calls += 1
+        return set(self.file_paths)
+
+    def get_metadata(self, _file_path: str):
+        raise AssertionError("bulk reset must not use scalar metadata reads")
+
+    def has_exif_fields(self, _file_path: str, _field_keys: list[str]):
+        raise AssertionError("bulk reset must not use scalar EXIF checks")
+
+
+class _BulkReadDBManager:
+    def __init__(self, paths_by_folder: dict[str, list[str]]):
+        self.databases = {
+            folder: _BulkReadDB(paths) for folder, paths in paths_by_folder.items()
+        }
+
+    def get_db_for_folder(self, folder: str) -> _BulkReadDB:
+        return self.databases[folder]
+
+
+def test_startup_bulk_priming_batches_storage_checks_per_folder(
+    manager, tmp_path, monkeypatch
+):
+    folders = [str(tmp_path / "folder_a"), str(tmp_path / "folder_b")]
+    paths_by_folder = {
+        folder: [f"{folder}/image_{index}.jpg" for index in range(20)]
+        for folder in folders
+    }
+    for folder in folders:
+        tmp_path.joinpath(folder.rsplit("/", 1)[1]).mkdir()
+        ensure_thumb_dir(folder)
+
+    fake_db_manager = _BulkReadDBManager(paths_by_folder)
+    manager._db_manager = fake_db_manager
+
+    ensure_calls: list[str] = []
+    real_ensure_thumb_dir = media_man.ensure_thumb_dir
+
+    def _counted_ensure_thumb_dir(folder: str):
+        ensure_calls.append(folder)
+        return real_ensure_thumb_dir(folder)
+
+    scan_calls: list[str] = []
+    real_scandir = media_man.os.scandir
+
+    def _counted_scandir(directory):
+        scan_calls.append(str(directory))
+        return real_scandir(directory)
+
+    monkeypatch.setattr(media_man, "ensure_thumb_dir", _counted_ensure_thumb_dir)
+    monkeypatch.setattr(media_man.os, "scandir", _counted_scandir)
+    monkeypatch.setattr(
+        media_man.os.path,
+        "exists",
+        lambda _path: (_ for _ in ()).throw(
+            AssertionError("bulk reset must not use per-photo exists checks")
+        ),
+    )
+
+    manager.reset_for_folder(
+        [path for paths in paths_by_folder.values() for path in paths],
+        folders,
+    )
+
+    assert ensure_calls == folders
+    for folder, db in fake_db_manager.databases.items():
+        assert db.metadata_calls == 1
+        assert db.exif_calls == 1
+        thumb_dir = real_ensure_thumb_dir(folder)
+        assert scan_calls.count(str(thumb_dir)) == 1
+        assert scan_calls.count(str(thumb_dir / "embedded")) == 1
+        assert scan_calls.count(str(thumb_dir / "hq")) == 1
+    assert len(scan_calls) == 3 * len(folders)
+
+
+def test_incremental_add_keeps_targeted_per_file_checks(manager, tmp_path, monkeypatch):
+    source_folder = tmp_path / "photos"
+    source_folder.mkdir()
+    image_path = str(source_folder / "a.jpg")
+    db = manager._db_manager.get_db_for_folder(str(source_folder))
+    scalar_calls: list[str] = []
+    monkeypatch.setattr(
+        db,
+        "get_metadata",
+        lambda file_path: scalar_calls.append(f"metadata:{file_path}"),
+    )
+    monkeypatch.setattr(
+        db,
+        "has_exif_fields",
+        lambda file_path, _keys: scalar_calls.append(f"exif:{file_path}") or False,
+    )
+    monkeypatch.setattr(
+        manager,
+        "_build_folder_priming_snapshot",
+        lambda *_args: (_ for _ in ()).throw(
+            AssertionError("incremental add must not build a folder snapshot")
+        ),
+    )
+
+    manager.add_files([image_path])
+
+    assert scalar_calls == [f"metadata:{image_path}", f"exif:{image_path}"]
 
 
 def test_empty_automatic_editable_result_does_not_update_db(manager, tmp_path):

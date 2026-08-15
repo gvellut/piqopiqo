@@ -679,6 +679,52 @@ class MetadataDB:
                 )
         return True, None
 
+    @staticmethod
+    def _metadata_from_row(row: sqlite3.Row) -> dict:
+        row_keys = set(row.keys())
+
+        time_taken_raw = row[DBFields.TIME_TAKEN]
+        if isinstance(time_taken_raw, str) and time_taken_raw:
+            try:
+                time_taken_val = datetime.strptime(time_taken_raw, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                time_taken_val = parse_exif_datetime(time_taken_raw)
+        elif isinstance(time_taken_raw, datetime):
+            time_taken_val = time_taken_raw
+        else:
+            time_taken_val = None
+
+        return {
+            DBFields.TITLE: row[DBFields.TITLE],
+            DBFields.DESCRIPTION: row[DBFields.DESCRIPTION],
+            DBFields.LATITUDE: row[DBFields.LATITUDE],
+            DBFields.LONGITUDE: row[DBFields.LONGITUDE],
+            DBFields.KEYWORDS: row[DBFields.KEYWORDS],
+            DBFields.TIME_TAKEN: time_taken_val,
+            DBFields.LABEL: row[DBFields.LABEL],
+            DBFields.ORIENTATION: row[DBFields.ORIENTATION],
+            DBFields.MANUAL_LENS_MAKE: (
+                row[DBFields.MANUAL_LENS_MAKE]
+                if DBFields.MANUAL_LENS_MAKE in row_keys
+                else None
+            ),
+            DBFields.MANUAL_LENS_MODEL: (
+                row[DBFields.MANUAL_LENS_MODEL]
+                if DBFields.MANUAL_LENS_MODEL in row_keys
+                else None
+            ),
+            DBFields.MANUAL_FOCAL_LENGTH: (
+                row[DBFields.MANUAL_FOCAL_LENGTH]
+                if DBFields.MANUAL_FOCAL_LENGTH in row_keys
+                else None
+            ),
+            DBFields.MANUAL_FOCAL_LENGTH_35MM: (
+                row[DBFields.MANUAL_FOCAL_LENGTH_35MM]
+                if DBFields.MANUAL_FOCAL_LENGTH_35MM in row_keys
+                else None
+            ),
+        }
+
     def get_metadata(self, file_path: str) -> dict | None:
         """Get metadata for a photo.
 
@@ -690,67 +736,33 @@ class MetadataDB:
         """
 
         def _load(conn: sqlite3.Connection) -> dict | None:
-            cursor = conn.execute(
+            row = conn.execute(
                 "SELECT * FROM photo_metadata WHERE file_path = ?", (file_path,)
-            )
-            row = cursor.fetchone()
-
+            ).fetchone()
             if row is None:
                 return None
-
-            row_keys = set(row.keys())
-
-            # Parse time_taken string to datetime object
-            time_taken_raw = row[DBFields.TIME_TAKEN]
-            if isinstance(time_taken_raw, str) and time_taken_raw:
-                try:
-                    time_taken_val = datetime.strptime(
-                        time_taken_raw, "%Y-%m-%d %H:%M:%S"
-                    )
-                except ValueError:
-                    # Fallback: try EXIF format for un-migrated data
-                    time_taken_val = parse_exif_datetime(time_taken_raw)
-            elif isinstance(time_taken_raw, datetime):
-                time_taken_val = time_taken_raw
-            else:
-                time_taken_val = None
-
-            return {
-                DBFields.TITLE: row[DBFields.TITLE],
-                DBFields.DESCRIPTION: row[DBFields.DESCRIPTION],
-                DBFields.LATITUDE: row[DBFields.LATITUDE],
-                DBFields.LONGITUDE: row[DBFields.LONGITUDE],
-                DBFields.KEYWORDS: row[DBFields.KEYWORDS],
-                DBFields.TIME_TAKEN: time_taken_val,
-                DBFields.LABEL: row[DBFields.LABEL],
-                DBFields.ORIENTATION: row[DBFields.ORIENTATION],
-                DBFields.MANUAL_LENS_MAKE: (
-                    row[DBFields.MANUAL_LENS_MAKE]
-                    if DBFields.MANUAL_LENS_MAKE in row_keys
-                    else None
-                ),
-                DBFields.MANUAL_LENS_MODEL: (
-                    row[DBFields.MANUAL_LENS_MODEL]
-                    if DBFields.MANUAL_LENS_MODEL in row_keys
-                    else None
-                ),
-                DBFields.MANUAL_FOCAL_LENGTH: (
-                    row[DBFields.MANUAL_FOCAL_LENGTH]
-                    if DBFields.MANUAL_FOCAL_LENGTH in row_keys
-                    else None
-                ),
-                DBFields.MANUAL_FOCAL_LENGTH_35MM: (
-                    row[DBFields.MANUAL_FOCAL_LENGTH_35MM]
-                    if DBFields.MANUAL_FOCAL_LENGTH_35MM in row_keys
-                    else None
-                ),
-            }
+            return self._metadata_from_row(row)
 
         return self._run_db_operation(
             operation="get_metadata",
             create=False,
             during_write=False,
             default=None,
+            func=_load,
+        )
+
+    def get_all_metadata(self) -> dict[str, dict]:
+        """Get all cached editable metadata for this source folder."""
+
+        def _load(conn: sqlite3.Connection) -> dict[str, dict]:
+            rows = conn.execute("SELECT * FROM photo_metadata").fetchall()
+            return {str(row["file_path"]): self._metadata_from_row(row) for row in rows}
+
+        return self._run_db_operation(
+            operation="get_all_metadata",
+            create=False,
+            during_write=False,
+            default={},
             func=_load,
         )
 
@@ -976,6 +988,30 @@ class MetadataDB:
                 default=False,
                 func=_check,
             )
+        )
+
+    def get_paths_with_exif_fields(self, field_keys: list[str]) -> set[str]:
+        """Get paths having rows for every requested EXIF panel field."""
+        unique_keys = list(dict.fromkeys(key for key in field_keys if key))
+        if not unique_keys:
+            return set()
+
+        def _load(conn: sqlite3.Connection) -> set[str]:
+            placeholders = ",".join("?" for _ in unique_keys)
+            rows = conn.execute(
+                "SELECT file_path FROM photo_exif_fields "
+                f"WHERE field_key IN ({placeholders}) "
+                "GROUP BY file_path HAVING COUNT(*) = ?",
+                (*unique_keys, len(unique_keys)),
+            ).fetchall()
+            return {str(row["file_path"]) for row in rows}
+
+        return self._run_db_operation(
+            operation="get_paths_with_exif_fields",
+            create=False,
+            during_write=False,
+            default=set(),
+            func=_load,
         )
 
     def get_folder_value(self, data: str) -> str | None:

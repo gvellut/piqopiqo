@@ -119,6 +119,14 @@ class FolderPrimingResult:
     missing_editable_paths: set[str]
 
 
+@define(frozen=True)
+class _FolderPrimingSnapshot:
+    cached_editable_metadata: dict[str, dict]
+    complete_exif_paths: set[str]
+    embedded_names: set[str]
+    hq_names: set[str]
+
+
 class MediaManager(QObject):
     """Manages EXIF extraction, embedded preview extraction and thumbnail generation."""
 
@@ -232,25 +240,42 @@ class MediaManager(QObject):
             get_effective_exif_panel_field_keys()
         )
 
-        for folder in source_folders:
-            ensure_thumb_dir(folder)
+        registered_folders = list(
+            dict.fromkeys([
+                *source_folders,
+                *(os.path.dirname(file_path) for file_path in file_paths),
+            ])
+        )
+        thumb_dirs = {
+            folder: str(ensure_thumb_dir(folder)) for folder in registered_folders
+        }
+        infos_by_folder: dict[str, list[_FileInfo]] = {
+            folder: [] for folder in registered_folders
+        }
 
         for file_path in file_paths:
             source_folder = os.path.dirname(file_path)
-            thumb_dir = str(ensure_thumb_dir(source_folder))
             base_name = os.path.splitext(os.path.basename(file_path))[0]
-            self._file_infos[file_path] = _FileInfo(
+            info = _FileInfo(
                 file_path=file_path,
                 source_folder=source_folder,
-                thumb_dir=thumb_dir,
+                thumb_dir=thumb_dirs[source_folder],
                 base_name=base_name,
             )
+            self._file_infos[file_path] = info
+            infos_by_folder[source_folder].append(info)
+
+        snapshots = {
+            folder: self._build_folder_priming_snapshot(folder, infos)
+            for folder, infos in infos_by_folder.items()
+            if infos
+        }
 
         self.thumb_progress_updated.emit(self._thumb_completed, self._thumb_total)
         self.exif_progress_updated.emit(self._exif_completed, self._exif_total)
 
         # Prime from DB / caches and queue missing work (initially non-visible).
-        return self._prime_and_queue_initial(file_paths)
+        return self._prime_and_queue_initial(file_paths, snapshots=snapshots)
 
     def add_files(self, file_paths: list[str]) -> None:
         """Register new files and enqueue processing for them."""
@@ -606,7 +631,78 @@ class MediaManager(QObject):
             except Exception:
                 continue
 
-    def _prime_and_queue_initial(self, file_paths: list[str]) -> FolderPrimingResult:
+    @staticmethod
+    def _scan_jpg_names(directory: str | Path) -> set[str]:
+        try:
+            with os.scandir(directory) as entries:
+                return {entry.name for entry in entries if entry.name.endswith(".jpg")}
+        except OSError:
+            return set()
+
+    @staticmethod
+    def _migrate_known_legacy_thumb(legacy_path: str, new_path: str) -> bool:
+        try:
+            try:
+                Path(legacy_path).rename(new_path)
+            except OSError:
+                shutil.copy2(legacy_path, new_path)
+        except Exception:
+            return False
+        return True
+
+    def _build_folder_priming_snapshot(
+        self,
+        source_folder: str,
+        infos: list[_FileInfo],
+    ) -> _FolderPrimingSnapshot:
+        thumb_dir = Path(infos[0].thumb_dir)
+        legacy_names = self._scan_jpg_names(thumb_dir)
+        embedded_names = self._scan_jpg_names(thumb_dir / "embedded")
+        hq_names = self._scan_jpg_names(thumb_dir / "hq")
+
+        for info in infos:
+            cache_name = f"{info.base_name}.jpg"
+            legacy_embedded_name = f"{info.base_name}_embedded.jpg"
+            if (
+                cache_name not in embedded_names
+                and legacy_embedded_name in legacy_names
+                and self._migrate_known_legacy_thumb(
+                    info.legacy_embedded_cache_path,
+                    info.embedded_cache_path,
+                )
+            ):
+                embedded_names.add(cache_name)
+
+            legacy_hq_name = f"{info.base_name}_hq.jpg"
+            if (
+                cache_name not in hq_names
+                and legacy_hq_name in legacy_names
+                and self._migrate_known_legacy_thumb(
+                    info.legacy_hq_cache_path,
+                    info.hq_cache_path,
+                )
+            ):
+                hq_names.add(cache_name)
+
+        db = self._db_manager.get_db_for_folder(source_folder)
+        complete_exif_paths = (
+            db.get_paths_with_exif_fields(self._panel_field_keys)
+            if self._panel_field_keys
+            else {info.file_path for info in infos}
+        )
+        return _FolderPrimingSnapshot(
+            cached_editable_metadata=db.get_all_metadata(),
+            complete_exif_paths=complete_exif_paths,
+            embedded_names=embedded_names,
+            hq_names=hq_names,
+        )
+
+    def _prime_and_queue_initial(
+        self,
+        file_paths: list[str],
+        *,
+        snapshots: dict[str, _FolderPrimingSnapshot] | None = None,
+    ) -> FolderPrimingResult:
         cached_editable_metadata: dict[str, dict] = {}
         missing_editable_paths: set[str] = set()
 
@@ -615,11 +711,23 @@ class MediaManager(QObject):
             if info is None:
                 continue
 
-            self._migrate_legacy_thumbs(info)
+            snapshot = (
+                snapshots.get(info.source_folder) if snapshots is not None else None
+            )
+            if snapshot is None:
+                self._migrate_legacy_thumbs(info)
+                db = self._db_manager.get_db_for_folder(info.source_folder)
+                meta = db.get_metadata(file_path)
+                has_panel_fields = db.has_exif_fields(file_path, self._panel_field_keys)
+                has_embedded = os.path.exists(info.embedded_cache_path)
+                has_hq = os.path.exists(info.hq_cache_path)
+            else:
+                meta = snapshot.cached_editable_metadata.get(file_path)
+                has_panel_fields = file_path in snapshot.complete_exif_paths
+                cache_name = f"{info.base_name}.jpg"
+                has_embedded = cache_name in snapshot.embedded_names
+                has_hq = cache_name in snapshot.hq_names
 
-            # Editable metadata
-            db = self._db_manager.get_db_for_folder(info.source_folder)
-            meta = db.get_metadata(file_path)
             if meta is not None and _metadata_has_preservable_values(meta):
                 self._editable_done.add(file_path)
                 self._exif_completed += 1
@@ -629,14 +737,11 @@ class MediaManager(QObject):
                 self._queue_combined(file_path, want_editable=True)
 
             # Panel fields (stored in DB as key/value)
-            if not db.has_exif_fields(file_path, self._panel_field_keys):
+            if not has_panel_fields:
                 self._queue_combined(file_path, want_panel=True)
 
             # Thumbnails
             lowres_only = self._is_lowres_only_mode()
-            has_embedded = os.path.exists(info.embedded_cache_path)
-            has_hq = os.path.exists(info.hq_cache_path)
-
             if lowres_only:
                 if has_embedded:
                     self._thumb_done.add(file_path)
