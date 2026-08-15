@@ -366,6 +366,8 @@ class PhotoGrid(QWidget):
             started = time.perf_counter()
 
         previous_anchor_path = self._last_selected_path
+        previous_anchor_index = self._last_selected_index
+        previous_order_paths = [item.path for item in self.items_data]
         # Inject index for click handling (preserve selection state)
         for i, item in enumerate(items):
             item._global_index = i
@@ -379,16 +381,30 @@ class PhotoGrid(QWidget):
 
         # Update last selected index based on current selection
         selected = [i for i, item in enumerate(items) if item.is_selected]
-        if selected and previous_anchor_path is not None:
-            anchor_idx = self.get_index_for_path(previous_anchor_path)
-            if anchor_idx is not None and self.items_data[anchor_idx].is_selected:
-                self._set_selection_anchor(anchor_idx)
-            else:
-                self._set_selection_anchor(selected[-1])
-        elif selected:
-            self._set_selection_anchor(selected[-1])
-        else:
+        if not selected:
             self._set_selection_anchor(-1)
+        else:
+            anchor_idx = None
+            if previous_anchor_path is not None:
+                candidate_idx = self.get_index_for_path(previous_anchor_path)
+                if (
+                    candidate_idx is not None
+                    and self.items_data[candidate_idx].is_selected
+                ):
+                    anchor_idx = candidate_idx
+
+            if anchor_idx is None and (
+                previous_anchor_path is not None or previous_anchor_index >= 0
+            ):
+                anchor_idx = self._find_next_selected_index_after_anchor(
+                    previous_anchor_path,
+                    reference_paths=previous_order_paths,
+                    former_index=previous_anchor_index,
+                )
+
+            self._set_selection_anchor(
+                selected[-1] if anchor_idx is None else anchor_idx
+            )
 
         if fast_first_paint:
             self._begin_fast_first_paint()
@@ -457,6 +473,9 @@ class PhotoGrid(QWidget):
         *,
         anchor_path: str | None = None,
     ) -> set[int]:
+        previous_anchor_path = self._last_selected_path
+        previous_anchor_index = self._last_selected_index
+        previous_order_paths = [item.path for item in self.items_data]
         path_set = set(paths)
         selected_indices: set[int] = set()
         for i, item in enumerate(self.items_data):
@@ -469,6 +488,20 @@ class PhotoGrid(QWidget):
             idx = self.get_index_for_path(anchor_path)
             if idx is not None and idx in selected_indices:
                 anchor_index = idx
+
+        if anchor_index is None and previous_anchor_path is not None:
+            idx = self.get_index_for_path(previous_anchor_path)
+            if idx is not None and idx in selected_indices:
+                anchor_index = idx
+
+        if anchor_index is None and (
+            previous_anchor_path is not None or previous_anchor_index >= 0
+        ):
+            anchor_index = self._find_next_selected_index_after_anchor(
+                previous_anchor_path,
+                reference_paths=previous_order_paths,
+                former_index=previous_anchor_index,
+            )
 
         if anchor_index is None:
             for path in reversed(paths):
@@ -499,6 +532,51 @@ class PhotoGrid(QWidget):
         else:
             self._last_selected_index = -1
             self._last_selected_path = None
+
+    def _find_next_selected_index_after_anchor(
+        self,
+        anchor_path: str | None,
+        *,
+        reference_paths: list[str] | None = None,
+        former_index: int | None = None,
+    ) -> int:
+        selected_indices = [
+            i for i, item in enumerate(self.items_data) if item.is_selected
+        ]
+        if not selected_indices:
+            return -1
+
+        selected_indices_by_path = {
+            self.items_data[i].path: i for i in selected_indices
+        }
+        ordered_paths = (
+            reference_paths
+            if reference_paths is not None
+            else [item.path for item in self.items_data]
+        )
+        if anchor_path is not None:
+            try:
+                anchor_position = ordered_paths.index(anchor_path)
+            except ValueError:
+                pass
+            else:
+                paths_after_anchor = ordered_paths[anchor_position + 1 :]
+                paths_before_anchor = ordered_paths[:anchor_position]
+                for path in paths_after_anchor + paths_before_anchor:
+                    index = selected_indices_by_path.get(path)
+                    if index is not None:
+                        return index
+
+        if former_index is not None and former_index >= 0:
+            start_index = min(former_index, len(self.items_data))
+            for index in range(start_index, len(self.items_data)):
+                if self.items_data[index].is_selected:
+                    return index
+            for index in range(start_index):
+                if self.items_data[index].is_selected:
+                    return index
+
+        return selected_indices[0]
 
     def _sync_cell_selection_state(
         self,
@@ -531,7 +609,14 @@ class PhotoGrid(QWidget):
                 return self._last_selected_index
 
         selected = [i for i, item in enumerate(self.items_data) if item.is_selected]
-        return selected[-1] if selected else -1
+        if not selected:
+            return -1
+        if self._last_selected_path is None and self._last_selected_index < 0:
+            return selected[-1]
+        return self._find_next_selected_index_after_anchor(
+            self._last_selected_path,
+            former_index=self._last_selected_index,
+        )
 
     def _column_bounds(self) -> tuple[int, int]:
         min_cols = max(

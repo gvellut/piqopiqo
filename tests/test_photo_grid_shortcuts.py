@@ -61,6 +61,138 @@ def test_select_all_visible_selects_all_items_and_emits_selection(qapp):
     assert emitted == [{0, 1, 2}]
 
 
+def test_deselecting_select_all_anchor_advances_indicator_and_keyboard_origin(qapp):
+    init_qsettings_store(dyn=True)
+    grid = PhotoGrid()
+    grid._rebuild_grid(1, 3)
+    items = [_item(f"/tmp/{index}.jpg") for index in range(3)]
+    grid.set_data(items)
+    grid.select_all_visible()
+
+    grid.on_cell_clicked(0, False, True)
+
+    assert [item.is_selected for item in items] == [False, True, True]
+    assert grid._last_selected_index == 1
+    assert grid._last_selected_path == "/tmp/1.jpg"
+    assert grid.cells[1].is_last_selected is True
+    assert grid.cells[2].is_last_selected is False
+
+    event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key_Left, Qt.NoModifier)
+    grid.keyPressEvent(event)
+
+    assert [item.is_selected for item in items] == [True, False, False]
+    assert grid._last_selected_path == "/tmp/0.jpg"
+
+
+def test_deselecting_middle_anchor_advances_to_next_selected_image(qapp):
+    init_qsettings_store(dyn=True)
+    grid = PhotoGrid()
+    items = [_item(f"/tmp/{index}.jpg") for index in range(6)]
+    grid.set_data(items)
+    grid.on_cell_clicked(0, False, False)
+    grid.on_cell_clicked(3, False, True)
+    grid.on_cell_clicked(5, False, True)
+    grid.on_cell_clicked(2, False, True)
+
+    grid.on_cell_clicked(2, False, True)
+
+    assert grid._last_selected_index == 3
+    assert grid._last_selected_path == "/tmp/3.jpg"
+
+
+def test_deselecting_final_anchor_wraps_to_first_selected_image(qapp):
+    init_qsettings_store(dyn=True)
+    grid = PhotoGrid()
+    items = [_item(f"/tmp/{index}.jpg") for index in range(6)]
+    grid.set_data(items)
+    grid.on_cell_clicked(0, False, False)
+    grid.on_cell_clicked(2, False, True)
+    grid.on_cell_clicked(5, False, True)
+
+    grid.on_cell_clicked(5, False, True)
+
+    assert grid._last_selected_index == 0
+    assert grid._last_selected_path == "/tmp/0.jpg"
+
+
+def test_deselecting_non_anchor_preserves_current_anchor(qapp):
+    init_qsettings_store(dyn=True)
+    grid = PhotoGrid()
+    items = [_item(f"/tmp/{index}.jpg") for index in range(4)]
+    grid.set_data(items)
+    grid.on_cell_clicked(0, False, False)
+    grid.on_cell_clicked(2, False, True)
+
+    grid.on_cell_clicked(0, False, True)
+
+    assert grid._last_selected_index == 2
+    assert grid._last_selected_path == "/tmp/2.jpg"
+
+
+def test_deselecting_only_selected_image_clears_anchor(qapp):
+    init_qsettings_store(dyn=True)
+    grid = PhotoGrid()
+    items = [_item("/tmp/0.jpg")]
+    grid.set_data(items)
+    grid.on_cell_clicked(0, False, False)
+
+    grid.on_cell_clicked(0, False, True)
+
+    assert grid._last_selected_index == -1
+    assert grid._last_selected_path is None
+
+
+def test_set_data_advances_filtered_anchor_using_previous_grid_order(qapp):
+    init_qsettings_store(dyn=True)
+    grid = PhotoGrid()
+    items = [_item(f"/tmp/{index}.jpg") for index in range(6)]
+    grid.set_data(items)
+    grid.on_cell_clicked(0, False, False)
+    grid.on_cell_clicked(4, False, True)
+    grid.on_cell_clicked(5, False, True)
+    grid.on_cell_clicked(3, False, True)
+
+    items[3].is_selected = False
+    filtered_items = [items[index] for index in (0, 2, 4, 5)]
+    grid.set_data(filtered_items)
+
+    assert grid._last_selected_index == 2
+    assert grid._last_selected_path == "/tmp/4.jpg"
+
+
+def test_set_data_advances_removed_anchor_from_its_former_grid_position(qapp):
+    init_qsettings_store(dyn=True)
+    grid = PhotoGrid()
+    items = [_item(f"/tmp/{index}.jpg") for index in range(6)]
+    grid.set_data(items)
+    grid.on_cell_clicked(0, False, False)
+    grid.on_cell_clicked(3, False, True)
+    grid.on_cell_clicked(5, False, True)
+    grid.on_cell_clicked(2, False, True)
+
+    items.pop(2)
+    grid.set_data(items)
+
+    assert grid._last_selected_index == 2
+    assert grid._last_selected_path == "/tmp/3.jpg"
+
+
+def test_select_paths_advances_invalidated_anchor_without_explicit_replacement(qapp):
+    init_qsettings_store(dyn=True)
+    grid = PhotoGrid()
+    items = [_item(f"/tmp/{index}.jpg") for index in range(6)]
+    grid.set_data(items)
+    grid.on_cell_clicked(0, False, False)
+    grid.on_cell_clicked(3, False, True)
+    grid.on_cell_clicked(5, False, True)
+    grid.on_cell_clicked(2, False, True)
+
+    grid.select_paths(["/tmp/0.jpg", "/tmp/3.jpg", "/tmp/5.jpg"])
+
+    assert grid._last_selected_index == 3
+    assert grid._last_selected_path == "/tmp/3.jpg"
+
+
 def test_shared_grid_scope_shortcuts_follow_focus_text_vs_panel(qapp):
     init_qsettings_store(dyn=True)
 
