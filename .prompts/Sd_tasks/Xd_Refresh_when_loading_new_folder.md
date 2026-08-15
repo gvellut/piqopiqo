@@ -1,0 +1,1 @@
+when loading images when opening new folder : instead of keep selected in view, keep the first currently visible in view after reresh + except  if currently selected is in view, keep it in view after refresh : Try to keep the selected in the same row when refreshing (moving the viewing extent)

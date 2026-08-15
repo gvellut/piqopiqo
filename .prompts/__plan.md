@@ -148,3 +148,4 @@
 ! [multiple selected](Sd_tasks/Td_multiple_selected.md)
 ! [Clear GPS also clears the updated date time](Sd_tasks/Ud_Clear_GPS_also_clears_the_updated_date_time.md)
 ! [add Flickr Utils tools](Sd_tasks/Wd_add_Flickr_Utils_tools.md)
+! [Refresh when loading new folder](Sd_tasks/Xd_Refresh_when_loading_new_folder.md)

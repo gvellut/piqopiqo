@@ -1897,16 +1897,12 @@ class MainWindow(QMainWindow):
                     path = self.grid.items_data[index].path
                     visible_rows_by_path[path] = (index // self.grid.n_cols) - top_row
 
-        selected_anchor_path = None
-        selected_anchor_viewport_row = None
         visible_anchor_path = None
         anchor_index = self.grid._choose_anchor_from_current_selection()
         if 0 <= anchor_index < len(self.grid.items_data):
             candidate = self.grid.items_data[anchor_index].path
             if self.grid.items_data[anchor_index].is_selected:
-                selected_anchor_path = candidate
-                selected_anchor_viewport_row = visible_rows_by_path.get(candidate)
-                if selected_anchor_viewport_row is not None:
+                if candidate in visible_rows_by_path:
                     visible_anchor_path = candidate
 
         return {
@@ -1915,9 +1911,6 @@ class MainWindow(QMainWindow):
             "selected_visible_paths": self.grid.get_viewport_selected_paths(),
             "visible_rows_by_path": visible_rows_by_path,
             "visible_anchor_path": visible_anchor_path,
-            "selected_anchor_path": selected_anchor_path,
-            "selected_anchor_viewport_row": selected_anchor_viewport_row,
-            "top_scroll_row": top_row,
         }
 
     def _ensure_grid_path_visible(self, path: str | None) -> bool:
@@ -2022,35 +2015,26 @@ class MainWindow(QMainWindow):
         )
 
     def _restore_grid_viewport_after_sort_change(self, snapshot: dict) -> None:
-        selected_anchor_path = snapshot.get("selected_anchor_path")
-        if selected_anchor_path:
-            new_photo_list_paths = {item.path for item in self.images_data}
-            if selected_anchor_path in new_photo_list_paths:
-                preferred_row = snapshot.get("selected_anchor_viewport_row")
-                if preferred_row is not None and self.grid._ensure_path_at_viewport_row(
-                    selected_anchor_path,
-                    preferred_row,
-                    navigation_activity=False,
-                ):
-                    return
-                self._ensure_grid_path_visible(selected_anchor_path)
-                return
-
-            self._restore_grid_viewport_from_snapshot(snapshot)
+        new_photo_list_paths = [item.path for item in self.images_data]
+        target_path, preferred_row = self._pick_grid_viewport_restore_target(
+            snapshot,
+            new_photo_list_paths,
+        )
+        if target_path is None:
             return
 
-        top_scroll_row = snapshot.get("top_scroll_row")
-        if top_scroll_row is not None:
-            try:
-                target_row = int(top_scroll_row)
-            except (TypeError, ValueError):
-                target_row = 0
-            maximum = int(self.grid.scrollbar.maximum())
-            target_row = max(0, min(target_row, maximum))
-            self.grid._set_scrollbar_value(target_row, navigation_activity=False)
+        selected_visible_paths = set(snapshot.get("selected_visible_paths", []))
+        if (
+            target_path in selected_visible_paths
+            and preferred_row is not None
+            and self.grid._ensure_path_at_viewport_row(
+                target_path,
+                preferred_row,
+                navigation_activity=False,
+            )
+        ):
             return
-
-        self._restore_grid_viewport_from_snapshot(snapshot)
+        self._ensure_grid_path_visible(target_path)
 
     def _restore_grid_viewport_from_snapshot(self, snapshot: dict) -> None:
         new_photo_list_paths = [item.path for item in self.images_data]
