@@ -64,27 +64,30 @@ def _register_file(manager: MediaManager, image_path: str, thumb_dir: str) -> No
 def test_refresh_files_retries_editable_metadata_when_db_row_missing(manager, tmp_path):
     image_path = str(tmp_path / "a.jpg")
     thumb_dir = str(tmp_path / "thumbs")
+    tmp_path.joinpath("a.jpg").write_bytes(b"image")
     _register_file(manager, image_path, thumb_dir)
 
     manager.refresh_files([image_path])
 
-    need = manager._pending_combined_other[image_path]
+    need = manager._pending_stable_refreshes[image_path]
     assert need.want_embedded is True
     assert need.want_panel is True
     assert need.want_editable is True
+    assert need.want_hq is True
     assert need.force is True
 
 
 def test_refresh_files_preserves_existing_editable_metadata(manager, tmp_path):
     image_path = str(tmp_path / "a.jpg")
     thumb_dir = str(tmp_path / "thumbs")
+    tmp_path.joinpath("a.jpg").write_bytes(b"image")
     _register_file(manager, image_path, thumb_dir)
     db = manager._db_manager.get_db_for_folder(str(tmp_path))
     db.save_metadata(image_path, {DBFields.TITLE: "Edited title"})
 
     manager.refresh_files([image_path])
 
-    need = manager._pending_combined_other[image_path]
+    need = manager._pending_stable_refreshes[image_path]
     assert need.want_embedded is True
     assert need.want_panel is True
     assert need.want_editable is False
@@ -96,13 +99,14 @@ def test_refresh_files_retries_editable_metadata_when_db_row_is_empty(
 ):
     image_path = str(tmp_path / "a.jpg")
     thumb_dir = str(tmp_path / "thumbs")
+    tmp_path.joinpath("a.jpg").write_bytes(b"image")
     _register_file(manager, image_path, thumb_dir)
     db = manager._db_manager.get_db_for_folder(str(tmp_path))
     db.save_metadata(image_path, {DBFields.ORIENTATION: 1})
 
     manager.refresh_files([image_path])
 
-    need = manager._pending_combined_other[image_path]
+    need = manager._pending_stable_refreshes[image_path]
     assert need.want_embedded is True
     assert need.want_panel is True
     assert need.want_editable is True
@@ -150,7 +154,7 @@ def test_startup_bulk_priming_uses_fully_cached_files(manager, tmp_path):
     assert manager._editable_done == set(image_paths)
     assert manager._thumb_done == set(image_paths)
     assert manager._pending_combined_other == {}
-    assert manager._pending_hq_other == set()
+    assert manager._pending_hq_other == {}
 
 
 def test_startup_lowres_only_uses_bulk_embedded_cache_snapshot(
@@ -173,7 +177,7 @@ def test_startup_lowres_only_uses_bulk_embedded_cache_snapshot(
 
     assert manager._thumb_done == {image_path}
     assert manager._pending_combined_other == {}
-    assert manager._pending_hq_other == set()
+    assert manager._pending_hq_other == {}
 
 
 def test_startup_bulk_priming_migrates_known_legacy_thumbnails(manager, tmp_path):
@@ -403,12 +407,7 @@ def test_combined_error_schedules_retry_without_saving_empty_metadata(
     tmp_path.joinpath("a.jpg").write_bytes(b"partial")
     _register_file(manager, image_path, thumb_dir)
 
-    retry_callbacks: list[object] = []
-    monkeypatch.setattr(
-        media_man.QTimer,
-        "singleShot",
-        lambda _delay_ms, callback: retry_callbacks.append(callback),
-    )
+    monkeypatch.setattr(manager, "_media_file_stability_delay_s", lambda: 0)
 
     manager._handle_combined_result({
         "items": [
@@ -430,9 +429,6 @@ def test_combined_error_schedules_retry_without_saving_empty_metadata(
     assert db.get_metadata(image_path) is None
     assert image_path not in manager._editable_done
     assert manager.get_exif_errors() == {}
-    assert len(retry_callbacks) == 1
-
-    retry_callbacks[0]()
 
     need = manager._pending_combined_other[image_path]
     assert need.want_embedded is True
@@ -442,19 +438,11 @@ def test_combined_error_schedules_retry_without_saving_empty_metadata(
     assert need.retry_count == 1
 
 
-def test_combined_error_records_error_after_retry_limit(manager, tmp_path, monkeypatch):
+def test_combined_error_records_error_after_retry_limit(manager, tmp_path):
     image_path = str(tmp_path / "a.jpg")
     thumb_dir = str(tmp_path / "thumbs")
     tmp_path.joinpath("a.jpg").write_bytes(b"partial")
     _register_file(manager, image_path, thumb_dir)
-    monkeypatch.setattr(
-        media_man.QTimer,
-        "singleShot",
-        lambda _delay_ms, _callback: (_ for _ in ()).throw(
-            AssertionError("retry should not be scheduled")
-        ),
-    )
-
     manager._handle_combined_result({
         "items": [
             {
@@ -518,6 +506,11 @@ def test_storage_full_results_pause_scheduling_and_emit_once(manager, tmp_path):
 def test_paused_manager_drains_results_without_scheduling(manager, monkeypatch):
     calls: list[str] = []
     monkeypatch.setattr(manager, "_drain_results", lambda: calls.append("drain"))
+    monkeypatch.setattr(
+        manager,
+        "_process_stable_refreshes",
+        lambda: calls.append("stable"),
+    )
     monkeypatch.setattr(manager, "_schedule_work", lambda: calls.append("schedule"))
     monkeypatch.setattr(
         manager,
@@ -533,12 +526,13 @@ def test_paused_manager_drains_results_without_scheduling(manager, monkeypatch):
     manager.pause_processing()
     manager._tick()
 
-    assert calls == ["drain"]
+    assert calls == ["drain", "stable"]
 
 
 def test_regenerate_retains_existing_cache_until_replacement(manager, tmp_path):
     image_path = str(tmp_path / "a.jpg")
     thumb_dir = tmp_path / "thumbs"
+    tmp_path.joinpath("a.jpg").write_bytes(b"image")
     _register_file(manager, image_path, str(thumb_dir))
     embedded_path = thumb_dir / "embedded" / "a.jpg"
     hq_path = thumb_dir / "hq" / "a.jpg"
@@ -554,5 +548,165 @@ def test_regenerate_retains_existing_cache_until_replacement(manager, tmp_path):
     assert embedded_path.read_bytes() == b"old-embedded"
     assert hq_path.read_bytes() == b"old-hq"
     assert manager._thumb_completed == 1
+    need = manager._pending_stable_refreshes[image_path]
+    assert need.want_embedded is True
+    assert need.want_hq is True
+    assert need.force is True
+
+
+def test_stable_refresh_waits_merges_and_restarts_on_source_change(
+    manager, tmp_path, monkeypatch
+):
+    image_path = str(tmp_path / "a.jpg")
+    tmp_path.joinpath("a.jpg").write_bytes(b"image")
+    thumb_dir = tmp_path / "thumbs"
+    embedded_path = thumb_dir / "embedded" / "a.jpg"
+    hq_path = thumb_dir / "hq" / "a.jpg"
+    embedded_path.parent.mkdir(parents=True)
+    hq_path.parent.mkdir(parents=True)
+    embedded_path.write_bytes(b"old-embedded")
+    hq_path.write_bytes(b"old-hq")
+    _register_file(manager, image_path, str(thumb_dir))
+    clock = [10.0]
+    fingerprint = [(1, 100, 1, 1)]
+    monkeypatch.setattr(media_man.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(
+        media_man,
+        "_file_fingerprint",
+        lambda _path: fingerprint[0],
+    )
+
+    manager.regenerate_thumbnails([image_path])
+    clock[0] = 10.4
+    manager.refresh_files([image_path])
+
+    stable_need = manager._pending_stable_refreshes[image_path]
+    assert embedded_path.read_bytes() == b"old-embedded"
+    assert hq_path.read_bytes() == b"old-hq"
+    assert stable_need.stable_since == 10.0
+    assert stable_need.want_embedded is True
+    assert stable_need.want_panel is True
+    assert stable_need.want_hq is True
+
+    clock[0] = 10.9
+    manager._process_stable_refreshes()
+    assert manager._pending_combined_other == {}
+    assert manager._pending_hq_other == {}
+
+    fingerprint[0] = (2, 200, 1, 1)
+    clock[0] = 11.0
+    manager._process_stable_refreshes()
+    assert stable_need.stable_since == 11.0
+
+    clock[0] = 11.9
+    manager._process_stable_refreshes()
+    assert image_path in manager._pending_stable_refreshes
+
+    clock[0] = 12.01
+    manager._process_stable_refreshes()
+
+    assert image_path not in manager._pending_stable_refreshes
     assert manager._pending_combined_other[image_path].force is True
-    assert image_path in manager._pending_hq_other
+    assert manager._pending_hq_other[image_path].force is True
+
+
+def test_stable_refresh_is_cleared_on_remove_and_reset(manager, tmp_path):
+    image_path = str(tmp_path / "a.jpg")
+    tmp_path.joinpath("a.jpg").write_bytes(b"image")
+    _register_file(manager, image_path, str(tmp_path / "thumbs"))
+
+    manager.regenerate_thumbnails([image_path])
+    assert image_path in manager._pending_stable_refreshes
+
+    manager.remove_files([image_path])
+    assert manager._pending_stable_refreshes == {}
+
+    _register_file(manager, image_path, str(tmp_path / "thumbs"))
+    manager.regenerate_thumbnails([image_path])
+    manager.reset_for_folder([], [])
+    assert manager._pending_stable_refreshes == {}
+
+
+def test_forced_hq_request_in_flight_runs_one_deferred_replacement(manager, tmp_path):
+    image_path = str(tmp_path / "a.jpg")
+    tmp_path.joinpath("a.jpg").write_bytes(b"image")
+    thumb_dir = tmp_path / "thumbs"
+    _register_file(manager, image_path, str(thumb_dir))
+    ready: list[tuple] = []
+    manager.thumb_ready.connect(lambda *args: ready.append(args))
+
+    manager._queue_hq(image_path)
+    first_task = manager._pop_next_task()
+    assert first_task is not None
+    assert image_path in manager._in_flight_hq_files
+
+    manager._queue_hq(image_path, force=True, retry_count=2)
+    manager._queue_hq(image_path, force=True, retry_count=2)
+    assert manager._pending_hq_other == {}
+    assert manager._deferred_hq[image_path].force is True
+
+    manager._handle_hq_result({
+        "file_path": image_path,
+        "ok": True,
+        "cache_path": str(thumb_dir / "hq" / "a.jpg"),
+        "force": False,
+        "retry_count": 0,
+    })
+
+    assert ready == []
+    assert image_path not in manager._in_flight_hq_files
+    assert manager._pending_hq_other[image_path].force is True
+    second_task = manager._pop_next_task()
+    assert second_task is not None
+    assert second_task["force"] is True
+    assert second_task["retry_count"] == 2
+
+
+def test_hq_failure_retries_then_success_clears_error(manager, tmp_path, monkeypatch):
+    image_path = str(tmp_path / "a.jpg")
+    tmp_path.joinpath("a.jpg").write_bytes(b"image")
+    _register_file(manager, image_path, str(tmp_path / "thumbs"))
+    monkeypatch.setattr(manager, "_media_file_stability_delay_s", lambda: 0)
+    manager._thumb_errors[image_path] = "old error"
+
+    manager._handle_hq_result({
+        "file_path": image_path,
+        "ok": False,
+        "error": "truncated image",
+        "force": True,
+        "retry_count": 0,
+        "retryable": True,
+    })
+
+    retry_need = manager._pending_hq_other[image_path]
+    assert retry_need.force is True
+    assert retry_need.retry_count == 1
+    task = manager._pop_next_task()
+    assert task is not None
+
+    manager._handle_hq_result({
+        "file_path": image_path,
+        "ok": True,
+        "cache_path": str(tmp_path / "thumbs" / "hq" / "a.jpg"),
+        "force": True,
+        "retry_count": 1,
+    })
+
+    assert manager.get_thumb_errors() == {}
+
+
+def test_hq_failure_records_error_after_retry_limit(manager, tmp_path):
+    image_path = str(tmp_path / "a.jpg")
+    tmp_path.joinpath("a.jpg").write_bytes(b"image")
+    _register_file(manager, image_path, str(tmp_path / "thumbs"))
+
+    manager._handle_hq_result({
+        "file_path": image_path,
+        "ok": False,
+        "error": "truncated image",
+        "force": True,
+        "retry_count": media_man.COMBINED_MAX_RETRIES,
+        "retryable": True,
+    })
+
+    assert manager.get_thumb_errors() == {image_path: "truncated image"}

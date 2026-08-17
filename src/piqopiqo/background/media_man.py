@@ -33,8 +33,19 @@ from . import media_worker
 
 logger = logging.getLogger(__name__)
 
-COMBINED_RETRY_DELAY_MS = 750
 COMBINED_MAX_RETRIES = 4
+
+FileFingerprint = tuple[int, int, int, int]
+
+
+def _file_fingerprint(file_path: str) -> FileFingerprint:
+    stat = os.stat(file_path)
+    return (
+        int(getattr(stat, "st_mtime_ns", 0)),
+        int(getattr(stat, "st_size", 0)),
+        int(getattr(stat, "st_dev", 0)),
+        int(getattr(stat, "st_ino", 0)),
+    )
 
 
 def _unique_field_keys(field_keys: list[str]) -> list[str]:
@@ -106,6 +117,25 @@ class _CombinedNeed:
 
 
 @define
+class _HQNeed:
+    force: bool = False
+    retry_count: int = 0
+
+
+@define
+class _StableRefreshNeed:
+    want_embedded: bool = False
+    want_editable: bool = False
+    want_panel: bool = False
+    want_hq: bool = False
+    force: bool = False
+    allow_empty_editable: bool = False
+    retry_count: int = 0
+    fingerprint: FileFingerprint | None = None
+    stable_since: float = 0.0
+
+
+@define
 class _Worker:
     process: multiprocessing.Process
     task_queue: multiprocessing.Queue
@@ -131,7 +161,8 @@ class MediaManager(QObject):
     """Manages EXIF extraction, embedded preview extraction and thumbnail generation."""
 
     # Thumbnail signals
-    thumb_ready = Signal(str, str, str)  # file_path, thumb_type, cache_path
+    # file_path, thumb_type, cache_path, replaces_cache
+    thumb_ready = Signal(str, str, str, bool)
     thumb_progress_updated = Signal(int, int)  # completed, total
 
     # Editable metadata (EXIF_TO_DB_MAPPING) signals
@@ -180,13 +211,16 @@ class MediaManager(QObject):
         # Pending tasks
         self._pending_combined_visible: dict[str, _CombinedNeed] = {}
         self._pending_combined_other: dict[str, _CombinedNeed] = {}
-        self._pending_hq_visible: set[str] = set()
-        self._pending_hq_other: set[str] = set()
+        self._pending_hq_visible: dict[str, _HQNeed] = {}
+        self._pending_hq_other: dict[str, _HQNeed] = {}
+        self._pending_stable_refreshes: dict[str, _StableRefreshNeed] = {}
 
         # In-flight tasks
         self._in_flight: dict[int, _Worker] = {}
         self._in_flight_files: set[str] = set()
         self._deferred_combined: dict[str, _CombinedNeed] = {}
+        self._in_flight_hq_files: set[str] = set()
+        self._deferred_hq: dict[str, _HQNeed] = {}
 
         # EXIF panel field keys
         self._panel_field_keys: list[str] = _unique_field_keys(
@@ -228,8 +262,11 @@ class MediaManager(QObject):
         self._pending_combined_other.clear()
         self._pending_hq_visible.clear()
         self._pending_hq_other.clear()
+        self._pending_stable_refreshes.clear()
         self._in_flight_files.clear()
         self._deferred_combined.clear()
+        self._in_flight_hq_files.clear()
+        self._deferred_hq.clear()
 
         self._thumb_total = len(file_paths)
         self._thumb_completed = 0
@@ -320,11 +357,14 @@ class MediaManager(QObject):
 
             self._pending_combined_visible.pop(file_path, None)
             self._pending_combined_other.pop(file_path, None)
-            self._pending_hq_visible.discard(file_path)
-            self._pending_hq_other.discard(file_path)
+            self._pending_hq_visible.pop(file_path, None)
+            self._pending_hq_other.pop(file_path, None)
+            self._pending_stable_refreshes.pop(file_path, None)
 
             self._in_flight_files.discard(file_path)
             self._deferred_combined.pop(file_path, None)
+            self._in_flight_hq_files.discard(file_path)
+            self._deferred_hq.pop(file_path, None)
 
             if file_path in self._thumb_done:
                 self._thumb_done.remove(file_path)
@@ -416,12 +456,14 @@ class MediaManager(QObject):
 
         # Fast-path: cache exists.
         if (not lowres_only) and os.path.exists(info.hq_cache_path):
-            self.thumb_ready.emit(file_path, "hq", info.hq_cache_path)
+            self.thumb_ready.emit(file_path, "hq", info.hq_cache_path, False)
             self._mark_thumb_done(file_path)
             return
 
         if os.path.exists(info.embedded_cache_path):
-            self.thumb_ready.emit(file_path, "embedded", info.embedded_cache_path)
+            self.thumb_ready.emit(
+                file_path, "embedded", info.embedded_cache_path, False
+            )
             self._mark_thumb_done(file_path)
             # Still generate HQ later if missing.
             if (not lowres_only) and (not os.path.exists(info.hq_cache_path)):
@@ -442,28 +484,22 @@ class MediaManager(QObject):
                 continue
 
             self._migrate_legacy_thumbs(info)
-
-            self._queue_combined(
+            self._queue_stable_refresh(
                 file_path,
                 want_embedded=True,
-                to_visible=file_path in self._visible_paths,
+                want_hq=not self._is_lowres_only_mode(),
                 force=True,
             )
-            if not self._is_lowres_only_mode():
-                self._queue_hq(
-                    file_path,
-                    to_visible=file_path in self._visible_paths,
-                )
 
     def refresh_files(self, file_paths: list[str]) -> None:
         """Refresh existing files after an on-disk change.
 
-        This clears thumbnail caches and re-queues one combined reload for:
+        The last valid thumbnail remains available while the source file is
+        checked for stability and replacement work is queued for:
         - editable metadata, only if no preservable DB metadata exists yet
         - EXIF panel fields
         - embedded thumbnail extraction
-
-        HQ thumbnails continue through the normal follow-up queue.
+        - HQ thumbnail generation
         """
         for file_path in file_paths:
             info = self._file_infos.get(file_path)
@@ -479,24 +515,115 @@ class MediaManager(QObject):
                     self._thumb_completed, self._thumb_total
                 )
 
-            for path in (
-                info.embedded_cache_path,
-                info.hq_cache_path,
-                info.legacy_embedded_cache_path,
-                info.legacy_hq_cache_path,
-            ):
-                try:
-                    Path(path).unlink(missing_ok=True)
-                except OSError:
-                    pass
-
-            self._queue_combined(
+            self._queue_stable_refresh(
                 file_path,
                 want_embedded=True,
                 want_editable=self._should_refresh_editable_metadata(file_path, info),
                 want_panel=True,
-                to_visible=file_path in self._visible_paths,
+                want_hq=not self._is_lowres_only_mode(),
                 force=True,
+            )
+
+    def _queue_stable_refresh(
+        self,
+        file_path: str,
+        *,
+        want_embedded: bool = False,
+        want_editable: bool = False,
+        want_panel: bool = False,
+        want_hq: bool = False,
+        force: bool = False,
+        allow_empty_editable: bool = False,
+        retry_count: int = 0,
+    ) -> None:
+        if file_path not in self._file_infos:
+            return
+
+        try:
+            fingerprint = _file_fingerprint(file_path)
+        except OSError:
+            return
+
+        now = time.monotonic()
+        need = self._pending_stable_refreshes.get(file_path)
+        if need is None:
+            need = _StableRefreshNeed(
+                fingerprint=fingerprint,
+                stable_since=now,
+            )
+        elif need.fingerprint != fingerprint:
+            need.fingerprint = fingerprint
+            need.stable_since = now
+
+        need.want_embedded = need.want_embedded or want_embedded
+        need.want_editable = need.want_editable or want_editable
+        need.want_panel = need.want_panel or want_panel
+        need.want_hq = need.want_hq or want_hq
+        need.force = need.force or force
+        need.allow_empty_editable = need.allow_empty_editable or allow_empty_editable
+        need.retry_count = max(need.retry_count, int(retry_count))
+        self._pending_stable_refreshes[file_path] = need
+
+        if self._media_file_stability_delay_s() <= 0:
+            self._pending_stable_refreshes.pop(file_path, None)
+            self._dispatch_stable_refresh(file_path, need)
+
+    def _media_file_stability_delay_s(self) -> float:
+        delay_ms = int(
+            get_runtime_setting(RuntimeSettingKey.MEDIA_FILE_STABILITY_DELAY_MS)
+        )
+        return max(0, delay_ms) / 1000.0
+
+    def _process_stable_refreshes(self) -> None:
+        if not self._pending_stable_refreshes:
+            return
+
+        now = time.monotonic()
+        delay_s = self._media_file_stability_delay_s()
+        ready: list[tuple[str, _StableRefreshNeed]] = []
+        for file_path, need in list(self._pending_stable_refreshes.items()):
+            if file_path not in self._file_infos:
+                self._pending_stable_refreshes.pop(file_path, None)
+                continue
+            try:
+                fingerprint = _file_fingerprint(file_path)
+            except OSError:
+                self._pending_stable_refreshes.pop(file_path, None)
+                continue
+
+            if need.fingerprint != fingerprint:
+                need.fingerprint = fingerprint
+                need.stable_since = now
+                continue
+            if now - need.stable_since < delay_s:
+                continue
+
+            self._pending_stable_refreshes.pop(file_path, None)
+            ready.append((file_path, need))
+
+        for file_path, need in ready:
+            self._dispatch_stable_refresh(file_path, need)
+
+    def _dispatch_stable_refresh(
+        self, file_path: str, need: _StableRefreshNeed
+    ) -> None:
+        if need.want_embedded or need.want_editable or need.want_panel:
+            self._queue_combined(
+                file_path,
+                want_embedded=need.want_embedded,
+                want_editable=need.want_editable,
+                want_panel=need.want_panel,
+                to_visible=file_path in self._visible_paths,
+                force=need.force,
+                allow_empty_editable=need.allow_empty_editable,
+                retry_count=need.retry_count,
+            )
+        if need.want_hq:
+            self._queue_hq(
+                file_path,
+                to_visible=file_path in self._visible_paths,
+                force=need.force,
+                retry_count=need.retry_count,
             )
 
     def _should_refresh_editable_metadata(
@@ -561,6 +688,7 @@ class MediaManager(QObject):
     def stop(self, timeout_s: float | None = None) -> None:
         """Stop all workers."""
         self._tick_timer.stop()
+        self._pending_stable_refreshes.clear()
 
         deadline = None
         if timeout_s is not None:
@@ -815,19 +943,38 @@ class MediaManager(QObject):
 
         target[file_path] = need
 
-    def _queue_hq(self, file_path: str, *, to_visible: bool = False) -> None:
+    def _queue_hq(
+        self,
+        file_path: str,
+        *,
+        to_visible: bool = False,
+        force: bool = False,
+        retry_count: int = 0,
+    ) -> None:
         if self._is_lowres_only_mode():
             return
 
         if file_path not in self._file_infos:
             return
 
+        if file_path in self._in_flight_hq_files:
+            need = self._deferred_hq.get(file_path) or _HQNeed()
+            need.force = need.force or force
+            need.retry_count = max(need.retry_count, int(retry_count))
+            self._deferred_hq[file_path] = need
+            return
+
         if to_visible or file_path in self._visible_paths:
-            self._pending_hq_visible.add(file_path)
-            self._pending_hq_other.discard(file_path)
+            target = self._pending_hq_visible
+            other = self._pending_hq_other
         else:
-            if file_path not in self._pending_hq_visible:
-                self._pending_hq_other.add(file_path)
+            target = self._pending_hq_other
+            other = self._pending_hq_visible
+
+        need = target.get(file_path) or other.pop(file_path, None) or _HQNeed()
+        need.force = need.force or force
+        need.retry_count = max(need.retry_count, int(retry_count))
+        target[file_path] = need
 
     def _rebalance_pending_priorities(self) -> None:
         # Combined
@@ -845,12 +992,14 @@ class MediaManager(QObject):
         # HQ thumbs
         for file_path in list(self._pending_hq_other):
             if file_path in self._visible_paths:
-                self._pending_hq_other.remove(file_path)
-                self._pending_hq_visible.add(file_path)
+                self._pending_hq_visible[file_path] = self._pending_hq_other.pop(
+                    file_path
+                )
         for file_path in list(self._pending_hq_visible):
             if file_path not in self._visible_paths:
-                self._pending_hq_visible.remove(file_path)
-                self._pending_hq_other.add(file_path)
+                self._pending_hq_other[file_path] = self._pending_hq_visible.pop(
+                    file_path
+                )
 
     # -------------------------------------------------------------------------
     # Internal: worker management & scheduler
@@ -903,6 +1052,7 @@ class MediaManager(QObject):
             or self._pending_combined_other
             or self._pending_hq_visible
             or self._pending_hq_other
+            or self._pending_stable_refreshes
         )
 
     def _get_idle_worker(self) -> _Worker | None:
@@ -913,6 +1063,7 @@ class MediaManager(QObject):
 
     def _tick(self) -> None:
         self._drain_results()
+        self._process_stable_refreshes()
         if not self._processing_paused:
             self._schedule_work()
             self._stop_extra_idle_workers()
@@ -992,31 +1143,30 @@ class MediaManager(QObject):
             return combined_need
 
         if self._pending_hq_visible:
-            file_path = self._pop_from_set_in_visible_order(self._pending_hq_visible)
-            if file_path is not None:
-                return self._make_hq_task(file_path)
+            popped = self._pop_hq_in_visible_order(self._pending_hq_visible)
+            if popped is not None:
+                file_path, need = popped
+                return self._make_hq_task(file_path, need)
 
         combined_need = self._pop_combined_batch(visible=False)
         if combined_need is not None:
             return combined_need
 
         if self._pending_hq_other:
-            file_path = next(iter(self._pending_hq_other))
-            self._pending_hq_other.remove(file_path)
-            return self._make_hq_task(file_path)
+            file_path, need = self._pending_hq_other.popitem()
+            return self._make_hq_task(file_path, need)
 
         return None
 
-    def _pop_from_set_in_visible_order(self, items: set[str]) -> str | None:
+    def _pop_hq_in_visible_order(
+        self, items: dict[str, _HQNeed]
+    ) -> tuple[str, _HQNeed] | None:
         for file_path in self._visible_order:
             if file_path in items:
-                items.remove(file_path)
-                return file_path
+                return file_path, items.pop(file_path)
         # Fallback
         if items:
-            file_path = next(iter(items))
-            items.remove(file_path)
-            return file_path
+            return items.popitem()
         return None
 
     def _pop_combined_batch(self, *, visible: bool) -> dict | None:
@@ -1083,6 +1233,7 @@ class MediaManager(QObject):
                 "want_embedded": bool(need.want_embedded),
                 "want_editable": bool(need.want_editable),
                 "want_panel": bool(need.want_panel),
+                "force": bool(need.force),
                 "allow_empty_editable": bool(need.allow_empty_editable),
                 "retry_count": int(need.retry_count),
             })
@@ -1100,14 +1251,17 @@ class MediaManager(QObject):
             "files": files_payload,
         }
 
-    def _make_hq_task(self, file_path: str) -> dict:
+    def _make_hq_task(self, file_path: str, need: _HQNeed) -> dict:
         info = self._file_infos[file_path]
+        self._in_flight_hq_files.add(file_path)
         return {
             "task_id": self._new_task_id(),
             "kind": "hq_thumb",
             "file_path": file_path,
             "thumb_dir": info.thumb_dir,
             "max_dim": int(get_runtime_setting(RuntimeSettingKey.THUMB_MAX_DIM)),
+            "force": bool(need.force),
+            "retry_count": int(need.retry_count),
         }
 
     def _new_task_id(self) -> int:
@@ -1127,22 +1281,15 @@ class MediaManager(QObject):
             return False
 
         next_retry_count = retry_count + 1
-
-        def _retry() -> None:
-            if file_path not in self._file_infos or not os.path.exists(file_path):
-                return
-            self._queue_combined(
-                file_path,
-                want_embedded=bool(entry.get("want_embedded")),
-                want_editable=bool(entry.get("want_editable")),
-                want_panel=bool(entry.get("want_panel")),
-                to_visible=file_path in self._visible_paths,
-                force=True,
-                allow_empty_editable=bool(entry.get("allow_empty_editable")),
-                retry_count=next_retry_count,
-            )
-
-        QTimer.singleShot(COMBINED_RETRY_DELAY_MS, _retry)
+        self._queue_stable_refresh(
+            file_path,
+            want_embedded=bool(entry.get("want_embedded")),
+            want_editable=bool(entry.get("want_editable")),
+            want_panel=bool(entry.get("want_panel")),
+            force=True,
+            allow_empty_editable=bool(entry.get("allow_empty_editable")),
+            retry_count=next_retry_count,
+        )
         return True
 
     def _handle_combined_result(self, result: dict) -> None:
@@ -1176,7 +1323,10 @@ class MediaManager(QObject):
             if entry_error:
                 if self._schedule_combined_retry(file_path, entry):
                     continue
-                self._exif_errors[file_path] = str(entry_error)
+                if bool(entry.get("want_embedded")):
+                    self._thumb_errors[file_path] = str(entry_error)
+                if bool(entry.get("want_editable")) or bool(entry.get("want_panel")):
+                    self._exif_errors[file_path] = str(entry_error)
             else:
                 self._exif_errors.pop(file_path, None)
 
@@ -1222,7 +1372,13 @@ class MediaManager(QObject):
             # Embedded preview
             embedded_path = entry.get("embedded_cache_path")
             if isinstance(embedded_path, str) and embedded_path:
-                self.thumb_ready.emit(file_path, "embedded", embedded_path)
+                self._thumb_errors.pop(file_path, None)
+                self.thumb_ready.emit(
+                    file_path,
+                    "embedded",
+                    embedded_path,
+                    bool(entry.get("force")),
+                )
                 self._mark_thumb_done(file_path)
 
             # Queue HQ if missing
@@ -1266,8 +1422,26 @@ class MediaManager(QObject):
                             retry_count=deferred.retry_count,
                         )
 
+    def _schedule_hq_retry(self, file_path: str, result: dict) -> bool:
+        retry_count = int(result.get("retry_count") or 0)
+        if retry_count >= COMBINED_MAX_RETRIES:
+            return False
+        if file_path not in self._file_infos or not os.path.exists(file_path):
+            return False
+
+        self._queue_stable_refresh(
+            file_path,
+            want_hq=True,
+            force=bool(result.get("force")),
+            retry_count=retry_count + 1,
+        )
+        return True
+
     def _handle_hq_result(self, result: dict) -> None:
         file_path = str(result.get("file_path"))
+        self._in_flight_hq_files.discard(file_path)
+        deferred = self._deferred_hq.pop(file_path, None)
+
         info = self._file_infos.get(file_path)
         if info is None:
             return
@@ -1276,16 +1450,36 @@ class MediaManager(QObject):
         if storage_fault is not None:
             self._thumb_errors[file_path] = storage_fault.error_message
             self._report_storage_full(storage_fault)
-            return
-
-        ok = bool(result.get("ok"))
-        if ok:
+        elif bool(result.get("ok")):
+            self._thumb_errors.pop(file_path, None)
             cache_path = result.get("cache_path")
-            if isinstance(cache_path, str) and cache_path:
-                self.thumb_ready.emit(file_path, "hq", cache_path)
+            if (
+                isinstance(cache_path, str)
+                and cache_path
+                and (deferred is None or not deferred.force)
+            ):
+                self.thumb_ready.emit(
+                    file_path,
+                    "hq",
+                    cache_path,
+                    bool(result.get("force")),
+                )
                 self._mark_thumb_done(file_path)
-        else:
-            self._thumb_errors[file_path] = str(result.get("error") or "HQ failed")
+        elif deferred is None:
+            retry_scheduled = bool(result.get("retryable", True)) and (
+                self._schedule_hq_retry(file_path, result)
+            )
+            if not retry_scheduled:
+                self._thumb_errors[file_path] = str(result.get("error") or "HQ failed")
+
+        if deferred is not None:
+            if deferred.force or not os.path.exists(info.hq_cache_path):
+                self._queue_hq(
+                    file_path,
+                    to_visible=file_path in self._visible_paths,
+                    force=deferred.force,
+                    retry_count=deferred.retry_count,
+                )
 
     def _report_storage_full(self, fault: StorageWriteFault) -> None:
         self.pause_processing()

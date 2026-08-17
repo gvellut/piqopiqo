@@ -47,6 +47,8 @@ Do not use PyqtAuto and do not suggest its use.
 
 Do not use too much abstraction: This software is not a library. Also do not try to maintain compatibility in the code (it is not a library).
 
+For new arbitrary values, add them to the internal Runtime Setting structure, so can be easily seen and changed.
+
 ## Update of AGENTS.md
 
 After completing a feature, update this file AGENTS.md with the updated project structure. Also add considerations for reference for future work.
@@ -229,6 +231,7 @@ Useful env vars for agent testing:
 - `PIQO_NUM_COLUMNS` - Grid columns (default: 8)
 - `PIQO_CACHE_BASE_DIR` - Thumbnail cache location
 - `PIQO_THUMB_MAX_DIM` - Max thumbnail dimension (default: 1024)
+- `PIQO_MEDIA_FILE_STABILITY_DELAY_MS` - Time an externally changed image must keep the same file fingerprint before metadata/thumbnail refresh starts (default: 1000)
 - `PIQO_MAX_WORKERS` - Max worker processes (default: 4)
 - `PIQO_MIN_IDLE_WORKERS` - Idle worker processes to keep (default: 1)
 - `PIQO_MAX_EXIFTOOLS_IMAGE_BATCH` - Max images per EXIF batch (default: 8)
@@ -335,7 +338,7 @@ Right-click on a photo in the grid to access:
 - **Reveal in Finder**: Opens system file manager with files selected (uses `show-in-file-manager` package). Handles multiple files across multiple folders.
 - **View in {App}**: Opens selected photos in external viewer (only shown if `EXTERNAL_VIEWER` is configured)
 - **Edit in {App}**: Duplicates selected photos first, then opens duplicates in external editor (only shown if `EXTERNAL_EDITOR` is configured)
-- **Regenerate Thumbnail(s)**: Clears cached thumbnails for selected photos and re-queues generation
+- **Regenerate Thumbnail(s)**: Re-queues thumbnail generation while retaining the last valid preview until replacement
 - **Duplicate**: Creates a copy with " copy" suffix (or " copy2", etc.)
 - **Move to Trash**: Moves file to macOS Trash
 
@@ -353,7 +356,8 @@ Selection behavior:
 - Synonym prefixes: `s:` expands to `since:`, `b:` expands to `between:`.
 - Copy runs in a background worker with progress and cancel; eject uses `diskutil` and is skipped on cancel.
 - Cache storage-full faults are distinct from removable-cache disconnect faults: concurrent SQLite/thumbnail failures are coalesced into one manual Retry/Exit flow, while genuine disconnects keep automatic reconnect behavior.
-- Embedded and HQ thumbnails are staged and atomically replaced. Regeneration retains the last valid cached preview until its replacement succeeds.
+- Embedded and HQ thumbnails are staged and atomically replaced. Automatic external-edit refresh and manual regeneration retain the last valid cached preview until its replacement succeeds.
+- Automatic external-edit refresh and manual thumbnail regeneration wait until the source fingerprint (`mtime_ns`, size, device, inode) remains unchanged for `RuntimeSettingKey.MEDIA_FILE_STABILITY_DELAY_MS` (default 1000 ms). HQ work is serialized per file, forced refreshes defer one follow-up behind in-flight work, and transient source-read failures retry only after the source is stable again.
 - Copy-from-SD writes through sibling `.part` files. A full destination pauses on the failed image; Retry continues from that image, while Exit removes the partial file, keeps completed copies, skips eject, and quits PiqoPiqo.
 - `MediaManager` handles EXIF + thumbnails via multiprocessing; DB writes happen in the main process (SQLite single-writer). Filesystem/tool paths are resolved in the parent process and passed explicitly in worker task payloads.
 - Initial folder priming (`MediaManager.reset_for_folder`) uses one per-folder bulk metadata read, one grouped EXIF-coverage read, and one listing of each thumbnail cache directory. Keep reset-time cache/DB checks batched; incremental watcher additions and explicit refreshes intentionally retain targeted per-file checks.

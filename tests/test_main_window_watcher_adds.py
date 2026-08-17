@@ -245,7 +245,7 @@ def test_watcher_add_batch_restores_viewport_without_revealing_new_top_item(
     assert new_image["path"] not in visible_after
 
 
-def test_watcher_modified_batch_uses_combined_media_refresh_once(
+def test_watcher_modified_batch_preserves_preview_and_refreshes_media_once(
     window: MainWindow, monkeypatch
 ):
     refresh_item_calls: list[int] = []
@@ -264,7 +264,7 @@ def test_watcher_modified_batch_uses_combined_media_refresh_once(
     window._on_folder_changes([("modified", path) for path in modified_paths])
 
     assert window.media_manager.refresh_files_calls == [modified_paths]
-    assert len(refresh_item_calls) == 2
+    assert refresh_item_calls == []
 
 
 def test_watcher_same_path_replace_keeps_metadata_and_refreshes(
@@ -293,6 +293,9 @@ def test_watcher_same_path_replace_keeps_metadata_and_refreshes(
     item._pixmap_source = item.hq_pixmap
     item._pixmap_orientation = 6
     item.exif_data = {"File:FileName": "old.jpg"}
+    original_embedded = item.embedded_pixmap
+    original_hq = item.hq_pixmap
+    original_display = item.pixmap
 
     original_item_count = len(window.photo_model.all_photos)
     window.media_manager.add_files_calls.clear()
@@ -313,12 +316,14 @@ def test_watcher_same_path_replace_keeps_metadata_and_refreshes(
     assert window.media_manager.remove_files_calls == []
     assert window.media_manager.add_files_calls == []
     assert window.media_manager.refresh_files_calls == [[path]]
-    assert item.state == 0
-    assert item.embedded_pixmap is None
-    assert item.hq_pixmap is None
-    assert item.pixmap is None
+    assert item.state == 2
+    assert item._cache_state_dirty is False
+    assert item.embedded_pixmap is original_embedded
+    assert item.hq_pixmap is original_hq
+    assert item.pixmap is original_display
     assert item.exif_data is None
-    assert item._pixmap_source is None
+    assert item._pixmap_source is original_hq
+    assert item._pixmap_orientation == 6
 
 
 def test_watcher_existing_path_added_event_refreshes_thumbnail_state(
@@ -334,6 +339,9 @@ def test_watcher_existing_path_added_event_refreshes_thumbnail_state(
     item._pixmap_source = item.hq_pixmap
     item._pixmap_orientation = 1
     item.exif_data = {"File:FileName": "old.jpg"}
+    original_embedded = item.embedded_pixmap
+    original_hq = item.hq_pixmap
+    original_display = item.pixmap
 
     window.media_manager.add_files_calls.clear()
     window.media_manager.remove_files_calls.clear()
@@ -346,13 +354,14 @@ def test_watcher_existing_path_added_event_refreshes_thumbnail_state(
     assert window.media_manager.remove_files_calls == []
     assert window.media_manager.add_files_calls == []
     assert window.media_manager.refresh_files_calls == [[path]]
-    assert item.state == 0
-    assert item.embedded_pixmap is None
-    assert item.hq_pixmap is None
-    assert item.pixmap is None
+    assert item.state == 2
+    assert item._cache_state_dirty is False
+    assert item.embedded_pixmap is original_embedded
+    assert item.hq_pixmap is original_hq
+    assert item.pixmap is original_display
     assert item.exif_data is None
-    assert item._pixmap_source is None
-    assert item._pixmap_orientation is None
+    assert item._pixmap_source is original_hq
+    assert item._pixmap_orientation == 1
 
 
 def test_watcher_delete_removes_subfolder_image_and_keeps_surviving_selection(

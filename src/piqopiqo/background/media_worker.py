@@ -27,6 +27,20 @@ from piqopiqo.storage import (
 logger = logging.getLogger(__name__)
 
 
+class SourceChangedDuringReadError(RuntimeError):
+    """Raised when an image changes while a worker is reading it."""
+
+
+def _source_fingerprint(file_path: str) -> tuple[int, int, int, int]:
+    stat = os.stat(file_path)
+    return (
+        int(getattr(stat, "st_mtime_ns", 0)),
+        int(getattr(stat, "st_size", 0)),
+        int(getattr(stat, "st_dev", 0)),
+        int(getattr(stat, "st_ino", 0)),
+    )
+
+
 def _safe_str(value: Any) -> str | None:
     if value is None:
         return None
@@ -127,17 +141,20 @@ def _extract_embedded_previews(
     file_paths: list[str],
     thumb_dir: str,
     exiftool_path: str | None,
-) -> dict[str, str | None]:
+) -> tuple[dict[str, str | None], set[str]]:
     """Extract embedded preview JPEGs to the thumb cache.
 
-    Returns mapping file_path -> cache_path (or None if missing).
+    Returns the cache-path mapping and paths that changed during extraction.
     """
     if not file_paths:
-        return {}
+        return {}, set()
 
     embedded_dir = Path(thumb_dir) / "embedded"
     staging_dir: Path | None = None
     try:
+        source_fingerprints = {
+            file_path: _source_fingerprint(file_path) for file_path in file_paths
+        }
         embedded_dir.mkdir(parents=True, exist_ok=True)
         staging_dir = Path(
             tempfile.mkdtemp(prefix=".piqopiqo-embedded-", dir=embedded_dir)
@@ -153,16 +170,27 @@ def _extract_embedded_previews(
         helper.execute("-b", "-ThumbnailImage", "-w", pattern, *file_paths)
 
         results: dict[str, str | None] = {}
+        changed_paths: set[str] = set()
         for file_path in file_paths:
             base_name = os.path.splitext(os.path.basename(file_path))[0]
             staged_path = staging_dir / f"{base_name}.jpg"
             cache_path = embedded_dir / f"{base_name}.jpg"
+            try:
+                source_unchanged = (
+                    _source_fingerprint(file_path) == source_fingerprints[file_path]
+                )
+            except OSError:
+                source_unchanged = False
+            if not source_unchanged:
+                changed_paths.add(file_path)
+                results[file_path] = None
+                continue
             if _is_nonempty_file(str(staged_path)):
                 os.replace(staged_path, cache_path)
                 results[file_path] = str(cache_path)
             else:
                 results[file_path] = None
-        return results
+        return results, changed_paths
     except Exception as exc:
         fault = storage_full_fault_from_error(
             exc,
@@ -171,7 +199,7 @@ def _extract_embedded_previews(
         )
         if fault is not None:
             raise StorageFullError(fault) from exc
-        return dict.fromkeys(file_paths)
+        raise
     finally:
         if staging_dir is not None:
             shutil.rmtree(staging_dir, ignore_errors=True)
@@ -199,7 +227,7 @@ def run_combined_task(task: dict) -> dict:
             embedded_targets = [
                 f["file_path"] for f in files if bool(f.get("want_embedded"))
             ]
-            embedded_map = _extract_embedded_previews(
+            embedded_map, changed_embedded_paths = _extract_embedded_previews(
                 helper,
                 file_paths=[str(p) for p in embedded_targets],
                 thumb_dir=thumb_dir,
@@ -246,6 +274,7 @@ def run_combined_task(task: dict) -> dict:
                     "want_embedded": bool(file_entry.get("want_embedded")),
                     "want_editable": bool(file_entry.get("want_editable")),
                     "want_panel": bool(file_entry.get("want_panel")),
+                    "force": bool(file_entry.get("force")),
                     "editable_metadata": editable_meta,
                     "allow_empty_editable": bool(
                         file_entry.get("allow_empty_editable")
@@ -254,6 +283,11 @@ def run_combined_task(task: dict) -> dict:
                     "embedded_cache_path": embedded_map.get(file_path),
                     "retry_count": int(file_entry.get("retry_count") or 0),
                     "now_iso": now_iso,
+                    "error": (
+                        "Source image changed during embedded thumbnail extraction"
+                        if file_path in changed_embedded_paths
+                        else None
+                    ),
                 })
 
     except Exception as e:
@@ -269,6 +303,7 @@ def run_combined_task(task: dict) -> dict:
                 "want_embedded": bool(file_entry.get("want_embedded")),
                 "want_editable": bool(file_entry.get("want_editable")),
                 "want_panel": bool(file_entry.get("want_panel")),
+                "force": bool(file_entry.get("force")),
                 "editable_metadata": (
                     {} if bool(file_entry.get("want_editable")) else None
                 ),
@@ -291,6 +326,7 @@ def run_combined_task(task: dict) -> dict:
 
 
 def generate_hq_thumbnail(source: str, dest_path: str, max_dim: int) -> None:
+    source_fingerprint = _source_fingerprint(source)
     destination = Path(dest_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     temp_fd, temp_name = tempfile.mkstemp(
@@ -309,6 +345,10 @@ def generate_hq_thumbnail(source: str, dest_path: str, max_dim: int) -> None:
                 image = source_image.copy()
         image.thumbnail((max_dim, max_dim))
         image.save(temp_path, "JPEG", quality=80, icc_profile=icc)
+        if _source_fingerprint(source) != source_fingerprint:
+            raise SourceChangedDuringReadError(
+                "Source image changed during HQ thumbnail generation"
+            )
         os.replace(temp_path, destination)
     finally:
         try:
@@ -322,6 +362,8 @@ def run_hq_thumb_task(task: dict) -> dict:
     file_path = str(task["file_path"])
     thumb_dir = str(task["thumb_dir"])
     max_dim = int(task["max_dim"])
+    force = bool(task.get("force"))
+    retry_count = int(task.get("retry_count") or 0)
 
     base_name = os.path.splitext(os.path.basename(file_path))[0]
     cache_path = str(Path(thumb_dir) / "hq" / f"{base_name}.jpg")
@@ -341,6 +383,9 @@ def run_hq_thumb_task(task: dict) -> dict:
             "cache_path": None,
             "ok": False,
             "error": str(exc) or exc.__class__.__name__,
+            "force": force,
+            "retry_count": retry_count,
+            "retryable": fault is None,
         }
         if fault is not None:
             result["storage_full_fault"] = fault
@@ -353,6 +398,9 @@ def run_hq_thumb_task(task: dict) -> dict:
         "cache_path": cache_path,
         "ok": True,
         "error": None,
+        "force": force,
+        "retry_count": retry_count,
+        "retryable": False,
     }
 
 

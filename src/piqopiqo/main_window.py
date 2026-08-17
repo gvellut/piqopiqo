@@ -3331,18 +3331,8 @@ class MainWindow(QMainWindow):
             if item is None:
                 continue
 
-            item.state = 0
-            item._cache_state_dirty = True
-            item.embedded_pixmap = None
-            item.hq_pixmap = None
-            item.pixmap = None
             item.exif_data = None
-            if hasattr(item, "_pixmap_source"):
-                item._pixmap_source = None
-            if hasattr(item, "_pixmap_orientation"):
-                item._pixmap_orientation = None
             modified_paths.append(path)
-            self.grid.refresh_item(item._global_index)
 
         if modified_paths:
             self.media_manager.refresh_files(modified_paths)
@@ -3552,7 +3542,7 @@ class MainWindow(QMainWindow):
 
         launch_save_exif(self)
 
-    def on_thumb_ready(self, file_path, thumb_type, cache_path):
+    def on_thumb_ready(self, file_path, thumb_type, cache_path, replaces_cache=False):
         item = self._items_by_path.get(file_path)
         if item is None:
             return
@@ -3575,10 +3565,11 @@ class MainWindow(QMainWindow):
             if has_hq_pixmap:
                 return
         else:
-            if has_hq_pixmap:
+            if has_hq_pixmap and not replaces_cache:
                 return
             item.hq_pixmap = None
         item.pixmap = None
+        item._pixmap_source = None
         self.grid.refresh_item(item._global_index)
 
     def on_selection_changed(self, selected_indices):

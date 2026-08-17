@@ -145,14 +145,7 @@ def move_to_trash(window: MainWindow, photos: list[ImageItem]) -> None:
 
 def regenerate_selected_thumbnails(window: MainWindow, photos: list[ImageItem]) -> None:
     paths = [p.path for p in photos]
-    for photo in photos:
-        photo._cache_state_dirty = True
-        photo.embedded_pixmap = None
-        photo.hq_pixmap = None
-        photo.pixmap = None
     window.media_manager.regenerate_thumbnails(paths)
-
-    window.grid.on_scroll(window.grid.scrollbar.value())
 
 
 def edit_in_external_app(window: MainWindow, photos: list[ImageItem]) -> None:

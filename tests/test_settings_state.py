@@ -364,6 +364,17 @@ def test_grid_column_runtime_bounds_and_status_bar_padding_defaults_and_env_over
     )
 
 
+def test_media_file_stability_delay_default_and_env_override(
+    isolated_settings, monkeypatch
+):
+    assert get_runtime_setting(RuntimeSettingKey.MEDIA_FILE_STABILITY_DELAY_MS) == 1000
+
+    monkeypatch.setenv("PIQO_MEDIA_FILE_STABILITY_DELAY_MS", "250")
+    init_qsettings_store(dyn=False)
+
+    assert get_runtime_setting(RuntimeSettingKey.MEDIA_FILE_STABILITY_DELAY_MS) == 250
+
+
 def test_recent_folders_menu_limit_default_and_env_override(
     isolated_settings, monkeypatch
 ):

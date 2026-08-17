@@ -1,4 +1,3 @@
-- [Edit overwrite in Gimp botched](Sd_tasks/Zd_Edit_overwrite_in_Gimp_botched.md)
 - [reverse cop from sd](Sd_tasks/Vd_reverse_cop_from_sd.md)
 - [Undo label do not record if label not changed](Sd_tasks/Sd_Undo_label_do_not_record_if_label_not_changed.md)
 - [change tool workflow](Gd_tasks/Rd_change_tool_workflow.md)
@@ -151,3 +150,4 @@
 ! [add Flickr Utils tools](Sd_tasks/Wd_add_Flickr_Utils_tools.md)
 ! [Refresh when loading new folder](Sd_tasks/Xd_Refresh_when_loading_new_folder.md)
 ! [Unselect go to next](Sd_tasks/Yd_Unselect_go_to_next.md)
+! [Edit overwrite in Gimp botched](Sd_tasks/Zd_Edit_overwrite_in_Gimp_botched.md)

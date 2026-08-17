@@ -137,6 +137,7 @@ class RuntimeSettingKey(StrEnum):
     GRID_EMBEDDED_BUFFER_ROWS = "gridEmbeddedBufferRows"
     GRID_HQ_THUMB_DELAY_ENABLED = "gridHqThumbDelayEnabled"
     GRID_HQ_THUMB_LOAD_DELAY_MS = "gridHqThumbLoadDelayMs"
+    MEDIA_FILE_STABILITY_DELAY_MS = "mediaFileStabilityDelayMs"
     GRID_NUM_COLUMNS_MIN = "gridNumColumnsMin"
     GRID_NUM_COLUMNS_MAX = "gridNumColumnsMax"
     GRID_LOWRES_ONLY = "gridLowresOnly"
@@ -851,6 +852,9 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     ),
     RuntimeSettingKey.GRID_HQ_THUMB_LOAD_DELAY_MS: SettingDef(
         default=100, read_type=int
+    ),
+    RuntimeSettingKey.MEDIA_FILE_STABILITY_DELAY_MS: SettingDef(
+        default=1000, read_type=int
     ),
     RuntimeSettingKey.GRID_NUM_COLUMNS_MIN: SettingDef(default=3, read_type=int),
     RuntimeSettingKey.GRID_NUM_COLUMNS_MAX: SettingDef(default=10, read_type=int),

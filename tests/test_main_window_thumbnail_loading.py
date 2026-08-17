@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 import uuid
 
 from PySide6.QtCore import QCoreApplication
@@ -9,6 +10,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QApplication
 import pytest
 
+from piqopiqo.grid.context_menu import regenerate_selected_thumbnails
 from piqopiqo.main_window import MainWindow
 from piqopiqo.model import ImageItem
 from piqopiqo.ssf.settings_state import RuntimeSettingKey, init_qsettings_store
@@ -133,6 +135,60 @@ def test_hq_ready_without_loaded_hq_invalidates_and_refreshes(qapp, monkeypatch)
     assert item.hq_pixmap is None
     assert item.pixmap is None
     assert window.grid.refreshed == [item._global_index]
+
+
+def test_replacement_hq_invalidates_loaded_hq_and_refreshes(qapp, monkeypatch):
+    init_qsettings_store(dyn=True)
+    _set_lowres_only(monkeypatch, False)
+
+    item = _item(
+        "/tmp/replaced.jpg",
+        state=2,
+        has_embedded=True,
+        has_hq=True,
+        display_source="hq",
+    )
+    window = _FakeWindow(item)
+
+    MainWindow.on_thumb_ready(
+        window,
+        item.path,
+        "hq",
+        "/tmp/replaced-hq.jpg",
+        True,
+    )
+
+    assert item.state == 2
+    assert item.hq_pixmap is None
+    assert item.pixmap is None
+    assert item._pixmap_source is None
+    assert window.grid.refreshed == [item._global_index]
+
+
+def test_manual_regeneration_keeps_loaded_preview_until_replacement(qapp):
+    item = _item(
+        "/tmp/manual.jpg",
+        state=2,
+        has_embedded=True,
+        has_hq=True,
+        display_source="hq",
+    )
+    original_embedded = item.embedded_pixmap
+    original_hq = item.hq_pixmap
+    original_display = item.pixmap
+    calls: list[list[str]] = []
+    window = SimpleNamespace(
+        media_manager=SimpleNamespace(
+            regenerate_thumbnails=lambda paths: calls.append(paths)
+        )
+    )
+
+    regenerate_selected_thumbnails(window, [item])
+
+    assert calls == [[item.path]]
+    assert item.embedded_pixmap is original_embedded
+    assert item.hq_pixmap is original_hq
+    assert item.pixmap is original_display
 
 
 def test_embedded_ready_with_loaded_hq_keeps_display_and_skips_refresh(
