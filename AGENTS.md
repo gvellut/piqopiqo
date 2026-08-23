@@ -408,6 +408,7 @@ Selection behavior:
 - Flickr Reorder Albums sorts the requested top-album prefix newest-first by each album's modal valid photo-taken date. Empty/fully-undated albums abort before `photosets.orderSets`.
 - When enabled, Flickr reorder writes the complete pre-change album ID order as a JSON array under `Application Support/PiqoPiqo/flickr-album-orders`; only the newest `FLICKR_REORDER_BACKUP_LIMIT` matching files are retained.
 - Flickr Find & Replace supports album order or an exact inclusive photostream range. A title regex, when present, gates both title and tag changes; per-photo failures are reported while remaining photos continue.
+- Flickr Find & Replace progress shows the photo ID above a single-line elided title (`<No title>` when empty); result totals are shown one per line in a read-only summary field.
 - Edit > Find & Replace targets selected grid photos, or captures all currently visible photos when selection is empty and shows a warning. It updates only SQLite `title`/`keywords`, never reads/writes EXIF, and synchronizes the model after completed or canceled partial changes.
 - If Flickr API credentials are missing when launching upload, the warning dialog offers `Go to settings` and opens Settings on the `External/Workflow` tab.
 - Flickr OAuth token cache is stored in `<cache_base>/flickr/oauth-tokens.sqlite`.

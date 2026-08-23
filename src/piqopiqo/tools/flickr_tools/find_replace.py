@@ -7,7 +7,8 @@ import threading
 from typing import TYPE_CHECKING
 
 from attrs import define, field
-from PySide6.QtCore import QObject, QThreadPool, Signal
+from PySide6.QtCore import QObject, Qt, QThreadPool, Signal
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -16,11 +17,13 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QSizePolicy,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
+from piqopiqo.components.ellided_label import EllidedLabel
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
@@ -71,6 +74,7 @@ SORT_OPTIONS = (
     "date-taken-desc",
     "date-taken-asc",
 )
+NO_TITLE_TEXT = "<No title>"
 
 
 @define(frozen=True)
@@ -136,7 +140,7 @@ def slice_photo_range(
 
 
 class _FlickrFindReplaceSignals(QObject):
-    progress = Signal(int, int, str)
+    progress = Signal(int, int, str, str)
     finished = Signal(object)
 
 
@@ -240,7 +244,8 @@ class FlickrFindReplaceWorker(PythonOwnedRunnable):
                 self.signals.progress.emit(
                     result.processed,
                     result.in_scope,
-                    f"Processing {photo_id} — {title}",
+                    photo_id,
+                    title,
                 )
                 result.processed += 1
 
@@ -435,7 +440,39 @@ class FlickrFindReplaceDialog(ToolFlowDialog):
             },
         )
         super().__init__(workflow, parent=parent or window)
+        self._configure_progress_status()
         self._set_unsaved_changes_state(self._input_state)
+
+    def _configure_progress_status(self) -> None:
+        progress_layout = self.progress_row.layout()
+        assert progress_layout is not None
+        progress_layout.removeWidget(self.status_label)
+        progress_layout.removeWidget(self.progress_count_label)
+
+        status_widget = QWidget(self.progress_row)
+        status_layout = QVBoxLayout(status_widget)
+        status_layout.setContentsMargins(0, 0, 0, 0)
+        status_layout.setSpacing(0)
+
+        self.status_label.setParent(status_widget)
+        self.status_label.setWordWrap(False)
+        self.status_label.show()
+        status_layout.addWidget(self.status_label)
+
+        self.progress_title_label = EllidedLabel("", status_widget)
+        self.progress_title_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.progress_title_label.setMinimumWidth(0)
+        self.progress_title_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Fixed,
+        )
+        self.progress_title_label.setFixedHeight(
+            self.progress_title_label.fontMetrics().lineSpacing()
+        )
+        status_layout.addWidget(self.progress_title_label)
+
+        progress_layout.addWidget(status_widget, 1)
+        progress_layout.addWidget(self.progress_count_label)
 
     def _input_state(self) -> tuple[object, ...]:
         assert self.source_combo is not None
@@ -651,6 +688,7 @@ class FlickrFindReplaceDialog(ToolFlowDialog):
             options=options,
         )
         self.transition_to("progress")
+        self.progress_title_label.setText("")
         self.set_status("Retrieving the Flickr photo scope...")
         self.set_progress(0, 0)
         self.start_task(
@@ -672,11 +710,21 @@ class FlickrFindReplaceDialog(ToolFlowDialog):
         button = self.button("cancel_work")
         if button is not None:
             button.setEnabled(False)
+        self.progress_title_label.setText("")
         self.set_status("Canceling after the current Flickr operation...")
 
-    def _on_progress(self, completed: int, total: int, status: str) -> None:
+    def _on_progress(
+        self,
+        completed: int,
+        total: int,
+        photo_id: str,
+        title: str,
+    ) -> None:
+        display_title = str(title).replace("\r\n", " ").replace("\r", " ")
+        display_title = display_title.replace("\n", " ").strip() or NO_TITLE_TEXT
+        self.progress_title_label.setText(display_title)
+        self.set_status(f"Photo {photo_id}")
         self.set_progress(completed, total)
-        self.set_status(status)
 
     def _on_finished(self, result: FlickrFindReplaceResult) -> None:
         self.stop_task("flickr_find_replace", cancel=False)
@@ -687,21 +735,37 @@ class FlickrFindReplaceDialog(ToolFlowDialog):
         result = self._result or FlickrFindReplaceResult()
         widget = QWidget(self)
         layout = QVBoxLayout(widget)
-        status = "Canceled" if result.cancelled else "Finished"
+        status = "Canceled." if result.cancelled else "Finished."
         lines = [
-            f"{status}. Retrieved {result.retrieved} photos; "
-            f"{result.in_scope} were in the exact requested range.",
-            f"Processed: {result.processed}    Eligible: {result.eligible}    "
+            status,
+            f"Retrieved photos: {result.retrieved}",
+            f"Photos in exact requested range: {result.in_scope}",
+            f"Processed: {result.processed}",
+            f"Eligible: {result.eligible}",
             f"Changed photos: {result.photos_changed}",
-            f"Titles changed: {result.title_changed}    Tags removed: "
-            f"{result.tags_removed}    Tags added: {result.tags_added}",
-            f"Unchanged: {result.unchanged}    Failed photos: "
-            f"{len(result.failed_photo_ids)}",
+            f"Titles changed: {result.title_changed}",
+            f"Tags removed: {result.tags_removed}",
+            f"Tags added: {result.tags_added}",
+            f"Unchanged: {result.unchanged}",
+            f"Failed photos: {len(result.failed_photo_ids)}",
         ]
         if result.error_message:
             lines.append(f"Error: {result.error_message}")
-        summary = QLabel("\n".join(lines), widget)
-        summary.setWordWrap(True)
+        summary = QTextEdit(widget)
+        summary.setObjectName("flickrFindReplaceSummaryText")
+        summary.setReadOnly(True)
+        summary.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        summary.setPlainText("\n".join(lines))
+        palette = summary.palette()
+        palette.setColor(
+            QPalette.ColorRole.Base,
+            palette.color(QPalette.ColorRole.AlternateBase),
+        )
+        summary.setPalette(palette)
+        visible_lines = min(max(len(lines), 2), 8)
+        text_height = summary.fontMetrics().lineSpacing() * visible_lines
+        frame_height = summary.frameWidth() * 2
+        summary.setFixedHeight(text_height + frame_height + 16)
         layout.addWidget(summary)
         if result.errors:
             details = QTextEdit(widget)
