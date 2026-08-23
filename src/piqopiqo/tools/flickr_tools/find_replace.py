@@ -34,7 +34,9 @@ from piqopiqo.keyword_utils import (
 )
 from piqopiqo.qt_workers import PythonOwnedRunnable
 from piqopiqo.ssf.settings_state import (
+    RuntimeSettingKey,
     UserSettingKey,
+    get_runtime_setting,
     get_user_setting,
 )
 from piqopiqo.tools.edit_tools.service import (
@@ -43,10 +45,7 @@ from piqopiqo.tools.edit_tools.service import (
     validate_find_replace_spec,
 )
 from piqopiqo.tools.flickr_tools.auth_flow import ensure_flickr_authenticated
-from piqopiqo.tools.flickr_tools.upload.constants import (
-    API_RETRIES,
-    QUICK_TIMEOUT_S,
-)
+from piqopiqo.tools.flickr_tools.upload.constants import API_RETRIES
 from piqopiqo.tools.flickr_utils import (
     FlickrOperationCancelled,
     all_pages,
@@ -151,11 +150,13 @@ class FlickrFindReplaceWorker(PythonOwnedRunnable):
         api_key: str,
         api_secret: str,
         options: FlickrFindReplaceOptions,
+        quick_timeout_s: float,
     ) -> None:
         super().__init__()
         self._api_key = api_key
         self._api_secret = api_secret
         self._options = options
+        self._quick_timeout_s = float(quick_timeout_s)
         self._cancel_requested = threading.Event()
         self.signals = _FlickrFindReplaceSignals()
 
@@ -172,7 +173,7 @@ class FlickrFindReplaceWorker(PythonOwnedRunnable):
                 photoset_id=options.album_id,
                 extras="date_taken",
                 per_page=500,
-                timeout=QUICK_TIMEOUT_S,
+                timeout=self._quick_timeout_s,
                 num_retries=API_RETRIES,
                 cancel_event=self._cancel_requested,
             )
@@ -181,14 +182,14 @@ class FlickrFindReplaceWorker(PythonOwnedRunnable):
                 API_RETRIES,
                 lambda: flickr.photos.getInfo(
                     photo_id=options.start_photo_id,
-                    timeout=QUICK_TIMEOUT_S,
+                    timeout=self._quick_timeout_s,
                 ),
             )
             end_info = retry(
                 API_RETRIES,
                 lambda: flickr.photos.getInfo(
                     photo_id=options.end_photo_id,
-                    timeout=QUICK_TIMEOUT_S,
+                    timeout=self._quick_timeout_s,
                 ),
             )
             start_posted = int(start_info["photo"]["dates"]["posted"])
@@ -203,7 +204,7 @@ class FlickrFindReplaceWorker(PythonOwnedRunnable):
                 sort=options.sort,
                 extras="date_taken",
                 per_page=500,
-                timeout=QUICK_TIMEOUT_S,
+                timeout=self._quick_timeout_s,
                 num_retries=API_RETRIES,
                 cancel_event=self._cancel_requested,
             )
@@ -230,7 +231,11 @@ class FlickrFindReplaceWorker(PythonOwnedRunnable):
     def run(self) -> None:
         result = FlickrFindReplaceResult()
         try:
-            flickr = create_flickr_client(self._api_key, self._api_secret)
+            flickr = create_flickr_client(
+                self._api_key,
+                self._api_secret,
+                timeout_s=self._quick_timeout_s,
+            )
             photos, retrieved = self._fetch_photos(flickr)
             result.retrieved = retrieved
             result.in_scope = len(photos)
@@ -264,7 +269,7 @@ class FlickrFindReplaceWorker(PythonOwnedRunnable):
                                 flickr.photos.setMeta,
                                 photo_id=photo_id,
                                 title=title_outcome.title,
-                                timeout=QUICK_TIMEOUT_S,
+                                timeout=self._quick_timeout_s,
                             ),
                         )
                         result.title_changed += 1
@@ -279,7 +284,7 @@ class FlickrFindReplaceWorker(PythonOwnedRunnable):
                             partial(
                                 flickr.photos.getInfo,
                                 photo_id=photo_id,
-                                timeout=QUICK_TIMEOUT_S,
+                                timeout=self._quick_timeout_s,
                             ),
                         )
                         tag_nodes = info.get("photo", {}).get("tags", {}).get("tag", [])
@@ -307,7 +312,7 @@ class FlickrFindReplaceWorker(PythonOwnedRunnable):
                                     partial(
                                         flickr.photos.removeTag,
                                         tag_id=tag_id,
-                                        timeout=QUICK_TIMEOUT_S,
+                                        timeout=self._quick_timeout_s,
                                     ),
                                 )
                                 successful_removed_raw.append(raw)
@@ -342,7 +347,7 @@ class FlickrFindReplaceWorker(PythonOwnedRunnable):
                                             flickr.photos.addTags,
                                             photo_id=photo_id,
                                             tags=api_tags,
-                                            timeout=QUICK_TIMEOUT_S,
+                                            timeout=self._quick_timeout_s,
                                         ),
                                     )
                                     result.tags_added += len(add_values)
@@ -686,6 +691,9 @@ class FlickrFindReplaceDialog(ToolFlowDialog):
             api_key=self._api_key,
             api_secret=self._api_secret,
             options=options,
+            quick_timeout_s=float(
+                get_runtime_setting(RuntimeSettingKey.FLICKR_API_QUICK_TIMEOUT_S)
+            ),
         )
         self.transition_to("progress")
         self.progress_title_label.setText("")

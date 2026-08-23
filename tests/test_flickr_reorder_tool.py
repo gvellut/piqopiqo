@@ -137,7 +137,8 @@ def test_worker_aborts_before_order_sets_for_undated_album(
         save_existing_order=True,
         support_dir=tmp_path,
         backup_limit=3,
-        apply_timeout_s=120.0,
+        quick_timeout_s=5.0,
+        very_long_timeout_s=120.0,
     )
     results = []
     worker.signals.finished.connect(results.append)
@@ -186,7 +187,8 @@ def test_worker_rejects_unknown_from_album_before_reading_photos_or_reordering(
         save_existing_order=False,
         support_dir=tmp_path,
         backup_limit=3,
-        apply_timeout_s=120.0,
+        quick_timeout_s=5.0,
+        very_long_timeout_s=120.0,
     )
     results = []
     worker.signals.finished.connect(results.append)
@@ -211,9 +213,11 @@ def test_worker_uses_indeterminate_progress_and_does_not_retry_applying(
     expected_error: str,
 ) -> None:
     order_calls: list[tuple[str, float]] = []
+    quick_timeouts: list[float] = []
 
     class _PhotoSets:
-        def getList(self, **_kwargs):
+        def getList(self, **kwargs):
+            quick_timeouts.append(kwargs["timeout"])
             return {
                 "photosets": {
                     "page": 1,
@@ -225,7 +229,8 @@ def test_worker_uses_indeterminate_progress_and_does_not_retry_applying(
                 }
             }
 
-        def getPhotos(self, photoset_id: str, **_kwargs):
+        def getPhotos(self, photoset_id: str, **kwargs):
+            quick_timeouts.append(kwargs["timeout"])
             date_taken = (
                 "2024-01-01 12:00:00" if photoset_id == "a" else "2025-01-01 12:00:00"
             )
@@ -259,7 +264,8 @@ def test_worker_uses_indeterminate_progress_and_does_not_retry_applying(
         save_existing_order=False,
         support_dir=tmp_path,
         backup_limit=3,
-        apply_timeout_s=120.0,
+        quick_timeout_s=5.0,
+        very_long_timeout_s=120.0,
     )
     progress_events: list[tuple[int, int, str]] = []
     results = []
@@ -274,6 +280,7 @@ def test_worker_uses_indeterminate_progress_and_does_not_retry_applying(
     worker.run()
 
     assert order_calls == [("b,a", 120.0)]
+    assert quick_timeouts == [5.0, 5.0, 5.0]
     assert progress_events[:2] == [
         (0, 2, "Reading A..."),
         (1, 2, "Reading B..."),

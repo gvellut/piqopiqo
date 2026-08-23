@@ -67,6 +67,9 @@ class FlickrUploadManager(QObject):
         exiftool_path: str,
         token_cache_dir: str,
         max_workers: int,
+        quick_timeout_s: float,
+        heavy_timeout_s: float,
+        very_long_timeout_s: float,
         album_plan: FlickrAlbumPlan | None = None,
         on_album_id_resolved: Callable[[str], None] | None = None,
         parent=None,
@@ -77,6 +80,9 @@ class FlickrUploadManager(QObject):
         self._exiftool_path = exiftool_path
         self._token_cache_dir = token_cache_dir
         self._max_workers = max(1, int(max_workers))
+        self._quick_timeout_s = float(quick_timeout_s)
+        self._heavy_timeout_s = float(heavy_timeout_s)
+        self._very_long_timeout_s = float(very_long_timeout_s)
         self._album_plan = album_plan if album_plan is not None else FlickrAlbumPlan()
         self._on_album_id_resolved = on_album_id_resolved
 
@@ -143,6 +149,9 @@ class FlickrUploadManager(QObject):
             "api_key": self._api_key,
             "api_secret": self._api_secret,
             "token_cache_dir": self._token_cache_dir,
+            "quick_timeout_s": self._quick_timeout_s,
+            "heavy_timeout_s": self._heavy_timeout_s,
+            "very_long_timeout_s": self._very_long_timeout_s,
         }
         base.update(payload)
         return base

@@ -50,7 +50,7 @@ def create_flickr_client(
     *,
     token_cache_dir: str | Path | None = None,
     response_format: str = "parsed-json",
-    timeout_s: float | None = None,
+    timeout_s: float,
 ) -> flickrapi.FlickrAPI:
     """Create a Flickr API client bound to the configured token cache directory."""
     cache_dir = Path(token_cache_dir) if token_cache_dir else get_flickr_cache_dir()
@@ -156,6 +156,7 @@ def validate_token_or_cleanup(
     api_key: str,
     api_secret: str,
     *,
+    timeout_s: float,
     token_cache_dir: str | Path | None = None,
     perms: str = FLICKR_REQUIRED_PERMS,
 ) -> bool:
@@ -165,6 +166,7 @@ def validate_token_or_cleanup(
         api_secret,
         token_cache_dir=token_cache_dir,
         response_format="parsed-json",
+        timeout_s=timeout_s,
     )
     valid = bool(flickr.token_valid(perms=perms))
     if not valid:

@@ -805,6 +805,9 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         worker = FlickrTokenValidationWorker(
             api_key=self._api_key,
             api_secret=self._api_secret,
+            quick_timeout_s=float(
+                get_runtime_setting(RuntimeSettingKey.FLICKR_API_QUICK_TIMEOUT_S)
+            ),
         )
         self._token_worker = worker
         self.start_task(
@@ -850,6 +853,9 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
             api_key=self._api_key,
             api_secret=self._api_secret,
             album_text=album_text,
+            quick_timeout_s=float(
+                get_runtime_setting(RuntimeSettingKey.FLICKR_API_QUICK_TIMEOUT_S)
+            ),
             cached_plan=(
                 self._cached_album_plan.to_dict()
                 if self._cached_album_plan is not None
@@ -894,6 +900,15 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
             token_cache_dir=str(get_flickr_cache_dir()),
             max_workers=int(
                 get_runtime_setting(RuntimeSettingKey.FLICKR_UPLOAD_MAX_WORKERS)  # type: ignore
+            ),
+            quick_timeout_s=float(
+                get_runtime_setting(RuntimeSettingKey.FLICKR_API_QUICK_TIMEOUT_S)
+            ),
+            heavy_timeout_s=float(
+                get_runtime_setting(RuntimeSettingKey.FLICKR_API_HEAVY_TIMEOUT_S)
+            ),
+            very_long_timeout_s=float(
+                get_runtime_setting(RuntimeSettingKey.FLICKR_API_VERY_LONG_TIMEOUT_S)
             ),
             album_plan=album_plan,
             on_album_id_resolved=self._set_folder_album_id_callback,
@@ -1399,14 +1414,18 @@ def _resolve_prefill_album_plan(
     if not aid:
         return None
 
+    quick_timeout_s = float(
+        get_runtime_setting(RuntimeSettingKey.FLICKR_API_QUICK_TIMEOUT_S)
+    )
     try:
         flickr = create_flickr_client(
             api_key,
             api_secret,
             token_cache_dir=get_flickr_cache_dir(),
             response_format="parsed-json",
+            timeout_s=quick_timeout_s,
         )
-        info = fetch_album_info(flickr, aid)
+        info = fetch_album_info(flickr, aid, timeout_s=quick_timeout_s)
     except Exception:
         return None
 
@@ -1540,7 +1559,13 @@ def _launch_flickr_upload_flow(
             )
 
         if preflight.selected_action == "login":
-            worker = FlickrLoginWorker(api_key=api_key, api_secret=api_secret)
+            worker = FlickrLoginWorker(
+                api_key=api_key,
+                api_secret=api_secret,
+                quick_timeout_s=float(
+                    get_runtime_setting(RuntimeSettingKey.FLICKR_API_QUICK_TIMEOUT_S)
+                ),
+            )
             login_dialog = FlickrLoginProgressDialog(parent=parent)
             login_dialog.start(worker)
             if login_dialog.exec() != QDialog.DialogCode.Accepted:

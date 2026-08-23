@@ -60,10 +60,12 @@ def test_slice_photo_range_is_inclusive_and_rejects_reversed() -> None:
 
 def test_worker_continues_after_one_photo_title_failure(monkeypatch) -> None:
     title_calls: list[tuple[str, str]] = []
+    timeout_calls: list[float] = []
     progress_updates: list[tuple[int, int, str, str]] = []
 
     class _Photosets:
-        def getPhotos(self, **_kwargs):
+        def getPhotos(self, **kwargs):
+            timeout_calls.append(kwargs["timeout"])
             return {
                 "photoset": {
                     "page": 1,
@@ -76,7 +78,8 @@ def test_worker_continues_after_one_photo_title_failure(monkeypatch) -> None:
             }
 
     class _Photos:
-        def setMeta(self, photo_id: str, title: str, **_kwargs):
+        def setMeta(self, photo_id: str, title: str, **kwargs):
+            timeout_calls.append(kwargs["timeout"])
             if photo_id == "1":
                 raise RuntimeError("blocked")
             title_calls.append((photo_id, title))
@@ -110,6 +113,7 @@ def test_worker_continues_after_one_photo_title_failure(monkeypatch) -> None:
                 title_replacement="New",
             ),
         ),
+        quick_timeout_s=5.0,
     )
     results = []
     worker.signals.progress.connect(
@@ -127,6 +131,7 @@ def test_worker_continues_after_one_photo_title_failure(monkeypatch) -> None:
     assert result.processed == 2
     assert result.failed_photo_ids == {"1"}
     assert title_calls == [("2", "New two")]
+    assert timeout_calls == [5.0, 5.0, 5.0]
     assert result.title_changed == 1
     assert progress_updates == [
         (0, 2, "1", "Old one"),

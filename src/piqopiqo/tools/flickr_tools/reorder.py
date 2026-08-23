@@ -39,10 +39,7 @@ from piqopiqo.ssf.settings_state import (
     set_state_value,
 )
 from piqopiqo.tools.flickr_tools.auth_flow import ensure_flickr_authenticated
-from piqopiqo.tools.flickr_tools.upload.constants import (
-    API_RETRIES,
-    QUICK_TIMEOUT_S,
-)
+from piqopiqo.tools.flickr_tools.upload.constants import API_RETRIES
 from piqopiqo.tools.flickr_utils import (
     FlickrOperationCancelled,
     all_pages,
@@ -201,7 +198,8 @@ class FlickrReorderWorker(PythonOwnedRunnable):
         save_existing_order: bool,
         support_dir: str | Path,
         backup_limit: int,
-        apply_timeout_s: float,
+        quick_timeout_s: float,
+        very_long_timeout_s: float,
     ) -> None:
         super().__init__()
         self._api_key = api_key
@@ -210,7 +208,8 @@ class FlickrReorderWorker(PythonOwnedRunnable):
         self._save_existing_order = bool(save_existing_order)
         self._support_dir = Path(support_dir)
         self._backup_limit = max(1, int(backup_limit))
-        self._apply_timeout_s = max(1.0, float(apply_timeout_s))
+        self._quick_timeout_s = float(quick_timeout_s)
+        self._very_long_timeout_s = float(very_long_timeout_s)
         self._cancel_requested = threading.Event()
         self.signals = _FlickrReorderSignals()
 
@@ -220,7 +219,11 @@ class FlickrReorderWorker(PythonOwnedRunnable):
     def run(self) -> None:
         result = FlickrReorderResult()
         try:
-            flickr = create_flickr_client(self._api_key, self._api_secret)
+            flickr = create_flickr_client(
+                self._api_key,
+                self._api_secret,
+                timeout_s=self._quick_timeout_s,
+            )
             raw_albums = all_pages(
                 "photosets",
                 "photoset",
@@ -228,7 +231,7 @@ class FlickrReorderWorker(PythonOwnedRunnable):
                 num_retries=API_RETRIES,
                 cancel_event=self._cancel_requested,
                 per_page=500,
-                timeout=QUICK_TIMEOUT_S,
+                timeout=self._quick_timeout_s,
             )
             albums = [
                 FlickrAlbumOrderEntry(
@@ -267,7 +270,7 @@ class FlickrReorderWorker(PythonOwnedRunnable):
                     photoset_id=album.album_id,
                     extras="date_taken",
                     per_page=500,
-                    timeout=QUICK_TIMEOUT_S,
+                    timeout=self._quick_timeout_s,
                     num_retries=API_RETRIES,
                     cancel_event=self._cancel_requested,
                 )
@@ -332,7 +335,7 @@ class FlickrReorderWorker(PythonOwnedRunnable):
             )
             flickr.photosets.orderSets(
                 photoset_ids=",".join(new_order),
-                timeout=self._apply_timeout_s,
+                timeout=self._very_long_timeout_s,
             )
             result.reordered = True
         except FlickrOperationCancelled:
@@ -479,8 +482,11 @@ class FlickrReorderDialog(ToolFlowDialog):
             backup_limit=int(
                 get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_BACKUP_LIMIT)
             ),
-            apply_timeout_s=float(
-                get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_APPLY_TIMEOUT_S)
+            quick_timeout_s=float(
+                get_runtime_setting(RuntimeSettingKey.FLICKR_API_QUICK_TIMEOUT_S)
+            ),
+            very_long_timeout_s=float(
+                get_runtime_setting(RuntimeSettingKey.FLICKR_API_VERY_LONG_TIMEOUT_S)
             ),
         )
         self.transition_to("progress")

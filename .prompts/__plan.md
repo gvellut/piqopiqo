@@ -1,3 +1,4 @@
+- [Flickr reorder summary](Sd_tasks/Ce_Flickr_reorder_summary.md)
 - [reverse cop from sd](Sd_tasks/Vd_reverse_cop_from_sd.md)
 - [Undo label do not record if label not changed](Sd_tasks/Sd_Undo_label_do_not_record_if_label_not_changed.md)
 - [change tool workflow](Gd_tasks/Rd_change_tool_workflow.md)

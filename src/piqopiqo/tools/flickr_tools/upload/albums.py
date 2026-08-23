@@ -8,7 +8,7 @@ from attrs import define
 
 from piqopiqo.tools.flickr_utils import extract_album_id
 
-from .constants import API_RETRIES, QUICK_TIMEOUT_S
+from .constants import API_RETRIES
 from .service import retry
 
 
@@ -81,7 +81,12 @@ def _extract_title(value: object) -> str:
     return str(value).strip()
 
 
-def fetch_album_info(flickr, album_id: str) -> FlickrAlbumInfo:
+def fetch_album_info(
+    flickr,
+    album_id: str,
+    *,
+    timeout_s: float,
+) -> FlickrAlbumInfo:
     """Fetch album info and return ID/title/owner NSID/url."""
     aid = str(album_id or "").strip()
     if not aid:
@@ -89,7 +94,7 @@ def fetch_album_info(flickr, album_id: str) -> FlickrAlbumInfo:
 
     response = retry(
         API_RETRIES,
-        lambda: flickr.photosets.getInfo(photoset_id=aid, timeout=QUICK_TIMEOUT_S),
+        lambda: flickr.photosets.getInfo(photoset_id=aid, timeout=timeout_s),
     )
     if not isinstance(response, dict):
         raise ValueError(f"Album '{aid}' was not found on Flickr.")
@@ -109,7 +114,12 @@ def fetch_album_info(flickr, album_id: str) -> FlickrAlbumInfo:
     )
 
 
-def find_album_by_exact_title(flickr, title: str) -> FlickrAlbumInfo | None:
+def find_album_by_exact_title(
+    flickr,
+    title: str,
+    *,
+    timeout_s: float,
+) -> FlickrAlbumInfo | None:
     """Find first exact title match from first page of albums list."""
     wanted = str(title or "").strip()
     if not wanted:
@@ -117,7 +127,7 @@ def find_album_by_exact_title(flickr, title: str) -> FlickrAlbumInfo | None:
 
     response = retry(
         API_RETRIES,
-        lambda: flickr.photosets.getList(per_page=100, page=1, timeout=QUICK_TIMEOUT_S),
+        lambda: flickr.photosets.getList(per_page=100, page=1, timeout=timeout_s),
     )
     if not isinstance(response, dict):
         return None
@@ -159,6 +169,7 @@ def resolve_album_plan(
     flickr,
     album_text: str,
     *,
+    timeout_s: float,
     cached_plan: FlickrAlbumPlan | None = None,
 ) -> FlickrAlbumPlan:
     """Resolve user album input into an existing-album or create-album plan."""
@@ -176,7 +187,7 @@ def resolve_album_plan(
     try:
         album_id = extract_album_id(raw_text)
     except ValueError:
-        found = find_album_by_exact_title(flickr, raw_text)
+        found = find_album_by_exact_title(flickr, raw_text, timeout_s=timeout_s)
         if found is None:
             return FlickrAlbumPlan(
                 raw_text=raw_text,
@@ -192,7 +203,7 @@ def resolve_album_plan(
             is_create=False,
         )
 
-    info = fetch_album_info(flickr, album_id)
+    info = fetch_album_info(flickr, album_id, timeout_s=timeout_s)
     return FlickrAlbumPlan(
         raw_text=raw_text,
         album_id=info.album_id,

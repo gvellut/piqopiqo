@@ -86,7 +86,9 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_FLICKR_UPLOAD_MAX_WORKERS",
         "PIQO_FLICKR_REORDER_BACKUP_LIMIT",
         "PIQO_FLICKR_REORDER_FROM_ALBUM_REQUIRED",
-        "PIQO_FLICKR_REORDER_APPLY_TIMEOUT_S",
+        "PIQO_FLICKR_API_QUICK_TIMEOUT_S",
+        "PIQO_FLICKR_API_HEAVY_TIMEOUT_S",
+        "PIQO_FLICKR_API_VERY_LONG_TIMEOUT_S",
         "PIQO_PROTECT_NON_TEXT_METADATA",
         "PIQO_SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY",
         "PIQO_FORCE_SRGB",
@@ -163,8 +165,10 @@ def test_flickr_reorder_state_and_runtime_defaults(isolated_settings):
         get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_FROM_ALBUM_REQUIRED)
         is True
     )
+    assert get_runtime_setting(RuntimeSettingKey.FLICKR_API_QUICK_TIMEOUT_S) == 5.0
+    assert get_runtime_setting(RuntimeSettingKey.FLICKR_API_HEAVY_TIMEOUT_S) == 30.0
     assert (
-        get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_APPLY_TIMEOUT_S) == 120.0
+        get_runtime_setting(RuntimeSettingKey.FLICKR_API_VERY_LONG_TIMEOUT_S) == 120.0
     )
 
     set_state_value(StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER, False)
@@ -183,11 +187,41 @@ def test_flickr_reorder_from_album_required_env_override(
     )
 
 
-def test_flickr_reorder_apply_timeout_env_override(isolated_settings, monkeypatch):
-    monkeypatch.setenv("PIQO_FLICKR_REORDER_APPLY_TIMEOUT_S", "45.5")
+@pytest.mark.parametrize(
+    ("env_name", "key", "raw_value", "expected"),
+    [
+        (
+            "PIQO_FLICKR_API_QUICK_TIMEOUT_S",
+            RuntimeSettingKey.FLICKR_API_QUICK_TIMEOUT_S,
+            "4.5",
+            4.5,
+        ),
+        (
+            "PIQO_FLICKR_API_HEAVY_TIMEOUT_S",
+            RuntimeSettingKey.FLICKR_API_HEAVY_TIMEOUT_S,
+            "25.5",
+            25.5,
+        ),
+        (
+            "PIQO_FLICKR_API_VERY_LONG_TIMEOUT_S",
+            RuntimeSettingKey.FLICKR_API_VERY_LONG_TIMEOUT_S,
+            "90.5",
+            90.5,
+        ),
+    ],
+)
+def test_flickr_api_timeout_env_override(
+    isolated_settings,
+    monkeypatch,
+    env_name,
+    key,
+    raw_value,
+    expected,
+):
+    monkeypatch.setenv(env_name, raw_value)
     init_qsettings_store(dyn=True)
 
-    assert get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_APPLY_TIMEOUT_S) == 45.5
+    assert get_runtime_setting(key) == expected
 
 
 def test_dialog_discard_confirmation_runtime_mode(isolated_settings, monkeypatch):

@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import QDialog, QMessageBox, QWidget
 
+from piqopiqo.ssf.settings_state import RuntimeSettingKey, get_runtime_setting
 from piqopiqo.tools.flickr_tools.upload.workers import (
     FlickrLoginWorker,
     FlickrTokenValidationWorker,
@@ -96,10 +97,14 @@ def ensure_flickr_authenticated(
     api_secret: str,
 ) -> bool:
     """Validate the cached token or complete browser OAuth before a Flickr tool."""
+    quick_timeout_s = float(
+        get_runtime_setting(RuntimeSettingKey.FLICKR_API_QUICK_TIMEOUT_S)
+    )
     if token_file_exists():
         validation_worker = FlickrTokenValidationWorker(
             api_key=api_key,
             api_secret=api_secret,
+            quick_timeout_s=quick_timeout_s,
         )
         validation_dialog = _FlickrAuthProgressDialog(
             title=title,
@@ -115,7 +120,11 @@ def ensure_flickr_authenticated(
         if bool(validation_dialog.payload):
             return True
 
-    login_worker = FlickrLoginWorker(api_key=api_key, api_secret=api_secret)
+    login_worker = FlickrLoginWorker(
+        api_key=api_key,
+        api_secret=api_secret,
+        quick_timeout_s=quick_timeout_s,
+    )
     login_dialog = _FlickrAuthProgressDialog(
         title=title,
         status="Log in to Flickr in your browser...",

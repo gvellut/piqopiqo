@@ -26,7 +26,18 @@ def _mk_manager() -> FlickrUploadManager:
         exiftool_path="/opt/homebrew/bin/exiftool",
         token_cache_dir="/tmp",
         max_workers=2,
+        quick_timeout_s=5.0,
+        heavy_timeout_s=30.0,
+        very_long_timeout_s=120.0,
     )
+
+
+def test_manager_includes_all_flickr_timeouts_in_worker_payload(qapp) -> None:  # noqa: ARG001
+    payload = _mk_manager()._build_worker_payload({"photo_id": "p1"})
+
+    assert payload["quick_timeout_s"] == 5.0
+    assert payload["heavy_timeout_s"] == 30.0
+    assert payload["very_long_timeout_s"] == 120.0
 
 
 def test_manager_stage_sequence_success(qapp, monkeypatch) -> None:  # noqa: ARG001
@@ -188,6 +199,9 @@ def test_manager_album_stage_create_then_add(qapp, monkeypatch) -> None:  # noqa
         exiftool_path="/opt/homebrew/bin/exiftool",
         token_cache_dir="/tmp",
         max_workers=2,
+        quick_timeout_s=5.0,
+        heavy_timeout_s=30.0,
+        very_long_timeout_s=120.0,
         album_plan=FlickrAlbumPlan(
             raw_text="Trip 2026",
             album_title="Trip 2026",
@@ -267,6 +281,9 @@ def test_manager_album_stage_add_failure_is_reported(qapp, monkeypatch) -> None:
         exiftool_path="/opt/homebrew/bin/exiftool",
         token_cache_dir="/tmp",
         max_workers=2,
+        quick_timeout_s=5.0,
+        heavy_timeout_s=30.0,
+        very_long_timeout_s=120.0,
         album_plan=FlickrAlbumPlan(
             raw_text="72177720331888267",
             album_id="72177720331888267",

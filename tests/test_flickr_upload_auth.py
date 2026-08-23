@@ -11,6 +11,7 @@ from piqopiqo.tools.flickr_tools.upload.constants import (
 )
 from piqopiqo.tools.flickr_utils import (
     authenticate_via_browser_cancellable,
+    create_flickr_client,
     validate_token_or_cleanup,
 )
 
@@ -21,6 +22,38 @@ def test_flickr_token_file_path_uses_cache_base(tmp_path) -> None:
     assert token_path == (
         tmp_path / "cache" / FLICKR_TOKEN_DIR_NAME / FLICKR_TOKEN_DB_FILENAME
     )
+
+
+def test_create_flickr_client_sets_required_default_timeout(
+    tmp_path, monkeypatch
+) -> None:
+    calls: list[dict] = []
+
+    class _Session:
+        headers: dict[str, str] = {}
+
+    class _OAuth:
+        session = _Session()
+
+    class _FakeFlickrApi:
+        flickr_oauth = _OAuth()
+
+        def __init__(self, *_args, **kwargs):
+            calls.append(kwargs)
+
+    monkeypatch.setattr(
+        "piqopiqo.tools.flickr_utils.flickrapi.FlickrAPI",
+        _FakeFlickrApi,
+    )
+
+    create_flickr_client(
+        "k",
+        "s",
+        token_cache_dir=tmp_path,
+        timeout_s=5.0,
+    )
+
+    assert calls[0]["timeout"] == 5.0
 
 
 def test_validate_token_or_cleanup_removes_invalid_token_file(
@@ -35,19 +68,27 @@ def test_validate_token_or_cleanup_removes_invalid_token_file(
         def token_valid(self, perms: str) -> bool:  # noqa: ARG002
             return False
 
+    client_calls: list[dict] = []
+
+    def create_client(*_args, **kwargs):
+        client_calls.append(kwargs)
+        return _FakeFlickr()
+
     monkeypatch.setattr(
         "piqopiqo.tools.flickr_utils.create_flickr_client",
-        lambda *args, **kwargs: _FakeFlickr(),
+        create_client,
     )
 
     is_valid = validate_token_or_cleanup(
         "k",
         "s",
+        timeout_s=5.0,
         token_cache_dir=token_cache_dir,
     )
 
     assert is_valid is False
     assert token_file.exists() is False
+    assert client_calls[0]["timeout_s"] == 5.0
 
 
 def test_authenticate_via_browser_cancel_stops_http_server(monkeypatch) -> None:

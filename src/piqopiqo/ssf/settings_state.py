@@ -133,7 +133,9 @@ class RuntimeSettingKey(StrEnum):
     FLICKR_UPLOAD_MAX_WORKERS = "flickrUploadMaxWorkers"
     FLICKR_REORDER_BACKUP_LIMIT = "flickrReorderBackupLimit"
     FLICKR_REORDER_FROM_ALBUM_REQUIRED = "flickrReorderFromAlbumRequired"
-    FLICKR_REORDER_APPLY_TIMEOUT_S = "flickrReorderApplyTimeoutS"
+    FLICKR_API_QUICK_TIMEOUT_S = "flickrApiQuickTimeoutS"
+    FLICKR_API_HEAVY_TIMEOUT_S = "flickrApiHeavyTimeoutS"
+    FLICKR_API_VERY_LONG_TIMEOUT_S = "flickrApiVeryLongTimeoutS"
     MIN_IDLE_WORKERS = "minIdleWorkers"
     MAX_EXIFTOOLS_IMAGE_BATCH = "maxExiftoolsImageBatch"
     SHUTDOWN_TIMEOUT_S = "shutdownTimeoutS"
@@ -857,7 +859,15 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
         default=True,
         read_type=bool,
     ),
-    RuntimeSettingKey.FLICKR_REORDER_APPLY_TIMEOUT_S: SettingDef(
+    RuntimeSettingKey.FLICKR_API_QUICK_TIMEOUT_S: SettingDef(
+        default=5.0,
+        read_type=float,
+    ),
+    RuntimeSettingKey.FLICKR_API_HEAVY_TIMEOUT_S: SettingDef(
+        default=30.0,
+        read_type=float,
+    ),
+    RuntimeSettingKey.FLICKR_API_VERY_LONG_TIMEOUT_S: SettingDef(
         default=120.0,
         read_type=float,
     ),

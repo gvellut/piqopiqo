@@ -19,8 +19,6 @@ __all__ = [
 # Keep aligned with flickr_api_utils defaults.
 API_RETRIES = 6
 API_RETRY_DELAY_S = 5
-UPLOAD_TIMEOUT_S = 30
-QUICK_TIMEOUT_S = 5
 CHECK_TICKETS_SLEEP_S = 3
 MAX_NUM_CHECKS = 5
 

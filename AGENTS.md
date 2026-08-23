@@ -167,6 +167,7 @@ tests/
 ├── test_exif_panel.py # EXIF panel display formatting and pending selection summary
 ├── test_photo_grid_shortcuts.py # Grid view-scoped shortcut ownership + text-input guard behavior
 ├── test_photo_grid_selection_refresh.py # Visible-only grid selection highlight refresh path
+├── test_flickr_upload_timeouts.py # Flickr API timeout-class and worker-payload coverage
 └── test_metadata_save_workers.py # QThreadPool drain helper shutdown semantics
 ```
 
@@ -228,7 +229,9 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - `StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER` (default `True`) remembers whether Flickr album reorder saves the current order first.
 - `RuntimeSettingKey.FLICKR_REORDER_BACKUP_LIMIT` (default `3`) controls how many timestamped album-order JSON backups are retained.
 - `RuntimeSettingKey.FLICKR_REORDER_FROM_ALBUM_REQUIRED` (default `True`) requires a Flickr album ID/URL boundary; when disabled, an empty boundary reorders the complete album list.
-- `RuntimeSettingKey.FLICKR_REORDER_APPLY_TIMEOUT_S` (default `120.0`) is the read timeout for the single Flickr `photosets.orderSets` request.
+- `RuntimeSettingKey.FLICKR_API_QUICK_TIMEOUT_S` (default `5.0`) is the per-attempt timeout for OAuth/token operations and ordinary Flickr reads/metadata updates.
+- `RuntimeSettingKey.FLICKR_API_HEAVY_TIMEOUT_S` (default `30.0`) is the per-attempt timeout for image upload/replace, upload album-photo listing, album creation, and `photosets.editPhotos`.
+- `RuntimeSettingKey.FLICKR_API_VERY_LONG_TIMEOUT_S` (default `120.0`) is the per-attempt timeout for bulk `photosets.orderSets` and `photosets.reorderPhotos` operations.
 - `RuntimeSettingKey.DIALOG_DISCARD_CONFIRMATION_MODE` (default `ESC_ONLY`) controls whether dirty input dialogs confirm only on Escape or on every dismissal (`EVERY_DISMISSAL`).
 
 Useful env vars for agent testing:
@@ -258,7 +261,9 @@ Useful env vars for agent testing:
 - `PIQO_FLICKR_UPLOAD_MAX_WORKERS` - Flickr upload multiprocessing worker count (default: 2)
 - `PIQO_FLICKR_REORDER_BACKUP_LIMIT` - Number of Flickr album-order backups retained (default: 3)
 - `PIQO_FLICKR_REORDER_FROM_ALBUM_REQUIRED` - Require a starting Flickr album ID/URL for album reorder (default: true)
-- `PIQO_FLICKR_REORDER_APPLY_TIMEOUT_S` - Read timeout for applying a Flickr album order (default: 120 seconds)
+- `PIQO_FLICKR_API_QUICK_TIMEOUT_S` - Flickr OAuth, normal-read, and metadata-update timeout per attempt (default: 5 seconds)
+- `PIQO_FLICKR_API_HEAVY_TIMEOUT_S` - Flickr upload/replace and heavy album-write timeout per attempt (default: 30 seconds)
+- `PIQO_FLICKR_API_VERY_LONG_TIMEOUT_S` - Flickr bulk album/photo reorder timeout per attempt (default: 120 seconds)
 - `PIQO_DIALOG_DISCARD_CONFIRMATION_MODE` - Dirty-dialog confirmation mode (`ESC_ONLY` by default; `EVERY_DISMISSAL` also guards Cancel and window close)
 
 
@@ -410,7 +415,9 @@ Selection behavior:
 - Flickr API credentials are configured in Settings > External/Workflow > Flickr (`FLICKR_API_KEY`, `FLICKR_API_SECRET` user settings).
 - Flickr Upload, Reorder Albums, and Flickr Find & Replace share the same write-permission OAuth token cache and browser login flow.
 - Flickr Reorder Albums sorts an inclusive prefix newest-first by each album's modal valid photo-taken date. If Flickr returns `[A, B, C, D, E]` and album `C` is entered, `[A, B, C]` is reordered while `[D, E]` remains unchanged. An empty boundary is accepted only when `FLICKR_REORDER_FROM_ALBUM_REQUIRED` is disabled, in which case the complete list is reordered. Empty/fully-undated albums abort before `photosets.orderSets`.
-- Flickr Reorder Albums submits `photosets.orderSets` once with `FLICKR_REORDER_APPLY_TIMEOUT_S`; do not use the shared short timeout/retry loop because Flickr may finish the server-side reorder after a short client read timeout.
+- Every Flickr client is constructed with `FLICKR_API_QUICK_TIMEOUT_S` as its default so OAuth and any non-overridden request cannot be unbounded. Ordinary reads/searches, token checks, ticket checks, and metadata updates use the quick timeout; upload/replace, upload album-photo listing, album creation, and `photosets.editPhotos` use the heavy timeout; `photosets.orderSets` and `photosets.reorderPhotos` use the very-long timeout.
+- Resolve all three Flickr timeout runtime settings in the main process and pass them into Qt workers and the Flickr upload multiprocessing payload. Worker processes must not read application settings directly.
+- Flickr Reorder Albums submits `photosets.orderSets` once with `FLICKR_API_VERY_LONG_TIMEOUT_S`; do not add a retry loop because Flickr may finish the server-side reorder after a client read timeout.
 - When enabled, Flickr reorder writes the complete pre-change album ID order as a JSON array under `Application Support/PiqoPiqo/flickr-album-orders`; only the newest `FLICKR_REORDER_BACKUP_LIMIT` matching files are retained.
 - Flickr Find & Replace supports album order or an exact inclusive photostream range. A title regex, when present, gates both title and tag changes; per-photo failures are reported while remaining photos continue.
 - Flickr Find & Replace progress shows the photo ID above a single-line elided title (`<No title>` when empty); result totals are shown one per line in a read-only summary field.

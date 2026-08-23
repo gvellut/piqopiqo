@@ -28,10 +28,11 @@ class FlickrLoginWorkerSignals(QObject):
 class FlickrLoginWorker(PythonOwnedRunnable):
     """Background Flickr browser-auth worker."""
 
-    def __init__(self, *, api_key: str, api_secret: str):
+    def __init__(self, *, api_key: str, api_secret: str, quick_timeout_s: float):
         super().__init__()
         self._api_key = api_key
         self._api_secret = api_secret
+        self._quick_timeout_s = float(quick_timeout_s)
         self._cancel_requested = threading.Event()
         self.signals = FlickrLoginWorkerSignals()
 
@@ -49,6 +50,7 @@ class FlickrLoginWorker(PythonOwnedRunnable):
                 self._api_secret,
                 token_cache_dir=get_flickr_cache_dir(),
                 response_format="parsed-json",
+                timeout_s=self._quick_timeout_s,
             )
             result = authenticate_via_browser_cancellable(
                 flickr,
@@ -81,10 +83,11 @@ class FlickrTokenValidationWorkerSignals(QObject):
 class FlickrTokenValidationWorker(PythonOwnedRunnable):
     """Background token validation worker."""
 
-    def __init__(self, *, api_key: str, api_secret: str):
+    def __init__(self, *, api_key: str, api_secret: str, quick_timeout_s: float):
         super().__init__()
         self._api_key = api_key
         self._api_secret = api_secret
+        self._quick_timeout_s = float(quick_timeout_s)
         self._cancel_requested = threading.Event()
         self.signals = FlickrTokenValidationWorkerSignals()
 
@@ -102,6 +105,7 @@ class FlickrTokenValidationWorker(PythonOwnedRunnable):
             valid = validate_token_or_cleanup(
                 self._api_key,
                 self._api_secret,
+                timeout_s=self._quick_timeout_s,
                 token_cache_dir=cache_dir,
             )
         except Exception as ex:  # pragma: no cover - external API/system failures
@@ -133,12 +137,14 @@ class FlickrAlbumCheckWorker(PythonOwnedRunnable):
         api_key: str,
         api_secret: str,
         album_text: str,
+        quick_timeout_s: float,
         cached_plan: dict[str, object] | None = None,
     ):
         super().__init__()
         self._api_key = api_key
         self._api_secret = api_secret
         self._album_text = str(album_text or "")
+        self._quick_timeout_s = float(quick_timeout_s)
         self._cached_plan = cached_plan
         self._cancel_requested = threading.Event()
         self.signals = FlickrAlbumCheckWorkerSignals()
@@ -159,10 +165,12 @@ class FlickrAlbumCheckWorker(PythonOwnedRunnable):
                 self._api_secret,
                 token_cache_dir=cache_dir,
                 response_format="parsed-json",
+                timeout_s=self._quick_timeout_s,
             )
             plan = resolve_album_plan(
                 flickr,
                 self._album_text,
+                timeout_s=self._quick_timeout_s,
                 cached_plan=FlickrAlbumPlan.from_dict(self._cached_plan),
             )
         except Exception as ex:  # pragma: no cover - external API/system failures

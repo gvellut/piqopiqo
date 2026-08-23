@@ -27,8 +27,6 @@ from .constants import (
     API_RETRIES,
     CHECK_TICKETS_SLEEP_S,
     MAX_NUM_CHECKS,
-    QUICK_TIMEOUT_S,
-    UPLOAD_TIMEOUT_S,
     FlickrStage,
 )
 from .service import (
@@ -115,6 +113,8 @@ def run_upload_task(task: dict) -> dict:
     api_key = str(task["api_key"])
     api_secret = str(task["api_secret"])
     token_cache_dir = str(task["token_cache_dir"])
+    quick_timeout_s = float(task["quick_timeout_s"])
+    heavy_timeout_s = float(task["heavy_timeout_s"])
     exiftool_path = str(task.get("exiftool_path") or "")
     db_metadata = task.get("db_metadata")
 
@@ -138,6 +138,7 @@ def run_upload_task(task: dict) -> dict:
             api_secret,
             token_cache_dir=token_cache_dir,
             response_format="parsed-json",
+            timeout_s=quick_timeout_s,
         )
 
         def _upload_call():
@@ -147,7 +148,7 @@ def run_upload_task(task: dict) -> dict:
                 tags=flickr_tags,
                 is_public=0,
                 format="etree",
-                timeout=UPLOAD_TIMEOUT_S,
+                timeout=heavy_timeout_s,
                 **{"async": 1},
             )
 
@@ -197,6 +198,8 @@ def _get_uploaded_photos_indirect(
     flickr,
     number: int,
     upload_ts: int,
+    *,
+    timeout_s: float,
     margin_s: int = 10,
 ) -> tuple[list[dict], bool]:
     date_s = upload_ts - int(margin_s)
@@ -210,6 +213,7 @@ def _get_uploaded_photos_indirect(
         sort="date-posted-desc",
         extras="date_taken,tags",
         min_upload_date=date_s,
+        timeout=timeout_s,
     )
     photos_uploaded = [photo for photo in photos_uploaded if isinstance(photo, dict)]
 
@@ -227,6 +231,8 @@ def _reupload_photos_without_tags(
     uploaded_photos: list[dict],
     *,
     exiftool_path: str,
+    quick_timeout_s: float,
+    heavy_timeout_s: float,
 ) -> list[dict]:
     """Re-upload photos whose tags are unexpectedly empty after async upload."""
     # TODO always reupload the incomplete images : known which index they are => file
@@ -277,14 +283,18 @@ def _reupload_photos_without_tags(
                     temp_path,
                     remote_photo_id,
                     format="rest",
-                    timeout=UPLOAD_TIMEOUT_S,
+                    timeout=heavy_timeout_s,
                 )
 
             def _add_tags_call(
                 remote_photo_id=remote_photo_id,
                 local_tags=local_tags,
             ):
-                return flickr.photos.addTags(photo_id=remote_photo_id, tags=local_tags)
+                return flickr.photos.addTags(
+                    photo_id=remote_photo_id,
+                    tags=local_tags,
+                    timeout=quick_timeout_s,
+                )
 
             retry(API_RETRIES, _replace_call)
             retry(API_RETRIES, _add_tags_call)
@@ -312,6 +322,8 @@ def run_resolve_tickets_task(
     api_key = str(task["api_key"])
     api_secret = str(task["api_secret"])
     token_cache_dir = str(task["token_cache_dir"])
+    quick_timeout_s = float(task["quick_timeout_s"])
+    heavy_timeout_s = float(task["heavy_timeout_s"])
     upload_ts = int(task["upload_ts"])
     upload_entries = list(task.get("upload_entries") or [])
     exiftool_path = str(task.get("exiftool_path") or "")
@@ -321,6 +333,7 @@ def run_resolve_tickets_task(
         api_secret,
         token_cache_dir=token_cache_dir,
         response_format="parsed-json",
+        timeout_s=quick_timeout_s,
     )
 
     ticket_status: dict[str, PhotoTicketStatus] = {}
@@ -358,7 +371,10 @@ def run_resolve_tickets_task(
 
         response = retry(
             API_RETRIES,
-            lambda: flickr.photos.upload.checkTickets(tickets=",".join(to_check)),  # noqa : B023
+            lambda to_check=to_check: flickr.photos.upload.checkTickets(
+                tickets=",".join(to_check),
+                timeout=quick_timeout_s,
+            ),
         )
         checks += 1
         if check_progress_callback is not None:
@@ -428,6 +444,7 @@ def run_resolve_tickets_task(
             flickr,
             len(upload_entries),
             upload_ts,
+            timeout_s=quick_timeout_s,
         )
         if not_found:
             return {
@@ -445,6 +462,8 @@ def run_resolve_tickets_task(
             upload_entries,
             uploaded,
             exiftool_path=exiftool_path,
+            quick_timeout_s=quick_timeout_s,
+            heavy_timeout_s=heavy_timeout_s,
         )
         return {
             "ok": True,
@@ -474,6 +493,7 @@ def run_set_date_task(task: dict) -> dict:
     api_key = str(task["api_key"])
     api_secret = str(task["api_secret"])
     token_cache_dir = str(task["token_cache_dir"])
+    quick_timeout_s = float(task["quick_timeout_s"])
     file_path = str(task.get("file_path") or "")
 
     try:
@@ -482,13 +502,14 @@ def run_set_date_task(task: dict) -> dict:
             api_secret,
             token_cache_dir=token_cache_dir,
             response_format="parsed-json",
+            timeout_s=quick_timeout_s,
         )
 
         def _set_dates_call():
             return flickr.photos.setDates(
                 photo_id=photo_id,
                 date_posted=timestamp,
-                timeout=QUICK_TIMEOUT_S,
+                timeout=quick_timeout_s,
             )
 
         retry(API_RETRIES, _set_dates_call)
@@ -515,6 +536,7 @@ def run_set_public_task(task: dict) -> dict:
     api_key = str(task["api_key"])
     api_secret = str(task["api_secret"])
     token_cache_dir = str(task["token_cache_dir"])
+    quick_timeout_s = float(task["quick_timeout_s"])
     file_path = str(task.get("file_path") or "")
 
     try:
@@ -523,6 +545,7 @@ def run_set_public_task(task: dict) -> dict:
             api_secret,
             token_cache_dir=token_cache_dir,
             response_format="parsed-json",
+            timeout_s=quick_timeout_s,
         )
 
         def _set_public_call():
@@ -531,7 +554,7 @@ def run_set_public_task(task: dict) -> dict:
                 is_public=1,
                 is_family=0,
                 is_friend=0,
-                timeout=QUICK_TIMEOUT_S,
+                timeout=quick_timeout_s,
             )
 
         retry(API_RETRIES, _set_public_call)
@@ -552,20 +575,37 @@ def run_set_public_task(task: dict) -> dict:
         }
 
 
-def _get_album_photos(flickr, album_id: str, **kwargs) -> list[dict]:
+def _get_album_photos(
+    flickr,
+    album_id: str,
+    *,
+    heavy_timeout_s: float,
+    **kwargs,
+) -> list[dict]:
     return _all_pages(
         "photoset",
         "photo",
         flickr.photosets.getPhotos,
         photoset_id=album_id,
         per_page=500,
-        timeout=UPLOAD_TIMEOUT_S,
+        timeout=heavy_timeout_s,
         **kwargs,
     )
 
 
-def _add_to_album(flickr, album_id: str, photo_ids: list[str]) -> None:
-    existing_photos = _get_album_photos(flickr, album_id)
+def _add_to_album(
+    flickr,
+    album_id: str,
+    photo_ids: list[str],
+    *,
+    heavy_timeout_s: float,
+    very_long_timeout_s: float,
+) -> None:
+    existing_photos = _get_album_photos(
+        flickr,
+        album_id,
+        heavy_timeout_s=heavy_timeout_s,
+    )
     if existing_photos is None:
         raise RuntimeError(f"Unable to list existing photos in album {album_id}.")
 
@@ -600,17 +640,33 @@ def _add_to_album(flickr, album_id: str, photo_ids: list[str]) -> None:
             photoset_id=album_id,
             primary_photo_id=primary_photo_id,
             photo_ids=",".join(all_photo_ids),
-            timeout=UPLOAD_TIMEOUT_S,
+            timeout=heavy_timeout_s,
         ),
     )
 
-    _reorder_album(flickr, album_id)
+    _reorder_album(
+        flickr,
+        album_id,
+        heavy_timeout_s=heavy_timeout_s,
+        very_long_timeout_s=very_long_timeout_s,
+    )
 
 
-def _reorder_album(flickr, album_id):
+def _reorder_album(
+    flickr,
+    album_id,
+    *,
+    heavy_timeout_s: float,
+    very_long_timeout_s: float,
+):
     # get everything in the album and reorder it: tried with only passing the new
     # uploads but weird result
-    album_photos = _get_album_photos(flickr, album_id, extras="date_taken")
+    album_photos = _get_album_photos(
+        flickr,
+        album_id,
+        heavy_timeout_s=heavy_timeout_s,
+        extras="date_taken",
+    )
     photos = sorted(album_photos, key=itemgetter("datetaken"))
     photo_ids = list(map(itemgetter("id"), photos))
 
@@ -618,7 +674,9 @@ def _reorder_album(flickr, album_id):
     retry(
         API_RETRIES,
         lambda: flickr.photosets.reorderPhotos(
-            photoset_id=album_id, photo_ids=q_photo_ids
+            photoset_id=album_id,
+            photo_ids=q_photo_ids,
+            timeout=very_long_timeout_s,
         ),
     )
 
@@ -649,6 +707,8 @@ def run_create_album_task(task: dict) -> dict:
     api_key = str(task["api_key"])
     api_secret = str(task["api_secret"])
     token_cache_dir = str(task["token_cache_dir"])
+    quick_timeout_s = float(task["quick_timeout_s"])
+    heavy_timeout_s = float(task["heavy_timeout_s"])
     album_title = str(task.get("album_title") or "").strip()
     primary_photo_id = str(task.get("primary_photo_id") or "").strip()
 
@@ -663,6 +723,7 @@ def run_create_album_task(task: dict) -> dict:
             api_secret,
             token_cache_dir=token_cache_dir,
             response_format="parsed-json",
+            timeout_s=quick_timeout_s,
         )
 
         response = retry(
@@ -670,7 +731,7 @@ def run_create_album_task(task: dict) -> dict:
             lambda: flickr.photosets.create(
                 title=album_title,
                 primary_photo_id=primary_photo_id,
-                timeout=UPLOAD_TIMEOUT_S,
+                timeout=heavy_timeout_s,
             ),
         )
         if not isinstance(response, dict):
@@ -717,6 +778,9 @@ def run_add_to_album_task(task: dict) -> dict:
     api_key = str(task["api_key"])
     api_secret = str(task["api_secret"])
     token_cache_dir = str(task["token_cache_dir"])
+    quick_timeout_s = float(task["quick_timeout_s"])
+    heavy_timeout_s = float(task["heavy_timeout_s"])
+    very_long_timeout_s = float(task["very_long_timeout_s"])
     album_id = str(task.get("album_id") or "").strip()
     photo_ids = [str(x or "").strip() for x in list(task.get("photo_ids") or [])]
     photo_ids = [x for x in photo_ids if x]
@@ -732,8 +796,15 @@ def run_add_to_album_task(task: dict) -> dict:
             api_secret,
             token_cache_dir=token_cache_dir,
             response_format="parsed-json",
+            timeout_s=quick_timeout_s,
         )
-        _add_to_album(flickr, album_id, photo_ids)
+        _add_to_album(
+            flickr,
+            album_id,
+            photo_ids,
+            heavy_timeout_s=heavy_timeout_s,
+            very_long_timeout_s=very_long_timeout_s,
+        )
         return {
             "ok": True,
             "stage": FlickrStage.STAGE_ADD_TO_ALBUM.label,
