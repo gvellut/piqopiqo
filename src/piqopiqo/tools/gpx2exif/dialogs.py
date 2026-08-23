@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from piqopiqo.tools.tool_flow import (
     ToolButton,
     ToolFlowDialog,
@@ -217,7 +218,7 @@ class ExtractGpsTimeShiftProgressDialog(ToolFlowDialog):
         self.reject()
 
 
-class ApplyGpxDialog(QDialog):
+class ApplyGpxDialog(UnsavedChangesDialog):
     """Input dialog for GPX application settings."""
 
     def __init__(
@@ -328,6 +329,16 @@ class ApplyGpxDialog(QDialog):
 
         self.gpx_path_edit.setText(str(initial_gpx_path).strip())
         self._update_ok_enabled()
+        self._set_unsaved_changes_state(
+            lambda: (
+                tuple(
+                    (folder, edit.text())
+                    for folder, edit in self._time_shift_edits.items()
+                ),
+                self.gpx_path_edit.text(),
+                self.mode_combo.currentIndex(),
+            )
+        )
 
     def showEvent(self, event) -> None:
         super().showEvent(event)

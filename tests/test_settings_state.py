@@ -22,6 +22,7 @@ from piqopiqo.model import (
 from piqopiqo.shortcuts import Shortcut
 import piqopiqo.ssf.settings_state as settings_state
 from piqopiqo.ssf.settings_state import (
+    DialogDiscardConfirmationMode,
     MandatorySettingInputKind,
     RuntimeSettingKey,
     SettingsPanelSaveMode,
@@ -74,6 +75,7 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_STATUS_BAR_SIDE_PADDING",
         "PIQO_STATUS_BAR_FOLDER_LABEL_MAX_WIDTH_RATIO",
         "PIQO_SETTINGS_PANEL_SAVE_MODE",
+        "PIQO_DIALOG_DISCARD_CONFIRMATION_MODE",
         "PIQO_SETTINGS_PANEL_ROW_SPACING",
         "PIQO_FONT_SIZE",
         "PIQO_GPX_IGNORE_OFFSET",
@@ -158,6 +160,24 @@ def test_flickr_reorder_state_and_runtime_defaults(isolated_settings):
 
     set_state_value(StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER, False)
     assert get_state_value(StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER) is False
+
+
+def test_dialog_discard_confirmation_runtime_mode(isolated_settings, monkeypatch):
+    assert (
+        get_runtime_setting(RuntimeSettingKey.DIALOG_DISCARD_CONFIRMATION_MODE)
+        == DialogDiscardConfirmationMode.ESC_ONLY
+    )
+
+    monkeypatch.setenv(
+        "PIQO_DIALOG_DISCARD_CONFIRMATION_MODE",
+        "EVERY_DISMISSAL",
+    )
+    init_qsettings_store(dyn=True)
+
+    assert (
+        get_runtime_setting(RuntimeSettingKey.DIALOG_DISCARD_CONFIRMATION_MODE)
+        == DialogDiscardConfirmationMode.EVERY_DISMISSAL
+    )
 
 
 def test_recent_folders_state_default_and_roundtrip(isolated_settings):

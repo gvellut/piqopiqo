@@ -4,7 +4,6 @@ import logging
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QDialog,
     QDialogButtonBox,
     QFileDialog,
     QHBoxLayout,
@@ -18,6 +17,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from piqopiqo.keyword_utils import parse_keywords
 from piqopiqo.model import ImageItem
 
@@ -32,7 +32,7 @@ ROLE_TYPE = Qt.ItemDataRole.UserRole
 ROLE_KEYWORD_PATH = Qt.ItemDataRole.UserRole + 1  # Full path in tree for finding node
 
 
-class KeywordTreeDialog(QDialog):
+class KeywordTreeDialog(UnsavedChangesDialog):
     """Dialog for hierarchical keyword selection with tri-state checkboxes."""
 
     keywords_changed = Signal(dict)  # {keyword: added/removed} for modified keywords
@@ -76,6 +76,7 @@ class KeywordTreeDialog(QDialog):
 
         # Restore expanded state from tree manager
         self._restore_expanded_state()
+        self._set_unsaved_changes_state(lambda: self._modifications.copy())
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)

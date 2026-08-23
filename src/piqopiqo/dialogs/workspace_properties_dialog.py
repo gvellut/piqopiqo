@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QDialog,
     QDialogButtonBox,
     QFormLayout,
     QGroupBox,
@@ -21,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from piqopiqo.external_apps import (
     get_reveal_in_file_manager_label_macos,
     reveal_path_in_file_manager_macos,
@@ -37,7 +37,7 @@ class WorkspaceFolderSummary:
     photo_count: int
 
 
-class WorkspacePropertiesDialog(QDialog):
+class WorkspacePropertiesDialog(UnsavedChangesDialog):
     """Workspace details and deferred cleanup actions."""
 
     def __init__(
@@ -175,6 +175,13 @@ class WorkspacePropertiesDialog(QDialog):
             self.folder_list_widget.setCurrentRow(0)
         else:
             self.reveal_selected_folder_button.setEnabled(False)
+
+        self._set_unsaved_changes_state(
+            lambda: (
+                self._pending_clear_thumb_cache,
+                self._pending_clear_metadata,
+            )
+        )
 
     @property
     def clear_thumb_cache_requested(self) -> bool:

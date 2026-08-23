@@ -103,7 +103,8 @@ src/piqopiqo/
 │   └── save_workers.py  # Background worker to save metadata
 ├── dialogs/         # Standalone dialogs not tied to a specific feature
 │   ├── error_list_dialog.py # Dialog showing loading errors (thumb/EXIF)
-│   └── storage_full_dialog.py # Shared cache-full Retry/Exit dialog
+│   ├── storage_full_dialog.py # Shared cache-full Retry/Exit dialog
+│   └── unsaved_changes_dialog.py # Shared dirty-input dismissal confirmation
 ├── components/      # Reusable UI components
 │   ├── ellided_label.py     # Truncated label with ellipsis
 │   ├── scrollable_strip.py  # Horizontal scrollable strip base class
@@ -161,6 +162,7 @@ src/piqopiqo/
     └── macos.py     # macOS utilities (resolution, move_to_trash)
 
 tests/
+├── test_unsaved_changes_dialog.py # Shared dirty-dialog dismissal behavior
 ├── test_edit_panel.py # Edit panel UI behavior (description field visibility + pending selection summary)
 ├── test_exif_panel.py # EXIF panel display formatting and pending selection summary
 ├── test_photo_grid_shortcuts.py # Grid view-scoped shortcut ownership + text-input guard behavior
@@ -225,6 +227,7 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - `UserSettingKey.MANUAL_LENSES` (default `[]`) stores lens presets used by `Tools > Set Lens Info ...`.
 - `StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER` (default `True`) remembers whether Flickr album reorder saves the current order first.
 - `RuntimeSettingKey.FLICKR_REORDER_BACKUP_LIMIT` (default `3`) controls how many timestamped album-order JSON backups are retained.
+- `RuntimeSettingKey.DIALOG_DISCARD_CONFIRMATION_MODE` (default `ESC_ONLY`) controls whether dirty input dialogs confirm only on Escape or on every dismissal (`EVERY_DISMISSAL`).
 
 Useful env vars for agent testing:
 
@@ -252,6 +255,7 @@ Useful env vars for agent testing:
 - `PIQO_GCP_SA_KEY_PATH` - Override service-account key path used by OCR time extraction
 - `PIQO_FLICKR_UPLOAD_MAX_WORKERS` - Flickr upload multiprocessing worker count (default: 2)
 - `PIQO_FLICKR_REORDER_BACKUP_LIMIT` - Number of Flickr album-order backups retained (default: 3)
+- `PIQO_DIALOG_DISCARD_CONFIRMATION_MODE` - Dirty-dialog confirmation mode (`ESC_ONLY` by default; `EVERY_DISMISSAL` also guards Cancel and window close)
 
 
 ## EXIF Panel Configuration
@@ -348,6 +352,7 @@ Selection behavior:
 
 
 ## Considerations
+- Editable dialogs use `UnsavedChangesDialog` and explicit opening-state snapshots. Track only dialog-local values that would be discarded; reset or scope the baseline when a workflow consumes its input or exposes a later editable result choice.
 - Copy-from-SD uses `UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER` as the destination base; ensure the target volume is mounted.
 - Output folders are created as `YYYYMMDD_<name>/<VOLUME_NAME>` using the SD card volume name directly.
 - Optional SD card name filtering is controlled by `RuntimeSettingKey.SDCARD_NAMES`.

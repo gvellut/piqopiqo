@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
+
 logger = logging.getLogger(__name__)
 _QWIDGETSIZE_MAX = 16777215
 _SIZE_CONSTRAINT_PROPERTY = "_tool_flow_size_constraints"
@@ -350,7 +352,7 @@ class ToolTaskHandle:
         return slot
 
 
-class ToolFlowDialog(QDialog):
+class ToolFlowDialog(UnsavedChangesDialog):
     """Modal dialog runtime for tool workflows."""
 
     def __init__(
@@ -369,6 +371,7 @@ class ToolFlowDialog(QDialog):
         self._content_widget: QWidget | None = None
         self._buttons: dict[str, QPushButton] = {}
         self._tasks: dict[str, ToolTaskHandle] = {}
+        self._unsaved_changes_screen_id: str | None = None
 
         self.setModal(True)
         self._setup_base_ui()
@@ -427,6 +430,15 @@ class ToolFlowDialog(QDialog):
 
     def emit_event(self, name: str, *args: Any, **payload: Any) -> None:
         self._dispatch_event(ToolEvent(name, tuple(args), dict(payload)))
+
+    def _set_unsaved_changes_state(self, getter: Callable[[], object]) -> None:
+        self._unsaved_changes_screen_id = self.current_screen_id
+        super()._set_unsaved_changes_state(getter)
+
+    def _has_unsaved_changes(self) -> bool:
+        if self.current_screen_id != self._unsaved_changes_screen_id:
+            return False
+        return super()._has_unsaved_changes()
 
     def start_task(self, name: str, task: ToolTaskHandle) -> None:
         self.stop_task(name, cancel=False)
@@ -503,6 +515,10 @@ class ToolFlowDialog(QDialog):
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
         self.sync_size_to_content()
+
+    def _escape_would_close(self) -> bool:
+        screen = self._current_screen
+        return screen is None or screen.close_policy != "ignore"
 
     def reject(self) -> None:
         screen = self._current_screen

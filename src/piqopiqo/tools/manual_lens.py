@@ -92,6 +92,7 @@ class LensSelectionDialog(ToolFlowDialog):
             },
         )
         super().__init__(workflow, parent=parent)
+        self._set_unsaved_changes_state(lambda: self.combo.currentIndex())
 
     @property
     def selected_preset(self) -> ManualLensPreset | None:

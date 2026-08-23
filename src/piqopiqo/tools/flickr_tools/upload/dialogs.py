@@ -26,6 +26,7 @@ from piqopiqo.cache_paths import get_flickr_cache_dir, get_flickr_token_file_pat
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
+from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from piqopiqo.label_transitions import (
     LabelTransitionPlan,
     filter_valid_label_transition_rules,
@@ -83,7 +84,7 @@ def _normalize_missing_paths(missing_paths_obj: object) -> list[str]:
     ]
 
 
-class FlickrPreflightDialog(QDialog):
+class FlickrPreflightDialog(UnsavedChangesDialog):
     """Preflight dialog showing upload scope and album state."""
 
     def __init__(
@@ -263,6 +264,12 @@ class FlickrPreflightDialog(QDialog):
         self._refresh_scope_state()
         self._start_metadata_validation_if_needed()
         self._sync_height_to_content()
+        self._set_unsaved_changes_state(
+            lambda: (
+                self._get_selected_use_label_scope(),
+                self.album_input.text() if self.album_input is not None else None,
+            )
+        )
 
     def selected_upload_scope_items(self) -> list[dict]:
         if self.selected_use_label_scope:
@@ -1147,6 +1154,13 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
             self.details.show()
 
         self._configure_transition_checkbox(result)
+        if (
+            not self.apply_transitions_checkbox.isHidden()
+            and self.apply_transitions_checkbox.isEnabled()
+        ):
+            self._set_unsaved_changes_state(
+                lambda: self.apply_transitions_checkbox.isChecked()
+            )
         self.ok_btn.setEnabled(True)
         self.ok_btn.setVisible(True)
         self.ok_btn.setDefault(True)

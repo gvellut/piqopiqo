@@ -44,6 +44,11 @@ class SettingsPanelSaveMode(Enum):
     SAVE_CANCEL = auto()
 
 
+class DialogDiscardConfirmationMode(Enum):
+    ESC_ONLY = auto()
+    EVERY_DISMISSAL = auto()
+
+
 class StateGroup(StrEnum):
     APP_STATE = "AppState"
     QT = "AppState/Qt"
@@ -112,6 +117,7 @@ class UserSettingKey(StrEnum):
 
 
 class RuntimeSettingKey(StrEnum):
+    DIALOG_DISCARD_CONFIRMATION_MODE = "dialogDiscardConfirmationMode"
     DETACHED_KEYWORD_TREE = "detachedKeywordTree"
     INITIAL_RESOLUTION = "initialResolution"
     RECENT_FOLDERS_MENU_LIMIT = "recentFoldersMenuLimit"
@@ -799,6 +805,15 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
 # read_type is to deserialize from an env var
 # TODO restrict the env vars to some of the keys ?
 _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
+    RuntimeSettingKey.DIALOG_DISCARD_CONFIRMATION_MODE: SettingDef(
+        default=DialogDiscardConfirmationMode.ESC_ONLY,
+        read_type=str,
+        env_parser=lambda raw: _parse_enum(
+            raw,
+            DialogDiscardConfirmationMode,
+            DialogDiscardConfirmationMode.ESC_ONLY,
+        ),
+    ),
     RuntimeSettingKey.DETACHED_KEYWORD_TREE: SettingDef(default=False, read_type=bool),
     RuntimeSettingKey.INITIAL_RESOLUTION: SettingDef(
         default=None,

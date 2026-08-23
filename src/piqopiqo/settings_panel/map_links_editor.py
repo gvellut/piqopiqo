@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from piqopiqo.model import MapLinkOption
 
 _INVALID_STYLE = "QLineEdit { border: 2px solid red; }"
@@ -114,7 +115,7 @@ def is_valid_map_link_template(value: str) -> bool:
     return fields_found == _ALLOWED_MAP_LINK_FIELDS
 
 
-class _MapLinkOptionDialog(QDialog):
+class _MapLinkOptionDialog(UnsavedChangesDialog):
     def __init__(
         self,
         *,
@@ -199,6 +200,9 @@ class _MapLinkOptionDialog(QDialog):
             self.url_edit.setText(initial.url_template)
 
         self._update_validity()
+        self._set_unsaved_changes_state(
+            lambda: (self.name_edit.text(), self.url_edit.text())
+        )
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -246,7 +250,7 @@ class _MapLinkOptionDialog(QDialog):
         )
 
 
-class _MapLinksDialog(QDialog):
+class _MapLinksDialog(UnsavedChangesDialog):
     def __init__(self, options: list[MapLinkOption] | None = None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Map Links")
@@ -323,6 +327,7 @@ class _MapLinksDialog(QDialog):
         layout.addLayout(button_row)
 
         self.set_value(options or [])
+        self._set_unsaved_changes_state(lambda: tuple(self._options))
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)

@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QDialog,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
@@ -19,6 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from piqopiqo.ssf.settings_state import (
     MandatorySettingInputKind,
     PendingMandatorySetting,
@@ -28,7 +28,7 @@ from piqopiqo.ssf.settings_state import (
 MANDATORY_SETTINGS_DIALOG_WIDTH = 640
 
 
-class MandatorySettingsDialog(QDialog):
+class MandatorySettingsDialog(UnsavedChangesDialog):
     def __init__(
         self,
         pending_settings: list[PendingMandatorySetting],
@@ -45,6 +45,11 @@ class MandatorySettingsDialog(QDialog):
 
         self._build_ui(error_message=error_message)
         self._resize_to_content()
+        self._set_unsaved_changes_state(
+            lambda: tuple(
+                (key, line_edit.text()) for key, line_edit in self._line_edits.items()
+            )
+        )
 
     def values(self) -> dict[UserSettingKey, str]:
         return {

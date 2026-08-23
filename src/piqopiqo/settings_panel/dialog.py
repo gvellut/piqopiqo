@@ -9,7 +9,6 @@ from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPalette, QPixmap
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
-    QDialog,
     QDialogButtonBox,
     QFrame,
     QGridLayout,
@@ -23,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from piqopiqo.model import TimeShiftOcrProvider
 from piqopiqo.ssf.settings_state import (
     MandatorySettingInputKind,
@@ -248,7 +248,7 @@ def _settings_label_vertical_alignment(field: FieldSpec) -> Qt.AlignmentFlag:
     return Qt.AlignmentFlag.AlignVCenter
 
 
-class SettingsDialog(QDialog):
+class SettingsDialog(UnsavedChangesDialog):
     setting_saved = Signal(object)
 
     def __init__(self, parent=None, initial_tab_title: str | None = None):
@@ -689,15 +689,9 @@ class SettingsDialog(QDialog):
         self._editors[key].show_error_hint(message, auto_value=auto_value)
 
     def _on_cancel(self):
-        if self._dirty:
-            answer = QMessageBox.question(
-                self,
-                "Discard changes",
-                "Some settings have changed. Discard them?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if answer != QMessageBox.StandardButton.Yes:
-                return
+        if not self._confirm_discard_changes_if_required(force=True):
+            return
+        self._reject_without_discard_confirmation()
 
-        self.reject()
+    def _has_unsaved_changes(self) -> bool:
+        return self._dirty

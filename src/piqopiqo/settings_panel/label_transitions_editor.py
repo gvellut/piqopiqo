@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.components.ellided_label import EllidedLabel
+from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from piqopiqo.label_transitions import is_valid_label_transition_rules
 from piqopiqo.model import LabelTransitionRule, StatusLabel
 from piqopiqo.ssf.settings_state import UserSettingKey, get_user_setting
@@ -273,7 +274,7 @@ def _configure_action_button(
     button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
 
-class _LabelTransitionRuleDialog(QDialog):
+class _LabelTransitionRuleDialog(UnsavedChangesDialog):
     def __init__(
         self,
         *,
@@ -360,6 +361,9 @@ class _LabelTransitionRuleDialog(QDialog):
             self._select_value(self.to_combo, rule.to_label)
 
         self._update_validity()
+        self._set_unsaved_changes_state(
+            lambda: (self.from_combo.currentIndex(), self.to_combo.currentIndex())
+        )
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -423,7 +427,7 @@ class _LabelTransitionRuleDialog(QDialog):
         )
 
 
-class _LabelTransitionsDialog(QDialog):
+class _LabelTransitionsDialog(UnsavedChangesDialog):
     def __init__(
         self,
         rules: list[LabelTransitionRule] | None = None,
@@ -506,6 +510,7 @@ class _LabelTransitionsDialog(QDialog):
         layout.addLayout(button_row)
 
         self.set_value(rules or [])
+        self._set_unsaved_changes_state(lambda: tuple(self._rules))
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)

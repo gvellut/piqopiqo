@@ -5,7 +5,8 @@ from __future__ import annotations
 from copy import replace
 import uuid
 
-from PySide6.QtCore import QCoreApplication, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, Qt
+from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QLabel,
     QListWidget,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QWidget,
@@ -64,6 +66,42 @@ def test_save_cancel_mode_tracks_dirty_state(qapp, monkeypatch):
     dialog._on_field_changed(UserSettingKey.EXTERNAL_EDITOR)
 
     assert dialog._dirty is True
+
+
+def test_dirty_settings_preserves_cancel_confirmation_and_guards_escape(
+    qapp,
+    monkeypatch,
+):
+    monkeypatch.delenv("PIQO_SETTINGS_PANEL_SAVE_MODE", raising=False)
+    monkeypatch.delenv("PIQO_DIALOG_DISCARD_CONFIRMATION_MODE", raising=False)
+    init_qsettings_store(dyn=True)
+    calls: list[str] = []
+
+    def decline(*_args, **_kwargs):
+        calls.append("question")
+        return QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(QMessageBox, "question", decline)
+    dialog = SettingsDialog()
+    editor = dialog._editors[UserSettingKey.EXTERNAL_EDITOR]
+    editor.set_value("EditorX")
+    dialog._on_field_changed(UserSettingKey.EXTERNAL_EDITOR)
+    dialog.show()
+    qapp.processEvents()
+
+    dialog._on_cancel()
+    assert dialog.isVisible() is True
+
+    dialog.keyPressEvent(
+        QKeyEvent(
+            QEvent.Type.KeyPress,
+            Qt.Key.Key_Escape,
+            Qt.KeyboardModifier.NoModifier,
+        )
+    )
+
+    assert calls == ["question", "question"]
+    assert dialog.isVisible() is True
 
 
 def test_autosave_mode_commits_on_field_update(qapp, monkeypatch, tmp_path):

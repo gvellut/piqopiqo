@@ -407,6 +407,12 @@ class FlickrReorderDialog(ToolFlowDialog):
             },
         )
         super().__init__(workflow, parent=parent or window)
+        self._set_unsaved_changes_state(
+            lambda: (
+                self.through_album_edit.text(),
+                self.save_order_check.isChecked(),
+            )
+        )
 
     def _build_input(self) -> QWidget:
         widget = QWidget(self)

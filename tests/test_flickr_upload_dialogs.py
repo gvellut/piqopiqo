@@ -542,6 +542,13 @@ def test_upload_progress_transition_checkbox_uses_state_on_clean_success(
     assert dialog.apply_transitions_checkbox.isHidden() is False
     assert dialog.apply_transitions_checkbox.isEnabled() is True
     assert dialog.apply_transitions_checkbox.isChecked() is True
+    assert dialog._has_unsaved_changes() is False
+
+    dialog.apply_transitions_checkbox.setChecked(False)
+    assert dialog._has_unsaved_changes() is True
+
+    dialog.apply_transitions_checkbox.setChecked(True)
+    assert dialog._has_unsaved_changes() is False
 
 
 def test_upload_progress_transition_checkbox_disabled_after_non_clean_result(

@@ -369,7 +369,9 @@ def test_copy_result_ok_without_eject_accepts(qapp):  # noqa: ARG001
     )
     dialog._on_finished(1, 1, False, 0)
     assert dialog.eject_checkbox is not None
+    assert dialog._has_unsaved_changes() is False
     dialog.eject_checkbox.setChecked(False)
+    assert dialog._has_unsaved_changes() is True
 
     dialog._on_ok()
 

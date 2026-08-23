@@ -40,6 +40,7 @@ from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
 from piqopiqo.dialogs.storage_full_dialog import wait_for_storage_retry
+from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from piqopiqo.folder_watcher import WorkspaceWatcherController
 from piqopiqo.qt_workers import PythonOwnedRunnable
 from piqopiqo.ssf.settings_state import (
@@ -674,7 +675,7 @@ class CopySdWorker(PythonOwnedRunnable):
             self.signals.finished.emit(copied, total, True, error_count)
 
 
-class CopySdInputDialog(QDialog):
+class CopySdInputDialog(UnsavedChangesDialog):
     def __init__(
         self,
         volume: PhotoVolume,
@@ -724,6 +725,9 @@ class CopySdInputDialog(QDialog):
         self.button_box.accepted.connect(self._on_accept)
         self.button_box.rejected.connect(self.reject)
         layout.addWidget(self.button_box)
+        self._set_unsaved_changes_state(
+            lambda: (self.name_edit.text(), self.date_edit.text())
+        )
 
     def _on_accept(self):
         name = self.name_edit.text().strip()
@@ -1100,6 +1104,7 @@ class CopySdProgressDialog(ToolFlowDialog):
         self.ok_btn.setFocus()
         if not cancelled and self.eject_checkbox is not None:
             self.eject_checkbox.show()
+            self._set_unsaved_changes_state(lambda: self.eject_checkbox.isChecked())
             self.sync_size_to_content()
 
     @staticmethod

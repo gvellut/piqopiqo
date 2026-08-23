@@ -226,6 +226,23 @@ class LocalFindReplaceDialog(ToolFlowDialog):
             },
         )
         super().__init__(workflow, parent=parent or window)
+        self._set_unsaved_changes_state(self._input_state)
+
+    def _input_state(self) -> tuple[object, ...]:
+        assert self.title_pattern_edit is not None
+        assert self.replace_title_check is not None
+        assert self.title_replacement_edit is not None
+        assert self.remove_tags_edit is not None
+        assert self.add_tags_edit is not None
+        assert self.add_only_if_removed_check is not None
+        return (
+            self.title_pattern_edit.text(),
+            self.replace_title_check.isChecked(),
+            self.title_replacement_edit.text(),
+            self.remove_tags_edit.text(),
+            self.add_tags_edit.text(),
+            self.add_only_if_removed_check.isChecked(),
+        )
 
     def _build_input(self) -> QWidget:
         widget = QWidget(self)

@@ -328,6 +328,13 @@ class ArchiveDialog(ToolFlowDialog):
         super().__init__(workflow, parent=parent)
         self._update_confirmation_text()
         self.sync_size_to_content()
+        self._set_unsaved_changes_state(
+            lambda: (
+                self.save_exif_checkbox.isChecked()
+                if self.current_screen_id == "confirm"
+                else None
+            )
+        )
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)

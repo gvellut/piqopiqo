@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from piqopiqo.model import ManualLensPreset
 
 _INVALID_STYLE = "QLineEdit { border: 2px solid red; }"
@@ -32,7 +33,7 @@ def _is_decimal_text(value: str) -> bool:
     return True
 
 
-class _ManualLensPresetDialog(QDialog):
+class _ManualLensPresetDialog(UnsavedChangesDialog):
     def __init__(
         self,
         *,
@@ -101,6 +102,14 @@ class _ManualLensPresetDialog(QDialog):
             self.focal_length_35mm_edit.setText(initial.focal_length_35mm)
 
         self._update_validity()
+        self._set_unsaved_changes_state(
+            lambda: (
+                self.lens_make_edit.text(),
+                self.lens_model_edit.text(),
+                self.focal_length_edit.text(),
+                self.focal_length_35mm_edit.text(),
+            )
+        )
 
     def _set_line_validity(self, line_edit: QLineEdit, *, valid: bool) -> None:
         line_edit.setStyleSheet("" if valid else _INVALID_STYLE)
