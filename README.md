@@ -16,7 +16,7 @@ Beyond JEPG triaging and metadata editing, it also allows:
 
 ## Limitations
 
-- It only works on macOS (only tested there + some non-abastracted dependencies like `pyobjc`).
+- It only works on macOS (only tested there + some non-abstracted dependencies like `pyobjc`).
 - It is limited to JPEG (no support for RAW).
 - The EXIF is extracted to an external SQLite DB for edition. It is not possible to directly edit the EXIF but there is a command to save the SQLite data back to EXIF explicitly.
 - `exiftool` needs to be installed (used for all EXIF reading and writing + small thumbnail extraction). Homebrew can be used to install it: `brew install exiftool`.
