@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 import json
 
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QTextEdit, QWidget
 import pytest
 
 from piqopiqo.ssf.settings_state import init_qsettings_store
@@ -14,6 +15,7 @@ from piqopiqo.tools.flickr_tools.reorder import (
     BACKUP_FOLDER_NAME,
     FlickrAlbumOrderEntry,
     FlickrReorderDialog,
+    FlickrReorderResult,
     FlickrReorderWorker,
     build_reordered_album_ids,
     save_album_order_backup,
@@ -381,3 +383,37 @@ def test_dialog_checkbox_has_bottom_padding_and_applying_progress_is_busy(
     assert dialog.progress_bar.minimum() == 0
     assert dialog.progress_bar.maximum() == 0
     assert dialog.progress_count_label.isHidden() is True
+
+
+def test_result_summary_is_read_only_selectable_multiline_text(qapp) -> None:
+    parent = QWidget()
+    dialog = FlickrReorderDialog(
+        window=parent,
+        api_key="k",
+        api_secret="s",
+        parent=parent,
+    )
+    dialog._result = FlickrReorderResult(
+        album_count=12,
+        albums_examined=10,
+        invalid_photo_dates=3,
+        reordered=True,
+        backup_path="/tmp/flickr-order.json",
+        error_message="Follow-up warning",
+    )
+
+    dialog.transition_to("result")
+    summary = dialog.findChild(QTextEdit, "flickrReorderSummaryText")
+
+    assert summary is not None
+    assert summary.isReadOnly() is True
+    assert summary.lineWrapMode() == QTextEdit.LineWrapMode.NoWrap
+    assert summary.textInteractionFlags() & Qt.TextInteractionFlag.TextSelectableByMouse
+    assert summary.toPlainText().splitlines() == [
+        "Flickr albums were reordered successfully.",
+        "Albums returned: 12",
+        "Albums examined: 10",
+        "Photo dates ignored as invalid: 3",
+        "Existing order saved to: /tmp/flickr-order.json",
+        "Error: Follow-up warning",
+    ]

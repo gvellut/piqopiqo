@@ -37,7 +37,7 @@ def test_edit_and_flickr_tool_menu_order(qapp) -> None:  # noqa: ARG001
     edit_labels = [
         action.text() for action in edit_menu.actions() if not action.isSeparator()
     ]
-    assert edit_labels[-2:] == ["Reload EXIF", "Find & Replace..."]
+    assert edit_labels[-2:] == ["Reload EXIF", "Find && Replace..."]
 
     flickr_menu = menu_actions[5].menu()
     assert flickr_menu is not None
@@ -46,5 +46,5 @@ def test_edit_and_flickr_tool_menu_order(qapp) -> None:  # noqa: ARG001
     assert flickr_actions[1].isSeparator()
     assert [action.text() for action in flickr_actions[2:]] == [
         "Reorder Albums...",
-        "Find & Replace...",
+        "Find && Replace...",
     ]

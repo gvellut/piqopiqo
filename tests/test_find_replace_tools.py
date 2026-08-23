@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QApplication, QLabel, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QLabel, QTextEdit, QWidget
 import pytest
 
 from piqopiqo.metadata.db_fields import DBFields
@@ -10,6 +11,7 @@ from piqopiqo.metadata.metadata_db import MetadataDB
 from piqopiqo.model import ImageItem
 from piqopiqo.tools.edit_tools.find_replace import (
     LocalFindReplaceDialog,
+    LocalFindReplaceResult,
     LocalFindReplaceWorker,
     launch_local_find_replace,
 )
@@ -301,3 +303,48 @@ def test_local_dialog_warns_for_visible_fallback_and_orders_buttons(qapp) -> Non
     assert any("No photos are selected" in text for text in texts)
     assert any("Will process: 1" in text for text in texts)
     assert dialog.button("cancel").x() < dialog.button("apply").x()
+
+
+def test_local_result_summary_is_read_only_selectable_multiline_text(qapp) -> None:
+    class _Window(QWidget):
+        db_manager = object()
+
+        def sync_model_after_metadata_update(self, *_args, **_kwargs) -> None:
+            return None
+
+    window = _Window()
+    dialog = LocalFindReplaceDialog(
+        window=window,
+        target_items=[_item("/photos/a.jpg")],
+        selected_count=1,
+        visible_count=1,
+        loaded_count=1,
+        used_visible_fallback=False,
+        parent=window,
+    )
+    dialog._result = LocalFindReplaceResult(
+        total=10,
+        processed=8,
+        eligible=7,
+        title_changed=5,
+        tags_removed=4,
+        tags_added=3,
+        photos_changed=6,
+        unchanged=2,
+        cancelled=True,
+    )
+
+    dialog.transition_to("result")
+    summary = dialog.findChild(QTextEdit, "localFindReplaceSummaryText")
+
+    assert summary is not None
+    assert summary.isReadOnly() is True
+    assert summary.lineWrapMode() == QTextEdit.LineWrapMode.NoWrap
+    assert summary.textInteractionFlags() & Qt.TextInteractionFlag.TextSelectableByMouse
+    assert summary.toPlainText() == (
+        "Canceled. Processed 8 of 10 photos.\n"
+        "Eligible: 7    Changed photos: 6    Unchanged: 2\n"
+        "Titles changed: 5    Tags removed: 4    Tags added: 3\n\n"
+        "Only the PiqoPiqo SQLite metadata database was changed. Image "
+        "files and EXIF metadata were untouched."
+    )

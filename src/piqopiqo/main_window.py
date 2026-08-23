@@ -2229,7 +2229,7 @@ class MainWindow(QMainWindow):
 
         edit_menu.addSeparator()
 
-        find_replace_action = QAction("Find & Replace...", self)
+        find_replace_action = QAction("Find && Replace...", self)
         find_replace_action.triggered.connect(self._on_local_find_replace)
         edit_menu.addAction(find_replace_action)
 
@@ -2322,7 +2322,7 @@ class MainWindow(QMainWindow):
         reorder_flickr_action.triggered.connect(self._on_reorder_flickr_albums)
         flickr_menu.addAction(reorder_flickr_action)
 
-        flickr_find_replace_action = QAction("Find & Replace...", self)
+        flickr_find_replace_action = QAction("Find && Replace...", self)
         flickr_find_replace_action.triggered.connect(self._on_flickr_find_replace)
         flickr_menu.addAction(flickr_find_replace_action)
 

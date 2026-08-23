@@ -13,10 +13,10 @@ from typing import TYPE_CHECKING
 
 from attrs import define, field
 from PySide6.QtCore import QObject, QThreadPool, Signal
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
-    QLabel,
     QLineEdit,
     QMessageBox,
     QTextEdit,
@@ -544,8 +544,21 @@ class FlickrReorderDialog(ToolFlowDialog):
             lines.append(f"Existing order saved to: {result.backup_path}")
         if result.error_message:
             lines.append(f"Error: {result.error_message}")
-        summary = QLabel("\n".join(lines), widget)
-        summary.setWordWrap(True)
+        summary = QTextEdit(widget)
+        summary.setObjectName("flickrReorderSummaryText")
+        summary.setReadOnly(True)
+        summary.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        summary.setPlainText("\n".join(lines))
+        palette = summary.palette()
+        palette.setColor(
+            QPalette.ColorRole.Base,
+            palette.color(QPalette.ColorRole.AlternateBase),
+        )
+        summary.setPalette(palette)
+        visible_lines = min(max(len(lines), 2), 8)
+        text_height = summary.fontMetrics().lineSpacing() * visible_lines
+        frame_height = summary.frameWidth() * 2
+        summary.setFixedHeight(text_height + frame_height + 16)
         layout.addWidget(summary)
         details_lines = [*result.warnings]
         if result.undated_albums:

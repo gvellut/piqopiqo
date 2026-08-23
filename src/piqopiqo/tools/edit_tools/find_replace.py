@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from attrs import define, field
 from PySide6.QtCore import QObject, QThreadPool, Signal
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
@@ -426,17 +427,30 @@ class LocalFindReplaceDialog(ToolFlowDialog):
         widget = QWidget(self)
         layout = QVBoxLayout(widget)
         status = "Canceled" if result.cancelled else "Finished"
-        summary = QLabel(
+        summary_text = (
             f"{status}. Processed {result.processed} of {result.total} photos.\n"
             f"Eligible: {result.eligible}    Changed photos: "
             f"{result.photos_changed}    Unchanged: {result.unchanged}\n"
             f"Titles changed: {result.title_changed}    Tags removed: "
             f"{result.tags_removed}    Tags added: {result.tags_added}\n\n"
             "Only the PiqoPiqo SQLite metadata database was changed. Image "
-            "files and EXIF metadata were untouched.",
-            widget,
+            "files and EXIF metadata were untouched."
         )
-        summary.setWordWrap(True)
+        summary = QTextEdit(widget)
+        summary.setObjectName("localFindReplaceSummaryText")
+        summary.setReadOnly(True)
+        summary.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        summary.setPlainText(summary_text)
+        palette = summary.palette()
+        palette.setColor(
+            QPalette.ColorRole.Base,
+            palette.color(QPalette.ColorRole.AlternateBase),
+        )
+        summary.setPalette(palette)
+        visible_lines = min(max(len(summary_text.splitlines()), 2), 8)
+        text_height = summary.fontMetrics().lineSpacing() * visible_lines
+        frame_height = summary.frameWidth() * 2
+        summary.setFixedHeight(text_height + frame_height + 16)
         layout.addWidget(summary)
         if result.errors:
             details = QTextEdit(widget)

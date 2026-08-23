@@ -422,6 +422,7 @@ Selection behavior:
 - Flickr Find & Replace supports album order or an exact inclusive photostream range. A title regex, when present, gates both title and tag changes; per-photo failures are reported while remaining photos continue.
 - Flickr Find & Replace progress shows the photo ID above a single-line elided title (`<No title>` when empty); result totals are shown one per line in a read-only summary field.
 - Edit > Find & Replace targets selected grid photos, or captures all currently visible photos when selection is empty and shows a warning. It updates only SQLite `title`/`keywords`, never reads/writes EXIF, and synchronizes the model after completed or canceled partial changes.
+- Multiline tool result summaries that users may need to copy use selectable, read-only `QTextEdit` fields with plain text and no wrapping. Escape literal ampersands in Qt menu action labels as `&&` so they render as `&`.
 - If Flickr API credentials are missing when launching upload, the warning dialog offers `Go to settings` and opens Settings on the `External/Workflow` tab.
 - Flickr OAuth token cache is stored in `<cache_base>/flickr/oauth-tokens.sqlite`.
 - Flickr preflight token state is based on physical existence of `oauth-tokens.sqlite`.
