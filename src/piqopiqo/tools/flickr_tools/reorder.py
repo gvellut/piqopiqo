@@ -48,7 +48,6 @@ from piqopiqo.tools.flickr_utils import (
     all_pages,
     create_flickr_client,
     extract_album_id,
-    retry,
 )
 from piqopiqo.tools.tool_flow import (
     ToolButton,
@@ -106,19 +105,19 @@ def build_reordered_album_ids(
     albums: list[FlickrAlbumOrderEntry],
     modal_dates: dict[str, object],
     *,
-    through_album_id: str = "",
+    from_album_id: str = "",
 ) -> list[str]:
     """Build the complete album order, sorting only the requested prefix."""
     if not albums:
         return []
     selected_count = len(albums)
-    if through_album_id:
+    if from_album_id:
         for index, album in enumerate(albums):
-            if album.album_id == through_album_id:
+            if album.album_id == from_album_id:
                 selected_count = index + 1
                 break
         else:
-            raise ValueError(f"Album {through_album_id} is not in your album list.")
+            raise ValueError(f"Album {from_album_id} is not in your album list.")
 
     selected = albums[:selected_count]
     tail = albums[selected_count:]
@@ -198,18 +197,20 @@ class FlickrReorderWorker(PythonOwnedRunnable):
         *,
         api_key: str,
         api_secret: str,
-        through_album_id: str,
+        from_album_id: str,
         save_existing_order: bool,
         support_dir: str | Path,
         backup_limit: int,
+        apply_timeout_s: float,
     ) -> None:
         super().__init__()
         self._api_key = api_key
         self._api_secret = api_secret
-        self._through_album_id = through_album_id
+        self._from_album_id = from_album_id
         self._save_existing_order = bool(save_existing_order)
         self._support_dir = Path(support_dir)
         self._backup_limit = max(1, int(backup_limit))
+        self._apply_timeout_s = max(1.0, float(apply_timeout_s))
         self._cancel_requested = threading.Event()
         self.signals = _FlickrReorderSignals()
 
@@ -242,13 +243,13 @@ class FlickrReorderWorker(PythonOwnedRunnable):
                 raise RuntimeError("No Flickr albums were returned.")
 
             selected_count = len(albums)
-            if self._through_album_id:
+            if self._from_album_id:
                 ids = [album.album_id for album in albums]
-                if self._through_album_id not in ids:
+                if self._from_album_id not in ids:
                     raise ValueError(
-                        f"Album {self._through_album_id} is not in your album list."
+                        f"Album {self._from_album_id} is not in your album list."
                     )
-                selected_count = ids.index(self._through_album_id) + 1
+                selected_count = ids.index(self._from_album_id) + 1
 
             modal_dates: dict[str, object] = {}
             for index, album in enumerate(albums[:selected_count], start=1):
@@ -304,7 +305,7 @@ class FlickrReorderWorker(PythonOwnedRunnable):
             new_order = build_reordered_album_ids(
                 albums,
                 modal_dates,
-                through_album_id=self._through_album_id,
+                from_album_id=self._from_album_id,
             )
             if new_order == current_order:
                 result.already_ordered = True
@@ -325,16 +326,13 @@ class FlickrReorderWorker(PythonOwnedRunnable):
                 raise FlickrOperationCancelled()
 
             self.signals.progress.emit(
-                selected_count,
-                selected_count,
+                0,
+                0,
                 "Applying the new album order...",
             )
-            retry(
-                API_RETRIES,
-                lambda: flickr.photosets.orderSets(
-                    photoset_ids=",".join(new_order),
-                    timeout=QUICK_TIMEOUT_S,
-                ),
+            flickr.photosets.orderSets(
+                photoset_ids=",".join(new_order),
+                timeout=self._apply_timeout_s,
             )
             result.reordered = True
         except FlickrOperationCancelled:
@@ -358,7 +356,7 @@ class FlickrReorderDialog(ToolFlowDialog):
         self._api_secret = api_secret
         self._worker: FlickrReorderWorker | None = None
         self._result: FlickrReorderResult | None = None
-        self.through_album_edit: QLineEdit | None = None
+        self.from_album_edit: QLineEdit | None = None
         self.save_order_check: QCheckBox | None = None
 
         workflow = ToolWorkflow(
@@ -409,7 +407,7 @@ class FlickrReorderDialog(ToolFlowDialog):
         super().__init__(workflow, parent=parent or window)
         self._set_unsaved_changes_state(
             lambda: (
-                self.through_album_edit.text(),
+                self.from_album_edit.text(),
                 self.save_order_check.isChecked(),
             )
         )
@@ -417,36 +415,47 @@ class FlickrReorderDialog(ToolFlowDialog):
     def _build_input(self) -> QWidget:
         widget = QWidget(self)
         layout = QVBoxLayout(widget)
-        explanation = QLabel(
-            "Albums are ordered newest-first using the most common photo taken "
-            "date in each album. If an album is supplied below, only the current "
-            "top-to-that-album prefix is reordered; albums below it stay in place.",
-            widget,
-        )
-        explanation.setWordWrap(True)
-        layout.addWidget(explanation)
-
         form = QFormLayout()
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        self.through_album_edit = QLineEdit(widget)
-        self.through_album_edit.setPlaceholderText("Optional Flickr album ID or URL")
-        form.addRow("Reorder through album", self.through_album_edit)
+        from_album_required = bool(
+            get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_FROM_ALBUM_REQUIRED)
+        )
+        self.from_album_edit = QLineEdit(widget)
+        placeholder = (
+            "Flickr album ID or URL"
+            if from_album_required
+            else "Optional Flickr album ID or URL"
+        )
+        self.from_album_edit.setPlaceholderText(placeholder)
+        form.addRow("Reorder from album", self.from_album_edit)
         self.save_order_check = QCheckBox("Save the existing order before changes")
         self.save_order_check.setChecked(
             bool(get_state_value(StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER))
         )
         form.addRow("", self.save_order_check)
         layout.addLayout(form)
+        layout.addSpacing(int(get_runtime_setting(RuntimeSettingKey.PADDING)))
         return widget
 
     def _start(self) -> None:
-        assert self.through_album_edit is not None
+        assert self.from_album_edit is not None
         assert self.save_order_check is not None
-        through_text = self.through_album_edit.text().strip()
-        through_album_id = ""
-        if through_text:
+        from_text = self.from_album_edit.text().strip()
+        from_album_required = bool(
+            get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_FROM_ALBUM_REQUIRED)
+        )
+        if from_album_required and not from_text:
+            QMessageBox.warning(
+                self,
+                "Reorder Flickr Albums",
+                "Enter a Flickr album ID or URL.",
+            )
+            return
+
+        from_album_id = ""
+        if from_text:
             try:
-                through_album_id = extract_album_id(through_text)
+                from_album_id = extract_album_id(from_text)
             except ValueError as ex:
                 QMessageBox.warning(self, "Reorder Flickr Albums", str(ex))
                 return
@@ -464,11 +473,14 @@ class FlickrReorderDialog(ToolFlowDialog):
         self._worker = FlickrReorderWorker(
             api_key=self._api_key,
             api_secret=self._api_secret,
-            through_album_id=through_album_id,
+            from_album_id=from_album_id,
             save_existing_order=save_order,
             support_dir=get_support_dir_macos(),
             backup_limit=int(
                 get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_BACKUP_LIMIT)
+            ),
+            apply_timeout_s=float(
+                get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_APPLY_TIMEOUT_S)
             ),
         )
         self.transition_to("progress")

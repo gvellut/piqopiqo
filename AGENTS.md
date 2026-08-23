@@ -227,6 +227,8 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - `UserSettingKey.MANUAL_LENSES` (default `[]`) stores lens presets used by `Tools > Set Lens Info ...`.
 - `StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER` (default `True`) remembers whether Flickr album reorder saves the current order first.
 - `RuntimeSettingKey.FLICKR_REORDER_BACKUP_LIMIT` (default `3`) controls how many timestamped album-order JSON backups are retained.
+- `RuntimeSettingKey.FLICKR_REORDER_FROM_ALBUM_REQUIRED` (default `True`) requires a Flickr album ID/URL boundary; when disabled, an empty boundary reorders the complete album list.
+- `RuntimeSettingKey.FLICKR_REORDER_APPLY_TIMEOUT_S` (default `120.0`) is the read timeout for the single Flickr `photosets.orderSets` request.
 - `RuntimeSettingKey.DIALOG_DISCARD_CONFIRMATION_MODE` (default `ESC_ONLY`) controls whether dirty input dialogs confirm only on Escape or on every dismissal (`EVERY_DISMISSAL`).
 
 Useful env vars for agent testing:
@@ -255,6 +257,8 @@ Useful env vars for agent testing:
 - `PIQO_GCP_SA_KEY_PATH` - Override service-account key path used by OCR time extraction
 - `PIQO_FLICKR_UPLOAD_MAX_WORKERS` - Flickr upload multiprocessing worker count (default: 2)
 - `PIQO_FLICKR_REORDER_BACKUP_LIMIT` - Number of Flickr album-order backups retained (default: 3)
+- `PIQO_FLICKR_REORDER_FROM_ALBUM_REQUIRED` - Require a starting Flickr album ID/URL for album reorder (default: true)
+- `PIQO_FLICKR_REORDER_APPLY_TIMEOUT_S` - Read timeout for applying a Flickr album order (default: 120 seconds)
 - `PIQO_DIALOG_DISCARD_CONFIRMATION_MODE` - Dirty-dialog confirmation mode (`ESC_ONLY` by default; `EVERY_DISMISSAL` also guards Cancel and window close)
 
 
@@ -405,7 +409,8 @@ Selection behavior:
 - Cancellation during Apply GPX rolls back metadata changes only for the in-progress folder; already completed folders remain committed and keep their generated KML.
 - Flickr API credentials are configured in Settings > External/Workflow > Flickr (`FLICKR_API_KEY`, `FLICKR_API_SECRET` user settings).
 - Flickr Upload, Reorder Albums, and Flickr Find & Replace share the same write-permission OAuth token cache and browser login flow.
-- Flickr Reorder Albums sorts the requested top-album prefix newest-first by each album's modal valid photo-taken date. Empty/fully-undated albums abort before `photosets.orderSets`.
+- Flickr Reorder Albums sorts an inclusive prefix newest-first by each album's modal valid photo-taken date. If Flickr returns `[A, B, C, D, E]` and album `C` is entered, `[A, B, C]` is reordered while `[D, E]` remains unchanged. An empty boundary is accepted only when `FLICKR_REORDER_FROM_ALBUM_REQUIRED` is disabled, in which case the complete list is reordered. Empty/fully-undated albums abort before `photosets.orderSets`.
+- Flickr Reorder Albums submits `photosets.orderSets` once with `FLICKR_REORDER_APPLY_TIMEOUT_S`; do not use the shared short timeout/retry loop because Flickr may finish the server-side reorder after a short client read timeout.
 - When enabled, Flickr reorder writes the complete pre-change album ID order as a JSON array under `Application Support/PiqoPiqo/flickr-album-orders`; only the newest `FLICKR_REORDER_BACKUP_LIMIT` matching files are retained.
 - Flickr Find & Replace supports album order or an exact inclusive photostream range. A title regex, when present, gates both title and tag changes; per-photo failures are reported while remaining photos continue.
 - Flickr Find & Replace progress shows the photo ID above a single-line elided title (`<No title>` when empty); result totals are shown one per line in a read-only summary field.

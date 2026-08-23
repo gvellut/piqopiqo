@@ -85,6 +85,8 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_TIMESHIFT_CACHE_NUM",
         "PIQO_FLICKR_UPLOAD_MAX_WORKERS",
         "PIQO_FLICKR_REORDER_BACKUP_LIMIT",
+        "PIQO_FLICKR_REORDER_FROM_ALBUM_REQUIRED",
+        "PIQO_FLICKR_REORDER_APPLY_TIMEOUT_S",
         "PIQO_PROTECT_NON_TEXT_METADATA",
         "PIQO_SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY",
         "PIQO_FORCE_SRGB",
@@ -157,9 +159,35 @@ def test_sort_order_state_default_and_roundtrip(isolated_settings):
 def test_flickr_reorder_state_and_runtime_defaults(isolated_settings):
     assert get_state_value(StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER) is True
     assert get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_BACKUP_LIMIT) == 3
+    assert (
+        get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_FROM_ALBUM_REQUIRED)
+        is True
+    )
+    assert (
+        get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_APPLY_TIMEOUT_S) == 120.0
+    )
 
     set_state_value(StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER, False)
     assert get_state_value(StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER) is False
+
+
+def test_flickr_reorder_from_album_required_env_override(
+    isolated_settings, monkeypatch
+):
+    monkeypatch.setenv("PIQO_FLICKR_REORDER_FROM_ALBUM_REQUIRED", "false")
+    init_qsettings_store(dyn=True)
+
+    assert (
+        get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_FROM_ALBUM_REQUIRED)
+        is False
+    )
+
+
+def test_flickr_reorder_apply_timeout_env_override(isolated_settings, monkeypatch):
+    monkeypatch.setenv("PIQO_FLICKR_REORDER_APPLY_TIMEOUT_S", "45.5")
+    init_qsettings_store(dyn=True)
+
+    assert get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_APPLY_TIMEOUT_S) == 45.5
 
 
 def test_dialog_discard_confirmation_runtime_mode(isolated_settings, monkeypatch):

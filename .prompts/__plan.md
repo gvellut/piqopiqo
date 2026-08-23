@@ -152,3 +152,4 @@
 ! [Unselect go to next](Sd_tasks/Yd_Unselect_go_to_next.md)
 ! [Edit overwrite in Gimp botched](Sd_tasks/Zd_Edit_overwrite_in_Gimp_botched.md)
 ! [Summary of Flickr Find replace is garbled](Sd_tasks/Ae_Summary_of_Flickr_Find_replace_is_garbled.md)
+! [change reorder flickr album](Sd_tasks/Be_change_reorder_flickr_album.md)
