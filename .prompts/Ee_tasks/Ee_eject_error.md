@@ -1,0 +1,3 @@
+check if that can happen 
+
+check case eject error : insert SD ; Copy from SD => cancel ; Rename SD Card in Finder ; in same Piqopiqo instance, Copy from SD again => this time do the copy ; at the end, eject checked  => tries to perform ejection => error (timeout ejection ; in Finder, SD card still there).. Seems happened twice. Maybe it has the reference of the old name and uses that for ejection ?

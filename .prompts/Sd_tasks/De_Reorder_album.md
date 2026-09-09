@@ -1,0 +1,3 @@
+Summary of reorder album has a vertical srcollbar see '/Users/guilhem/Documents/screenshots/Screenshot 2026-08-29 at 23.38.19.png'. It should not. Make the dialog high enough so there isnt (based on the content). Content does not depend on number of albums examined so should work.
+Remove the line Photo dates ignored as invalid: 0
+Remove the line : Existing order saved to: /Users/guilhem/Library/Application Support/PiqoPiqo/flickr-album-orders/flickr-album-order-2026-08-29_233723.json. Instead : add a button (if the option save was selected in first screen) left of close :  "Open order backup" (opens the directory in Finde with the file selected). Use the same way to open in finder as in other places= in the app.
