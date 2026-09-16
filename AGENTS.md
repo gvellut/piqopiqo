@@ -110,7 +110,7 @@ src/piqopiqo/
 │   ├── scrollable_strip.py  # Horizontal scrollable strip base class
 │   └── status_bar.py        # Loading status bar with progress and error button
 ├── fullscreen/      # Fullscreen image viewing
-│   ├── overlay.py   # Fullscreen overlay widget + dynamic loop rank in info panel
+│   ├── overlay.py   # Fullscreen overlay + dynamic loop rank and configurable label swatch border
 │   ├── pan.py       # Pan logic for zoomed images
 │   └── zoom.py      # Zoom state management
 ├── grid/            # Photo grid display
@@ -235,6 +235,8 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - `RuntimeSettingKey.FLICKR_API_VERY_LONG_TIMEOUT_S` (default `120.0`) is the per-attempt timeout for bulk `photosets.orderSets` and `photosets.reorderPhotos` operations.
 - `RuntimeSettingKey.DIALOG_DISCARD_CONFIRMATION_MODE` (default `ESC_ONLY`) controls whether dirty input dialogs confirm only on Escape or on every dismissal (`EVERY_DISMISSAL`).
 - `RuntimeSettingKey.INFO_PANEL_RANK_FONT_SIZE` (default `18`) sets the fullscreen info panel rank font size in points; override with `PIQO_INFO_PANEL_RANK_FONT_SIZE`.
+- `RuntimeSettingKey.FULLSCREEN_INFO_PANEL_SWATCH_BORDER_COLOR` (default `"white"`) sets the fullscreen info panel label swatch border color; override with `PIQO_FULLSCREEN_INFO_PANEL_SWATCH_BORDER_COLOR`.
+- `RuntimeSettingKey.FULLSCREEN_INFO_PANEL_SWATCH_BORDER_WIDTH` (default `1`) sets the fullscreen info panel label swatch border width in pixels (`0` disables it); override with `PIQO_FULLSCREEN_INFO_PANEL_SWATCH_BORDER_WIDTH`.
 
 Useful env vars for agent testing:
 
@@ -447,6 +449,7 @@ Selection behavior:
 - When fullscreen opens, `MainWindow` disables all menu actions (and their menu shortcuts) except Quit; this prevents `Cmd+O`, `Cmd+,`, and future menu shortcuts from acting on the hidden grid view.
 - Fullscreen exit selection/visibility restoration is path-based and centralized in `MainWindow` (single-image loop vs selected-images loop, `FILTER_IN_FULLSCREEN`, and `ON_FULLSCREEN_EXIT_SELECTION_MODE` all converge there). Hidden/filtered-out loop members are not kept selected in the grid on exit.
 - Fullscreen info panel starts with `#N`, the current 1-based position in the active loop (`current_visible_idx + 1`). Single-selection entry uses the filtered grid order; multi-selection entry uses the selected loop. Navigation, ejection, filtering, and filesystem rebinding refresh the rank without gaps, even when the current photo path stays unchanged or image decoding fails. Rank is never stored in photo metadata.
+- Fullscreen info panel label swatches draw a solid, square-cornered border inside the existing 20×20 footprint. Border color/width use internal `FULLSCREEN_INFO_PANEL_SWATCH_BORDER_*` runtime settings; missing or unrecognized labels stay transparent and borderless while retaining their layout space.
 - Filter/Edit/EXIF panel interactions can hand focus back to the grid via `interaction_finished` signals (explicit interaction end); edit-panel focus restore uses explicit Enter/Escape completion, not passive focus-out saves between fields.
 - Large grid selections (for example `Cmd+A`) use a responsive-first panel update path in `MainWindow`: visible grid selection highlights refresh immediately without a full grid render, while Metadata/EXIF panel aggregation is deferred/coalesced with a short single-shot timer. During that pending refresh, Metadata/EXIF panels keep their previous visible contents and editing is disabled; selection-refresh activity is indicated only by the status bar's indeterminate progress bar, and folder loading progress takes precedence.
 - `EditPanel` metadata rows are top-anchored for layout stability: the form `QGridLayout` uses `Qt.AlignTop`, the scroll-area content container uses a non-fixed vertical size policy, and the `Keywords:` label is top-aligned so only the keyword editor row height change is visible when `KeywordsEdit` auto-height changes.

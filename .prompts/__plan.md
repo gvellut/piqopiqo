@@ -157,3 +157,4 @@
 ! [Flickr reorder summary](Sd_tasks/Ce_Flickr_reorder_summary.md)
 ! [eject error](Ee_tasks/Ee_eject_error.md)
 ! [Rank in fullscreen](Ee_tasks/Fe_Rank_in_fullscreen.md)
+! [White border label fullscreen](Ee_tasks/Ge_White_border_label_fullscreen.md)

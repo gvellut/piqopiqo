@@ -425,10 +425,10 @@ class FullscreenOverlay(QWidget):
         self.rank_label.setFont(rank_font)
         panel_layout.addWidget(self.rank_label)
 
-        # Color Swatch (always occupies space, transparent when no label)
+        # Color swatch (always occupies space, transparent and borderless when no label)
         self.color_swatch = QWidget(self)
         self.color_swatch.setFixedSize(20, 20)
-        self.color_swatch.setStyleSheet("background-color: transparent;")
+        self.color_swatch.setStyleSheet("background-color: transparent; border: none;")
         panel_layout.addWidget(self.color_swatch)
 
         # Filename Label
@@ -520,18 +520,35 @@ class FullscreenOverlay(QWidget):
     def _update_color_swatch(self):
         """Update the color swatch based on the current image's label."""
         global_index = self.visible_indices[self.current_visible_idx]
+        color = None
         if 0 <= global_index < len(self.all_items):
             item = self.all_items[global_index]
             db_meta = item.db_metadata or {}
             label = db_meta.get(DBFields.LABEL)
             if label:
                 color = get_label_color(label)
-                if color:
-                    self.color_swatch.setStyleSheet(f"background-color: {color};")
-                else:
-                    self.color_swatch.setStyleSheet("background-color: transparent;")
-            else:
-                self.color_swatch.setStyleSheet("background-color: transparent;")
+
+        if color:
+            border_color = get_runtime_setting(
+                RuntimeSettingKey.FULLSCREEN_INFO_PANEL_SWATCH_BORDER_COLOR
+            )
+            border_width = max(
+                0,
+                int(
+                    get_runtime_setting(
+                        RuntimeSettingKey.FULLSCREEN_INFO_PANEL_SWATCH_BORDER_WIDTH
+                    )
+                ),
+            )
+            self.color_swatch.setStyleSheet(
+                f"background-color: {color};"
+                f"border: {border_width}px solid {border_color};"
+                "border-radius: 0px;"
+            )
+        else:
+            self.color_swatch.setStyleSheet(
+                "background-color: transparent; border: none;"
+            )
 
     def _position_info_panel(self):
         """Positions the panel on the left side, top or bottom per config."""

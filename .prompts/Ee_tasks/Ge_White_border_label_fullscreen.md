@@ -1,0 +1,1 @@
+in the color swatch showing the label status in fullscreen, surround the color square with a white border. Make the color + width configurable in internal Runtime Settings.
