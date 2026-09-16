@@ -110,7 +110,7 @@ src/piqopiqo/
 │   ├── scrollable_strip.py  # Horizontal scrollable strip base class
 │   └── status_bar.py        # Loading status bar with progress and error button
 ├── fullscreen/      # Fullscreen image viewing
-│   ├── overlay.py   # Fullscreen overlay widget
+│   ├── overlay.py   # Fullscreen overlay widget + dynamic loop rank in info panel
 │   ├── pan.py       # Pan logic for zoomed images
 │   └── zoom.py      # Zoom state management
 ├── grid/            # Photo grid display
@@ -162,6 +162,7 @@ src/piqopiqo/
     └── macos.py     # macOS utilities (resolution, move_to_trash)
 
 tests/
+├── test_fullscreen_info_panel.py # Fullscreen loop rank, info panel layout, zoom overlay lifecycle
 ├── test_unsaved_changes_dialog.py # Shared dirty-dialog dismissal behavior
 ├── test_edit_panel.py # Edit panel UI behavior (description field visibility + pending selection summary)
 ├── test_exif_panel.py # EXIF panel display formatting and pending selection summary
@@ -233,6 +234,7 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - `RuntimeSettingKey.FLICKR_API_HEAVY_TIMEOUT_S` (default `30.0`) is the per-attempt timeout for image upload/replace, upload album-photo listing, album creation, and `photosets.editPhotos`.
 - `RuntimeSettingKey.FLICKR_API_VERY_LONG_TIMEOUT_S` (default `120.0`) is the per-attempt timeout for bulk `photosets.orderSets` and `photosets.reorderPhotos` operations.
 - `RuntimeSettingKey.DIALOG_DISCARD_CONFIRMATION_MODE` (default `ESC_ONLY`) controls whether dirty input dialogs confirm only on Escape or on every dismissal (`EVERY_DISMISSAL`).
+- `RuntimeSettingKey.INFO_PANEL_RANK_FONT_SIZE` (default `18`) sets the fullscreen info panel rank font size in points; override with `PIQO_INFO_PANEL_RANK_FONT_SIZE`.
 
 Useful env vars for agent testing:
 
@@ -444,6 +446,7 @@ Selection behavior:
 - Grid shared-view shortcuts (`Space`, `Select All`) are attached to the central grid+panels scope so they still work after non-text panel interactions, but editable text widgets win focus (search/metadata fields keep normal typing + `Cmd+A` text selection).
 - When fullscreen opens, `MainWindow` disables all menu actions (and their menu shortcuts) except Quit; this prevents `Cmd+O`, `Cmd+,`, and future menu shortcuts from acting on the hidden grid view.
 - Fullscreen exit selection/visibility restoration is path-based and centralized in `MainWindow` (single-image loop vs selected-images loop, `FILTER_IN_FULLSCREEN`, and `ON_FULLSCREEN_EXIT_SELECTION_MODE` all converge there). Hidden/filtered-out loop members are not kept selected in the grid on exit.
+- Fullscreen info panel starts with `#N`, the current 1-based position in the active loop (`current_visible_idx + 1`). Single-selection entry uses the filtered grid order; multi-selection entry uses the selected loop. Navigation, ejection, filtering, and filesystem rebinding refresh the rank without gaps, even when the current photo path stays unchanged or image decoding fails. Rank is never stored in photo metadata.
 - Filter/Edit/EXIF panel interactions can hand focus back to the grid via `interaction_finished` signals (explicit interaction end); edit-panel focus restore uses explicit Enter/Escape completion, not passive focus-out saves between fields.
 - Large grid selections (for example `Cmd+A`) use a responsive-first panel update path in `MainWindow`: visible grid selection highlights refresh immediately without a full grid render, while Metadata/EXIF panel aggregation is deferred/coalesced with a short single-shot timer. During that pending refresh, Metadata/EXIF panels keep their previous visible contents and editing is disabled; selection-refresh activity is indicated only by the status bar's indeterminate progress bar, and folder loading progress takes precedence.
 - `EditPanel` metadata rows are top-anchored for layout stability: the form `QGridLayout` uses `Qt.AlignTop`, the scroll-area content container uses a non-fixed vertical size policy, and the `Keywords:` label is top-aligned so only the keyword editor row height change is visible when `KeywordsEdit` auto-height changes.

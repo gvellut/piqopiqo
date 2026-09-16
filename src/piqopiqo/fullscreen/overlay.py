@@ -411,10 +411,19 @@ class FullscreenOverlay(QWidget):
         self.info_panel.setFrameShadow(QFrame.Raised)
         self.info_panel.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-        # Vertical layout: color swatch, filename, date
+        # Vertical layout: loop rank, color swatch, filename, date
         panel_layout = QVBoxLayout(self.info_panel)
         panel_layout.setContentsMargins(10, 5, 10, 5)
         panel_layout.setSpacing(5)
+
+        self.rank_label = QLabel(self)
+        self.rank_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        rank_font = self.rank_label.font()
+        rank_font.setPointSize(
+            int(get_runtime_setting(RuntimeSettingKey.INFO_PANEL_RANK_FONT_SIZE))
+        )
+        self.rank_label.setFont(rank_font)
+        panel_layout.addWidget(self.rank_label)
 
         # Color Swatch (always occupies space, transparent when no label)
         self.color_swatch = QWidget(self)
@@ -472,6 +481,8 @@ class FullscreenOverlay(QWidget):
 
         if not hasattr(self, "info_panel") or not self.image_path:
             return
+
+        self.rank_label.setText(f"#{self.current_visible_idx + 1}")
 
         # Filename
         filename = os.path.basename(self.image_path)
@@ -562,6 +573,7 @@ class FullscreenOverlay(QWidget):
             image_data = self.all_items[global_index]
             self.image_path = image_data.path
             if self.image_path:
+                self._update_info_panel()
                 raw_pixmap = self._load_fullscreen_pixmap_with_color_management()
                 # raw_pixmap = QPixmap(self.image_path)
                 if raw_pixmap.isNull():
@@ -574,7 +586,6 @@ class FullscreenOverlay(QWidget):
                 orientation = db_meta.get(DBFields.ORIENTATION)
                 self._pixmap = apply_orientation_to_pixmap(raw_pixmap, orientation)
 
-                self._update_info_panel()
                 return True
         return False
 

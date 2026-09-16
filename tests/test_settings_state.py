@@ -78,6 +78,7 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_DIALOG_DISCARD_CONFIRMATION_MODE",
         "PIQO_SETTINGS_PANEL_ROW_SPACING",
         "PIQO_FONT_SIZE",
+        "PIQO_INFO_PANEL_RANK_FONT_SIZE",
         "PIQO_GPX_IGNORE_OFFSET",
         "PIQO_GPX_TIMEZONE",
         "PIQO_TIME_SHIFT_UNKNOWN_FOLDER_IGNORE",
@@ -444,6 +445,17 @@ def test_grid_column_runtime_bounds_and_status_bar_padding_defaults_and_env_over
         get_runtime_setting(RuntimeSettingKey.STATUS_BAR_FOLDER_LABEL_MAX_WIDTH_RATIO)
         == 0.35
     )
+
+
+def test_info_panel_rank_font_size_default_and_env_override(
+    isolated_settings, monkeypatch
+):
+    assert get_runtime_setting(RuntimeSettingKey.INFO_PANEL_RANK_FONT_SIZE) == 18
+
+    monkeypatch.setenv("PIQO_INFO_PANEL_RANK_FONT_SIZE", "24")
+    init_qsettings_store(dyn=False)
+
+    assert get_runtime_setting(RuntimeSettingKey.INFO_PANEL_RANK_FONT_SIZE) == 24
 
 
 def test_media_file_stability_delay_default_and_env_override(

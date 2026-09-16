@@ -162,6 +162,7 @@ class RuntimeSettingKey(StrEnum):
     INFO_PANEL_BACKGROUND_COLOR = "infoPanelBackgroundColor"
     INFO_PANEL_BACKGROUND_TRANSPARENCY = "infoPanelBackgroundTransparency"
     INFO_PANEL_TEXT_COLOR = "infoPanelTextColor"
+    INFO_PANEL_RANK_FONT_SIZE = "infoPanelRankFontSize"
     INFO_PANEL_MARGIN_BOTTOM = "infoPanelMarginBottom"
     INFO_PANEL_MARGIN_SIDE = "infoPanelMarginSide"
     INFO_PANEL_POSITION = "infoPanelPosition"
@@ -923,6 +924,7 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
         default=80, read_type=int
     ),
     RuntimeSettingKey.INFO_PANEL_TEXT_COLOR: SettingDef(default="white", read_type=str),
+    RuntimeSettingKey.INFO_PANEL_RANK_FONT_SIZE: SettingDef(default=18, read_type=int),
     RuntimeSettingKey.INFO_PANEL_MARGIN_BOTTOM: SettingDef(default=10, read_type=int),
     RuntimeSettingKey.INFO_PANEL_MARGIN_SIDE: SettingDef(default=10, read_type=int),
     RuntimeSettingKey.INFO_PANEL_POSITION: SettingDef(default="bottom", read_type=str),

@@ -1,4 +1,3 @@
-* [eject error](Ee_tasks/Ee_eject_error.md)
 - [Reorder album](Sd_tasks/De_Reorder_album.md)
 - [reverse cop from sd](Sd_tasks/Vd_reverse_cop_from_sd.md)
 - [Undo label do not record if label not changed](Sd_tasks/Sd_Undo_label_do_not_record_if_label_not_changed.md)
@@ -156,3 +155,5 @@
 ! [Summary of Flickr Find replace is garbled](Sd_tasks/Ae_Summary_of_Flickr_Find_replace_is_garbled.md)
 ! [change reorder flickr album](Sd_tasks/Be_change_reorder_flickr_album.md)
 ! [Flickr reorder summary](Sd_tasks/Ce_Flickr_reorder_summary.md)
+! [eject error](Ee_tasks/Ee_eject_error.md)
+! [Rank in fullscreen](Ee_tasks/Fe_Rank_in_fullscreen.md)
