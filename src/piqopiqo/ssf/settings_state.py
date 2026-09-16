@@ -127,6 +127,8 @@ class RuntimeSettingKey(StrEnum):
     EXIF_PANEL_ROW_SPACING = "exifPanelRowSpacing"
     SETTINGS_PANEL_ROW_SPACING = "settingsPanelRowSpacing"
     GRID_ITEM_SHOW_LABEL_SWATCH = "gridItemShowLabelSwatch"
+    GRID_ITEM_SWATCH_BORDER_COLOR = "gridItemSwatchBorderColor"
+    GRID_ITEM_SWATCH_BORDER_WIDTH = "gridItemSwatchBorderWidth"
     EXIF_AUTO_FORMAT = "exifAutoFormat"
     MAX_WORKERS = "maxWorkers"
     TIMESHIFT_CACHE_NUM = "timeshiftCacheNum"
@@ -850,6 +852,12 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.SETTINGS_PANEL_ROW_SPACING: SettingDef(default=0, read_type=int),
     RuntimeSettingKey.GRID_ITEM_SHOW_LABEL_SWATCH: SettingDef(
         default=True, read_type=bool
+    ),
+    RuntimeSettingKey.GRID_ITEM_SWATCH_BORDER_COLOR: SettingDef(
+        default="black", read_type=str
+    ),
+    RuntimeSettingKey.GRID_ITEM_SWATCH_BORDER_WIDTH: SettingDef(
+        default=1, read_type=int
     ),
     RuntimeSettingKey.MAX_WORKERS: SettingDef(default=4, read_type=int),
     RuntimeSettingKey.TIMESHIFT_CACHE_NUM: SettingDef(default=10, read_type=int),

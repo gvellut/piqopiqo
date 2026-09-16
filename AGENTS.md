@@ -114,7 +114,7 @@ src/piqopiqo/
 │   ├── pan.py       # Pan logic for zoomed images
 │   └── zoom.py      # Zoom state management
 ├── grid/            # Photo grid display
-│   ├── photo_cell.py    # Single photo cell widget (left/right click)
+│   ├── photo_cell.py    # Single photo cell widget (left/right click, configurable label swatch border)
 │   ├── photo_grid.py    # Grid of photo thumbnails with context menu
 │   └── context_menu.py  # Right-click context menu and file operations (duplicate, trash, external apps)
 ├── panels/          # Side panels and tightly coupled editing dialogs
@@ -237,6 +237,8 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - `RuntimeSettingKey.INFO_PANEL_RANK_FONT_SIZE` (default `18`) sets the fullscreen info panel rank font size in points; override with `PIQO_INFO_PANEL_RANK_FONT_SIZE`.
 - `RuntimeSettingKey.FULLSCREEN_INFO_PANEL_SWATCH_BORDER_COLOR` (default `"white"`) sets the fullscreen info panel label swatch border color; override with `PIQO_FULLSCREEN_INFO_PANEL_SWATCH_BORDER_COLOR`.
 - `RuntimeSettingKey.FULLSCREEN_INFO_PANEL_SWATCH_BORDER_WIDTH` (default `1`) sets the fullscreen info panel label swatch border width in pixels (`0` disables it); override with `PIQO_FULLSCREEN_INFO_PANEL_SWATCH_BORDER_WIDTH`.
+- `RuntimeSettingKey.GRID_ITEM_SWATCH_BORDER_COLOR` (default `"black"`) sets the grid label swatch border color; override with `PIQO_GRID_ITEM_SWATCH_BORDER_COLOR`.
+- `RuntimeSettingKey.GRID_ITEM_SWATCH_BORDER_WIDTH` (default `1`) sets the grid label swatch border width in pixels (`0` disables it); override with `PIQO_GRID_ITEM_SWATCH_BORDER_WIDTH`.
 
 Useful env vars for agent testing:
 
@@ -450,6 +452,7 @@ Selection behavior:
 - Fullscreen exit selection/visibility restoration is path-based and centralized in `MainWindow` (single-image loop vs selected-images loop, `FILTER_IN_FULLSCREEN`, and `ON_FULLSCREEN_EXIT_SELECTION_MODE` all converge there). Hidden/filtered-out loop members are not kept selected in the grid on exit.
 - Fullscreen info panel starts with `#N`, the current 1-based position in the active loop (`current_visible_idx + 1`). Single-selection entry uses the filtered grid order; multi-selection entry uses the selected loop. Navigation, ejection, filtering, and filesystem rebinding refresh the rank without gaps, even when the current photo path stays unchanged or image decoding fails. Rank is never stored in photo metadata.
 - Fullscreen info panel label swatches draw a solid, square-cornered border inside the existing 20×20 footprint. Border color/width use internal `FULLSCREEN_INFO_PANEL_SWATCH_BORDER_*` runtime settings; missing or unrecognized labels stay transparent and borderless while retaining their layout space.
+- Grid label swatches retain their 16×16 rectangle and 4-pixel margin. Their border uses internal `GRID_ITEM_SWATCH_BORDER_*` runtime settings (black, 1 pixel by default); `GRID_ITEM_SHOW_LABEL_SWATCH` still controls visibility, and missing or unrecognized labels show no swatch.
 - Filter/Edit/EXIF panel interactions can hand focus back to the grid via `interaction_finished` signals (explicit interaction end); edit-panel focus restore uses explicit Enter/Escape completion, not passive focus-out saves between fields.
 - Large grid selections (for example `Cmd+A`) use a responsive-first panel update path in `MainWindow`: visible grid selection highlights refresh immediately without a full grid render, while Metadata/EXIF panel aggregation is deferred/coalesced with a short single-shot timer. During that pending refresh, Metadata/EXIF panels keep their previous visible contents and editing is disabled; selection-refresh activity is indicated only by the status bar's indeterminate progress bar, and folder loading progress takes precedence.
 - `EditPanel` metadata rows are top-anchored for layout stability: the form `QGridLayout` uses `Qt.AlignTop`, the scroll-area content container uses a non-fixed vertical size policy, and the `Keywords:` label is top-aligned so only the keyword editor row height change is visible when `KeywordsEdit` auto-height changes.

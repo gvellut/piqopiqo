@@ -168,8 +168,19 @@ class PhotoCell(QFrame):
                             swatch_size,
                         )
                         painter.fillRect(swatch_rect, QColor(color))
-                        painter.setPen(QPen(Qt.black, 1))
-                        painter.drawRect(swatch_rect)
+                        border_width = int(
+                            get_runtime_setting(
+                                RuntimeSettingKey.GRID_ITEM_SWATCH_BORDER_WIDTH
+                            )
+                        )
+                        if border_width > 0:
+                            border_color = QColor(
+                                get_runtime_setting(
+                                    RuntimeSettingKey.GRID_ITEM_SWATCH_BORDER_COLOR
+                                )
+                            )
+                            painter.setPen(QPen(border_color, border_width))
+                            painter.drawRect(swatch_rect)
 
             # Text area
             text_rect = QRect(
