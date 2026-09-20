@@ -36,6 +36,8 @@ uv run piqopiqo /path/to/your/images
 
 It is possible to generate a `.app`. Run:
 
-`uv run task build`
+```shell
+uv run task build
+```
 
 Copy the generated file in the build to your `/Applications` folder.
