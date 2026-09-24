@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from attrs import define, field
 from PySide6.QtCore import QObject, Qt, QThreadPool, Signal
-from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -24,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.components.ellided_label import EllidedLabel
+from piqopiqo.components.summary_text_edit import SummaryTextEdit
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
@@ -759,21 +759,8 @@ class FlickrFindReplaceDialog(ToolFlowDialog):
         ]
         if result.error_message:
             lines.append(f"Error: {result.error_message}")
-        summary = QTextEdit(widget)
+        summary = SummaryTextEdit("\n".join(lines), widget)
         summary.setObjectName("flickrFindReplaceSummaryText")
-        summary.setReadOnly(True)
-        summary.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-        summary.setPlainText("\n".join(lines))
-        palette = summary.palette()
-        palette.setColor(
-            QPalette.ColorRole.Base,
-            palette.color(QPalette.ColorRole.AlternateBase),
-        )
-        summary.setPalette(palette)
-        visible_lines = min(max(len(lines), 2), 8)
-        text_height = summary.fontMetrics().lineSpacing() * visible_lines
-        frame_height = summary.frameWidth() * 2
-        summary.setFixedHeight(text_height + frame_height + 16)
         layout.addWidget(summary)
         if result.errors:
             details = QTextEdit(widget)

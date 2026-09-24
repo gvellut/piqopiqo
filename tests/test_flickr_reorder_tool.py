@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QTextEdit, QWidget
 import pytest
 
+from piqopiqo.components.summary_text_edit import SummaryTextEdit
 from piqopiqo.ssf.settings_state import init_qsettings_store
 from piqopiqo.tools.flickr_tools.album_order import BACKUP_FOLDER_NAME
 import piqopiqo.tools.flickr_tools.reorder as reorder_module
@@ -405,7 +406,7 @@ def test_result_summary_is_read_only_selectable_multiline_text(qapp) -> None:
     dialog.transition_to("result")
     summary = dialog.findChild(QTextEdit, "flickrReorderSummaryText")
 
-    assert summary is not None
+    assert isinstance(summary, SummaryTextEdit)
     assert summary.isReadOnly() is True
     assert summary.lineWrapMode() == QTextEdit.LineWrapMode.NoWrap
     assert summary.textInteractionFlags() & Qt.TextInteractionFlag.TextSelectableByMouse

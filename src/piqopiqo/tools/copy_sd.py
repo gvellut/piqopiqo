@@ -18,7 +18,6 @@ from typing import Any
 
 from attrs import define
 from PySide6.QtCore import QObject, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -31,11 +30,11 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QStyle,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
+from piqopiqo.components.summary_text_edit import SummaryTextEdit
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
@@ -1217,21 +1216,10 @@ class _CopySdConfirmDialog(QDialog):
 
         layout.addWidget(QLabel("Dates:", self))
 
-        self.dates_text = QTextEdit(self)
-        self.dates_text.setObjectName("copySdConfirmDatesText")
-        self.dates_text.setReadOnly(True)
-        self.dates_text.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-        self.dates_text.setPlainText("\n".join(date_to_str(d) for d in dates))
-        palette = self.dates_text.palette()
-        palette.setColor(
-            QPalette.ColorRole.Base,
-            palette.color(QPalette.ColorRole.AlternateBase),
+        self.dates_text = SummaryTextEdit(
+            "\n".join(date_to_str(d) for d in dates), self
         )
-        self.dates_text.setPalette(palette)
-        visible_lines = min(max(len(dates), 2), 8)
-        text_height = self.dates_text.fontMetrics().lineSpacing() * visible_lines
-        frame_height = self.dates_text.frameWidth() * 2
-        self.dates_text.setFixedHeight(text_height + frame_height + 16)
+        self.dates_text.setObjectName("copySdConfirmDatesText")
         layout.addWidget(self.dates_text)
 
         confirm_label = QLabel("Confirm?", self)

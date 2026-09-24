@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QApplication, QTextEdit, QWidget
 import pytest
 
+from piqopiqo.components.summary_text_edit import SummaryTextEdit
 from piqopiqo.tools.edit_tools.service import FindReplaceSpec
 from piqopiqo.tools.flickr_tools.find_replace import (
     NO_TITLE_TEXT,
@@ -160,7 +161,7 @@ def test_result_summary_is_read_only_and_uses_one_value_per_line(
     flickr_dialog.transition_to("result")
     summary = flickr_dialog.findChild(QTextEdit, "flickrFindReplaceSummaryText")
 
-    assert summary is not None
+    assert isinstance(summary, SummaryTextEdit)
     assert summary.isReadOnly() is True
     assert summary.lineWrapMode() == QTextEdit.LineWrapMode.NoWrap
     assert summary.toPlainText().splitlines() == [
@@ -177,6 +178,18 @@ def test_result_summary_is_read_only_and_uses_one_value_per_line(
         "Failed photos: 3",
         "Error: Connection failed",
     ]
+
+
+def test_long_error_keeps_flickr_result_summary_scrollable(qapp, flickr_dialog) -> None:
+    flickr_dialog._result = FlickrFindReplaceResult(error_message="x" * 500)
+    flickr_dialog.transition_to("result")
+    flickr_dialog.show()
+    qapp.processEvents()
+    summary = flickr_dialog.findChild(QTextEdit, "flickrFindReplaceSummaryText")
+
+    assert isinstance(summary, SummaryTextEdit)
+    assert summary.horizontalScrollBar().maximum() > 0
+    assert summary.verticalScrollBar().maximum() > 0
 
 
 def test_progress_uses_fixed_two_line_status_with_elided_title(

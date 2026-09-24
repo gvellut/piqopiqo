@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLabel, QTextEdit, QWidget
 import pytest
 
+from piqopiqo.components.summary_text_edit import SummaryTextEdit
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDB
 from piqopiqo.model import ImageItem
@@ -337,7 +338,7 @@ def test_local_result_summary_is_read_only_selectable_multiline_text(qapp) -> No
     dialog.transition_to("result")
     summary = dialog.findChild(QTextEdit, "localFindReplaceSummaryText")
 
-    assert summary is not None
+    assert isinstance(summary, SummaryTextEdit)
     assert summary.isReadOnly() is True
     assert summary.lineWrapMode() == QTextEdit.LineWrapMode.NoWrap
     assert summary.textInteractionFlags() & Qt.TextInteractionFlag.TextSelectableByMouse
@@ -348,3 +349,7 @@ def test_local_result_summary_is_read_only_selectable_multiline_text(qapp) -> No
         "Only the PiqoPiqo SQLite metadata database was changed. Image "
         "files and EXIF metadata were untouched."
     )
+    dialog.show()
+    qapp.processEvents()
+    assert summary.horizontalScrollBar().maximum() > 0
+    assert summary.verticalScrollBar().maximum() == 0

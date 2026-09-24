@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from attrs import define, field
 from PySide6.QtCore import QObject, QThreadPool, Signal
-from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
@@ -21,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.components.summary_text_edit import SummaryTextEdit
 from piqopiqo.keyword_utils import (
     format_keywords,
     normalize_keyword_list,
@@ -436,21 +436,8 @@ class LocalFindReplaceDialog(ToolFlowDialog):
             "Only the PiqoPiqo SQLite metadata database was changed. Image "
             "files and EXIF metadata were untouched."
         )
-        summary = QTextEdit(widget)
+        summary = SummaryTextEdit(summary_text, widget)
         summary.setObjectName("localFindReplaceSummaryText")
-        summary.setReadOnly(True)
-        summary.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-        summary.setPlainText(summary_text)
-        palette = summary.palette()
-        palette.setColor(
-            QPalette.ColorRole.Base,
-            palette.color(QPalette.ColorRole.AlternateBase),
-        )
-        summary.setPalette(palette)
-        visible_lines = min(max(len(summary_text.splitlines()), 2), 8)
-        text_height = summary.fontMetrics().lineSpacing() * visible_lines
-        frame_height = summary.frameWidth() * 2
-        summary.setFixedHeight(text_height + frame_height + 16)
         layout.addWidget(summary)
         if result.errors:
             details = QTextEdit(widget)

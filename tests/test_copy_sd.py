@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QTextEdit
 import pytest
 
+from piqopiqo.components.summary_text_edit import SummaryTextEdit
 from piqopiqo.ssf.settings_state import StateKey, UserSettingKey
 from piqopiqo.storage import StorageWriteFault
 from piqopiqo.tools.copy_sd import (
@@ -37,7 +38,7 @@ def qapp(monkeypatch):
     return app
 
 
-def test_copy_confirm_dialog_shows_dates_in_read_only_text_edit(qapp):  # noqa: ARG001
+def test_copy_confirm_dialog_shows_dates_in_read_only_text_edit(qapp):
     dialog = _CopySdConfirmDialog(
         None,
         PhotoVolume("CARD", "/Volumes/CARD"),
@@ -47,11 +48,14 @@ def test_copy_confirm_dialog_shows_dates_in_read_only_text_edit(qapp):  # noqa: 
 
     dates_text = dialog.findChild(QTextEdit, "copySdConfirmDatesText")
 
-    assert dates_text is not None
+    assert isinstance(dates_text, SummaryTextEdit)
     assert dates_text.isReadOnly() is True
     lines = dates_text.toPlainText().splitlines()
     assert lines == ["2026-03-01", "2026-03-02"]
     assert all(not line.startswith("- ") for line in lines)
+    dialog.show()
+    qapp.processEvents()
+    assert dates_text.verticalScrollBar().maximum() == 0
 
 
 def test_no_images_message_since_last_with_previous_date(monkeypatch):
