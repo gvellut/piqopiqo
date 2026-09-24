@@ -1,0 +1,8 @@
+Duing Flickr Upload, it is possible for the software to create a new album. Flickr will add it in the first position in the list of albums (no option to do otherwise).
+I would like for a NEW album (nothing to do if photos are added to an existing album) to be placed in its correct position in the list of albums on Flickr. Generally, my albums are ordered according to the date of the photos it contains (DESC).
+I want you to :
+- add a user config setting boolean to enable that feature: Reorder new albums (in the Flickr section of the config dialog). Set it to False as the default.
+- when a NEW album is created : after the photos are added to it, add a final step : 
+    - do something similar to the Reorder Albums Flickr tool src/piqopiqo/tools/flickr_tools/reorder.py. Query the first 50 albums and use those albums as the set where to put the new album. Those 50 albums may not be ordered and the call will order them but that sideeffect is fine.
+    - If the NEW album would still be the first in that list : still call the reorder album Flickr API method (it would have the effect of reordering the other).
+    - However : if the album is old enough that it would be the LAST in the list (instead of the first as default when added), do not call the reorder album. Add a text in the final summary of the tool to indicate that its date is beyond the first 50 albums. The user will take care of it.
