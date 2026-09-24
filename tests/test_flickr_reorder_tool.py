@@ -417,3 +417,27 @@ def test_result_summary_is_read_only_selectable_multiline_text(qapp) -> None:
         "Existing order saved to: /tmp/flickr-order.json",
         "Error: Follow-up warning",
     ]
+
+
+def test_result_summary_long_backup_path_does_not_clip_last_line(qapp) -> None:
+    parent = QWidget()
+    dialog = FlickrReorderDialog(
+        window=parent,
+        api_key="k",
+        api_secret="s",
+        parent=parent,
+    )
+    dialog._result = FlickrReorderResult(
+        album_count=12,
+        albums_examined=10,
+        reordered=True,
+        backup_path="/tmp/" + "long-folder-name/" * 30 + "flickr-order.json",
+    )
+
+    dialog.transition_to("result")
+    dialog.show()
+    qapp.processEvents()
+    summary = dialog.findChild(QTextEdit, "flickrReorderSummaryText")
+
+    assert summary.horizontalScrollBar().maximum() > 0
+    assert summary.verticalScrollBar().maximum() == 0

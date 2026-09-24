@@ -433,7 +433,7 @@ class FlickrReorderDialog(ToolFlowDialog):
         )
         summary.setPalette(palette)
         visible_lines = min(max(len(lines), 2), 8)
-        text_height = summary.fontMetrics().lineSpacing() * visible_lines
+        text_height = summary.fontMetrics().lineSpacing() * (visible_lines + 1)
         frame_height = summary.frameWidth() * 2
         summary.setFixedHeight(text_height + frame_height + 16)
         layout.addWidget(summary)
