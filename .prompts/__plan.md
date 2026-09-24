@@ -1,4 +1,3 @@
-* [reorder when creating album](Ee_tasks/He_reorder_when_creating_album.md)
 - [Reorder album](Sd_tasks/De_Reorder_album.md)
 - [reverse cop from sd](Sd_tasks/Vd_reverse_cop_from_sd.md)
 - [Undo label do not record if label not changed](Sd_tasks/Sd_Undo_label_do_not_record_if_label_not_changed.md)
@@ -159,3 +158,4 @@
 ! [eject error](Ee_tasks/Ee_eject_error.md)
 ! [Rank in fullscreen](Ee_tasks/Fe_Rank_in_fullscreen.md)
 ! [White border label fullscreen](Ee_tasks/Ge_White_border_label_fullscreen.md)
+! [reorder when creating album](Ee_tasks/He_reorder_when_creating_album.md)

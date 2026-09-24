@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import date, datetime
 import multiprocessing
+from pathlib import Path
 import threading
 import time
 from typing import Any
@@ -12,8 +13,21 @@ from typing import Any
 from attrs import define, field
 from PySide6.QtCore import QObject, Signal
 
+from piqopiqo.tools.flickr_tools.album_order import (
+    FlickrAlbumOrderEntry,
+    album_title,
+    build_reordered_album_ids,
+    modal_photo_date,
+    save_album_order_backup,
+)
+from piqopiqo.tools.flickr_utils import (
+    FlickrOperationCancelled,
+    all_pages,
+    create_flickr_client,
+)
+
 from .albums import FlickrAlbumPlan
-from .constants import MAX_NUM_CHECKS, FlickrStage
+from .constants import API_RETRIES, MAX_NUM_CHECKS, FlickrStage
 from .media_worker import (
     run_add_to_album_task,
     run_create_album_task,
@@ -45,6 +59,9 @@ class FlickrUploadResult:
     album_url: str = ""
     album_created: bool = False
     album_added_count: int = 0
+    album_reordered: bool = False
+    album_reorder_note: str = ""
+    album_reorder_backup_path: str = ""
     cancelled: bool = False
     fatal_error: str = ""
     failures: list[FlickrUploadPhotoFailure] = field(factory=list)
@@ -70,6 +87,10 @@ class FlickrUploadManager(QObject):
         quick_timeout_s: float,
         heavy_timeout_s: float,
         very_long_timeout_s: float,
+        reorder_new_albums: bool,
+        reorder_new_albums_limit: int,
+        reorder_backup_limit: int,
+        support_dir: str | Path,
         album_plan: FlickrAlbumPlan | None = None,
         on_album_id_resolved: Callable[[str], None] | None = None,
         parent=None,
@@ -83,6 +104,10 @@ class FlickrUploadManager(QObject):
         self._quick_timeout_s = float(quick_timeout_s)
         self._heavy_timeout_s = float(heavy_timeout_s)
         self._very_long_timeout_s = float(very_long_timeout_s)
+        self._reorder_new_albums = bool(reorder_new_albums)
+        self._reorder_new_albums_limit = max(1, int(reorder_new_albums_limit))
+        self._reorder_backup_limit = max(1, int(reorder_backup_limit))
+        self._support_dir = Path(support_dir)
         self._album_plan = album_plan if album_plan is not None else FlickrAlbumPlan()
         self._on_album_id_resolved = on_album_id_resolved
 
@@ -139,6 +164,13 @@ class FlickrUploadManager(QObject):
                     return
 
                 self._run_add_to_album_stage(photo_pairs, result)
+                if (
+                    self._reorder_new_albums
+                    and result.album_created
+                    and result.album_added_count
+                    and not result.cancelled
+                ):
+                    self._run_reorder_new_album_stage(result)
             except Exception as ex:  # pragma: no cover - defensive
                 result.fatal_error = str(ex)
             finally:
@@ -457,6 +489,118 @@ class FlickrUploadManager(QObject):
 
         result.album_added_count = int(add_row.get("added_count") or len(photo_pairs))
         self.status.emit(FlickrStage.STAGE_ADD_TO_ALBUM.label)
+
+    def _run_reorder_new_album_stage(self, result: FlickrUploadResult) -> None:
+        stage = FlickrStage.STAGE_REORDER_NEW_ALBUM.label
+        self.stage_changed.emit(stage)
+        self.progress.emit(0, 0)
+        try:
+            flickr = create_flickr_client(
+                self._api_key,
+                self._api_secret,
+                token_cache_dir=self._token_cache_dir,
+                response_format="parsed-json",
+                timeout_s=self._quick_timeout_s,
+            )
+            raw_albums = all_pages(
+                "photosets",
+                "photoset",
+                flickr.photosets.getList,
+                num_retries=API_RETRIES,
+                cancel_event=self._cancel_requested,
+                per_page=500,
+                timeout=self._quick_timeout_s,
+            )
+            albums = [
+                FlickrAlbumOrderEntry(
+                    album_id=str(album.get("id") or "").strip(),
+                    title=album_title(album.get("title")),
+                )
+                for album in raw_albums
+                if isinstance(album, dict) and str(album.get("id") or "").strip()
+            ]
+            window = albums[: self._reorder_new_albums_limit]
+            if result.album_id not in [album.album_id for album in window]:
+                raise RuntimeError(
+                    "The new album was not found in the first "
+                    f"{self._reorder_new_albums_limit} Flickr albums."
+                )
+
+            modal_dates: dict[str, date] = {}
+            undated_albums: list[str] = []
+            self.progress.emit(0, len(window))
+            for index, album in enumerate(window, start=1):
+                if self._cancel_requested.is_set():
+                    raise FlickrOperationCancelled()
+                self.album_status.emit(f"Reading {album.title or album.album_id}...")
+                photos = all_pages(
+                    "photoset",
+                    "photo",
+                    flickr.photosets.getPhotos,
+                    photoset_id=album.album_id,
+                    extras="date_taken",
+                    per_page=500,
+                    timeout=self._quick_timeout_s,
+                    num_retries=API_RETRIES,
+                    cancel_event=self._cancel_requested,
+                )
+                modal_date, _invalid_count = modal_photo_date(photos)
+                if modal_date is None:
+                    undated_albums.append(album.title or album.album_id)
+                else:
+                    modal_dates[album.album_id] = modal_date
+                self.progress.emit(index, len(window))
+
+            if undated_albums:
+                raise RuntimeError(
+                    "Album reordering skipped because these albums have no valid "
+                    "photo taken dates: " + ", ".join(undated_albums)
+                )
+
+            current_order = [album.album_id for album in albums]
+            new_order = build_reordered_album_ids(
+                albums,
+                modal_dates,
+                from_album_id=window[-1].album_id,
+            )
+            if (
+                len(albums) > self._reorder_new_albums_limit
+                and new_order[self._reorder_new_albums_limit - 1] == result.album_id
+            ):
+                result.album_reorder_note = (
+                    "The new album sorts last among the first "
+                    f"{self._reorder_new_albums_limit} albums. Its date may place "
+                    "it beyond this window; please position it manually on Flickr."
+                )
+                return
+
+            if self._cancel_requested.is_set():
+                raise FlickrOperationCancelled()
+            backup_path, warnings = save_album_order_backup(
+                current_order,
+                support_dir=self._support_dir,
+                keep=self._reorder_backup_limit,
+            )
+            result.album_reorder_backup_path = str(backup_path)
+            for warning in warnings:
+                result.failures.append(
+                    FlickrUploadPhotoFailure(file_path="", stage=stage, message=warning)
+                )
+            if self._cancel_requested.is_set():
+                raise FlickrOperationCancelled()
+            self.album_status.emit("Applying the new album order...")
+            self.progress.emit(0, 0)
+            flickr.photosets.orderSets(
+                photoset_ids=",".join(new_order),
+                timeout=self._very_long_timeout_s,
+            )
+            result.album_reordered = True
+        except FlickrOperationCancelled:
+            result.cancelled = True
+        except Exception as ex:
+            result.failures.append(
+                FlickrUploadPhotoFailure(file_path="", stage=stage, message=str(ex))
+            )
 
     def _run_parallel_pool(
         self,

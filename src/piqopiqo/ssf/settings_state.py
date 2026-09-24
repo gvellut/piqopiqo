@@ -112,6 +112,7 @@ class UserSettingKey(StrEnum):
     FLICKR_UPLOAD_USE_LIFECYCLE = "flickrUploadUseLifecycle"
     FLICKR_UPLOAD_LABEL = "flickrUploadLabel"
     FLICKR_UPLOAD_REQUIRE_TITLE_AND_KEYWORDS = "flickrUploadRequireTitleAndKeywords"
+    FLICKR_UPLOAD_REORDER_NEW_ALBUMS = "flickrUploadReorderNewAlbums"
     FLICKR_UPLOAD_LABEL_TRANSITIONS = "flickrUploadLabelTransitions"
     MANUAL_LENSES = "manualLenses"
 
@@ -133,6 +134,7 @@ class RuntimeSettingKey(StrEnum):
     MAX_WORKERS = "maxWorkers"
     TIMESHIFT_CACHE_NUM = "timeshiftCacheNum"
     FLICKR_UPLOAD_MAX_WORKERS = "flickrUploadMaxWorkers"
+    FLICKR_UPLOAD_REORDER_NEW_ALBUMS_LIMIT = "flickrUploadReorderNewAlbumsLimit"
     FLICKR_REORDER_BACKUP_LIMIT = "flickrReorderBackupLimit"
     FLICKR_REORDER_FROM_ALBUM_REQUIRED = "flickrReorderFromAlbumRequired"
     FLICKR_API_QUICK_TIMEOUT_S = "flickrApiQuickTimeoutS"
@@ -791,6 +793,11 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         default=False,
         read_type=bool,
     ),
+    UserSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default=False,
+        read_type=bool,
+    ),
     UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS: SettingDef(
         group=SettingsGroup.SETTINGS,
         default=[],
@@ -862,6 +869,10 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.MAX_WORKERS: SettingDef(default=4, read_type=int),
     RuntimeSettingKey.TIMESHIFT_CACHE_NUM: SettingDef(default=10, read_type=int),
     RuntimeSettingKey.FLICKR_UPLOAD_MAX_WORKERS: SettingDef(default=2, read_type=int),
+    RuntimeSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS_LIMIT: SettingDef(
+        default=20,
+        read_type=int,
+    ),
     RuntimeSettingKey.FLICKR_REORDER_BACKUP_LIMIT: SettingDef(
         default=3,
         read_type=int,

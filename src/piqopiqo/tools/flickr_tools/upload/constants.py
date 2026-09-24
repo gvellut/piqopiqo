@@ -30,6 +30,7 @@ class FlickrStage(Enum):
     STAGE_MAKE_PUBLIC = auto(), "Make public"
     STAGE_ALBUM_CHECK = auto(), "Album check"
     STAGE_ADD_TO_ALBUM = auto(), "Add to album"
+    STAGE_REORDER_NEW_ALBUM = auto(), "Reorder new album"
 
     def __new__(cls, name, label):
         obj = object.__new__(cls)

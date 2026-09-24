@@ -160,6 +160,11 @@ def test_sort_order_state_default_and_roundtrip(isolated_settings):
 
 
 def test_flickr_reorder_state_and_runtime_defaults(isolated_settings):
+    assert get_user_setting(UserSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS) is False
+    assert (
+        get_runtime_setting(RuntimeSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS_LIMIT)
+        == 20
+    )
     assert get_state_value(StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER) is True
     assert get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_BACKUP_LIMIT) == 3
     assert (
@@ -481,7 +486,7 @@ def test_recent_folders_menu_limit_default_and_env_override(
 
 
 def test_copy_sd_eject_timeout_default_and_env_override(isolated_settings, monkeypatch):
-    assert get_runtime_setting(RuntimeSettingKey.COPY_SD_EJECT_TIMEOUT_S) == 5.0
+    assert get_runtime_setting(RuntimeSettingKey.COPY_SD_EJECT_TIMEOUT_S) == 30.0
 
     monkeypatch.setenv("PIQO_COPY_SD_EJECT_TIMEOUT_S", "2.5")
     init_qsettings_store(dyn=False)

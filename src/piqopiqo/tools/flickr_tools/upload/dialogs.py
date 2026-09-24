@@ -41,6 +41,7 @@ from piqopiqo.ssf.settings_state import (
     UserSettingKey,
     get_runtime_setting,
     get_state_value,
+    get_support_dir_macos,
     get_user_setting,
     set_state_value,
 )
@@ -910,6 +911,18 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
             very_long_timeout_s=float(
                 get_runtime_setting(RuntimeSettingKey.FLICKR_API_VERY_LONG_TIMEOUT_S)
             ),
+            reorder_new_albums=bool(
+                get_user_setting(UserSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS)
+            ),
+            reorder_new_albums_limit=int(
+                get_runtime_setting(
+                    RuntimeSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS_LIMIT
+                )
+            ),
+            reorder_backup_limit=int(
+                get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_BACKUP_LIMIT)
+            ),
+            support_dir=get_support_dir_macos(),
             album_plan=album_plan,
             on_album_id_resolved=self._set_folder_album_id_callback,
             parent=self,
@@ -954,8 +967,7 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         if self._finished:
             return
         self._current_stage = str(stage or "").strip() or "-"
-        if stage != FlickrStage.STAGE_ADD_TO_ALBUM.label:
-            self._album_action_text = ""
+        self._album_action_text = ""
         if stage != FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label:
             self._check_status_text = ""
         self._update_stage_label()
@@ -963,6 +975,7 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         if stage in (
             FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label,
             FlickrStage.STAGE_ADD_TO_ALBUM.label,
+            FlickrStage.STAGE_REORDER_NEW_ALBUM.label,
         ):
             self._set_busy_progress()
 
@@ -990,7 +1003,10 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         if self._finished:
             return
         text = str(message or "").strip()
-        if self._current_stage != FlickrStage.STAGE_ADD_TO_ALBUM.label:
+        if self._current_stage not in (
+            FlickrStage.STAGE_ADD_TO_ALBUM.label,
+            FlickrStage.STAGE_REORDER_NEW_ALBUM.label,
+        ):
             return
         self._album_action_text = text
         self._update_stage_label()
@@ -1153,16 +1169,22 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
             elif result.album_added_count:
                 lines.append(f"Added to album: {result.album_added_count} photo(s).")
 
+        if result.album_reordered:
+            lines.append("New album reordered on Flickr.")
+        if result.album_reorder_note:
+            lines.append(f"New album order: {result.album_reorder_note}")
+        if result.album_reorder_backup_path:
+            lines.append(f"Album order backup: {result.album_reorder_backup_path}")
+
         if result.failures:
             lines.append("")
             lines.append("Failures:")
             for failure in result.failures:
-                base_name = (
-                    os.path.basename(failure.file_path)
-                    if failure.file_path
-                    else "<unknown>"
-                )
-                lines.append(f"- [{failure.stage}] {base_name}: {failure.message}")
+                if failure.file_path:
+                    base_name = os.path.basename(failure.file_path)
+                    lines.append(f"- [{failure.stage}] {base_name}: {failure.message}")
+                else:
+                    lines.append(f"- [{failure.stage}] {failure.message}")
 
         if lines:
             self.details.setPlainText("\n".join(lines))

@@ -31,6 +31,7 @@ def qapp(monkeypatch):
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
+    init_qsettings_store(dyn=True)
     return app
 
 
@@ -495,6 +496,68 @@ def test_upload_progress_completion_hides_running_widgets_and_shows_summary(  # 
     assert dialog.details.isHidden() is False
     assert dialog.ok_btn.isHidden() is False
     assert dialog.ok_btn.isEnabled() is True
+
+
+def test_upload_summary_reports_new_album_reorder_and_backup(qapp) -> None:  # noqa: ARG001
+    dialog = _mk_upload_dialog()
+    dialog._on_finished(
+        FlickrUploadResult(
+            total_photos=1,
+            uploaded_count=1,
+            album_id="new",
+            album_created=True,
+            album_added_count=1,
+            album_reordered=True,
+            album_reorder_backup_path="/tmp/order.json",
+        )
+    )
+
+    assert "New album reordered on Flickr." in dialog.details.toPlainText()
+    assert "Album order backup: /tmp/order.json" in dialog.details.toPlainText()
+
+
+def test_upload_summary_explains_manual_album_placement(qapp) -> None:  # noqa: ARG001
+    dialog = _mk_upload_dialog()
+    dialog._on_finished(
+        FlickrUploadResult(
+            total_photos=1,
+            uploaded_count=1,
+            album_id="new",
+            album_created=True,
+            album_added_count=1,
+            album_reorder_note=(
+                "The new album sorts last among the first 20 albums. "
+                "Its date may place it beyond this window; please position it "
+                "manually on Flickr."
+            ),
+        )
+    )
+
+    assert "first 20 albums" in dialog.details.toPlainText()
+    assert "please position it manually" in dialog.details.toPlainText()
+
+
+def test_upload_summary_reports_new_album_reorder_failure(qapp) -> None:  # noqa: ARG001
+    dialog = _mk_upload_dialog()
+    dialog._on_finished(
+        FlickrUploadResult(
+            total_photos=1,
+            uploaded_count=1,
+            album_id="new",
+            album_created=True,
+            album_added_count=1,
+            failures=[
+                FlickrUploadPhotoFailure(
+                    file_path="",
+                    stage=FlickrStage.STAGE_REORDER_NEW_ALBUM.label,
+                    message="order timeout",
+                )
+            ],
+        )
+    )
+
+    assert dialog.upload_status_label.text() == "Upload completed with issues."
+    assert "[Reorder new album] order timeout" in dialog.details.toPlainText()
 
 
 def test_upload_progress_hides_transition_checkbox_without_rules(

@@ -324,6 +324,11 @@ SETTINGS_TABS: list[TabSpec] = [
                         editor=EditorKind.BOOL,
                     ),
                     FieldSpec(
+                        key=UserSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS,
+                        label="Reorder new albums",
+                        editor=EditorKind.BOOL,
+                    ),
+                    FieldSpec(
                         key=UserSettingKey.FLICKR_UPLOAD_USE_LIFECYCLE,
                         label="Use lifecycle",
                         editor=EditorKind.BOOL,

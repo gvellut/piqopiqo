@@ -10,9 +10,9 @@ from PySide6.QtWidgets import QApplication, QTextEdit, QWidget
 import pytest
 
 from piqopiqo.ssf.settings_state import init_qsettings_store
+from piqopiqo.tools.flickr_tools.album_order import BACKUP_FOLDER_NAME
 import piqopiqo.tools.flickr_tools.reorder as reorder_module
 from piqopiqo.tools.flickr_tools.reorder import (
-    BACKUP_FOLDER_NAME,
     FlickrAlbumOrderEntry,
     FlickrReorderDialog,
     FlickrReorderResult,

@@ -29,6 +29,10 @@ def _mk_manager() -> FlickrUploadManager:
         quick_timeout_s=5.0,
         heavy_timeout_s=30.0,
         very_long_timeout_s=120.0,
+        reorder_new_albums=False,
+        reorder_new_albums_limit=20,
+        reorder_backup_limit=3,
+        support_dir="/tmp",
     )
 
 
@@ -202,6 +206,10 @@ def test_manager_album_stage_create_then_add(qapp, monkeypatch) -> None:  # noqa
         quick_timeout_s=5.0,
         heavy_timeout_s=30.0,
         very_long_timeout_s=120.0,
+        reorder_new_albums=False,
+        reorder_new_albums_limit=20,
+        reorder_backup_limit=3,
+        support_dir="/tmp",
         album_plan=FlickrAlbumPlan(
             raw_text="Trip 2026",
             album_title="Trip 2026",
@@ -284,6 +292,10 @@ def test_manager_album_stage_add_failure_is_reported(qapp, monkeypatch) -> None:
         quick_timeout_s=5.0,
         heavy_timeout_s=30.0,
         very_long_timeout_s=120.0,
+        reorder_new_albums=False,
+        reorder_new_albums_limit=20,
+        reorder_backup_limit=3,
+        support_dir="/tmp",
         album_plan=FlickrAlbumPlan(
             raw_text="72177720331888267",
             album_id="72177720331888267",

@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-from collections import Counter
-from datetime import datetime
-import json
-import os
 from pathlib import Path
-import tempfile
 import threading
 from typing import TYPE_CHECKING
 
@@ -38,6 +33,13 @@ from piqopiqo.ssf.settings_state import (
     get_user_setting,
     set_state_value,
 )
+from piqopiqo.tools.flickr_tools.album_order import (
+    FlickrAlbumOrderEntry,
+    album_title,
+    build_reordered_album_ids,
+    modal_photo_date,
+    save_album_order_backup,
+)
 from piqopiqo.tools.flickr_tools.auth_flow import ensure_flickr_authenticated
 from piqopiqo.tools.flickr_tools.upload.constants import API_RETRIES
 from piqopiqo.tools.flickr_utils import (
@@ -58,16 +60,6 @@ if TYPE_CHECKING:
     from piqopiqo.main_window import MainWindow
 
 
-BACKUP_FOLDER_NAME = "flickr-album-orders"
-BACKUP_PREFIX = "flickr-album-order-"
-
-
-@define(frozen=True)
-class FlickrAlbumOrderEntry:
-    album_id: str
-    title: str
-
-
 @define
 class FlickrReorderResult:
     album_count: int = 0
@@ -80,107 +72,6 @@ class FlickrReorderResult:
     undated_albums: list[str] = field(factory=list)
     warnings: list[str] = field(factory=list)
     error_message: str = ""
-
-
-def _album_title(value: object) -> str:
-    if isinstance(value, dict):
-        return str(value.get("_content") or "").strip()
-    return str(value or "").strip()
-
-
-def _taken_date(value: object):
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
-    except ValueError:
-        return None
-
-
-def build_reordered_album_ids(
-    albums: list[FlickrAlbumOrderEntry],
-    modal_dates: dict[str, object],
-    *,
-    from_album_id: str = "",
-) -> list[str]:
-    """Build the complete album order, sorting only the requested prefix."""
-    if not albums:
-        return []
-    selected_count = len(albums)
-    if from_album_id:
-        for index, album in enumerate(albums):
-            if album.album_id == from_album_id:
-                selected_count = index + 1
-                break
-        else:
-            raise ValueError(f"Album {from_album_id} is not in your album list.")
-
-    selected = albums[:selected_count]
-    tail = albums[selected_count:]
-    ordered = sorted(
-        selected,
-        key=lambda album: modal_dates[album.album_id],
-        reverse=True,
-    )
-    return [album.album_id for album in (*ordered, *tail)]
-
-
-def save_album_order_backup(
-    album_ids: list[str],
-    *,
-    support_dir: str | Path,
-    keep: int,
-    now: datetime | None = None,
-) -> tuple[Path, list[str]]:
-    """Atomically save an ID-array backup and prune older tool backups."""
-    backup_dir = Path(support_dir) / BACKUP_FOLDER_NAME
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    stamp = (now or datetime.now()).strftime("%Y-%m-%d_%H%M%S")
-    target = backup_dir / f"{BACKUP_PREFIX}{stamp}.json"
-    suffix = 2
-    while target.exists():
-        target = backup_dir / f"{BACKUP_PREFIX}{stamp}-{suffix}.json"
-        suffix += 1
-
-    temp_path = ""
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=backup_dir,
-            prefix=".flickr-album-order-",
-            suffix=".tmp",
-            delete=False,
-        ) as stream:
-            json.dump([str(album_id) for album_id in album_ids], stream, indent=2)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-            temp_path = stream.name
-        os.replace(temp_path, target)
-    except Exception:
-        if temp_path:
-            try:
-                Path(temp_path).unlink(missing_ok=True)
-            except OSError:
-                pass
-        raise
-
-    warnings: list[str] = []
-    dated_backups: list[tuple[int, str, Path]] = []
-    for path in backup_dir.glob(f"{BACKUP_PREFIX}*.json"):
-        try:
-            dated_backups.append((path.stat().st_mtime_ns, path.name, path))
-        except OSError as ex:
-            warnings.append(f"Could not inspect old backup {path.name}: {ex}")
-    backups = [row[2] for row in sorted(dated_backups, reverse=True)]
-    for old_path in backups[max(1, int(keep)) :]:
-        try:
-            old_path.unlink()
-        except OSError as ex:
-            warnings.append(f"Could not remove old backup {old_path.name}: {ex}")
-    return target, warnings
 
 
 class _FlickrReorderSignals(QObject):
@@ -236,7 +127,7 @@ class FlickrReorderWorker(PythonOwnedRunnable):
             albums = [
                 FlickrAlbumOrderEntry(
                     album_id=str(album.get("id") or "").strip(),
-                    title=_album_title(album.get("title")),
+                    title=album_title(album.get("title")),
                 )
                 for album in raw_albums
                 if isinstance(album, dict) and str(album.get("id") or "").strip()
@@ -274,26 +165,12 @@ class FlickrReorderWorker(PythonOwnedRunnable):
                     num_retries=API_RETRIES,
                     cancel_event=self._cancel_requested,
                 )
-                counts: Counter = Counter()
-                first_seen: list = []
-                for photo in photos:
-                    if not isinstance(photo, dict):
-                        result.invalid_photo_dates += 1
-                        continue
-                    date = _taken_date(photo.get("datetaken"))
-                    if date is None:
-                        result.invalid_photo_dates += 1
-                        continue
-                    if date not in counts:
-                        first_seen.append(date)
-                    counts[date] += 1
-                if not counts:
+                date, invalid_count = modal_photo_date(photos)
+                result.invalid_photo_dates += invalid_count
+                if date is None:
                     result.undated_albums.append(album.title or album.album_id)
                 else:
-                    highest = max(counts.values())
-                    modal_dates[album.album_id] = next(
-                        date for date in first_seen if counts[date] == highest
-                    )
+                    modal_dates[album.album_id] = date
                 result.albums_examined += 1
 
             if result.undated_albums:
