@@ -633,11 +633,11 @@ class FullscreenOverlay(QWidget):
         visible_indices: list[int] | None = None,
         old_global_index: int | None = None,
     ):
-        """Navigate to a new image while preserving zoom level and center position.
+        """Navigate to a new image while preserving zoom percentage and center.
 
-        Keeps the same zoom factor. The center of the image preserves its screen
-        position - i.e., the center of the new image appears at the same screen
-        coordinates as the center of the old image (can be negative if offscreen).
+        Recalculates the zoom multiplier for the new image's base scale to keep
+        the same absolute pixel mapping. The center of the new image appears at
+        the old image's screen coordinates (can be negative if offscreen).
 
         Special cases:
         - If the new image would be completely offscreen, show it in base view
@@ -671,7 +671,6 @@ class FullscreenOverlay(QWidget):
         old_image_center_screen = self._get_image_center_screen_coords()
 
         # Save zoom state
-        saved_zoom_level = self._zoom_level
         saved_zoom_state = self._zoom_state
         saved_zoom_direction = self._zoom_direction
 
@@ -682,10 +681,14 @@ class FullscreenOverlay(QWidget):
         self.current_visible_idx = new_visible_idx
         self._load_image_only()
 
-        # Restore zoom state
-        self._zoom_level = saved_zoom_level
+        # Preserve the percentage, recalculating its fit-relative multiplier.
         self._zoom_state = saved_zoom_state
         self._zoom_direction = saved_zoom_direction
+        self._zoom_level = get_zoom_level_for_state(
+            saved_zoom_state,
+            self._get_base_scale_factor(),
+            self._device_pixel_ratio,
+        )
 
         # Position new image center at the same screen position (without clamping)
         self._position_image_center_at_screen_no_clamp(old_image_center_screen)

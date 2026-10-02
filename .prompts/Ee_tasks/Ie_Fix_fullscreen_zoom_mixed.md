@@ -1,0 +1,1 @@
+Portrait / landscape mixed : photo : fullscreen : zoom 100% in one , going to the next : photo is more zoomed in than 100% : if I go back to base view, a single click (100%) is not as much zoomed. Check and fix. The % must be fixed for an image, should NOT depend on previous / next photos in sequence. Check if same thing for mixed resolution photos.

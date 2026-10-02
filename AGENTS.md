@@ -113,7 +113,7 @@ src/piqopiqo/
 ├── fullscreen/      # Fullscreen image viewing
 │   ├── overlay.py   # Fullscreen overlay + dynamic loop rank and configurable label swatch border
 │   ├── pan.py       # Pan logic for zoomed images
-│   └── zoom.py      # Zoom state management
+│   └── zoom.py      # Absolute pixel zoom states + per-image fit-relative multipliers
 ├── grid/            # Photo grid display
 │   ├── photo_cell.py    # Single photo cell widget (left/right click, configurable label swatch border)
 │   ├── photo_grid.py    # Grid of photo thumbnails with context menu
@@ -165,6 +165,7 @@ src/piqopiqo/
 
 tests/
 ├── test_fullscreen_info_panel.py # Fullscreen loop rank, info panel layout, zoom overlay lifecycle
+├── test_fullscreen_navigation_zoom.py # Absolute zoom across mixed orientations/resolutions, Retina, pan and fallback
 ├── test_unsaved_changes_dialog.py # Shared dirty-dialog dismissal behavior
 ├── test_edit_panel.py # Edit panel UI behavior (description field visibility + pending selection summary)
 ├── test_exif_panel.py # EXIF panel display formatting and pending selection summary
@@ -457,6 +458,7 @@ Selection behavior:
 - Grid shared-view shortcuts (`Space`, `Select All`) are attached to the central grid+panels scope so they still work after non-text panel interactions, but editable text widgets win focus (search/metadata fields keep normal typing + `Cmd+A` text selection).
 - When fullscreen opens, `MainWindow` disables all menu actions (and their menu shortcuts) except Quit; this prevents `Cmd+O`, `Cmd+,`, and future menu shortcuts from acting on the hidden grid view.
 - Fullscreen exit selection/visibility restoration is path-based and centralized in `MainWindow` (single-image loop vs selected-images loop, `FILTER_IN_FULLSCREEN`, and `ON_FULLSCREEN_EXIT_SELECTION_MODE` all converge there). Hidden/filtered-out loop members are not kept selected in the grid on exit.
+- Fullscreen zoom percentages are absolute pixel mappings: 100% means one image pixel per physical render-buffer pixel (including Retina/device pixel ratio). Navigation and loop ejection preserve the selected percentage and image-center screen position, recalculating the fit-relative zoom multiplier after loading and orienting each destination image. Never carry the previous image's multiplier across different orientations or resolutions. Base view still fits without upscaling beyond 100%, and a completely offscreen destination falls back to base view.
 - Fullscreen info panel starts with `#N`, the current 1-based position in the active loop (`current_visible_idx + 1`). Single-selection entry uses the filtered grid order; multi-selection entry uses the selected loop. Navigation, ejection, filtering, and filesystem rebinding refresh the rank without gaps, even when the current photo path stays unchanged or image decoding fails. Rank is never stored in photo metadata.
 - Fullscreen info panel label swatches draw a solid, square-cornered border inside the existing 20×20 footprint. Border color/width use internal `FULLSCREEN_INFO_PANEL_SWATCH_BORDER_*` runtime settings; missing or unrecognized labels stay transparent and borderless while retaining their layout space.
 - Grid label swatches retain their 16×16 rectangle and 4-pixel margin. Their border uses internal `GRID_ITEM_SWATCH_BORDER_*` runtime settings (black, 1 pixel by default); `GRID_ITEM_SHOW_LABEL_SWATCH` still controls visibility, and missing or unrecognized labels show no swatch.

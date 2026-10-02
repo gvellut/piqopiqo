@@ -159,3 +159,4 @@
 ! [Rank in fullscreen](Ee_tasks/Fe_Rank_in_fullscreen.md)
 ! [White border label fullscreen](Ee_tasks/Ge_White_border_label_fullscreen.md)
 ! [reorder when creating album](Ee_tasks/He_reorder_when_creating_album.md)
+! [Fix fullscreen zoom mixed](Ee_tasks/Ie_Fix_fullscreen_zoom_mixed.md)
