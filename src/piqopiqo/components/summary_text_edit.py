@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 
 from attrs import define
-from PySide6.QtGui import QPalette, QTextCharFormat
+from PySide6.QtGui import QPalette, QShowEvent, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import QTextEdit, QWidget
 
 
@@ -61,3 +61,13 @@ class SummaryTextEdit(QTextEdit):
         text_height = self.fontMetrics().lineSpacing() * (visible_lines + 1)
         frame_height = self.frameWidth() * 2
         self.setFixedHeight(text_height + frame_height + 16)
+        self._reset_scroll_position()
+
+    def showEvent(self, event: QShowEvent) -> None:
+        super().showEvent(event)
+        self._reset_scroll_position()
+
+    def _reset_scroll_position(self) -> None:
+        self.moveCursor(QTextCursor.MoveOperation.Start)
+        self.horizontalScrollBar().setValue(0)
+        self.verticalScrollBar().setValue(0)

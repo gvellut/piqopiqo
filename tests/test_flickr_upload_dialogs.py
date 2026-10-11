@@ -520,6 +520,35 @@ def test_upload_summary_reports_new_album_reorder_and_backup(qapp) -> None:  # n
     assert "Album order backup: /tmp/order.json" in dialog.details.toPlainText()
 
 
+def test_upload_summary_long_backup_path_starts_at_top_left(qapp, monkeypatch) -> None:
+    dialog = _mk_upload_dialog()
+    monkeypatch.setattr(dialog, "start", lambda: None)
+    dialog.show()
+    qapp.processEvents()
+    dialog._on_finished(
+        FlickrUploadResult(
+            total_photos=1,
+            uploaded_count=1,
+            album_id="new",
+            album_created=True,
+            album_added_count=1,
+            album_reordered=True,
+            album_reorder_backup_path=(
+                "/tmp/" + "long-folder-name/" * 40 + "order.json"
+            ),
+        )
+    )
+    qapp.processEvents()
+
+    assert dialog.details.toPlainText().startswith("Upload completed successfully.")
+    assert dialog.details.textCursor().position() == 0
+    assert dialog.details.horizontalScrollBar().maximum() > 0
+    assert dialog.details.horizontalScrollBar().value() == 0
+    assert dialog.details.verticalScrollBar().value() == 0
+    assert dialog.ok_btn.hasFocus()
+    dialog.close()
+
+
 @pytest.mark.parametrize(
     "result, expected",
     [
