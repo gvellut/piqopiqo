@@ -18,12 +18,14 @@ from typing import Any
 
 from attrs import define
 from PySide6.QtCore import QObject, QThreadPool, QTimer, Signal
+from PySide6.QtGui import QColor, QTextCharFormat
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -34,7 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from piqopiqo.components.summary_text_edit import SummaryTextEdit
+from piqopiqo.components.summary_text_edit import SummaryLine, SummaryTextEdit
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
@@ -790,13 +792,12 @@ class CopySdProgressDialog(ToolFlowDialog):
                 "result": ToolScreen(
                     id="result",
                     title="Copy from SD",
-                    build=lambda dialog: dialog._build_body(),
+                    build=lambda dialog: dialog._build_result_body(),
                     buttons=(
                         ToolButton("cancel", "Cancel"),
                         ToolButton("ok", "OK", enabled=True, default=True),
                     ),
                     min_width=520,
-                    show_progress=True,
                 ),
                 "storage_full": ToolScreen(
                     id="storage_full",
@@ -871,7 +872,6 @@ class CopySdProgressDialog(ToolFlowDialog):
             },
         )
         super().__init__(workflow, parent=parent)
-        self._setup_status_warning_icon()
         self._setup_eject_checkbox()
         self.progress_bar.setRange(0, 0)
         self.set_status("Preparing copy...")
@@ -890,6 +890,7 @@ class CopySdProgressDialog(ToolFlowDialog):
         return bool(self._eject_checked)
 
     def transition_to(self, screen_id: str) -> None:
+        self.status_warning_icon_label = None
         super().transition_to(screen_id)
         self.status_label = self.status_label
         self.progress_text_label = self.progress_count_label
@@ -920,15 +921,18 @@ class CopySdProgressDialog(ToolFlowDialog):
         if layout is not None:
             layout.insertWidget(layout.count() - 1, self.eject_checkbox)
 
-    def _setup_status_warning_icon(self) -> None:
-        self.status_warning_icon_label = QLabel(self.progress_row)
+    def _build_result_body(self) -> QWidget:
+        widget = QWidget(self)
+        layout = QHBoxLayout(widget)
+        self.status_warning_icon_label = QLabel(widget)
         self.status_warning_icon_label.setObjectName("copySdWarningIcon")
         icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
         self.status_warning_icon_label.setPixmap(icon.pixmap(24, 24))
         self.status_warning_icon_label.hide()
-        layout = self.progress_row.layout()
-        if layout is not None:
-            layout.insertWidget(0, self.status_warning_icon_label)
+        layout.addWidget(self.status_warning_icon_label)
+        self.summary_text = SummaryTextEdit("", widget)
+        layout.addWidget(self.summary_text, 1)
+        return widget
 
     def _set_status_warning_icon_visible(self, visible: bool) -> None:
         if self.status_warning_icon_label is None:
@@ -938,9 +942,8 @@ class CopySdProgressDialog(ToolFlowDialog):
     def _build_ejected_body(self) -> QWidget:
         widget = QWidget(self)
         layout = QVBoxLayout(widget)
-        label = QLabel("You can remove the SD Card safely", widget)
-        label.setWordWrap(True)
-        layout.addWidget(label)
+        self.summary_text = SummaryTextEdit("You can remove the SD Card safely", widget)
+        layout.addWidget(self.summary_text)
         return widget
 
     def _build_eject_error_body(self) -> QWidget:
@@ -949,10 +952,12 @@ class CopySdProgressDialog(ToolFlowDialog):
         message = "Could not eject the SD card."
         if self._eject_error_message:
             message = f"{message}\n\n{self._eject_error_message}"
-        label = QLabel(message, widget)
-        label.setWordWrap(True)
-        label.setStyleSheet("color: red;")
-        layout.addWidget(label)
+        error_format = QTextCharFormat()
+        error_format.setForeground(QColor("red"))
+        self.summary_text = SummaryTextEdit(
+            [SummaryLine(message, error_format)], widget
+        )
+        layout.addWidget(self.summary_text)
         return widget
 
     def _build_storage_full_body(self) -> QWidget:
@@ -1089,14 +1094,7 @@ class CopySdProgressDialog(ToolFlowDialog):
         if error_count:
             status += f" {error_count} error(s)."
 
-        self.set_status(status)
-        if total:
-            self.set_progress(min(copied, total), total)
-        else:
-            self.progress_bar.hide()
-            self.progress_count_label.clear()
-            self.progress_count_label.hide()
-            self.sync_size_to_content()
+        self.summary_text.set_lines(status)
         self.cancel_btn.setEnabled(False)
         self.ok_btn.setEnabled(True)
         self.ok_btn.setDefault(True)
@@ -1104,7 +1102,7 @@ class CopySdProgressDialog(ToolFlowDialog):
         if not cancelled and self.eject_checkbox is not None:
             self.eject_checkbox.show()
             self._set_unsaved_changes_state(lambda: self.eject_checkbox.isChecked())
-            self.sync_size_to_content()
+        self.sync_size_to_content()
 
     @staticmethod
     def _quit_application() -> None:

@@ -9,11 +9,11 @@ import shutil
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, Qt, QThreadPool, QTimer, Signal
+from PySide6.QtGui import QTextCharFormat
 from PySide6.QtWidgets import (
     QCheckBox,
     QLabel,
     QMessageBox,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -22,6 +22,7 @@ from piqopiqo.cache_paths import (
     clear_metadata_cache_for_folders,
     clear_thumb_cache_for_folders,
 )
+from piqopiqo.components.summary_text_edit import SummaryLine, SummaryTextEdit
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
@@ -296,7 +297,7 @@ class ArchiveDialog(ToolFlowDialog):
                 "result": ToolScreen(
                     id="result",
                     title="Archive",
-                    build=lambda dialog: dialog._build_body(),
+                    build=lambda dialog: dialog._build_result(),
                     buttons=(
                         ToolButton("cancel", "Cancel", visible=False),
                         ToolButton("ok", "OK", default=True),
@@ -351,12 +352,12 @@ class ArchiveDialog(ToolFlowDialog):
         widget = QWidget(self)
         layout = QVBoxLayout(widget)
 
-        self.summary_label = QLabel(widget)
-        self.summary_label.setWordWrap(True)
-        self.summary_label.setTextInteractionFlags(
+        self.confirm_label = QLabel(widget)
+        self.confirm_label.setWordWrap(True)
+        self.confirm_label.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
         )
-        layout.addWidget(self.summary_label)
+        layout.addWidget(self.confirm_label)
 
         self.save_exif_checkbox = QCheckBox("Save EXIF before archive", widget)
         self.save_exif_checkbox.setChecked(
@@ -364,14 +365,17 @@ class ArchiveDialog(ToolFlowDialog):
         )
         layout.addWidget(self.save_exif_checkbox)
 
-        self.error_label = QLabel(widget)
-        self.error_label.setWordWrap(True)
-        self.error_label.setStyleSheet("color: red;")
-        self.error_label.hide()
-        layout.addWidget(self.error_label)
+        return widget
 
-        self.details_text = QTextEdit(widget)
-        self.details_text.setReadOnly(True)
+    def _build_result(self) -> QWidget:
+        widget = QWidget(self)
+        layout = QVBoxLayout(widget)
+        self.summary_text = SummaryTextEdit("", widget)
+        layout.addWidget(self.summary_text)
+        self.error_text = SummaryTextEdit("", widget)
+        self.error_text.hide()
+        layout.addWidget(self.error_text)
+        self.details_text = SummaryTextEdit("", widget)
         self.details_text.hide()
         layout.addWidget(self.details_text)
 
@@ -387,7 +391,7 @@ class ArchiveDialog(ToolFlowDialog):
         item_count = len(self._items)
         # archive path contains also the name of the current folder
         destination_folder = str(Path(self._archive_path).parent)
-        self.summary_label.setText(
+        self.confirm_label.setText(
             "This will move the loaded root folder and all of its contents.\n\n"
             f"Folder:\n{self._root_folder}\n\n"
             f"Destination:\n{destination_folder}\n\n"
@@ -435,10 +439,7 @@ class ArchiveDialog(ToolFlowDialog):
         self._running = True
         self._running_stage = "move"
         self.transition_to("move")
-        self.error_label.hide()
-        self.details_text.hide()
-        self.details_text.clear()
-        self.summary_label.hide()
+        self.confirm_label.hide()
         self.progress_stage_label.setText(text)
         self.progress_count_label.hide()
         self.progress_count_label.clear()
@@ -452,10 +453,7 @@ class ArchiveDialog(ToolFlowDialog):
         self._running = True
         self._running_stage = "exif"
         self.transition_to("exif")
-        self.error_label.hide()
-        self.details_text.hide()
-        self.details_text.clear()
-        self.summary_label.hide()
+        self.confirm_label.hide()
         self.progress_stage_label.setText("Saving EXIF metadata before archive...")
         self.save_exif_checkbox.setEnabled(False)
         self.save_exif_checkbox.hide()
@@ -626,8 +624,7 @@ class ArchiveDialog(ToolFlowDialog):
         self._running_stage = None
         self._finished = True
         self.transition_to("result")
-        self.summary_label.setText(text)
-        self.summary_label.show()
+        self.summary_text.set_lines(text)
         self.progress_header_widget.hide()
         self.progress_count_label.clear()
         self.progress_count_label.hide()
@@ -635,18 +632,16 @@ class ArchiveDialog(ToolFlowDialog):
         self.ok_btn.setEnabled(True)
         self.ok_btn.setFocus(Qt.FocusReason.OtherFocusReason)
         self.ok_btn.setDefault(True)
-        self.save_exif_checkbox.hide()
 
         detail_lines = [line for line in (details or []) if str(line).strip()]
         if error_text.strip():
-            self.error_label.setText(error_text.strip())
-            self.error_label.show()
-        else:
-            self.error_label.hide()
+            error_format = QTextCharFormat()
+            error_format.setForeground(Qt.GlobalColor.red)
+            self.error_text.set_lines([SummaryLine(error_text.strip(), error_format)])
+            self.error_text.show()
 
         if detail_lines:
-            self.details_text.setPlainText("\n".join(detail_lines))
-            self.details_text.setFixedHeight(140)
+            self.details_text.set_lines(detail_lines)
             self.details_text.show()
         else:
             self.details_text.hide()

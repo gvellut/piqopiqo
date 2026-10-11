@@ -156,6 +156,7 @@ def test_result_summary_is_read_only_and_uses_one_value_per_line(
         cancelled=True,
         error_message="Connection failed",
         failed_photo_ids={"1", "2", "3"},
+        errors=["<photo>: Failed\nMore details & text"],
     )
 
     flickr_dialog.transition_to("result")
@@ -178,6 +179,10 @@ def test_result_summary_is_read_only_and_uses_one_value_per_line(
         "Failed photos: 3",
         "Error: Connection failed",
     ]
+    text_widgets = flickr_dialog.findChildren(QTextEdit)
+    assert len(text_widgets) == 2
+    assert all(isinstance(widget, SummaryTextEdit) for widget in text_widgets)
+    assert text_widgets[1].toPlainText() == "<photo>: Failed\nMore details & text"
 
 
 def test_long_error_keeps_flickr_result_summary_scrollable(qapp, flickr_dialog) -> None:

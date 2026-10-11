@@ -333,6 +333,7 @@ def test_local_result_summary_is_read_only_selectable_multiline_text(qapp) -> No
         photos_changed=6,
         unchanged=2,
         cancelled=True,
+        errors=["<file>.jpg: Failed\nMore details & text"],
     )
 
     dialog.transition_to("result")
@@ -349,6 +350,10 @@ def test_local_result_summary_is_read_only_selectable_multiline_text(qapp) -> No
         "Only the PiqoPiqo SQLite metadata database was changed. Image "
         "files and EXIF metadata were untouched."
     )
+    text_widgets = dialog.findChildren(QTextEdit)
+    assert len(text_widgets) == 2
+    assert all(isinstance(widget, SummaryTextEdit) for widget in text_widgets)
+    assert text_widgets[1].toPlainText() == "<file>.jpg: Failed\nMore details & text"
     dialog.show()
     qapp.processEvents()
     assert summary.horizontalScrollBar().maximum() > 0

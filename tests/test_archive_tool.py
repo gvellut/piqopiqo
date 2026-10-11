@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 import pytest
 
 from piqopiqo.background.media_man import FolderPrimingResult
+from piqopiqo.components.summary_text_edit import SummaryTextEdit
 from piqopiqo.main_window import MainWindow
 from piqopiqo.model import FilterCriteria, ImageItem
 from piqopiqo.ssf.settings_state import (
@@ -454,7 +455,7 @@ def test_archive_dialog_exif_stage_shows_compact_progress_and_suspends_watcher(
     qapp.processEvents()
 
     assert watcher_control.suspend_calls == 1
-    assert dialog.summary_label.isHidden() is True
+    assert dialog.confirm_label.isHidden() is True
     assert dialog.progress_header_widget.isHidden() is False
     assert dialog.progress_count_label.text() == "0/1"
     assert dialog.ok_btn.text() == "Cancel"
@@ -558,8 +559,14 @@ def test_archive_dialog_finished_state_shows_summary_and_clickable_ok(
     dialog._show_finished_result(text="Archive complete.\nMoved to:\n/archive/root")
     qapp.processEvents()
 
-    assert dialog.summary_label.isVisible() is True
-    assert dialog.summary_label.height() >= dialog.summary_label.sizeHint().height()
+    assert isinstance(dialog.summary_text, SummaryTextEdit)
+    assert dialog.summary_text.isVisible() is True
+    assert (
+        dialog.summary_text.toPlainText()
+        == "Archive complete.\nMoved to:\n/archive/root"
+    )
+    assert dialog.progress_row.isHidden()
+    assert dialog.progress_bar.isHidden()
     assert dialog.ok_btn.isVisible() is True
     assert dialog.ok_btn.height() >= dialog.ok_btn.sizeHint().height()
 
@@ -614,7 +621,10 @@ def test_archive_dialog_exif_cancel_stops_before_move_and_resumes_watcher(
     assert watcher_control.resume_calls == 1
     assert started == []
     assert dialog._finished is True
-    assert dialog.summary_label.text() == "Archive cancelled. The folder was not moved."
+    assert (
+        dialog.summary_text.toPlainText()
+        == "Archive cancelled. The folder was not moved."
+    )
 
 
 def test_archive_dialog_exif_failure_stops_before_move(qapp, settings_store):  # noqa: ARG001
@@ -643,7 +653,11 @@ def test_archive_dialog_exif_failure_stops_before_move(qapp, settings_store):  #
     assert watcher_control.resume_calls == 1
     assert started == []
     assert dialog._finished is True
-    assert "The folder was not moved" in dialog.summary_label.text()
+    assert "The folder was not moved" in dialog.summary_text.toPlainText()
+    assert isinstance(dialog.error_text, SummaryTextEdit)
+    assert isinstance(dialog.details_text, SummaryTextEdit)
+    assert dialog.error_text.toPlainText() == "EXIF save failed for 1 file(s)."
+    assert dialog.details_text.toPlainText() == "a.jpg: boom"
 
 
 def test_archive_dialog_exif_success_keeps_watcher_suspended_until_move(
@@ -703,8 +717,9 @@ def test_archive_dialog_move_prepare_failure_after_exif_success_resumes_watcher(
     assert watcher_control.suspend_calls == 1
     assert watcher_control.resume_calls == 1
     assert dialog._finished is True
-    assert dialog.summary_label.text() == "Archive could not start."
-    assert dialog.error_label.text() == "boom"
+    assert dialog.summary_text.toPlainText() == "Archive could not start."
+    assert isinstance(dialog.error_text, SummaryTextEdit)
+    assert dialog.error_text.toPlainText() == "boom"
 
 
 def test_archive_dialog_move_stage_uses_current_root_and_source_folders(

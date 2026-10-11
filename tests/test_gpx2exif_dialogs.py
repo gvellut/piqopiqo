@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication, QFileDialog
 import pytest
 
+from piqopiqo.components.summary_text_edit import SummaryTextEdit
 from piqopiqo.ssf.settings_state import init_qsettings_store
 from piqopiqo.tools.gpx2exif.dialogs import (
     ApplyGpxDialog,
     ApplyGpxProgressDialog,
+    ClearGpsProgressDialog,
     ExtractGpsTimeShiftProgressDialog,
 )
 from piqopiqo.tools.gpx2exif.service import ApplyGpxResult, ApplyGpxUnmatchedPhoto
@@ -283,13 +286,14 @@ def test_extract_time_shift_progress_success_shows_clock_and_shift_lines(qapp):
     qapp.processEvents()
 
     assert dialog.result_shift == "-1m4s"
-    assert dialog.result_label.isHidden() is False
-    assert dialog.result_label.text() == (
+    assert isinstance(dialog.result_text, SummaryTextEdit)
+    assert dialog.result_text.isHidden() is False
+    assert dialog.result_text.toPlainText() == (
         "Extracted clock: 12:34:56\nComputed time shift: -1m4s"
     )
     assert dialog.progress_row.isHidden() is True
     assert dialog.progress_bar.isHidden() is True
-    assert dialog.result_label.geometry().x() == 0
+    assert dialog.result_text.geometry().x() == 0
 
 
 def test_extract_time_shift_progress_running_screen_has_no_body_gap(qapp):
@@ -356,7 +360,17 @@ def test_apply_gpx_progress_dialog_initially_compact_and_expands_on_details(qapp
     assert dialog.minimumHeight() == dialog.maximumHeight() == final_height
     assert final_height > initial_height
     assert dialog.progress_bar.isHidden() is True
-    assert dialog.status_label.text() == ("Processed 1 photo(s).\nGeoreferenced: 0 / 1")
+    assert isinstance(dialog.summary_text, SummaryTextEdit)
+    assert isinstance(dialog.details_text, SummaryTextEdit)
+    assert dialog.summary_text.toPlainText() == (
+        "Processed 1 photo(s).\nGeoreferenced: 0 / 1"
+    )
+    assert (
+        dialog.details_text.toPlainText()
+        == "KML output:\n/tmp/out.kml\n\nErrors:\nSome folder failed"
+    )
+    assert dialog.progress_row.isHidden()
+    assert dialog.show_finder_btn.isEnabled()
 
 
 def test_apply_gpx_progress_no_match_shows_compact_warning_only(qapp):
@@ -369,7 +383,10 @@ def test_apply_gpx_progress_no_match_shows_compact_warning_only(qapp):
     qapp.processEvents()
 
     assert dialog.no_match_warning_row.isHidden() is False
-    assert dialog.no_match_warning_label.text() == "The GPX did not match any image"
+    assert isinstance(dialog.no_match_warning_text, SummaryTextEdit)
+    assert (
+        dialog.no_match_warning_text.toPlainText() == "The GPX did not match any image"
+    )
     assert dialog.no_match_warning_icon.pixmap().isNull() is False
     assert dialog.details_text.isHidden() is True
     assert dialog.folder_label.isHidden() is True
@@ -408,11 +425,93 @@ def test_apply_gpx_progress_mixed_result_shows_kml_then_red_unmatched(qapp):
     assert (
         "Images without georeferencing:\nphoto-0.jpg - 2026-01-01 09:00:00"
     ) in plain_text
-    assert "#b00020" in dialog.details_text.toHtml().lower()
-    assert dialog.details_text.height() == 140
+    assert isinstance(dialog.details_text, SummaryTextEdit)
+    assert dialog.details_text.document().find(
+        "Images without georeferencing:"
+    ).charFormat().foreground().color() == QColor("#b00020")
+    assert dialog.details_text.document().find(
+        "photo-0.jpg"
+    ).charFormat().foreground().color() == QColor("#b00020")
+    assert dialog.details_text.document().find(
+        "KML output:"
+    ).charFormat().foreground().color() != QColor("#b00020")
     assert dialog.details_text.verticalScrollBar().maximum() > 0
     assert dialog.no_match_warning_row.isHidden() is True
     assert dialog.progress_bar.isHidden() is True
-    assert dialog.status_label.text() == (
+    assert dialog.summary_text.toPlainText() == (
         "Processed 25 photo(s).\nGeoreferenced: 1 / 24"
     )
+    assert dialog.progress_row.isHidden()
+
+
+def test_extract_time_shift_error_uses_red_summary(qapp):
+    init_qsettings_store(dyn=True)
+    dialog = ExtractGpsTimeShiftProgressDialog()
+    dialog._on_error("<OCR> failed\nMore details & text")
+
+    assert isinstance(dialog.result_text, SummaryTextEdit)
+    assert dialog.result_text.toPlainText() == "<OCR> failed\nMore details & text"
+    assert dialog.result_text.document().find(
+        "<OCR>"
+    ).charFormat().foreground().color() == QColor("red")
+    assert dialog.progress_row.isHidden()
+    assert dialog.progress_bar.isHidden()
+
+
+def test_apply_gpx_no_match_keeps_error_details(qapp):
+    dialog = ApplyGpxProgressDialog(total=1)
+    dialog.finish(ApplyGpxResult(processed=1, errors=["<track> failed\nMore details"]))
+
+    assert dialog.no_match_warning_row.isHidden() is False
+    assert isinstance(dialog.details_text, SummaryTextEdit)
+    assert dialog.details_text.isHidden() is False
+    assert dialog.details_text.toPlainText() == "Errors:\n<track> failed\nMore details"
+
+
+def test_apply_gpx_cancelled_result_uses_shared_summary(qapp):
+    dialog = ApplyGpxProgressDialog(total=3)
+    dialog.finish(ApplyGpxResult(processed=1, cancelled=True))
+
+    assert isinstance(dialog.summary_text, SummaryTextEdit)
+    assert (
+        dialog.summary_text.toPlainText()
+        == "Cancelled. 1 photo(s) processed.\nGeoreferenced: 0 / 3"
+    )
+    assert dialog.progress_row.isHidden()
+    assert dialog.progress_bar.isHidden()
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_clear_gps_result_uses_shared_summary(qapp, cancelled):
+    dialog = ClearGpsProgressDialog(total=3)
+    dialog.finish(processed=2, total=3, cancelled=cancelled)
+
+    status = "cancelled" if cancelled else "complete"
+    assert isinstance(dialog.summary_text, SummaryTextEdit)
+    assert (
+        dialog.summary_text.toPlainText()
+        == f"Clear GPS {status}. 2/3 photo(s) processed."
+    )
+    assert dialog.progress_row.isHidden()
+    assert dialog.progress_bar.isHidden()
+    assert dialog.ok_btn.isEnabled()
+
+
+@pytest.mark.parametrize(
+    "dialog_class, headline",
+    [
+        (ApplyGpxProgressDialog, "Apply GPX failed:"),
+        (ClearGpsProgressDialog, "Clear GPS failed:"),
+    ],
+)
+def test_gps_failure_uses_shared_summary_and_details(qapp, dialog_class, headline):
+    dialog = dialog_class(total=3)
+    dialog.show_error("<Failure> & details\nSecond line")
+
+    assert isinstance(dialog.summary_text, SummaryTextEdit)
+    assert isinstance(dialog.details_text, SummaryTextEdit)
+    assert dialog.summary_text.toPlainText() == headline
+    assert dialog.details_text.toPlainText() == "<Failure> & details\nSecond line"
+    assert dialog.progress_row.isHidden()
+    assert dialog.progress_bar.isHidden()
+    assert dialog.ok_btn.isEnabled()

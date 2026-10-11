@@ -401,6 +401,8 @@ def test_result_summary_is_read_only_selectable_multiline_text(qapp) -> None:
         reordered=True,
         backup_path="/tmp/flickr-order.json",
         error_message="Follow-up warning",
+        warnings=["<Warning> & details"],
+        undated_albums=["Old trip"],
     )
 
     dialog.transition_to("result")
@@ -418,6 +420,12 @@ def test_result_summary_is_read_only_selectable_multiline_text(qapp) -> None:
         "Existing order saved to: /tmp/flickr-order.json",
         "Error: Follow-up warning",
     ]
+    text_widgets = dialog.findChildren(QTextEdit)
+    assert len(text_widgets) == 2
+    assert all(isinstance(widget, SummaryTextEdit) for widget in text_widgets)
+    assert text_widgets[1].toPlainText() == (
+        "<Warning> & details\nAlbums without a usable date: Old trip"
+    )
 
 
 def test_result_summary_long_backup_path_does_not_clip_last_line(qapp) -> None:

@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -440,10 +439,7 @@ class LocalFindReplaceDialog(ToolFlowDialog):
         summary.setObjectName("localFindReplaceSummaryText")
         layout.addWidget(summary)
         if result.errors:
-            details = QTextEdit(widget)
-            details.setReadOnly(True)
-            details.setPlainText("\n".join(result.errors))
-            details.setMaximumHeight(140)
+            details = SummaryTextEdit(result.errors, widget)
             layout.addWidget(details)
         return widget
 

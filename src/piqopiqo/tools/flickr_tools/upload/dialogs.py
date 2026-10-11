@@ -754,11 +754,6 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         widget = QWidget(self)
         layout = QVBoxLayout(widget)
 
-        self.upload_status_label = QLabel("", widget)
-        self.upload_status_label.setWordWrap(True)
-        self.upload_status_label.hide()
-        layout.addWidget(self.upload_status_label)
-
         self.album_action_label = QLabel("", widget)
         self.album_action_label.setWordWrap(True)
         self.album_action_label.hide()
@@ -777,9 +772,10 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         widget = QWidget(self)
         layout = QVBoxLayout(widget)
 
-        self.transition_result_label = QLabel(self._transition_result_text, widget)
-        self.transition_result_label.setWordWrap(True)
-        layout.addWidget(self.transition_result_label)
+        self.transition_result_text = SummaryTextEdit(
+            self._transition_result_text, widget
+        )
+        layout.addWidget(self.transition_result_text)
         return widget
 
     def _update_stage_label(self) -> None:
@@ -1129,30 +1125,29 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         self.progress_text_label.hide()
         self.album_action_label.clear()
         self.album_action_label.hide()
-        self.upload_status_label.show()
         self.details.clear()
         self.details.hide()
 
         lines: list[str | SummaryLine] = []
         if result.fatal_error:
-            self.upload_status_label.setText("Upload failed.")
+            lines.append("Upload failed.")
             lines.append(result.fatal_error)
         elif result.cancelled:
-            self.upload_status_label.setText("Upload cancelled.")
+            lines.append("Upload cancelled.")
             lines.append(
                 "Uploaded "
                 f"{result.uploaded_count}/{result.total_photos} "
                 "photo(s) before cancellation."
             )
         elif result.failures:
-            self.upload_status_label.setText("Upload completed with issues.")
+            lines.append("Upload completed with issues.")
             lines.append(
                 f"Uploaded {result.uploaded_count}/{result.total_photos} photo(s)."
             )
             lines.append(f"Reset date: {result.reset_date_count}")
             lines.append(f"Make public: {result.made_public_count}")
         else:
-            self.upload_status_label.setText("Upload completed successfully.")
+            lines.append("Upload completed successfully.")
             lines.append(
                 f"Uploaded {result.uploaded_count}/{result.total_photos} photo(s)."
             )

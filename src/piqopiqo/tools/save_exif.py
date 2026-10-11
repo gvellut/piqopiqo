@@ -6,13 +6,15 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QTextCharFormat
 from PySide6.QtWidgets import (
     QLabel,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
+from piqopiqo.components.summary_text_edit import SummaryLine, SummaryTextEdit
 from piqopiqo.metadata.exif_write import build_exif_tags
 from piqopiqo.model import ImageItem
 from piqopiqo.tools.tool_flow import (
@@ -82,7 +84,7 @@ class SaveExifDialog(ToolFlowDialog):
                 "result": ToolScreen(
                     id="result",
                     title="Save EXIF Metadata",
-                    build=lambda dialog: dialog._build_body(),
+                    build=lambda dialog: dialog._build_result(),
                     buttons=(ToolButton("ok", "OK", default=True),),
                     min_width=500,
                 ),
@@ -120,11 +122,20 @@ class SaveExifDialog(ToolFlowDialog):
         self.error_label.hide()
         layout.addWidget(self.error_label)
 
-        self.error_text = QTextEdit(widget)
-        self.error_text.setReadOnly(True)
+        self.error_text = SummaryTextEdit("", widget)
         self.error_text.hide()
         layout.addWidget(self.error_text)
 
+        return widget
+
+    def _build_result(self) -> QWidget:
+        widget = QWidget(self)
+        layout = QVBoxLayout(widget)
+        self.summary_text = SummaryTextEdit("", widget)
+        layout.addWidget(self.summary_text)
+        self.error_text = SummaryTextEdit("", widget)
+        self.error_text.hide()
+        layout.addWidget(self.error_text)
         return widget
 
     def _update_confirmation_text(self):
@@ -203,11 +214,9 @@ class SaveExifDialog(ToolFlowDialog):
             filename = os.path.basename(file_path)
             line = f"{filename}: {error_message}"
             self._error_lines.append(line)
-            self.error_text.append(line)
-            if not self.error_text.isVisible():
-                self.error_text.setFixedHeight(120)
-                self.error_text.show()
-                self.sync_size_to_content()
+            self.error_text.set_lines(self._error_lines)
+            self.error_text.show()
+            self.sync_size_to_content()
 
     def _on_all_completed(self):
         self._disconnect_signals()
@@ -220,23 +229,23 @@ class SaveExifDialog(ToolFlowDialog):
 
         completed, total = self._exif_manager.get_write_progress()
         if cancelled:
-            self.confirm_label.setText(
-                f"Operation stopped. {completed} of {total} files processed."
-            )
+            summary = f"Operation stopped. {completed} of {total} files processed."
         else:
             if self._error_count > 0:
-                self.confirm_label.setText(
+                summary = (
                     f"Complete. {completed} files processed, "
                     f"{self._error_count} with errors."
                 )
             else:
-                self.confirm_label.setText(f"Complete. {completed} files processed.")
+                summary = f"Complete. {completed} files processed."
+        self.summary_text.set_lines(summary)
         if self._error_count > 0:
-            self.error_label.setText(f"{self._error_count} file(s) with errors")
-            self.error_label.show()
-        if self._error_lines:
-            self.error_text.setPlainText("\n".join(self._error_lines))
-            self.error_text.setFixedHeight(120)
+            error_format = QTextCharFormat()
+            error_format.setForeground(Qt.GlobalColor.red)
+            self.error_text.set_lines([
+                SummaryLine(f"{self._error_count} file(s) with errors", error_format),
+                *self._error_lines,
+            ])
             self.error_text.show()
         self.sync_size_to_content()
 

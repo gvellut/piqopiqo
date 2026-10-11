@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QLineEdit,
     QMessageBox,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -430,10 +429,7 @@ class FlickrReorderDialog(ToolFlowDialog):
                 "Albums without a usable date: " + ", ".join(result.undated_albums)
             )
         if details_lines:
-            details = QTextEdit(widget)
-            details.setReadOnly(True)
-            details.setPlainText("\n".join(details_lines))
-            details.setMaximumHeight(130)
+            details = SummaryTextEdit(details_lines, widget)
             layout.addWidget(details)
         return widget
 

@@ -43,6 +43,16 @@ def test_summary_accepts_plain_text_and_mixed_formatted_lines(qapp) -> None:  # 
         Qt.GlobalColor.red
     )
 
+    summary.set_lines([SummaryLine("Unformatted"), "<b>Literal & plain</b>"])
+    assert summary.toPlainText() == "Unformatted\n<b>Literal & plain</b>"
+    assert summary.document().find(
+        "Unformatted"
+    ).charFormat().foreground().color() != QColor(Qt.GlobalColor.red)
+    summary.set_lines("Plain text after formatting")
+    assert summary.document().find(
+        "Plain text"
+    ).charFormat().foreground().color() != QColor(Qt.GlobalColor.red)
+
 
 def test_summary_height_updates_with_new_lines(qapp) -> None:  # noqa: ARG001
     summary = SummaryTextEdit("One")
@@ -54,3 +64,15 @@ def test_summary_height_updates_with_new_lines(qapp) -> None:  # noqa: ARG001
 
     assert tall_height > short_height
     assert summary.height() == short_height
+
+
+@pytest.mark.parametrize(
+    "content",
+    ["One\nTwo\nThree\nFour\n", ["One\nTwo", SummaryLine("Three\nFour\n")]],
+)
+def test_summary_counts_embedded_newlines_for_height(qapp, content) -> None:  # noqa: ARG001
+    summary = SummaryTextEdit(content)
+    explicit_lines = SummaryTextEdit(["One", "Two", "Three", "Four", ""])
+
+    assert summary.toPlainText() == explicit_lines.toPlainText()
+    assert summary.height() == explicit_lines.height()

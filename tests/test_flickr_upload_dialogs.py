@@ -495,7 +495,7 @@ def test_upload_progress_completion_hides_running_widgets_and_shows_summary(  # 
     assert dialog.stage_label.isHidden() is True
     assert dialog.progress_bar.isHidden() is True
     assert dialog.progress_text_label.isHidden() is True
-    assert dialog.upload_status_label.isHidden() is False
+    assert dialog.details.toPlainText().startswith("Upload completed successfully.\n")
     assert dialog.details.isHidden() is False
     assert isinstance(dialog.details, SummaryTextEdit)
     assert dialog.ok_btn.isHidden() is False
@@ -518,6 +518,31 @@ def test_upload_summary_reports_new_album_reorder_and_backup(qapp) -> None:  # n
 
     assert "New album reordered on Flickr." in dialog.details.toPlainText()
     assert "Album order backup: /tmp/order.json" in dialog.details.toPlainText()
+
+
+@pytest.mark.parametrize(
+    "result, expected",
+    [
+        (
+            FlickrUploadResult(fatal_error="<Failure> & details\nSecond line"),
+            "Upload failed.\n<Failure> & details\nSecond line",
+        ),
+        (
+            FlickrUploadResult(total_photos=3, uploaded_count=1, cancelled=True),
+            "Upload cancelled.\nUploaded 1/3 photo(s) before cancellation.",
+        ),
+    ],
+)
+def test_upload_failure_and_cancellation_headlines_use_shared_summary(
+    qapp, result, expected
+):  # noqa: ARG001
+    dialog = _mk_upload_dialog()
+    dialog._on_finished(result)
+
+    assert isinstance(dialog.details, SummaryTextEdit)
+    assert dialog.details.toPlainText() == expected
+    assert dialog.progress_row.isHidden()
+    assert dialog.progress_bar.isHidden()
 
 
 def test_upload_summary_explains_manual_album_placement(qapp) -> None:  # noqa: ARG001
@@ -581,7 +606,7 @@ def test_upload_summary_reports_new_album_reorder_failure(qapp) -> None:  # noqa
         )
     )
 
-    assert dialog.upload_status_label.text() == "Upload completed with issues."
+    assert dialog.details.toPlainText().startswith("Upload completed with issues.\n")
     assert "[Reorder new album] order timeout" in dialog.details.toPlainText()
 
 
@@ -741,7 +766,8 @@ def test_upload_progress_ok_applies_transitions_and_shows_result(
     assert get_state_value(StateKey.FLICKR_UPLOAD_APPLY_TRANSITIONS) is True
     assert dialog.current_screen_id == "transition_result"
     assert dialog.progress_bar.isHidden() is True
-    assert dialog.transition_result_label.text() == (
+    assert isinstance(dialog.transition_result_text, SummaryTextEdit)
+    assert dialog.transition_result_text.toPlainText() == (
         "Transitions complete. 1 image(s) changed."
     )
     assert dialog.ok_btn is not None

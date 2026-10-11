@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from enum import Enum, auto
-import html
 import os
 
 from PySide6.QtCore import QThreadPool, Signal
+from PySide6.QtGui import QColor, QTextCharFormat
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -21,11 +21,11 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QStyle,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
+from piqopiqo.components.summary_text_edit import SummaryLine, SummaryTextEdit
 from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from piqopiqo.tools.tool_flow import (
     ToolButton,
@@ -45,8 +45,6 @@ from .service import ApplyGpxResult
 from .time_shift import is_valid_time_shift
 
 _INVALID_STYLE = "border: 1px solid red;"
-_DETAILS_TEXT_HEIGHT = 140
-_DETAILS_WARNING_STYLE = "color: #b00020;"
 
 
 class ApplyGpxMode(Enum):
@@ -171,10 +169,9 @@ class ExtractGpsTimeShiftProgressDialog(ToolFlowDialog):
         widget = QWidget(self)
         layout = QVBoxLayout(widget)
 
-        self.result_label = QLabel("", widget)
-        self.result_label.setWordWrap(True)
-        self.result_label.hide()
-        layout.addWidget(self.result_label)
+        self.result_text = SummaryTextEdit("", widget)
+        self.result_text.hide()
+        layout.addWidget(self.result_text)
 
         return widget
 
@@ -195,20 +192,20 @@ class ExtractGpsTimeShiftProgressDialog(ToolFlowDialog):
     def _on_success(self, extracted_clock: str, time_shift: str) -> None:
         self._result_shift = time_shift
         self.transition_to("result")
-        self.result_label.setStyleSheet("")
-        self.result_label.setText(
+        self.result_text.set_lines(
             f"Extracted clock: {extracted_clock}\nComputed time shift: {time_shift}"
         )
-        self.result_label.show()
+        self.result_text.show()
         self.ok_btn.setFocus()
         self.sync_size_to_content()
 
     def _on_error(self, message: str) -> None:
         self._result_shift = None
         self.transition_to("result")
-        self.result_label.setStyleSheet("color: red;")
-        self.result_label.setText(message)
-        self.result_label.show()
+        error_format = QTextCharFormat()
+        error_format.setForeground(QColor("red"))
+        self.result_text.set_lines([SummaryLine(message, error_format)])
+        self.result_text.show()
         self.ok_btn.setFocus()
         self.sync_size_to_content()
 
@@ -469,12 +466,11 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
         self.no_match_warning_icon.setPixmap(icon.pixmap(24, 24))
         warning_layout.addWidget(self.no_match_warning_icon)
 
-        self.no_match_warning_label = QLabel(
+        self.no_match_warning_text = SummaryTextEdit(
             "The GPX did not match any image",
             self.no_match_warning_row,
         )
-        self.no_match_warning_label.setWordWrap(True)
-        warning_layout.addWidget(self.no_match_warning_label, 1)
+        warning_layout.addWidget(self.no_match_warning_text, 1)
         self.no_match_warning_row.hide()
         layout.addWidget(self.no_match_warning_row)
 
@@ -483,8 +479,11 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
         self.folder_label.hide()
         layout.addWidget(self.folder_label)
 
-        self.details_text = QTextEdit(widget)
-        self.details_text.setReadOnly(True)
+        self.summary_text = SummaryTextEdit("", widget)
+        self.summary_text.hide()
+        layout.addWidget(self.summary_text)
+
+        self.details_text = SummaryTextEdit("", widget)
         self.details_text.hide()
         layout.addWidget(self.details_text)
 
@@ -508,13 +507,15 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
     def finish(self, result: ApplyGpxResult) -> None:
         self.cancel_btn.setEnabled(False)
         self._kml_paths = list(result.kml_paths)
+        self.configure_progress(visible=False)
+        self.folder_label.clear()
+        self.folder_label.hide()
+        details_lines = self._build_details_lines(result)
+        self.details_text.set_lines(details_lines)
+        self.details_text.setVisible(bool(details_lines))
 
         if not result.cancelled and result.matched <= 0 and not self._kml_paths:
-            self.configure_progress(visible=False)
-            self.folder_label.clear()
-            self.folder_label.hide()
-            self.details_text.clear()
-            self.details_text.hide()
+            self.summary_text.hide()
             self.no_match_warning_row.show()
             self.show_finder_btn.setVisible(False)
             self.show_finder_btn.setEnabled(False)
@@ -528,14 +529,10 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
         summary = f"Processed {result.processed} photo(s)."
         if result.cancelled:
             summary = f"Cancelled. {result.processed} photo(s) processed."
-        self.set_status(f"{summary}\nGeoreferenced: {result.matched} / {self._total}")
-        self.progress_bar.hide()
-
-        details_html = self._build_details_html(result)
-        if details_html:
-            self.details_text.setHtml(details_html)
-            self.details_text.setFixedHeight(_DETAILS_TEXT_HEIGHT)
-            self.details_text.show()
+        self.summary_text.set_lines(
+            f"{summary}\nGeoreferenced: {result.matched} / {self._total}"
+        )
+        self.summary_text.show()
 
         if self._kml_paths:
             self.show_finder_btn.setVisible(True)
@@ -546,40 +543,38 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
         self.ok_btn.setFocus()
         self.sync_size_to_content()
 
-    def _build_details_html(self, result: ApplyGpxResult) -> str:
-        sections: list[str] = []
+    def _build_details_lines(self, result: ApplyGpxResult) -> list[str | SummaryLine]:
+        lines: list[str | SummaryLine] = []
         if result.kml_paths:
-            lines = ["KML output:", *result.kml_paths]
-            sections.append(self._html_lines(lines))
+            lines.extend(["KML output:", *result.kml_paths])
 
         if result.errors:
-            lines = ["Errors:", *result.errors]
-            sections.append(self._html_lines(lines))
+            if lines:
+                lines.append("")
+            lines.extend(["Errors:", *result.errors])
 
         if result.unmatched_photos:
-            lines = ["Images without georeferencing:"]
-            lines.extend(
+            if lines:
+                lines.append("")
+            warning_format = QTextCharFormat()
+            warning_format.setForeground(QColor("#b00020"))
+            unmatched_lines = ["Images without georeferencing:"]
+            unmatched_lines.extend(
                 f"{photo.name} - {photo.datetime_display}"
                 for photo in result.unmatched_photos
             )
-            sections.append(
-                f'<div style="{_DETAILS_WARNING_STYLE}">{self._html_lines(lines)}</div>'
-            )
+            lines.extend(SummaryLine(line, warning_format) for line in unmatched_lines)
 
-        return "<br/>".join(sections)
-
-    def _html_lines(self, lines: list[str]) -> str:
-        return "".join(
-            f"<div>{html.escape(str(line)) if str(line) else '&nbsp;'}</div>"
-            for line in lines
-        )
+        return lines
 
     def show_error(self, message: str) -> None:
         self.cancel_btn.setEnabled(False)
         self.no_match_warning_row.hide()
-        self.set_status("Apply GPX failed:")
-        self.details_text.setPlainText(message)
-        self.details_text.setFixedHeight(_DETAILS_TEXT_HEIGHT)
+        self.configure_progress(visible=False)
+        self.folder_label.hide()
+        self.summary_text.set_lines("Apply GPX failed:")
+        self.summary_text.show()
+        self.details_text.set_lines(message)
         self.details_text.show()
         self.ok_btn.setEnabled(True)
         self.ok_btn.setDefault(True)
@@ -637,21 +632,25 @@ class ClearGpsProgressDialog(ToolFlowDialog):
     def _build_body(self) -> QWidget:
         widget = QWidget(self)
         layout = QVBoxLayout(widget)
-        self.details_text = QTextEdit(widget)
-        self.details_text.setReadOnly(True)
+        self.summary_text = SummaryTextEdit("", widget)
+        self.summary_text.hide()
+        layout.addWidget(self.summary_text)
+        self.details_text = SummaryTextEdit("", widget)
         self.details_text.hide()
         layout.addWidget(self.details_text)
         return widget
 
     def finish(self, *, processed: int, total: int, cancelled: bool) -> None:
+        self.configure_progress(visible=False)
         if cancelled:
-            self.set_status(
+            self.summary_text.set_lines(
                 f"Clear GPS cancelled. {processed}/{total} photo(s) processed."
             )
         else:
-            self.set_status(
+            self.summary_text.set_lines(
                 f"Clear GPS complete. {processed}/{total} photo(s) processed."
             )
+        self.summary_text.show()
         self.cancel_btn.setEnabled(False)
         self.ok_btn.setEnabled(True)
         self.ok_btn.setDefault(True)
@@ -659,9 +658,10 @@ class ClearGpsProgressDialog(ToolFlowDialog):
         self.sync_size_to_content()
 
     def show_error(self, message: str) -> None:
-        self.set_status("Clear GPS failed:")
-        self.details_text.setPlainText(message)
-        self.details_text.setFixedHeight(140)
+        self.configure_progress(visible=False)
+        self.summary_text.set_lines("Clear GPS failed:")
+        self.summary_text.show()
+        self.details_text.set_lines(message)
         self.details_text.show()
         self.cancel_btn.setEnabled(False)
         self.ok_btn.setEnabled(True)

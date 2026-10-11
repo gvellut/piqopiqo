@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QSizePolicy,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -763,10 +762,7 @@ class FlickrFindReplaceDialog(ToolFlowDialog):
         summary.setObjectName("flickrFindReplaceSummaryText")
         layout.addWidget(summary)
         if result.errors:
-            details = QTextEdit(widget)
-            details.setReadOnly(True)
-            details.setPlainText("\n".join(result.errors))
-            details.setMaximumHeight(170)
+            details = SummaryTextEdit(result.errors, widget)
             layout.addWidget(details)
         return widget
 

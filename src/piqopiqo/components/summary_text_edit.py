@@ -38,7 +38,6 @@ class SummaryTextEdit(QTextEdit):
         """Display plain text or lines with optional character formatting."""
         if isinstance(content, str):
             self.setPlainText(content)
-            line_count = len(content.splitlines())
         else:
             self.clear()
             cursor = self.textCursor()
@@ -55,8 +54,8 @@ class SummaryTextEdit(QTextEdit):
                         else normal_format
                     )
                     cursor.insertText(line.text, line_format)
-            line_count = len(content)
 
+        line_count = self.document().blockCount()
         visible_lines = min(max(line_count, 2), 8)
         # The extra line leaves room when a long line adds a horizontal scrollbar.
         text_height = self.fontMetrics().lineSpacing() * (visible_lines + 1)

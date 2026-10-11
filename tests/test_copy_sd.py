@@ -10,7 +10,8 @@ import threading
 from types import SimpleNamespace
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QTextEdit
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QTextEdit
 import pytest
 
 from piqopiqo.components.summary_text_edit import SummaryTextEdit
@@ -276,7 +277,33 @@ def test_copy_progress_counter_label_updates(qapp):  # noqa: ARG001
     assert dialog.progress_text_label.text() == "2/5"
 
     dialog._on_finished(5, 5, False, 0)
-    assert dialog.progress_text_label.text() == "5/5"
+    assert dialog.progress_text_label.isHidden()
+    assert dialog.progress_row.isHidden()
+    assert dialog.progress_bar.isHidden()
+    assert dialog.summary_text.toPlainText() == "Copy complete. 5 file(s) copied."
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_copy_result_summary_preserves_counts_and_errors(qapp, cancelled):  # noqa: ARG001
+    dialog = CopySdProgressDialog(
+        volume=PhotoVolume("CARD", "/Volumes/CARD"),
+        dates=[],
+        target_dirs=[],
+        should_eject=True,
+    )
+    dialog._on_finished(2, 3, cancelled, 1)
+
+    assert isinstance(dialog.summary_text, SummaryTextEdit)
+    expected = (
+        "Copy cancelled (2/3 file(s) copied). 1 error(s)."
+        if cancelled
+        else "Copy complete. 2 file(s) copied. 1 error(s)."
+    )
+    assert dialog.summary_text.toPlainText() == expected
+    assert dialog.progress_row.isHidden()
+    assert dialog.progress_bar.isHidden()
+    assert dialog.eject_checkbox.isHidden() is cancelled
+    assert dialog.ok_btn.isEnabled()
 
 
 def test_copy_storage_full_screen_places_exit_left_and_retry_right(qapp, tmp_path):  # noqa: ARG001
@@ -439,7 +466,11 @@ def test_copy_no_images_result_shows_eject_checkbox(qapp):  # noqa: ARG001
     dialog._on_finished(0, 0, False, 0)
 
     assert dialog.current_screen_id == "result"
-    assert dialog.status_label.text() == "No images found for the selected date(s)."
+    assert isinstance(dialog.summary_text, SummaryTextEdit)
+    assert (
+        dialog.summary_text.toPlainText() == "No images found for the selected date(s)."
+    )
+    assert dialog.progress_row.isHidden()
     assert dialog.status_warning_icon_label is not None
     assert dialog.status_warning_icon_label.isHidden() is False
     assert dialog.status_warning_icon_label.pixmap() is not None
@@ -466,7 +497,7 @@ def test_copy_no_images_result_uses_custom_message(qapp):  # noqa: ARG001
     dialog._on_finished(0, 0, False, 0)
 
     assert (
-        dialog.status_label.text()
+        dialog.summary_text.toPlainText()
         == "No new photo found since last copied date 2026-02-01."
     )
 
@@ -488,7 +519,6 @@ def test_copy_eject_success_shows_safe_remove_screen(qapp, monkeypatch):  # noqa
     dialog._on_finished(1, 1, False, 0)
     dialog._on_ok()
     qapp.processEvents()
-    ejecting_height = dialog.height()
 
     dialog._on_eject_done("")
     qapp.processEvents()
@@ -496,12 +526,9 @@ def test_copy_eject_success_shows_safe_remove_screen(qapp, monkeypatch):  # noqa
     assert dialog.current_screen_id == "ejected"
     assert dialog.progress_row.isHidden() is True
     assert dialog.progress_bar.isHidden() is True
-    assert dialog.height() < ejecting_height
     assert dialog.minimumHeight() == dialog.maximumHeight() == dialog.height()
-    assert any(
-        label.text() == "You can remove the SD Card safely"
-        for label in dialog.findChildren(QLabel)
-    )
+    assert isinstance(dialog.summary_text, SummaryTextEdit)
+    assert dialog.summary_text.toPlainText() == "You can remove the SD Card safely"
 
 
 def test_copy_eject_failure_shows_error_screen(qapp, monkeypatch):  # noqa: ARG001
@@ -521,9 +548,13 @@ def test_copy_eject_failure_shows_error_screen(qapp, monkeypatch):  # noqa: ARG0
 
     assert dialog.current_screen_id == "eject_error"
     assert dialog.progress_bar.isHidden() is True
-    label_text = "\n".join(label.text() for label in dialog.findChildren(QLabel))
-    assert "Could not eject the SD card." in label_text
-    assert "The volume is still mounted." in label_text
+    assert isinstance(dialog.summary_text, SummaryTextEdit)
+    text = dialog.summary_text.toPlainText()
+    assert "Could not eject the SD card." in text
+    assert "The volume is still mounted." in text
+    assert dialog.summary_text.document().find(
+        "Could not eject"
+    ).charFormat().foreground().color() == QColor("red")
 
 
 def test_copy_eject_cancel_closes_and_ignores_late_completion(qapp, monkeypatch):  # noqa: ARG001
