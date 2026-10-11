@@ -870,7 +870,7 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.TIMESHIFT_CACHE_NUM: SettingDef(default=10, read_type=int),
     RuntimeSettingKey.FLICKR_UPLOAD_MAX_WORKERS: SettingDef(default=2, read_type=int),
     RuntimeSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS_LIMIT: SettingDef(
-        default=20,
+        default=50,
         read_type=int,
     ),
     RuntimeSettingKey.FLICKR_REORDER_BACKUP_LIMIT: SettingDef(

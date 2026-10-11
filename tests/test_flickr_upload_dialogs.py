@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication
 import pytest
 
@@ -530,11 +532,32 @@ def test_upload_summary_explains_manual_album_placement(qapp) -> None:  # noqa: 
                 "Its date may place it beyond this window; please position it "
                 "manually on Flickr."
             ),
+            failures=[
+                FlickrUploadPhotoFailure(
+                    file_path="/a.jpg",
+                    stage=FlickrStage.STAGE_UPLOAD.label,
+                    message="upload warning",
+                )
+            ],
         )
     )
 
     assert "first 20 albums" in dialog.details.toPlainText()
     assert "please position it manually" in dialog.details.toPlainText()
+    warning_cursor = dialog.details.document().find("New album order:")
+    warning_end_cursor = dialog.details.document().find("manually on Flickr.")
+    album_cursor = dialog.details.document().find("Album: new (new)")
+    failure_cursor = dialog.details.document().find("upload warning")
+    assert warning_cursor.charFormat().foreground().color() == QColor(
+        Qt.GlobalColor.red
+    )
+    assert warning_end_cursor.charFormat().foreground().color() == QColor(
+        Qt.GlobalColor.red
+    )
+    assert album_cursor.charFormat().foreground().color() != QColor(Qt.GlobalColor.red)
+    assert failure_cursor.charFormat().foreground().color() != QColor(
+        Qt.GlobalColor.red
+    )
 
 
 def test_upload_summary_reports_new_album_reorder_failure(qapp) -> None:  # noqa: ARG001
