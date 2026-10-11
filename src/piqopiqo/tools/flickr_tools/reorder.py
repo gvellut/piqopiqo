@@ -7,16 +7,18 @@ import threading
 from typing import TYPE_CHECKING
 
 from attrs import define, field
-from PySide6.QtCore import QObject, QThreadPool, Signal
+from PySide6.QtCore import QObject, Qt, QThreadPool, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
     QLineEdit,
     QMessageBox,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
+from piqopiqo.components.ellided_label import EllidedLabel
 from piqopiqo.components.summary_text_edit import SummaryTextEdit
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
@@ -74,7 +76,7 @@ class FlickrReorderResult:
 
 
 class _FlickrReorderSignals(QObject):
-    progress = Signal(int, int, str)
+    progress = Signal(int, int, str, str)
     finished = Signal(object)
 
 
@@ -151,7 +153,8 @@ class FlickrReorderWorker(PythonOwnedRunnable):
                 self.signals.progress.emit(
                     index - 1,
                     selected_count,
-                    f"Reading {album.title or album.album_id}...",
+                    "Reading album",
+                    album.title or album.album_id,
                 )
                 photos = all_pages(
                     "photoset",
@@ -208,6 +211,7 @@ class FlickrReorderWorker(PythonOwnedRunnable):
                 0,
                 0,
                 "Applying the new album order...",
+                "",
             )
             flickr.photosets.orderSets(
                 photoset_ids=",".join(new_order),
@@ -284,12 +288,44 @@ class FlickrReorderDialog(ToolFlowDialog):
             },
         )
         super().__init__(workflow, parent=parent or window)
+        self._configure_progress_status()
         self._set_unsaved_changes_state(
             lambda: (
                 self.from_album_edit.text(),
                 self.save_order_check.isChecked(),
             )
         )
+
+    def _configure_progress_status(self) -> None:
+        progress_layout = self.progress_row.layout()
+        assert progress_layout is not None
+        progress_layout.removeWidget(self.status_label)
+        progress_layout.removeWidget(self.progress_count_label)
+
+        status_widget = QWidget(self.progress_row)
+        status_layout = QVBoxLayout(status_widget)
+        status_layout.setContentsMargins(0, 0, 0, 0)
+        status_layout.setSpacing(0)
+
+        self.status_label.setParent(status_widget)
+        self.status_label.setWordWrap(False)
+        self.status_label.show()
+        status_layout.addWidget(self.status_label)
+
+        self.progress_title_label = EllidedLabel("", status_widget)
+        self.progress_title_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.progress_title_label.setMinimumWidth(0)
+        self.progress_title_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Fixed,
+        )
+        self.progress_title_label.setFixedHeight(
+            self.progress_title_label.fontMetrics().lineSpacing()
+        )
+        status_layout.addWidget(self.progress_title_label)
+
+        progress_layout.addWidget(status_widget, 1)
+        progress_layout.addWidget(self.progress_count_label)
 
     def _build_input(self) -> QWidget:
         widget = QWidget(self)
@@ -366,6 +402,7 @@ class FlickrReorderDialog(ToolFlowDialog):
             ),
         )
         self.transition_to("progress")
+        self.progress_title_label.setText("")
         self.set_status("Reading the current Flickr album order...")
         self.set_progress(0, 0)
         self.start_task(
@@ -387,11 +424,17 @@ class FlickrReorderDialog(ToolFlowDialog):
         button = self.button("cancel_work")
         if button is not None:
             button.setEnabled(False)
+        self.progress_title_label.setText("")
         self.set_status("Canceling before the next Flickr operation...")
 
-    def _on_progress(self, completed: int, total: int, status: str) -> None:
-        self.set_progress(completed, total)
+    def _on_progress(
+        self, completed: int, total: int, status: str, album_title: str
+    ) -> None:
+        display_title = album_title.replace("\r\n", " ").replace("\r", " ")
+        display_title = display_title.replace("\n", " ").strip()
+        self.progress_title_label.setText(display_title)
         self.set_status(status)
+        self.set_progress(completed, total)
 
     def _on_finished(self, result: FlickrReorderResult) -> None:
         self.stop_task("flickr_reorder", cancel=False)

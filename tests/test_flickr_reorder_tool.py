@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 import json
+from unittest.mock import Mock
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QTextEdit, QWidget
@@ -202,6 +203,7 @@ def test_worker_rejects_unknown_from_album_before_reading_photos_or_reordering(
     assert results[0].error_message == "Album missing is not in your album list."
 
 
+@pytest.mark.parametrize("first_album_title", ["A", ""])
 @pytest.mark.parametrize(
     ("order_error", "expected_error"),
     [
@@ -214,6 +216,7 @@ def test_worker_uses_indeterminate_progress_and_does_not_retry_applying(
     tmp_path,
     order_error: Exception | None,
     expected_error: str,
+    first_album_title: str,
 ) -> None:
     order_calls: list[tuple[str, float]] = []
     quick_timeouts: list[float] = []
@@ -226,7 +229,7 @@ def test_worker_uses_indeterminate_progress_and_does_not_retry_applying(
                     "page": 1,
                     "pages": 1,
                     "photoset": [
-                        {"id": "a", "title": {"_content": "A"}},
+                        {"id": "a", "title": {"_content": first_album_title}},
                         {"id": "b", "title": {"_content": "B"}},
                     ],
                 }
@@ -270,13 +273,14 @@ def test_worker_uses_indeterminate_progress_and_does_not_retry_applying(
         quick_timeout_s=5.0,
         very_long_timeout_s=120.0,
     )
-    progress_events: list[tuple[int, int, str]] = []
+    progress_events: list[tuple[int, int, str, str]] = []
     results = []
     worker.signals.progress.connect(
-        lambda completed, total, status: progress_events.append((
+        lambda completed, total, status, title: progress_events.append((
             completed,
             total,
             status,
+            title,
         ))
     )
     worker.signals.finished.connect(results.append)
@@ -285,10 +289,10 @@ def test_worker_uses_indeterminate_progress_and_does_not_retry_applying(
     assert order_calls == [("b,a", 120.0)]
     assert quick_timeouts == [5.0, 5.0, 5.0]
     assert progress_events[:2] == [
-        (0, 2, "Reading A..."),
-        (1, 2, "Reading B..."),
+        (0, 2, "Reading album", first_album_title or "a"),
+        (1, 2, "Reading album", "B"),
     ]
-    assert progress_events[-1] == (0, 0, "Applying the new album order...")
+    assert progress_events[-1] == (0, 0, "Applying the new album order...", "")
     assert results[0].error_message == expected_error
     assert results[0].reordered is (order_error is None)
 
@@ -375,15 +379,90 @@ def test_dialog_checkbox_has_bottom_padding_and_applying_progress_is_busy(
     )
 
     dialog.transition_to("progress")
-    dialog._on_progress(1, 3, "Reading B...")
+    dialog._on_progress(1, 3, "Reading album", "B")
+    qapp.processEvents()
+    reading_height = dialog.height()
     assert dialog.progress_count_label.text() == "1/3"
     assert dialog.progress_count_label.isHidden() is False
 
-    dialog._on_progress(0, 0, "Applying the new album order...")
+    dialog._on_progress(0, 0, "Applying the new album order...", "")
+    qapp.processEvents()
     assert dialog.status_label.text() == "Applying the new album order..."
+    assert dialog.progress_title_label.text() == ""
+    assert dialog.progress_title_label.isVisible()
+    assert dialog.height() == reading_height
     assert dialog.progress_bar.minimum() == 0
     assert dialog.progress_bar.maximum() == 0
     assert dialog.progress_count_label.isHidden() is True
+
+
+def test_progress_uses_fixed_two_line_status_with_elided_album_title(qapp) -> None:
+    parent = QWidget()
+    dialog = FlickrReorderDialog(
+        window=parent,
+        api_key="k",
+        api_secret="s",
+        parent=parent,
+    )
+    dialog.transition_to("progress")
+    dialog._on_progress(0, 0, "Reading the current Flickr album order...", "")
+    dialog.show()
+    qapp.processEvents()
+    initial_size = dialog.size()
+
+    assert dialog.progress_title_label.isVisible()
+    assert dialog.progress_title_label.text() == ""
+
+    dialog._on_progress(0, 2, "Reading album", "Short title")
+    qapp.processEvents()
+
+    assert dialog.status_label.text() == "Reading album"
+    assert dialog.status_label.wordWrap() is False
+    assert dialog.progress_title_label.text() == "Short title"
+    assert dialog.size() == initial_size
+
+    long_title = ("A very long Flickr album title " * 30) + "one\r\ntwo\rthree\nfour"
+    dialog._on_progress(1, 2, "Reading album", long_title)
+    qapp.processEvents()
+
+    assert dialog.progress_title_label.full_text == (
+        ("A very long Flickr album title " * 30) + "one two three four"
+    )
+    assert dialog.progress_title_label.text().endswith("…")
+    assert dialog.size() == initial_size
+
+    dialog._on_progress(1, 2, "Reading album", "<Trip>\r\n& friends")
+    qapp.processEvents()
+
+    assert dialog.progress_title_label.textFormat() == Qt.TextFormat.PlainText
+    assert dialog.progress_title_label.text() == "<Trip> & friends"
+    assert dialog.size() == initial_size
+
+
+def test_cancellation_clears_album_title_and_preserves_reserved_line(qapp) -> None:
+    parent = QWidget()
+    dialog = FlickrReorderDialog(
+        window=parent,
+        api_key="k",
+        api_secret="s",
+        parent=parent,
+    )
+    dialog._worker = Mock(spec=FlickrReorderWorker)
+    dialog.transition_to("progress")
+    dialog.show()
+    dialog._on_progress(0, 2, "Reading album", "Short title")
+    qapp.processEvents()
+    reading_height = dialog.height()
+
+    dialog._cancel_work()
+    qapp.processEvents()
+
+    dialog._worker.request_cancel.assert_called_once_with()
+    assert dialog.status_label.text() == "Canceling before the next Flickr operation..."
+    assert dialog.progress_title_label.text() == ""
+    assert dialog.progress_title_label.isVisible()
+    assert dialog.height() == reading_height
+    assert dialog.button("cancel_work").isEnabled() is False
 
 
 def test_result_summary_is_read_only_selectable_multiline_text(qapp) -> None:
