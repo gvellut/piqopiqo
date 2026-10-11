@@ -7,6 +7,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication
 import pytest
 
+from piqopiqo.components.summary_text_edit import SummaryTextEdit
 from piqopiqo.label_transitions import LabelTransitionChange, LabelTransitionPlan
 from piqopiqo.model import LabelTransitionRule
 from piqopiqo.ssf.settings_state import (
@@ -496,6 +497,7 @@ def test_upload_progress_completion_hides_running_widgets_and_shows_summary(  # 
     assert dialog.progress_text_label.isHidden() is True
     assert dialog.upload_status_label.isHidden() is False
     assert dialog.details.isHidden() is False
+    assert isinstance(dialog.details, SummaryTextEdit)
     assert dialog.ok_btn.isHidden() is False
     assert dialog.ok_btn.isEnabled() is True
 

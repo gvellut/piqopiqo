@@ -6,7 +6,6 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
-from attrs import define
 from PySide6.QtCore import Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QBrush, QTextCharFormat
 from PySide6.QtWidgets import (
@@ -18,13 +17,13 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QTextEdit,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from piqopiqo.cache_paths import get_flickr_cache_dir, get_flickr_token_file_path
+from piqopiqo.components.summary_text_edit import SummaryLine, SummaryTextEdit
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
@@ -77,12 +76,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
-
-
-@define(frozen=True)
-class _SummaryLine:
-    text: str
-    text_format: QTextCharFormat | None = None
 
 
 def _normalize_missing_paths(missing_paths_obj: object) -> list[str]:
@@ -771,8 +764,7 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         self.album_action_label.hide()
         layout.addWidget(self.album_action_label)
 
-        self.details = QTextEdit(widget)
-        self.details.setReadOnly(True)
+        self.details = SummaryTextEdit("", widget)
         self.details.hide()
         layout.addWidget(self.details)
 
@@ -1141,94 +1133,68 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         self.details.clear()
         self.details.hide()
 
-        lines: list[_SummaryLine] = []
+        lines: list[str | SummaryLine] = []
         if result.fatal_error:
             self.upload_status_label.setText("Upload failed.")
-            lines.append(_SummaryLine(result.fatal_error))
+            lines.append(result.fatal_error)
         elif result.cancelled:
             self.upload_status_label.setText("Upload cancelled.")
             lines.append(
-                _SummaryLine(
-                    "Uploaded "
-                    f"{result.uploaded_count}/{result.total_photos} "
-                    "photo(s) before cancellation."
-                )
+                "Uploaded "
+                f"{result.uploaded_count}/{result.total_photos} "
+                "photo(s) before cancellation."
             )
         elif result.failures:
             self.upload_status_label.setText("Upload completed with issues.")
             lines.append(
-                _SummaryLine(
-                    f"Uploaded {result.uploaded_count}/{result.total_photos} photo(s)."
-                )
+                f"Uploaded {result.uploaded_count}/{result.total_photos} photo(s)."
             )
-            lines.append(_SummaryLine(f"Reset date: {result.reset_date_count}"))
-            lines.append(_SummaryLine(f"Make public: {result.made_public_count}"))
+            lines.append(f"Reset date: {result.reset_date_count}")
+            lines.append(f"Make public: {result.made_public_count}")
         else:
             self.upload_status_label.setText("Upload completed successfully.")
             lines.append(
-                _SummaryLine(
-                    f"Uploaded {result.uploaded_count}/{result.total_photos} photo(s)."
-                )
+                f"Uploaded {result.uploaded_count}/{result.total_photos} photo(s)."
             )
-            lines.append(_SummaryLine(f"Reset date: {result.reset_date_count}"))
-            lines.append(_SummaryLine(f"Make public: {result.made_public_count}"))
+            lines.append(f"Reset date: {result.reset_date_count}")
+            lines.append(f"Make public: {result.made_public_count}")
 
         if result.album_id:
             display_title = result.album_title or result.album_id
-            lines.append(_SummaryLine(f"Album: {display_title} ({result.album_id})"))
+            lines.append(f"Album: {display_title} ({result.album_id})")
             if result.album_created:
                 lines.append(
-                    _SummaryLine(
-                        "Album operation: created album then added uploaded photos."
-                    )
+                    "Album operation: created album then added uploaded photos."
                 )
             elif result.album_added_count:
-                lines.append(
-                    _SummaryLine(
-                        f"Added to album: {result.album_added_count} photo(s)."
-                    )
-                )
+                lines.append(f"Added to album: {result.album_added_count} photo(s).")
 
         if result.album_reordered:
-            lines.append(_SummaryLine("New album reordered on Flickr."))
+            lines.append("New album reordered on Flickr.")
         if result.album_reorder_note:
             warning_format = QTextCharFormat()
             warning_format.setForeground(QBrush(Qt.GlobalColor.red))
             lines.append(
-                _SummaryLine(
+                SummaryLine(
                     f"New album order: {result.album_reorder_note}",
                     warning_format,
                 )
             )
         if result.album_reorder_backup_path:
-            lines.append(
-                _SummaryLine(f"Album order backup: {result.album_reorder_backup_path}")
-            )
+            lines.append(f"Album order backup: {result.album_reorder_backup_path}")
 
         if result.failures:
-            lines.append(_SummaryLine(""))
-            lines.append(_SummaryLine("Failures:"))
+            lines.append("")
+            lines.append("Failures:")
             for failure in result.failures:
                 if failure.file_path:
                     base_name = os.path.basename(failure.file_path)
-                    lines.append(
-                        _SummaryLine(
-                            f"- [{failure.stage}] {base_name}: {failure.message}"
-                        )
-                    )
+                    lines.append(f"- [{failure.stage}] {base_name}: {failure.message}")
                 else:
-                    lines.append(_SummaryLine(f"- [{failure.stage}] {failure.message}"))
+                    lines.append(f"- [{failure.stage}] {failure.message}")
 
         if lines:
-            cursor = self.details.textCursor()
-            normal_format = QTextCharFormat()
-            for index, line in enumerate(lines):
-                if index:
-                    cursor.insertBlock()
-                line_format = (
-                    line.text_format if line.text_format is not None else normal_format
-                )
-                cursor.insertText(line.text, line_format)
+            self.details.set_lines(lines)
             self.details.show()
 
         self._configure_transition_checkbox(result)

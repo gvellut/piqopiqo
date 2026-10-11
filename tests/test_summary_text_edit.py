@@ -1,11 +1,11 @@
-"""Tests for the shared read-only summary control."""
+"""Shared summary widget text and formatting behavior."""
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPalette
+from PySide6.QtGui import QBrush, QColor, QTextCharFormat
 from PySide6.QtWidgets import QApplication, QTextEdit
 import pytest
 
-from piqopiqo.components.summary_text_edit import SummaryTextEdit
+from piqopiqo.components.summary_text_edit import SummaryLine, SummaryTextEdit
 
 
 @pytest.fixture
@@ -17,29 +17,40 @@ def qapp(monkeypatch):
     return app
 
 
-@pytest.mark.parametrize("line_count", [1, 5, 8])
-def test_long_line_does_not_create_a_small_vertical_scroll_range(
-    qapp, line_count: int
-) -> None:
-    lines = [*(f"Line {index}" for index in range(line_count - 1)), "x" * 500]
-    summary = SummaryTextEdit("\n".join(lines))
-    summary.resize(520, summary.height())
-    summary.show()
-    qapp.processEvents()
-
+def test_summary_accepts_plain_text_and_mixed_formatted_lines(qapp) -> None:  # noqa: ARG001
+    summary = SummaryTextEdit("First\nSecond")
+    assert summary.toPlainText() == "First\nSecond"
     assert summary.isReadOnly()
     assert summary.lineWrapMode() == QTextEdit.LineWrapMode.NoWrap
-    assert summary.textInteractionFlags() & Qt.TextInteractionFlag.TextSelectableByMouse
-    assert summary.palette().color(QPalette.ColorRole.Base) == summary.palette().color(
-        QPalette.ColorRole.AlternateBase
+
+    warning_format = QTextCharFormat()
+    warning_format.setForeground(QBrush(Qt.GlobalColor.red))
+    summary.set_lines([
+        "Before",
+        SummaryLine("Warning", warning_format),
+        "After",
+    ])
+
+    assert summary.toPlainText() == "Before\nWarning\nAfter"
+    document = summary.document()
+    assert document.find("Warning").charFormat().foreground().color() == QColor(
+        Qt.GlobalColor.red
     )
-    assert summary.horizontalScrollBar().maximum() > 0
-    assert summary.verticalScrollBar().maximum() == 0
+    assert document.find("Before").charFormat().foreground().color() != QColor(
+        Qt.GlobalColor.red
+    )
+    assert document.find("After").charFormat().foreground().color() != QColor(
+        Qt.GlobalColor.red
+    )
 
 
-def test_more_than_eight_lines_remain_scrollable(qapp) -> None:
-    summary = SummaryTextEdit("\n".join(f"Line {index}" for index in range(12)))
-    summary.show()
-    qapp.processEvents()
+def test_summary_height_updates_with_new_lines(qapp) -> None:  # noqa: ARG001
+    summary = SummaryTextEdit("One")
+    short_height = summary.height()
 
-    assert summary.verticalScrollBar().maximum() > 0
+    summary.set_lines([f"Line {index}" for index in range(10)])
+    tall_height = summary.height()
+    summary.set_lines(["One"])
+
+    assert tall_height > short_height
+    assert summary.height() == short_height
