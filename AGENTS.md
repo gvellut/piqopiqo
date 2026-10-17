@@ -99,7 +99,7 @@ src/piqopiqo/
 ├── metadata/        # Metadata sqllite database layer
 │   ├── metadata_db.py   # SQLite database for cached metadata
 │   ├── db_fields.py     # Database field definitions and EXIF mappings
-│   ├── exif_write.py    # Shared DB->EXIF tag builder
+│   ├── exif_write.py    # Shared DB->EXIF tag builder, including synchronized manual lens ranges
 │   └── save_workers.py  # Background worker to save metadata
 ├── dialogs/         # Standalone dialogs not tied to a specific feature
 │   ├── error_list_dialog.py # Dialog showing loading errors (thumb/EXIF)
@@ -165,6 +165,7 @@ src/piqopiqo/
     └── macos.py     # macOS utilities (resolution, move_to_trash)
 
 tests/
+├── test_exif_write.py # Manual lens tags + real ExifTool round trips for Save EXIF/Flickr, with/without Fujifilm MakerNotes
 ├── test_fullscreen_info_panel.py # Fullscreen loop rank, info panel layout, zoom overlay lifecycle
 ├── test_fullscreen_navigation_zoom.py # Absolute zoom across mixed orientations/resolutions, Retina, pan and fallback
 ├── test_unsaved_changes_dialog.py # Shared dirty-dialog dismissal behavior
@@ -325,7 +326,7 @@ Defined in `db_fields.py`:
 Manual lens override fields are hidden DB columns (created lazily on first use of `Set Lens Info`) and are write-only to EXIF/Flickr temp EXIF:
 - `manual_lens_make` -> `lensmake`
 - `manual_lens_model` -> `lensmodel`
-- `manual_focal_length` -> `focallength`, `lens`, `LensInfo`
+- `manual_focal_length` -> `focallength`, `lens`, `LensInfo`, `MinFocalLength`, `MaxFocalLength`
 - `manual_focal_length_35mm` -> `FocalLengthIn35mmFormat`
 
 ### Version
@@ -415,7 +416,7 @@ Selection behavior:
 - `Set Lens Info` lens picker never remembers the last chosen lens: dialog opens with a placeholder, no preset selected, and `OK` disabled until the user picks one.
 - `Set Lens Info` includes `Clear lens info` in the picker to clear hidden manual lens DB fields (`manual_lens_make`, `manual_lens_model`, `manual_focal_length`, `manual_focal_length_35mm`) for target images.
 - Manual lens presets are edited in `Settings > External/Tools > Manual Lens`; each preset requires non-empty make/model and valid numeric focal/focal-35mm (supports `.` or `,` input).
-- Manual lens focal values are normalized to `.` decimal separator when writing EXIF/Flickr temp EXIF (`focallength`, `lens`, `LensInfo`, `FocalLengthIn35mmFormat`).
+- Manual lens focal values are normalized to `.` decimal separator when writing EXIF/Flickr temp EXIF (`focallength`, `lens`, `LensInfo`, `MinFocalLength`, `MaxFocalLength`, `FocalLengthIn35mmFormat`). Both writers use ExifTool numeric mode (`-n`), so `LensInfo` must be one space-separated string `<focal> <focal> undef undef`; this keeps aperture unknown (`f/?`). The same focal value is written to existing supported camera minimum/maximum focal-length tags, without creating MakerNotes on images that lack them.
 - GPX workflows are DB-first: "Update images" mode label is kept for compatibility, but normal processing updates SQLite metadata and KML outputs; it does not write EXIF.
 - Apply GPX scope ignores grid selection/filter and always processes all photos in all loaded source folders.
 - Clear GPS scope ignores grid selection/filter and always processes all photos in all loaded source folders; it clears DB latitude/longitude and restores DB `time_taken` from image `EXIF:DateTimeOriginal` (or cached EXIF data if direct EXIF read fails).

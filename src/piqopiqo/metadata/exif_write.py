@@ -37,7 +37,10 @@ def _apply_manual_lens_tags(db_metadata: dict, tags: dict[str, object]) -> None:
     if focal_length is not None:
         tags["focallength"] = focal_length
         tags["lens"] = f"{focal_length} mm"
-        tags["LensInfo"] = f"{focal_length}mm f/?"
+        # Both writers use -n: LensInfo requires raw focal/aperture ranges.
+        tags["LensInfo"] = f"{focal_length} {focal_length} undef undef"
+        tags["MinFocalLength"] = focal_length
+        tags["MaxFocalLength"] = focal_length
 
     focal_length_35mm = _normalize_decimal_text(
         db_metadata.get(DBFields.MANUAL_FOCAL_LENGTH_35MM)
