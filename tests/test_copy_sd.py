@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QTextEdit
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QTextEdit
 import pytest
 
 from piqopiqo.components.summary_text_edit import SummaryTextEdit
@@ -527,8 +527,8 @@ def test_copy_eject_success_shows_safe_remove_screen(qapp, monkeypatch):  # noqa
     assert dialog.progress_row.isHidden() is True
     assert dialog.progress_bar.isHidden() is True
     assert dialog.minimumHeight() == dialog.maximumHeight() == dialog.height()
-    assert isinstance(dialog.summary_text, SummaryTextEdit)
-    assert dialog.summary_text.toPlainText() == "You can remove the SD Card safely"
+    assert isinstance(dialog.ejected_label, QLabel)
+    assert dialog.ejected_label.text() == "You can remove the SD Card safely"
 
 
 def test_copy_eject_failure_shows_error_screen(qapp, monkeypatch):  # noqa: ARG001
@@ -548,12 +548,12 @@ def test_copy_eject_failure_shows_error_screen(qapp, monkeypatch):  # noqa: ARG0
 
     assert dialog.current_screen_id == "eject_error"
     assert dialog.progress_bar.isHidden() is True
+    assert isinstance(dialog.eject_error_label, QLabel)
+    assert dialog.eject_error_label.text() == "Could not eject the SD card."
     assert isinstance(dialog.summary_text, SummaryTextEdit)
-    text = dialog.summary_text.toPlainText()
-    assert "Could not eject the SD card." in text
-    assert "The volume is still mounted." in text
+    assert dialog.summary_text.toPlainText() == "The volume is still mounted."
     assert dialog.summary_text.document().find(
-        "Could not eject"
+        "The volume is still mounted."
     ).charFormat().foreground().color() == QColor("red")
 
 

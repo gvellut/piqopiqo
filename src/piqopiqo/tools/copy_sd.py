@@ -942,20 +942,19 @@ class CopySdProgressDialog(ToolFlowDialog):
     def _build_ejected_body(self) -> QWidget:
         widget = QWidget(self)
         layout = QVBoxLayout(widget)
-        self.summary_text = SummaryTextEdit("You can remove the SD Card safely", widget)
-        layout.addWidget(self.summary_text)
+        self.ejected_label = QLabel("You can remove the SD Card safely", widget)
+        layout.addWidget(self.ejected_label)
         return widget
 
     def _build_eject_error_body(self) -> QWidget:
         widget = QWidget(self)
         layout = QVBoxLayout(widget)
-        message = "Could not eject the SD card."
-        if self._eject_error_message:
-            message = f"{message}\n\n{self._eject_error_message}"
+        self.eject_error_label = QLabel("Could not eject the SD card.", widget)
+        layout.addWidget(self.eject_error_label)
         error_format = QTextCharFormat()
         error_format.setForeground(QColor("red"))
         self.summary_text = SummaryTextEdit(
-            [SummaryLine(message, error_format)], widget
+            [SummaryLine(self._eject_error_message, error_format)], widget
         )
         layout.addWidget(self.summary_text)
         return widget
