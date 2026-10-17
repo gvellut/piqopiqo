@@ -370,7 +370,12 @@ class ArchiveDialog(ToolFlowDialog):
     def _build_result(self) -> QWidget:
         widget = QWidget(self)
         layout = QVBoxLayout(widget)
+        self.message_label = QLabel("", widget)
+        self.message_label.setWordWrap(True)
+        self.message_label.hide()
+        layout.addWidget(self.message_label)
         self.summary_text = SummaryTextEdit("", widget)
+        self.summary_text.hide()
         layout.addWidget(self.summary_text)
         self.error_text = SummaryTextEdit("", widget)
         self.error_text.hide()
@@ -527,7 +532,7 @@ class ArchiveDialog(ToolFlowDialog):
         if self._write_error_count > 0:
             self._resume_watcher_after_exif_stop()
             self._show_finished_result(
-                text=(
+                message=(
                     "Archive stopped because saving EXIF failed. "
                     "The folder was not moved."
                 ),
@@ -544,7 +549,7 @@ class ArchiveDialog(ToolFlowDialog):
         self.stop_task("archive_write_exif", cancel=True)
         self._resume_watcher_after_exif_stop()
         self._show_finished_result(
-            text="Archive cancelled. The folder was not moved.",
+            message="Archive cancelled. The folder was not moved.",
         )
 
     def _start_move_stage(self) -> None:
@@ -553,7 +558,7 @@ class ArchiveDialog(ToolFlowDialog):
         except Exception as exc:
             self._resume_watcher_after_exif_stop()
             self._show_finished_result(
-                text="Archive could not start.",
+                message="Archive could not start.",
                 error_text=str(exc),
             )
             return
@@ -581,7 +586,7 @@ class ArchiveDialog(ToolFlowDialog):
     def _on_move_finished(self, result: object) -> None:
         if not isinstance(result, ArchiveMoveResult):
             self._show_finished_result(
-                text="Archive failed.",
+                message="Archive failed.",
                 error_text="Unexpected archive result.",
             )
             return
@@ -608,7 +613,7 @@ class ArchiveDialog(ToolFlowDialog):
         if result.move_error:
             details = [result.move_error]
         self._show_finished_result(
-            text="Archive failed. The folder was not moved.",
+            message="Archive failed. The folder was not moved.",
             error_text=result.move_error or "Unknown archive error.",
             details=details,
         )
@@ -616,7 +621,8 @@ class ArchiveDialog(ToolFlowDialog):
     def _show_finished_result(
         self,
         *,
-        text: str,
+        text: str = "",
+        message: str = "",
         error_text: str = "",
         details: list[str] | None = None,
     ) -> None:
@@ -624,7 +630,10 @@ class ArchiveDialog(ToolFlowDialog):
         self._running_stage = None
         self._finished = True
         self.transition_to("result")
+        self.message_label.setText(message)
+        self.message_label.setVisible(bool(message))
         self.summary_text.set_lines(text)
+        self.summary_text.setVisible(bool(text))
         self.progress_header_widget.hide()
         self.progress_count_label.clear()
         self.progress_count_label.hide()

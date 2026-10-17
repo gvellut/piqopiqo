@@ -466,10 +466,11 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
         self.no_match_warning_icon.setPixmap(icon.pixmap(24, 24))
         warning_layout.addWidget(self.no_match_warning_icon)
 
-        self.no_match_warning_text = SummaryTextEdit(
+        self.no_match_warning_text = QLabel(
             "The GPX did not match any image",
             self.no_match_warning_row,
         )
+        self.no_match_warning_text.setWordWrap(True)
         warning_layout.addWidget(self.no_match_warning_text, 1)
         self.no_match_warning_row.hide()
         layout.addWidget(self.no_match_warning_row)
@@ -478,6 +479,11 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
         self.folder_label.setWordWrap(True)
         self.folder_label.hide()
         layout.addWidget(self.folder_label)
+
+        self.failure_label = QLabel("Apply GPX failed:", widget)
+        self.failure_label.setWordWrap(True)
+        self.failure_label.hide()
+        layout.addWidget(self.failure_label)
 
         self.summary_text = SummaryTextEdit("", widget)
         self.summary_text.hide()
@@ -506,6 +512,7 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
 
     def finish(self, result: ApplyGpxResult) -> None:
         self.cancel_btn.setEnabled(False)
+        self.failure_label.hide()
         self._kml_paths = list(result.kml_paths)
         self.configure_progress(visible=False)
         self.folder_label.clear()
@@ -572,8 +579,8 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
         self.no_match_warning_row.hide()
         self.configure_progress(visible=False)
         self.folder_label.hide()
-        self.summary_text.set_lines("Apply GPX failed:")
-        self.summary_text.show()
+        self.summary_text.hide()
+        self.failure_label.show()
         self.details_text.set_lines(message)
         self.details_text.show()
         self.ok_btn.setEnabled(True)
@@ -632,6 +639,10 @@ class ClearGpsProgressDialog(ToolFlowDialog):
     def _build_body(self) -> QWidget:
         widget = QWidget(self)
         layout = QVBoxLayout(widget)
+        self.failure_label = QLabel("Clear GPS failed:", widget)
+        self.failure_label.setWordWrap(True)
+        self.failure_label.hide()
+        layout.addWidget(self.failure_label)
         self.summary_text = SummaryTextEdit("", widget)
         self.summary_text.hide()
         layout.addWidget(self.summary_text)
@@ -642,6 +653,7 @@ class ClearGpsProgressDialog(ToolFlowDialog):
 
     def finish(self, *, processed: int, total: int, cancelled: bool) -> None:
         self.configure_progress(visible=False)
+        self.failure_label.hide()
         if cancelled:
             self.summary_text.set_lines(
                 f"Clear GPS cancelled. {processed}/{total} photo(s) processed."
@@ -659,8 +671,8 @@ class ClearGpsProgressDialog(ToolFlowDialog):
 
     def show_error(self, message: str) -> None:
         self.configure_progress(visible=False)
-        self.summary_text.set_lines("Clear GPS failed:")
-        self.summary_text.show()
+        self.summary_text.hide()
+        self.failure_label.show()
         self.details_text.set_lines(message)
         self.details_text.show()
         self.cancel_btn.setEnabled(False)

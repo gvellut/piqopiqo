@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 from PySide6.QtCore import QCoreApplication, QObject, Signal
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QWidget
 import pytest
 
 from piqopiqo.background.media_man import FolderPrimingResult
@@ -561,6 +561,7 @@ def test_archive_dialog_finished_state_shows_summary_and_clickable_ok(
 
     assert isinstance(dialog.summary_text, SummaryTextEdit)
     assert dialog.summary_text.isVisible() is True
+    assert dialog.message_label.isHidden()
     assert (
         dialog.summary_text.toPlainText()
         == "Archive complete.\nMoved to:\n/archive/root"
@@ -621,10 +622,10 @@ def test_archive_dialog_exif_cancel_stops_before_move_and_resumes_watcher(
     assert watcher_control.resume_calls == 1
     assert started == []
     assert dialog._finished is True
-    assert (
-        dialog.summary_text.toPlainText()
-        == "Archive cancelled. The folder was not moved."
-    )
+    assert isinstance(dialog.message_label, QLabel)
+    assert dialog.message_label.isHidden() is False
+    assert dialog.message_label.text() == "Archive cancelled. The folder was not moved."
+    assert dialog.summary_text.isHidden()
 
 
 def test_archive_dialog_exif_failure_stops_before_move(qapp, settings_store):  # noqa: ARG001
@@ -653,7 +654,12 @@ def test_archive_dialog_exif_failure_stops_before_move(qapp, settings_store):  #
     assert watcher_control.resume_calls == 1
     assert started == []
     assert dialog._finished is True
-    assert "The folder was not moved" in dialog.summary_text.toPlainText()
+    assert isinstance(dialog.message_label, QLabel)
+    assert dialog.message_label.isHidden() is False
+    assert dialog.message_label.text() == (
+        "Archive stopped because saving EXIF failed. The folder was not moved."
+    )
+    assert dialog.summary_text.isHidden()
     assert isinstance(dialog.error_text, SummaryTextEdit)
     assert isinstance(dialog.details_text, SummaryTextEdit)
     assert dialog.error_text.toPlainText() == "EXIF save failed for 1 file(s)."
@@ -717,7 +723,10 @@ def test_archive_dialog_move_prepare_failure_after_exif_success_resumes_watcher(
     assert watcher_control.suspend_calls == 1
     assert watcher_control.resume_calls == 1
     assert dialog._finished is True
-    assert dialog.summary_text.toPlainText() == "Archive could not start."
+    assert isinstance(dialog.message_label, QLabel)
+    assert dialog.message_label.isHidden() is False
+    assert dialog.message_label.text() == "Archive could not start."
+    assert dialog.summary_text.isHidden()
     assert isinstance(dialog.error_text, SummaryTextEdit)
     assert dialog.error_text.toPlainText() == "boom"
 
@@ -839,6 +848,14 @@ def test_archive_dialog_move_failure_restores_workspace_when_source_still_exists
     assert window.resume_calls == 1
     assert window.unload_calls == []
     assert dialog._finished is True
+    assert isinstance(dialog.message_label, QLabel)
+    assert dialog.message_label.isHidden() is False
+    assert dialog.message_label.text() == "Archive failed. The folder was not moved."
+    assert dialog.summary_text.isHidden()
+    assert isinstance(dialog.error_text, SummaryTextEdit)
+    assert dialog.error_text.toPlainText() == "boom"
+    assert isinstance(dialog.details_text, SummaryTextEdit)
+    assert dialog.details_text.toPlainText() == "boom"
 
 
 def test_archive_dialog_success_does_not_override_folder_dialog_hint(

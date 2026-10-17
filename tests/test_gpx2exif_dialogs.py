@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QApplication, QFileDialog
+from PySide6.QtWidgets import QApplication, QFileDialog, QLabel
 import pytest
 
 from piqopiqo.components.summary_text_edit import SummaryTextEdit
@@ -383,10 +383,8 @@ def test_apply_gpx_progress_no_match_shows_compact_warning_only(qapp):
     qapp.processEvents()
 
     assert dialog.no_match_warning_row.isHidden() is False
-    assert isinstance(dialog.no_match_warning_text, SummaryTextEdit)
-    assert (
-        dialog.no_match_warning_text.toPlainText() == "The GPX did not match any image"
-    )
+    assert isinstance(dialog.no_match_warning_text, QLabel)
+    assert dialog.no_match_warning_text.text() == "The GPX did not match any image"
     assert dialog.no_match_warning_icon.pixmap().isNull() is False
     assert dialog.details_text.isHidden() is True
     assert dialog.folder_label.isHidden() is True
@@ -504,13 +502,15 @@ def test_clear_gps_result_uses_shared_summary(qapp, cancelled):
         (ClearGpsProgressDialog, "Clear GPS failed:"),
     ],
 )
-def test_gps_failure_uses_shared_summary_and_details(qapp, dialog_class, headline):
+def test_gps_failure_uses_label_and_shared_details(qapp, dialog_class, headline):
     dialog = dialog_class(total=3)
     dialog.show_error("<Failure> & details\nSecond line")
 
-    assert isinstance(dialog.summary_text, SummaryTextEdit)
+    assert isinstance(dialog.failure_label, QLabel)
+    assert dialog.failure_label.isHidden() is False
+    assert dialog.failure_label.text() == headline
+    assert dialog.summary_text.isHidden()
     assert isinstance(dialog.details_text, SummaryTextEdit)
-    assert dialog.summary_text.toPlainText() == headline
     assert dialog.details_text.toPlainText() == "<Failure> & details\nSecond line"
     assert dialog.progress_row.isHidden()
     assert dialog.progress_bar.isHidden()
