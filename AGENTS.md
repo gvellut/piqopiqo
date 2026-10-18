@@ -147,7 +147,7 @@ src/piqopiqo/
     │   ├── auth_flow.py      # Shared token-validation/browser-login dialog flow
     │   ├── find_replace.py   # Remote Flickr title/tag replacement workflow
     │   ├── reorder.py        # Modal-photo-date album reorder + retained backups + fixed two-line progress
-    │   └── upload/           # Flickr upload workflow (filtered scope + optional new-album reorder)
+    │   └── upload/           # Flickr upload workflow (filtered scope + optional early-stop new-album insertion)
     │       ├── constants.py, service.py, albums.py
     │       ├── workers.py, media_worker.py, manager.py
     │       └── dialogs.py
@@ -174,6 +174,8 @@ tests/
 ├── test_photo_grid_shortcuts.py # Grid view-scoped shortcut ownership + text-input guard behavior
 ├── test_photo_grid_selection_refresh.py # Visible-only grid selection highlight refresh path
 ├── test_flickr_upload_timeouts.py # Flickr API timeout-class and worker-payload coverage
+├── test_flickr_upload_reorder.py # New-album early-stop insertion, configurable cutoff, exhaustion and backup behavior
+├── test_flickr_upload_dialogs.py # Flickr upload dialogs, single-line album progress and content-sized phase transitions
 └── test_metadata_save_workers.py # QThreadPool drain helper shutdown semantics
 ```
 
@@ -234,7 +236,7 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - `UserSettingKey.MANUAL_LENSES` (default `[]`) stores lens presets used by `Tools > Set Lens Info ...`.
 - `StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER` (default `True`) remembers whether Flickr album reorder saves the current order first.
 - `UserSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS` (default `False`) adds a final album-ordering stage only after photos are added to a newly created Flickr album.
-- `RuntimeSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS_LIMIT` (default `20`) sets the number of leading Flickr albums whose photo-taken dates are examined for that stage.
+- `RuntimeSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS_LIMIT` (default `50`) caps the leading Flickr album window whose photo-taken dates may be examined for that stage, including the new album; fetching stops at the first strictly older album.
 - `RuntimeSettingKey.FLICKR_REORDER_BACKUP_LIMIT` (default `3`) controls how many timestamped album-order JSON backups are retained.
 - `RuntimeSettingKey.FLICKR_REORDER_FROM_ALBUM_REQUIRED` (default `True`) requires a Flickr album ID/URL boundary; when disabled, an empty boundary reorders the complete album list.
 - `RuntimeSettingKey.FLICKR_API_QUICK_TIMEOUT_S` (default `5.0`) is the per-attempt timeout for OAuth/token operations and ordinary Flickr reads/metadata updates.
@@ -273,7 +275,7 @@ Useful env vars for agent testing:
 - `PIQO_GCP_SA_KEY_PATH` - Override service-account key path used by OCR time extraction
 - `PIQO_FLICKR_UPLOAD_MAX_WORKERS` - Flickr upload multiprocessing worker count (default: 2)
 - `PIQO_FLICKR_REORDER_BACKUP_LIMIT` - Number of Flickr album-order backups retained (default: 3)
-- `PIQO_FLICKR_UPLOAD_REORDER_NEW_ALBUMS_LIMIT` - Leading album window for ordering a new Flickr album (default: 20)
+- `PIQO_FLICKR_UPLOAD_REORDER_NEW_ALBUMS_LIMIT` - Leading album window for ordering a new Flickr album (default: 50, includes the new album)
 - `PIQO_FLICKR_REORDER_FROM_ALBUM_REQUIRED` - Require a starting Flickr album ID/URL for album reorder (default: true)
 - `PIQO_FLICKR_API_QUICK_TIMEOUT_S` - Flickr OAuth, normal-read, and metadata-update timeout per attempt (default: 5 seconds)
 - `PIQO_FLICKR_API_HEAVY_TIMEOUT_S` - Flickr upload/replace and heavy album-write timeout per attempt (default: 30 seconds)
@@ -433,7 +435,7 @@ Selection behavior:
 - Flickr Upload, Reorder Albums, and Flickr Find & Replace share the same write-permission OAuth token cache and browser login flow.
 - Flickr Reorder Albums sorts an inclusive prefix newest-first by each album's modal valid photo-taken date. If Flickr returns `[A, B, C, D, E]` and album `C` is entered, `[A, B, C]` is reordered while `[D, E]` remains unchanged. An empty boundary is accepted only when `FLICKR_REORDER_FROM_ALBUM_REQUIRED` is disabled, in which case the complete list is reordered. Empty/fully-undated albums abort before `photosets.orderSets`.
 - Flickr Reorder Albums progress reserves two lines: `Reading album` above a single-line plain-text title (album ID when empty), with embedded line breaks replaced by spaces. Only truncated titles receive an ellipsis. Keep the title line reserved but empty during initial loading, cancellation, and applying the new order so title length never changes the dialog height.
-- Flickr Upload's optional new-album reorder reads the complete album ID list to preserve the tail, but reads photo dates only for the leading runtime-configured window. If the new album sorts last in that window and more albums follow it, the step skips the API call and shows the manual-placement note in red through a formatted `SummaryLine`; other upload summary lines remain plain strings. A successful reorder always saves a full-order backup first, even when the new album remains first. An undated album or failed backup/API call is reported as an upload issue without undoing the uploaded photos.
+- Flickr Upload's optional new-album reorder reads the complete album ID list, then fetches the new album's modal photo-taken date first. Existing albums are assumed newest-first: inspect them in order, continue through equal dates, and insert the new album before the first strictly older album without changing existing albums' relative order. The runtime-configured leading window includes the new album. If no older album is found and unexamined albums remain beyond the window, leave the new album first, skip both backup and reorder API call, and show the manual-placement note in red through a formatted `SummaryLine`. If the complete list is exhausted without an older album, put the new album last, including when exhaustion occurs exactly at the configured limit. A successful reorder always saves a full-order backup first, even when the new album remains first. An encountered undated album or failed backup/API call is reported as an upload issue without undoing the uploaded photos; albums after the insertion point are not read.
 - Every Flickr client is constructed with `FLICKR_API_QUICK_TIMEOUT_S` as its default so OAuth and any non-overridden request cannot be unbounded. Ordinary reads/searches, token checks, ticket checks, and metadata updates use the quick timeout; upload/replace, upload album-photo listing, album creation, and `photosets.editPhotos` use the heavy timeout; `photosets.orderSets` and `photosets.reorderPhotos` use the very-long timeout.
 - Resolve all three Flickr timeout runtime settings in the main process and pass them into Qt workers and the Flickr upload multiprocessing payload. Worker processes must not read application settings directly.
 - Flickr Reorder Albums submits `photosets.orderSets` once with `FLICKR_API_VERY_LONG_TIMEOUT_S`; do not add a retry loop because Flickr may finish the server-side reorder after a client read timeout.
@@ -458,6 +460,7 @@ Selection behavior:
 - Flickr upload manager stages are `Upload -> Reset date -> Make public -> Add to album` when album mode is enabled.
 - Album add uses grouped `photosets.editPhotos` semantics (existing album photos + uploaded photo IDs).
 - Flickr upload progress dialog keeps one running step label (`Step: ...`) above the progress bar, merges Add-to-album sub-status into that label, resizes height to fit currently visible content on every state change, and hides step/progress UI when finished so only the completion summary remains.
+- Flickr Upload new-album reorder uses `reorder_progress(completed, total, status, album_title)`: keep the stage and bounded runtime-window count on the same top row, with `Fetching dates...` and a plain-text, single-line elided album title below. Normalize embedded title line breaks to spaces and fall back to the album ID. Hide the title outside date fetching and clear reorder details on stage exit/completion; resize to visible content when entering or leaving loading, fetching, applying, and result phases. Title length must never change dialog dimensions.
 - Model/filter/sort synchronization after metadata writes is centralized in `MainWindow.sync_model_after_metadata_update(...)`. Any new feature/tool that mutates metadata DB fields must call this method with the changed fields so grid filtering, sort order, selection panels, and fullscreen loop state stay consistent.
 - Custom shortcuts are view-scoped and not handled in `MainWindow`: `PhotoGrid` owns grid label shortcuts plus shared grid-view `Space`/`Select All` shortcuts, while `FullscreenOverlay` owns fullscreen label shortcuts and zoom/navigation keys. Fullscreen label shortcuts act on the current fullscreen image only; grid label undo/redo is disabled/ignored while fullscreen is active.
 - Grid shared-view shortcuts (`Space`, `Select All`) are attached to the central grid+panels scope so they still work after non-text panel interactions, but editable text widgets win focus (search/metadata fields keep normal typing + `Cmd+A` text selection).

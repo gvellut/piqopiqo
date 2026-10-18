@@ -163,7 +163,7 @@ def test_flickr_reorder_state_and_runtime_defaults(isolated_settings):
     assert get_user_setting(UserSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS) is False
     assert (
         get_runtime_setting(RuntimeSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS_LIMIT)
-        == 20
+        == 50
     )
     assert get_state_value(StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER) is True
     assert get_runtime_setting(RuntimeSettingKey.FLICKR_REORDER_BACKUP_LIMIT) == 3

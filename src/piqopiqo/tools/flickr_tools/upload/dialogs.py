@@ -17,12 +17,14 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from piqopiqo.cache_paths import get_flickr_cache_dir, get_flickr_token_file_path
+from piqopiqo.components.ellided_label import EllidedLabel
 from piqopiqo.components.summary_text_edit import SummaryLine, SummaryTextEdit
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
@@ -730,6 +732,9 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
                 ("*", "manager_album_status"): lambda dialog, event: (
                     dialog._on_album_status(*event.args)
                 ),
+                ("*", "manager_reorder_progress"): lambda dialog, event: (
+                    dialog._on_reorder_progress(*event.args)
+                ),
                 ("*", "manager_finished"): lambda dialog, event: dialog._on_finished(
                     *event.args
                 ),
@@ -739,6 +744,7 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         progress_layout = self.progress_row.layout()
         self.stage_label = progress_layout.itemAt(0).widget()
         self.progress_text_label = self.progress_count_label
+        self._configure_reorder_progress()
         self.cancel_btn = self.button("cancel")
         self.ok_btn = self.button("ok")
         self._update_stage_label()
@@ -749,6 +755,41 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         super().transition_to(screen_id)
         self.cancel_btn = self.button("cancel")
         self.ok_btn = self.button("ok")
+
+    def _configure_reorder_progress(self) -> None:
+        self.reorder_status_widget = QWidget(self)
+        layout = QVBoxLayout(self.reorder_status_widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.reorder_status_label = QLabel("", self.reorder_status_widget)
+        self.reorder_status_label.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(self.reorder_status_label)
+
+        self.reorder_title_label = EllidedLabel("", self.reorder_status_widget)
+        self.reorder_title_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.reorder_title_label.setWordWrap(False)
+        self.reorder_title_label.setMinimumWidth(0)
+        self.reorder_title_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Fixed,
+        )
+        self.reorder_title_label.setFixedHeight(
+            self.reorder_title_label.fontMetrics().lineSpacing()
+        )
+        layout.addWidget(self.reorder_title_label)
+
+        root_layout = self.layout()
+        root_layout.insertWidget(
+            root_layout.indexOf(self.progress_bar), self.reorder_status_widget
+        )
+        self._clear_reorder_progress()
+
+    def _clear_reorder_progress(self) -> None:
+        self.reorder_status_label.clear()
+        self.reorder_title_label.setText("")
+        self.reorder_title_label.hide()
+        self.reorder_status_widget.hide()
 
     def _build_body(self) -> QWidget:
         widget = QWidget(self)
@@ -935,6 +976,7 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
                     manager.progress: "manager_progress",
                     manager.status: "manager_status",
                     manager.album_status: "manager_album_status",
+                    manager.reorder_progress: "manager_reorder_progress",
                     manager.finished: "manager_finished",
                 },
             ),
@@ -967,6 +1009,7 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         if stage != FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label:
             self._check_status_text = ""
         self._update_stage_label()
+        self._clear_reorder_progress()
 
         if stage in (
             FlickrStage.STAGE_CHECK_UPLOAD_STATUS.label,
@@ -999,16 +1042,28 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         if self._finished:
             return
         text = str(message or "").strip()
-        if self._current_stage not in (
-            FlickrStage.STAGE_ADD_TO_ALBUM.label,
-            FlickrStage.STAGE_REORDER_NEW_ALBUM.label,
-        ):
+        if self._current_stage != FlickrStage.STAGE_ADD_TO_ALBUM.label:
             return
         self._album_action_text = text
         self._update_stage_label()
         self.album_action_label.clear()
         self.album_action_label.hide()
         self.sync_size_to_content()
+
+    def _on_reorder_progress(
+        self, completed: int, total: int, status: str, album_title: str
+    ) -> None:
+        if (
+            self._finished
+            or self._current_stage != FlickrStage.STAGE_REORDER_NEW_ALBUM.label
+        ):
+            return
+        display_title = " ".join(album_title.splitlines()).strip()
+        self.reorder_status_label.setText(status)
+        self.reorder_title_label.setText(display_title)
+        self.reorder_title_label.setVisible(bool(display_title))
+        self.reorder_status_widget.setVisible(bool(status or display_title))
+        self.set_progress(completed, total)
 
     def _is_clean_upload_success(self, result: FlickrUploadResult) -> bool:
         if result.cancelled or result.fatal_error or result.failures:
@@ -1123,6 +1178,7 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
         self.progress_row.hide()
         self.progress_bar.hide()
         self.progress_text_label.hide()
+        self._clear_reorder_progress()
         self.album_action_label.clear()
         self.album_action_label.hide()
         self.details.clear()

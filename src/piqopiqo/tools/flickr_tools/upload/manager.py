@@ -16,7 +16,6 @@ from PySide6.QtCore import QObject, Signal
 from piqopiqo.tools.flickr_tools.album_order import (
     FlickrAlbumOrderEntry,
     album_title,
-    build_reordered_album_ids,
     modal_photo_date,
     save_album_order_backup,
 )
@@ -74,6 +73,7 @@ class FlickrUploadManager(QObject):
     progress = Signal(int, int)
     status = Signal(str)
     album_status = Signal(str)
+    reorder_progress = Signal(int, int, str, str)
     finished = Signal(object)  # FlickrUploadResult
 
     def __init__(
@@ -493,7 +493,9 @@ class FlickrUploadManager(QObject):
     def _run_reorder_new_album_stage(self, result: FlickrUploadResult) -> None:
         stage = FlickrStage.STAGE_REORDER_NEW_ALBUM.label
         self.stage_changed.emit(stage)
-        self.progress.emit(0, 0)
+        self.reorder_progress.emit(
+            0, 0, "Reading the current Flickr album order...", ""
+        )
         try:
             flickr = create_flickr_client(
                 self._api_key,
@@ -520,19 +522,29 @@ class FlickrUploadManager(QObject):
                 if isinstance(album, dict) and str(album.get("id") or "").strip()
             ]
             window = albums[: self._reorder_new_albums_limit]
-            if result.album_id not in [album.album_id for album in window]:
+            new_album = next(
+                (album for album in window if album.album_id == result.album_id),
+                None,
+            )
+            if new_album is None:
                 raise RuntimeError(
                     "The new album was not found in the first "
                     f"{self._reorder_new_albums_limit} Flickr albums."
                 )
 
-            modal_dates: dict[str, date] = {}
-            undated_albums: list[str] = []
-            self.progress.emit(0, len(window))
-            for index, album in enumerate(window, start=1):
+            new_album_date: date | None = None
+            older_album_id = ""
+            date_window = [
+                new_album,
+                *(album for album in window if album.album_id != result.album_id),
+            ]
+            for index, album in enumerate(date_window, start=1):
                 if self._cancel_requested.is_set():
                     raise FlickrOperationCancelled()
-                self.album_status.emit(f"Reading {album.title or album.album_id}...")
+                display_title = album.title or album.album_id
+                self.reorder_progress.emit(
+                    index - 1, len(window), "Fetching dates...", display_title
+                )
                 photos = all_pages(
                     "photoset",
                     "photo",
@@ -544,35 +556,39 @@ class FlickrUploadManager(QObject):
                     num_retries=API_RETRIES,
                     cancel_event=self._cancel_requested,
                 )
+                if self._cancel_requested.is_set():
+                    raise FlickrOperationCancelled()
                 modal_date, _invalid_count = modal_photo_date(photos)
                 if modal_date is None:
-                    undated_albums.append(album.title or album.album_id)
-                else:
-                    modal_dates[album.album_id] = modal_date
-                self.progress.emit(index, len(window))
-
-            if undated_albums:
-                raise RuntimeError(
-                    "Album reordering skipped because these albums have no valid "
-                    "photo taken dates: " + ", ".join(undated_albums)
+                    raise RuntimeError(
+                        "Album reordering skipped because these albums have no valid "
+                        "photo taken dates: " + display_title
+                    )
+                self.reorder_progress.emit(
+                    index, len(window), "Fetching dates...", display_title
                 )
+                if new_album_date is None:
+                    new_album_date = modal_date
+                elif modal_date < new_album_date:
+                    older_album_id = album.album_id
+                    break
 
             current_order = [album.album_id for album in albums]
-            new_order = build_reordered_album_ids(
-                albums,
-                modal_dates,
-                from_album_id=window[-1].album_id,
-            )
-            if (
-                len(albums) > self._reorder_new_albums_limit
-                and new_order[self._reorder_new_albums_limit - 1] == result.album_id
-            ):
+            new_order = [
+                album_id for album_id in current_order if album_id != result.album_id
+            ]
+            if older_album_id:
+                insertion_index = new_order.index(older_album_id)
+            elif len(window) < len(albums):
                 result.album_reorder_note = (
-                    "The new album sorts last among the first "
-                    f"{self._reorder_new_albums_limit} albums. Its date may place "
-                    "it beyond this window; please position it manually on Flickr."
+                    "No older album was found among the first "
+                    f"{self._reorder_new_albums_limit} albums. The new album was "
+                    "left first; please position it manually on Flickr."
                 )
                 return
+            else:
+                insertion_index = len(new_order)
+            new_order.insert(insertion_index, result.album_id)
 
             if self._cancel_requested.is_set():
                 raise FlickrOperationCancelled()
@@ -588,8 +604,7 @@ class FlickrUploadManager(QObject):
                 )
             if self._cancel_requested.is_set():
                 raise FlickrOperationCancelled()
-            self.album_status.emit("Applying the new album order...")
-            self.progress.emit(0, 0)
+            self.reorder_progress.emit(0, 0, "Applying the new album order...", "")
             flickr.photosets.orderSets(
                 photoset_ids=",".join(new_order),
                 timeout=self._very_long_timeout_s,

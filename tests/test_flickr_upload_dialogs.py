@@ -23,6 +23,7 @@ from piqopiqo.tools.flickr_tools.upload.dialogs import (
     FlickrUploadProgressDialog,
 )
 from piqopiqo.tools.flickr_tools.upload.manager import (
+    FlickrUploadManager,
     FlickrUploadPhotoFailure,
     FlickrUploadResult,
 )
@@ -477,6 +478,141 @@ def test_upload_progress_add_to_album_uses_merged_step_text(qapp) -> None:  # no
     assert dialog.album_action_label.isHidden() is True
 
 
+def test_upload_reorder_signal_shows_stage_count_status_and_plain_album_title(
+    qapp, monkeypatch
+) -> None:
+    monkeypatch.setattr(FlickrUploadManager, "start", lambda _self, _items: None)
+    dialog = _mk_upload_dialog()
+    dialog._started = True
+    dialog.show()
+    dialog._start_upload_manager(FlickrAlbumPlan())
+    manager = dialog._manager
+    manager.stage_changed.emit(FlickrStage.STAGE_REORDER_NEW_ALBUM.label)
+    manager.reorder_progress.emit(
+        2, 7, "Fetching dates...", "<b>Trip</b>\r\n2026\rDay\none\u2028More"
+    )
+    qapp.processEvents()
+
+    assert dialog.stage_label.text() == "Reorder new album"
+    assert dialog.progress_text_label.text() == "2/7"
+    assert dialog.reorder_status_label.text() == "Fetching dates..."
+    assert dialog.reorder_title_label.full_text == "<b>Trip</b> 2026 Day one More"
+    assert dialog.reorder_title_label.textFormat() == Qt.TextFormat.PlainText
+    assert dialog.reorder_title_label.wordWrap() is False
+    assert dialog.reorder_status_widget.isVisible()
+    assert dialog.reorder_title_label.isVisible()
+    assert (
+        abs(
+            dialog.stage_label.geometry().center().y()
+            - dialog.progress_text_label.geometry().center().y()
+        )
+        <= 1
+    )
+    status_top = dialog.reorder_status_label.mapTo(
+        dialog, dialog.reorder_status_label.rect().topLeft()
+    ).y()
+    title_top = dialog.reorder_title_label.mapTo(
+        dialog, dialog.reorder_title_label.rect().topLeft()
+    ).y()
+    assert dialog.progress_row.geometry().bottom() < status_top < title_top
+    assert title_top < dialog.progress_bar.y()
+
+
+def test_upload_reorder_title_elides_without_changing_dialog_size(qapp) -> None:
+    dialog = _mk_upload_dialog()
+    dialog._started = True
+    dialog.show()
+    dialog._on_stage_changed(FlickrStage.STAGE_REORDER_NEW_ALBUM.label)
+    dialog._on_reorder_progress(0, 5, "Fetching dates...", "Short title")
+    qapp.processEvents()
+    initial_size = dialog.size()
+    title_height = dialog.reorder_title_label.height()
+    assert dialog.reorder_title_label.text() == "Short title"
+
+    long_title = "Long album title " * 100
+    dialog._on_reorder_progress(1, 5, "Fetching dates...", long_title)
+    qapp.processEvents()
+
+    assert dialog.size() == initial_size
+    assert dialog.reorder_title_label.height() == title_height
+    assert dialog.reorder_title_label.full_text == long_title.strip()
+    assert dialog.reorder_title_label.text().endswith("\u2026")
+    assert dialog.reorder_title_label.text() != long_title.strip()
+    assert (
+        dialog.reorder_title_label.fontMetrics().horizontalAdvance(
+            dialog.reorder_title_label.text()
+        )
+        <= dialog.reorder_title_label.width()
+    )
+
+
+def test_upload_reorder_height_tracks_loading_fetching_applying_and_stage_exit(
+    qapp,
+) -> None:
+    dialog = _mk_upload_dialog()
+    dialog._started = True
+    dialog.show()
+    dialog._on_stage_changed(FlickrStage.STAGE_REORDER_NEW_ALBUM.label)
+    qapp.processEvents()
+    initial_height = dialog.height()
+
+    dialog._on_reorder_progress(0, 0, "Reading the current Flickr album order...", "")
+    qapp.processEvents()
+    loading_height = dialog.height()
+    assert loading_height > initial_height
+    assert dialog.reorder_title_label.isHidden()
+
+    dialog._on_reorder_progress(0, 4, "Fetching dates...", "Trip")
+    qapp.processEvents()
+    fetching_height = dialog.height()
+    assert fetching_height > loading_height
+    assert dialog.minimumHeight() == dialog.maximumHeight() == fetching_height
+
+    dialog._on_reorder_progress(0, 0, "Applying the new album order...", "")
+    qapp.processEvents()
+    assert dialog.height() == loading_height
+    assert dialog.reorder_title_label.isHidden()
+    assert dialog.reorder_title_label.full_text == ""
+    assert dialog.progress_text_label.isHidden()
+
+    dialog._on_stage_changed(FlickrStage.STAGE_UPLOAD.label)
+    qapp.processEvents()
+    assert dialog.height() == initial_height
+    assert dialog.reorder_status_widget.isHidden()
+    assert dialog.reorder_status_label.text() == ""
+
+    dialog._on_stage_changed(FlickrStage.STAGE_REORDER_NEW_ALBUM.label)
+    dialog._on_reorder_progress(1, 4, "Fetching dates...", "Another trip")
+    qapp.processEvents()
+    assert dialog.height() == fetching_height
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_upload_reorder_completion_clears_details_and_ignores_late_progress(
+    qapp, cancelled
+) -> None:
+    dialog = _mk_upload_dialog()
+    dialog._started = True
+    dialog.show()
+    dialog._on_stage_changed(FlickrStage.STAGE_REORDER_NEW_ALBUM.label)
+    dialog._on_reorder_progress(1, 4, "Fetching dates...", "Trip")
+    dialog._on_finished(
+        FlickrUploadResult(total_photos=2, uploaded_count=2, cancelled=cancelled)
+    )
+    qapp.processEvents()
+    final_height = dialog.height()
+
+    dialog._on_reorder_progress(2, 4, "Fetching dates...", "Late album")
+    qapp.processEvents()
+
+    assert dialog.reorder_status_widget.isHidden()
+    assert dialog.reorder_status_label.text() == ""
+    assert dialog.reorder_title_label.full_text == ""
+    assert dialog.progress_row.isHidden()
+    assert dialog.height() == final_height
+    assert dialog.minimumHeight() == dialog.maximumHeight() == final_height
+
+
 def test_upload_progress_completion_hides_running_widgets_and_shows_summary(  # noqa: ARG001
     qapp,
 ) -> None:
@@ -584,9 +720,8 @@ def test_upload_summary_explains_manual_album_placement(qapp) -> None:  # noqa: 
             album_created=True,
             album_added_count=1,
             album_reorder_note=(
-                "The new album sorts last among the first 20 albums. "
-                "Its date may place it beyond this window; please position it "
-                "manually on Flickr."
+                "No older album was found among the first 7 albums. "
+                "The new album was left first; please position it manually on Flickr."
             ),
             failures=[
                 FlickrUploadPhotoFailure(
@@ -598,7 +733,8 @@ def test_upload_summary_explains_manual_album_placement(qapp) -> None:  # noqa: 
         )
     )
 
-    assert "first 20 albums" in dialog.details.toPlainText()
+    assert "first 7 albums" in dialog.details.toPlainText()
+    assert "left first" in dialog.details.toPlainText()
     assert "please position it manually" in dialog.details.toPlainText()
     warning_cursor = dialog.details.document().find("New album order:")
     warning_end_cursor = dialog.details.document().find("manually on Flickr.")

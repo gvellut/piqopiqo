@@ -104,12 +104,12 @@ def _reorder(manager):
     return result
 
 
-def test_reorders_unsorted_window_and_preserves_tail_with_full_backup(
+def test_stops_at_first_older_album_and_preserves_tail_with_full_backup(
     qapp, monkeypatch, tmp_path
 ) -> None:  # noqa: ARG001
     photosets = _install_flickr(
         monkeypatch,
-        ["new", "old", "recent", "tail1", "tail2"],
+        ["new", "recent", "old", "tail1", "tail2"],
         {
             "new": "2025-01-01 12:00:00",
             "old": "2024-01-01 12:00:00",
@@ -120,7 +120,7 @@ def test_reorders_unsorted_window_and_preserves_tail_with_full_backup(
 
     result = _reorder(manager)
 
-    assert photosets.read_photo_ids == ["new", "old", "recent"]
+    assert photosets.read_photo_ids == ["new", "recent", "old"]
     assert photosets.order_calls == [("recent,new,old,tail1,tail2", 120.0)]
     assert result.album_reordered is True
     assert result.failures == []
@@ -128,8 +128,8 @@ def test_reorders_unsorted_window_and_preserves_tail_with_full_backup(
         Path(result.album_reorder_backup_path).read_text(encoding="utf-8")
     ) == [
         "new",
-        "old",
         "recent",
+        "old",
         "tail1",
         "tail2",
     ]
@@ -150,8 +150,54 @@ def test_calls_order_sets_when_new_album_stays_first(
 
     result = _reorder(_manager(tmp_path))
 
+    assert photosets.read_photo_ids == ["new", "a"]
     assert photosets.order_calls == [("new,a,b", 120.0)]
     assert result.album_reordered is True
+    assert Path(result.album_reorder_backup_path).exists()
+
+
+def test_fetches_new_album_date_first_even_when_not_first_in_list(
+    qapp, monkeypatch, tmp_path
+) -> None:  # noqa: ARG001
+    photosets = _install_flickr(
+        monkeypatch,
+        ["recent", "new", "old", "tail"],
+        {
+            "recent": "2026-01-01 12:00:00",
+            "new": "2025-01-01 12:00:00",
+            "old": "2024-01-01 12:00:00",
+        },
+    )
+
+    result = _reorder(_manager(tmp_path))
+
+    assert photosets.read_photo_ids == ["new", "recent", "old"]
+    assert photosets.order_calls == [("recent,new,old,tail", 120.0)]
+    assert result.failures == []
+
+
+def test_inserts_after_equal_dates_without_reading_the_remaining_tail(
+    qapp, monkeypatch, tmp_path
+) -> None:  # noqa: ARG001
+    photosets = _install_flickr(
+        monkeypatch,
+        ["new", "recent", "equal1", "equal2", "old", "tail"],
+        {
+            "new": "2025-01-01 12:00:00",
+            "recent": "2026-01-01 12:00:00",
+            "equal1": "2025-01-01 08:00:00",
+            "equal2": "2025-01-01 20:00:00",
+            "old": "2024-01-01 12:00:00",
+            "tail": None,
+        },
+    )
+
+    result = _reorder(_manager(tmp_path, limit=6))
+
+    assert photosets.read_photo_ids == ["new", "recent", "equal1", "equal2", "old"]
+    assert photosets.order_calls == [("recent,equal1,equal2,new,old,tail", 120.0)]
+    assert result.album_reordered is True
+    assert result.failures == []
 
 
 def test_skips_oldest_new_album_when_more_albums_follow_window(
@@ -195,33 +241,51 @@ def test_places_oldest_new_album_last_when_list_fits_window(
     assert result.album_reordered is True
 
 
-@pytest.mark.parametrize("album_count", [20, 21])
-def test_default_window_boundary_at_twenty_albums(
-    qapp, monkeypatch, tmp_path, album_count
+@pytest.mark.parametrize(
+    ("limit", "album_count"),
+    [(1, 1), (1, 2), (2, 2), (2, 3), (7, 7), (7, 8), (50, 50), (50, 51)],
+)
+@pytest.mark.parametrize("new_date", ["2023-01-01", "2024-01-01"])
+def test_no_older_album_distinguishes_complete_list_from_configured_cutoff(
+    qapp, monkeypatch, tmp_path, limit, album_count, new_date
 ) -> None:  # noqa: ARG001
     album_ids = ["new", *(f"a{index}" for index in range(album_count - 1))]
     dates = {album_id: "2024-01-01 12:00:00" for album_id in album_ids[1:]}
-    dates["new"] = "2023-01-01 12:00:00"
+    dates["new"] = new_date
     photosets = _install_flickr(monkeypatch, album_ids, dates)
 
-    result = _reorder(_manager(tmp_path, limit=20))
+    result = _reorder(_manager(tmp_path, limit=limit))
 
-    assert len(photosets.read_photo_ids) == 20
-    if album_count == 20:
+    assert photosets.read_photo_ids == album_ids[:limit]
+    assert result.failures == []
+    if album_count == limit:
         assert photosets.order_calls == [(",".join([*album_ids[1:], "new"]), 120.0)]
         assert result.album_reordered is True
+        assert Path(result.album_reorder_backup_path).exists()
+        assert result.album_reorder_note == ""
     else:
         assert photosets.order_calls == []
-        assert "first 20 albums" in result.album_reorder_note
+        assert result.album_reordered is False
+        assert f"first {limit} albums" in result.album_reorder_note
+        assert "left first" in result.album_reorder_note
+        assert result.album_reorder_backup_path == ""
+        assert not (tmp_path / BACKUP_FOLDER_NAME).exists()
 
 
+@pytest.mark.parametrize("undated_album", ["new", "a"])
 def test_undated_album_skips_reorder_and_reports_issue(
-    qapp, monkeypatch, tmp_path
+    qapp, monkeypatch, tmp_path, undated_album
 ) -> None:  # noqa: ARG001
+    dates = {
+        "new": "2025-01-01 12:00:00",
+        "a": "2024-01-01 12:00:00",
+        "b": "2023-01-01 12:00:00",
+    }
+    dates[undated_album] = None
     photosets = _install_flickr(
         monkeypatch,
         ["new", "a", "b"],
-        {"new": "2025-01-01 12:00:00", "a": None, "b": "2024-01-01 12:00:00"},
+        dates,
     )
 
     result = _reorder(_manager(tmp_path))
@@ -230,7 +294,86 @@ def test_undated_album_skips_reorder_and_reports_issue(
     assert result.album_reordered is False
     assert len(result.failures) == 1
     assert result.failures[0].stage == FlickrStage.STAGE_REORDER_NEW_ALBUM.label
-    assert "no valid photo taken dates: a" in result.failures[0].message
+    assert f"no valid photo taken dates: {undated_album}" in result.failures[0].message
+    assert result.album_reorder_backup_path == ""
+
+
+@pytest.mark.parametrize("album_ids", [["a", "b"], ["a", "b", "new"]])
+def test_new_album_missing_from_configured_window_reports_issue(
+    qapp, monkeypatch, tmp_path, album_ids
+) -> None:  # noqa: ARG001
+    photosets = _install_flickr(monkeypatch, album_ids, {})
+
+    result = _reorder(_manager(tmp_path, limit=2))
+
+    assert photosets.read_photo_ids == []
+    assert photosets.order_calls == []
+    assert "not found in the first 2" in result.failures[0].message
+
+
+@pytest.mark.parametrize("cancel_after", [None, "new", "a"])
+def test_cancellation_prevents_reordering_and_backup(
+    qapp, monkeypatch, tmp_path, cancel_after
+) -> None:  # noqa: ARG001
+    photosets = _install_flickr(
+        monkeypatch,
+        ["new", "a", "b"],
+        {"new": "2025-01-01", "a": "2024-01-01", "b": "2023-01-01"},
+    )
+    manager = _manager(tmp_path)
+    get_photos = photosets.getPhotos
+
+    def _get_photos(photoset_id, **kwargs):
+        response = get_photos(photoset_id, **kwargs)
+        if photoset_id == cancel_after:
+            manager.request_cancel()
+        return response
+
+    monkeypatch.setattr(photosets, "getPhotos", _get_photos)
+    if cancel_after is None:
+        manager.request_cancel()
+
+    result = _reorder(manager)
+
+    assert result.cancelled is True
+    assert result.failures == []
+    assert photosets.order_calls == []
+    assert result.album_reorder_backup_path == ""
+    assert not (tmp_path / BACKUP_FOLDER_NAME).exists()
+
+
+def test_reorder_progress_reports_current_album_and_bounded_counts(
+    qapp, monkeypatch, tmp_path
+) -> None:  # noqa: ARG001
+    photosets = _install_flickr(
+        monkeypatch,
+        ["new", "a", "b"],
+        {"new": "2025-01-01", "a": "2024-01-01"},
+    )
+    get_list = photosets.getList
+
+    def _get_list(**kwargs):
+        response = get_list(**kwargs)
+        response["photosets"]["photoset"][0]["title"] = {"_content": "New album"}
+        response["photosets"]["photoset"][1]["title"] = {"_content": ""}
+        return response
+
+    monkeypatch.setattr(photosets, "getList", _get_list)
+    manager = _manager(tmp_path, limit=9)
+    updates = []
+    manager.reorder_progress.connect(lambda *args: updates.append(args))
+
+    result = _reorder(manager)
+
+    assert result.album_reordered is True
+    assert updates == [
+        (0, 0, "Reading the current Flickr album order...", ""),
+        (0, 3, "Fetching dates...", "New album"),
+        (1, 3, "Fetching dates...", "New album"),
+        (1, 3, "Fetching dates...", "a"),
+        (2, 3, "Fetching dates...", "a"),
+        (0, 0, "Applying the new album order...", ""),
+    ]
 
 
 @pytest.mark.parametrize("failure_at", ["backup", "api"])
