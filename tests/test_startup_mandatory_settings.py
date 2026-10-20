@@ -52,6 +52,9 @@ def _build_fake_dialog_class(scripted_responses: list[dict]) -> type:
         def values(self):
             return self._script.get("values", {})
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
     return _FakeDialog
 
 

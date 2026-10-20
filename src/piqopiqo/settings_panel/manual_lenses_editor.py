@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.dialogs.modal import managed_modal_dialog
 from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from piqopiqo.model import ManualLensPreset
 
@@ -240,10 +241,12 @@ class ManualLensesEditor(QWidget):
             existing_models=self._existing_models(),
             parent=self,
         )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
+        with managed_modal_dialog(dialog):
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            value = dialog.get_value()
 
-        self._presets.append(dialog.get_value())
+        self._presets.append(value)
         self._refresh_list()
         self._list.setCurrentRow(len(self._presets) - 1)
         self.value_changed.emit()
@@ -260,10 +263,12 @@ class ManualLensesEditor(QWidget):
             initial=current,
             parent=self,
         )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
+        with managed_modal_dialog(dialog):
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            value = dialog.get_value()
 
-        self._presets[index] = dialog.get_value()
+        self._presets[index] = value
         self._refresh_list()
         self._list.setCurrentRow(index)
         self.value_changed.emit()

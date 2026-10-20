@@ -310,6 +310,12 @@ def test_flickr_upload_cancel_selects_visible_missing_metadata_paths(
         def active_metadata_validation_missing_paths(self) -> list[str]:
             return ["/b.jpg", "/c.jpg"]
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
+        def _stop_metadata_validation(self):
+            self.validation_stopped = True
+
     monkeypatch.setattr(
         "piqopiqo.tools.flickr_tools.upload.dialogs.FlickrPreflightDialog",
         _Preflight,
@@ -382,6 +388,12 @@ def test_flickr_upload_cancel_selects_lifecycle_missing_metadata_paths(
 
         def active_metadata_validation_missing_paths(self) -> list[str]:
             return ["/hidden.jpg", "/visible.jpg"]
+
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
+        def _stop_metadata_validation(self):
+            self.validation_stopped = True
 
     monkeypatch.setattr(
         "piqopiqo.tools.flickr_tools.upload.dialogs.FlickrPreflightDialog",
@@ -457,6 +469,12 @@ def test_flickr_upload_cancel_lifecycle_unchecked_uses_plain_missing_selection(
         def active_metadata_validation_missing_paths(self) -> list[str]:
             return ["/hidden.jpg"]
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
+        def _stop_metadata_validation(self):
+            self.validation_stopped = True
+
     monkeypatch.setattr(
         "piqopiqo.tools.flickr_tools.upload.dialogs.FlickrPreflightDialog",
         _Preflight,
@@ -516,6 +534,12 @@ def test_flickr_upload_cancel_without_missing_metadata_leaves_grid_unchanged(
 
         def active_metadata_validation_missing_paths(self) -> list[str]:
             return []
+
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
+        def _stop_metadata_validation(self):
+            self.validation_stopped = True
 
     monkeypatch.setattr(
         "piqopiqo.tools.flickr_tools.upload.dialogs.FlickrPreflightDialog",
@@ -596,6 +620,12 @@ def test_flickr_upload_flow_uses_all_loaded_photos_for_transition_scope(
         def selected_upload_scope_items(self) -> list[dict]:
             return list(self._label_upload_items)
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
+        def _stop_metadata_validation(self):
+            self.validation_stopped = True
+
     created_upload_dialogs: list[object] = []
 
     class _UploadDialog:
@@ -611,6 +641,12 @@ def test_flickr_upload_flow_uses_all_loaded_photos_for_transition_scope(
 
         def exec(self):
             return QDialog.DialogCode.Accepted
+
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
+        def stop_all_tasks(self, *, cancel):
+            self.tasks_cancelled = cancel
 
     monkeypatch.setattr(
         "piqopiqo.tools.flickr_tools.upload.dialogs.FlickrPreflightDialog",
@@ -706,6 +742,12 @@ def test_flickr_upload_flow_hides_transitions_when_lifecycle_state_unchecked(
         def selected_upload_scope_items(self) -> list[dict]:
             return list(self._visible_upload_items)
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
+        def _stop_metadata_validation(self):
+            self.validation_stopped = True
+
     created_upload_dialogs: list[object] = []
 
     class _UploadDialog:
@@ -721,6 +763,12 @@ def test_flickr_upload_flow_hides_transitions_when_lifecycle_state_unchecked(
 
         def exec(self):
             return QDialog.DialogCode.Accepted
+
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
+        def stop_all_tasks(self, *, cancel):
+            self.tasks_cancelled = cancel
 
     monkeypatch.setattr(
         "piqopiqo.tools.flickr_tools.upload.dialogs.FlickrPreflightDialog",

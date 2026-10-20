@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.components.summary_text_edit import SummaryTextEdit
+from piqopiqo.dialogs.modal import managed_modal_dialog
 from piqopiqo.keyword_utils import (
     format_keywords,
     normalize_keyword_list,
@@ -478,4 +479,8 @@ def launch_local_find_replace(window: MainWindow) -> None:
         used_visible_fallback=used_visible_fallback,
         parent=window,
     )
-    dialog.exec()
+    with managed_modal_dialog(dialog):
+        try:
+            dialog.exec()
+        finally:
+            dialog.stop_all_tasks(cancel=True)

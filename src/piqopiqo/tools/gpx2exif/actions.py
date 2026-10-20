@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QWidget
 
+from piqopiqo.dialogs.modal import managed_modal_dialog
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBUnavailableError
 from piqopiqo.ssf.settings_state import (
@@ -205,8 +206,9 @@ def extract_gps_time_shift_for_item(window: MainWindow, item: ImageItem) -> None
         existing_shift=existing_shift,
         parent=window,
     )
-    if confirm.exec() != QDialog.DialogCode.Accepted:
-        return
+    with managed_modal_dialog(confirm):
+        if confirm.exec() != QDialog.DialogCode.Accepted:
+            return
 
     metadata = item.db_metadata
     if metadata is None:
@@ -232,12 +234,17 @@ def extract_gps_time_shift_for_item(window: MainWindow, item: ImageItem) -> None
     )
 
     progress = ExtractGpsTimeShiftProgressDialog(parent=window)
-    progress.start(worker)
-    if progress.exec() != QDialog.DialogCode.Accepted:
-        return
+    with managed_modal_dialog(progress):
+        try:
+            progress.start(worker)
+            if progress.exec() != QDialog.DialogCode.Accepted:
+                return
+            result_shift = progress.result_shift
+        finally:
+            progress.stop_all_tasks(cancel=True)
 
-    if progress.result_shift:
-        persist_folder_time_shift(window, folder_path, progress.result_shift)
+    if result_shift:
+        persist_folder_time_shift(window, folder_path, result_shift)
 
 
 def launch_apply_gpx(window: MainWindow) -> None:
@@ -280,10 +287,10 @@ def launch_apply_gpx(window: MainWindow) -> None:
         on_browse_selected_folder=on_browse_selected_folder,
         parent=window,
     )
-    if input_dialog.exec() != QDialog.DialogCode.Accepted:
-        return
-
-    gpx_path, mode, folder_time_shifts = input_dialog.get_values()
+    with managed_modal_dialog(input_dialog):
+        if input_dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        gpx_path, mode, folder_time_shifts = input_dialog.get_values()
     if not _persist_apply_gpx_time_shifts(window, folder_time_shifts):
         return
     if not _set_gpx_path_for_folders(window, source_folders, gpx_path):
@@ -311,26 +318,30 @@ def launch_apply_gpx(window: MainWindow) -> None:
     window._active_apply_gpx_worker = worker
 
     def on_folder_changed(relative_folder: str):
-        progress_dialog.set_folder(relative_folder)
+        if progress_dialog is not None:
+            progress_dialog.set_folder(relative_folder)
 
     def on_progress(completed: int, total_count: int):
-        progress_dialog.set_progress(completed, total_count)
+        if progress_dialog is not None:
+            progress_dialog.set_progress(completed, total_count)
 
     def on_error(message: str):
         window._active_apply_gpx_worker = None
-        if progress_dialog.isVisible():
+        if window._shutdown_started:
+            return
+        if progress_dialog is not None and progress_dialog.isVisible():
             progress_dialog.show_error(message)
         else:
             QMessageBox.warning(window, "Apply GPX", message)
 
     def on_finished(result):
         window._active_apply_gpx_worker = None
-        if result is None:
+        if result is None or window._shutdown_started:
             return
 
         apply_gpx_result_to_model(window, result, update_db=update_db)
 
-        if progress_dialog.isVisible():
+        if progress_dialog is not None and progress_dialog.isVisible():
             progress_dialog.finish(result)
 
     worker.signals.folder_changed.connect(on_folder_changed)
@@ -339,8 +350,18 @@ def launch_apply_gpx(window: MainWindow) -> None:
     worker.signals.finished.connect(on_finished)
     progress_dialog.cancel_requested.connect(worker.request_cancel)
 
-    QThreadPool.globalInstance().start(worker)
-    progress_dialog.exec()
+    with managed_modal_dialog(progress_dialog):
+        try:
+            QThreadPool.globalInstance().start(worker)
+            progress_dialog.exec()
+        except BaseException:
+            worker.request_cancel()
+            raise
+        finally:
+            # Completion still reconciles the model after a dismissed dialog.
+            worker.signals.folder_changed.disconnect(on_folder_changed)
+            worker.signals.progress.disconnect(on_progress)
+            progress_dialog = None
 
 
 def launch_clear_gps(window: MainWindow) -> None:
@@ -387,20 +408,25 @@ def launch_clear_gps(window: MainWindow) -> None:
     )
 
     def on_progress(completed: int, total_count: int) -> None:
-        progress_dialog.set_progress(completed, total_count)
+        if progress_dialog is not None:
+            progress_dialog.set_progress(completed, total_count)
 
     def on_error(message: str) -> None:
-        if progress_dialog.isVisible():
+        if window._shutdown_started:
+            return
+        if progress_dialog is not None and progress_dialog.isVisible():
             progress_dialog.show_error(message)
         else:
             QMessageBox.warning(window, "Clear GPS", message)
 
     def on_finished(result: ClearGpsResult) -> None:
+        if window._shutdown_started:
+            return
         if result.db_unavailable:
             handle_interrupted = getattr(window, "_handle_interrupted_db_action", None)
             if callable(handle_interrupted):
                 handle_interrupted(action_name="Clear GPS")
-            if progress_dialog.isVisible():
+            if progress_dialog is not None and progress_dialog.isVisible():
                 progress_dialog.finish(
                     processed=result.processed,
                     total=result.total,
@@ -423,7 +449,7 @@ def launch_clear_gps(window: MainWindow) -> None:
                 source="clear_gpx",
             )
 
-        if progress_dialog.isVisible():
+        if progress_dialog is not None and progress_dialog.isVisible():
             progress_dialog.finish(
                 processed=result.processed,
                 total=result.total,
@@ -434,8 +460,16 @@ def launch_clear_gps(window: MainWindow) -> None:
     worker.signals.error.connect(on_error)
     worker.signals.finished.connect(on_finished)
     progress_dialog.cancel_requested.connect(worker.request_cancel)
-    QThreadPool.globalInstance().start(worker)
-    progress_dialog.exec()
+    with managed_modal_dialog(progress_dialog):
+        try:
+            QThreadPool.globalInstance().start(worker)
+            progress_dialog.exec()
+        except BaseException:
+            worker.request_cancel()
+            raise
+        finally:
+            worker.signals.progress.disconnect(on_progress)
+            progress_dialog = None
 
 
 def _clear_gps_sync(window: MainWindow, items: list) -> None:

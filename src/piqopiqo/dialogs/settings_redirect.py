@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QMessageBox, QWidget
 
+from piqopiqo.dialogs.modal import managed_modal_dialog
+
 
 def prompt_open_settings_for_missing_setting(
     parent,
@@ -22,5 +24,6 @@ def prompt_open_settings_for_missing_setting(
         QMessageBox.ButtonRole.AcceptRole,
     )
     dialog.addButton(QMessageBox.StandardButton.Cancel)
-    dialog.exec()
-    return dialog.clickedButton() == go_to_settings_btn
+    with managed_modal_dialog(dialog):
+        dialog.exec()
+        return dialog.clickedButton() == go_to_settings_btn

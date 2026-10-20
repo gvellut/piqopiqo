@@ -211,6 +211,12 @@ def test_launcher_prefers_selection_and_falls_back_to_visible(monkeypatch) -> No
         def exec(self):
             return 0
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
+        def stop_all_tasks(self, *, cancel):
+            self.tasks_cancelled = cancel
+
     monkeypatch.setattr(
         "piqopiqo.tools.edit_tools.find_replace.LocalFindReplaceDialog",
         _Dialog,

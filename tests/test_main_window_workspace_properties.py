@@ -495,6 +495,9 @@ def test_open_workspace_properties_accept_without_flags_does_not_start_cleanup(
         def exec(self) -> int:
             return QDialog.DialogCode.Accepted
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
     calls: list[dict] = []
     monkeypatch.setattr(
         "piqopiqo.main_window.WorkspacePropertiesDialog", _DialogNoAction
@@ -520,6 +523,9 @@ def test_open_workspace_properties_accept_with_flags_starts_cleanup(
 
         def exec(self) -> int:
             return QDialog.DialogCode.Accepted
+
+        def deleteLater(self):
+            self.deletion_scheduled = True
 
     calls: list[dict] = []
     monkeypatch.setattr(

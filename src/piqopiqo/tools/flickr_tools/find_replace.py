@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from piqopiqo.components.ellided_label import EllidedLabel
 from piqopiqo.components.summary_text_edit import SummaryTextEdit
+from piqopiqo.dialogs.modal import managed_modal_dialog
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
@@ -789,4 +790,8 @@ def launch_flickr_find_replace(window: MainWindow) -> None:
         api_secret=api_secret,
         parent=window,
     )
-    dialog.exec()
+    with managed_modal_dialog(dialog):
+        try:
+            dialog.exec()
+        finally:
+            dialog.stop_all_tasks(cancel=True)

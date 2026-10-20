@@ -6,6 +6,8 @@ import os
 
 from PySide6.QtWidgets import QDialog, QWidget
 
+from piqopiqo.dialogs.modal import managed_modal_dialog
+
 from .dialogs.mandatory_settings_dialog import MandatorySettingsDialog
 from .ssf.settings_state import (
     MandatorySettingInputKind,
@@ -26,10 +28,11 @@ def ensure_mandatory_settings_configured(parent: QWidget | None = None) -> bool:
             error_message=error_message,
             parent=parent,
         )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return False
+        with managed_modal_dialog(dialog):
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return False
 
-        submitted = dialog.values()
+            submitted = dialog.values()
         errors: list[str] = []
         for setting in pending:
             error = _validate_and_persist_pending_setting(

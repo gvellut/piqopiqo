@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import QDialog, QMessageBox, QWidget
 
+from piqopiqo.dialogs.modal import managed_modal_dialog
 from piqopiqo.ssf.settings_state import RuntimeSettingKey, get_runtime_setting
 from piqopiqo.tools.flickr_tools.upload.workers import (
     FlickrLoginWorker,
@@ -111,13 +112,19 @@ def ensure_flickr_authenticated(
             status="Checking Flickr login...",
             parent=parent,
         )
-        validation_dialog.start_worker(validation_worker)
-        if validation_dialog.exec() != QDialog.DialogCode.Accepted:
+        with managed_modal_dialog(validation_dialog):
+            try:
+                validation_dialog.start_worker(validation_worker)
+                if validation_dialog.exec() != QDialog.DialogCode.Accepted:
+                    return False
+                error_message = validation_dialog.error_message
+                valid_token = bool(validation_dialog.payload)
+            finally:
+                validation_dialog.stop_all_tasks(cancel=True)
+        if error_message:
+            QMessageBox.warning(parent, title, error_message)
             return False
-        if validation_dialog.error_message:
-            QMessageBox.warning(parent, title, validation_dialog.error_message)
-            return False
-        if bool(validation_dialog.payload):
+        if valid_token:
             return True
 
     login_worker = FlickrLoginWorker(
@@ -130,10 +137,16 @@ def ensure_flickr_authenticated(
         status="Log in to Flickr in your browser...",
         parent=parent,
     )
-    login_dialog.start_worker(login_worker)
-    if login_dialog.exec() != QDialog.DialogCode.Accepted:
+    with managed_modal_dialog(login_dialog):
+        try:
+            login_dialog.start_worker(login_worker)
+            if login_dialog.exec() != QDialog.DialogCode.Accepted:
+                return False
+            error_message = login_dialog.error_message
+            success = bool(getattr(login_dialog.payload, "success", False))
+        finally:
+            login_dialog.stop_all_tasks(cancel=True)
+    if error_message:
+        QMessageBox.warning(parent, title, error_message)
         return False
-    if login_dialog.error_message:
-        QMessageBox.warning(parent, title, login_dialog.error_message)
-        return False
-    return bool(getattr(login_dialog.payload, "success", False))
+    return success

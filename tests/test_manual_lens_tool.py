@@ -177,6 +177,9 @@ def test_launch_manual_lens_falls_back_to_visible_when_no_selection(
         def exec(self):
             return QDialog.DialogCode.Accepted
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
     monkeypatch.setattr(manual_lens, "LensSelectionDialog", _PickerStub)
     monkeypatch.setattr(
         QMessageBox,
@@ -220,6 +223,9 @@ def test_launch_manual_lens_prioritizes_selected_items(tmp_path, monkeypatch):
 
         def exec(self):
             return QDialog.DialogCode.Accepted
+
+        def deleteLater(self):
+            self.deletion_scheduled = True
 
     monkeypatch.setattr(manual_lens, "LensSelectionDialog", _PickerStub)
     monkeypatch.setattr(
@@ -269,6 +275,9 @@ def test_launch_manual_lens_clear_option_clears_all_manual_lens_fields(
 
         def exec(self):
             return QDialog.DialogCode.Accepted
+
+        def deleteLater(self):
+            self.deletion_scheduled = True
 
     confirm_texts: list[str] = []
 

@@ -125,6 +125,9 @@ def test_launch_apply_gpx_passes_last_folder_and_persists_browse_selection(
         def exec(self):
             return QDialog.DialogCode.Rejected
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
     monkeypatch.setattr(gpx_actions, "get_state", lambda: _StateStub())
     monkeypatch.setattr(gpx_actions, "get_user_setting", lambda _key: "")
     monkeypatch.setattr(gpx_actions, "_get_first_folder_gpx_path", lambda *_: "")

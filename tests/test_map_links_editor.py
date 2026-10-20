@@ -137,6 +137,9 @@ def test_map_links_dialog_add_edit_delete_and_button_state(monkeypatch, qapp):  
         def get_value(self):
             return self._value
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
     monkeypatch.setattr(mle, "_MapLinkOptionDialog", _DialogStub)
 
     dialog._on_add()
@@ -201,6 +204,9 @@ def test_map_links_editor_summary_updates_after_dialog_accept(monkeypatch, qapp)
 
         def get_value(self):
             return returned_options
+
+        def deleteLater(self):
+            self.deletion_scheduled = True
 
     monkeypatch.setattr(mle, "_MapLinksDialog", _DialogStub)
 

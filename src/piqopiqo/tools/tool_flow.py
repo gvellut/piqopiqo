@@ -321,6 +321,8 @@ class ToolTaskHandle:
             self._cancel_fn()
 
     def disconnect(self) -> None:
+        # Disconnecting does not remove callbacks already queued by Qt.
+        self._emit = None
         while self._connections:
             signal, slot = self._connections.pop()
             try:
@@ -449,9 +451,9 @@ class ToolFlowDialog(UnsavedChangesDialog):
         task = self._tasks.pop(name, None)
         if task is None:
             return
+        task.disconnect()
         if cancel:
             task.cancel()
-        task.disconnect()
 
     def stop_all_tasks(self, *, cancel: bool = True) -> None:
         for name in list(self._tasks):
@@ -540,7 +542,7 @@ class ToolFlowDialog(UnsavedChangesDialog):
         super().closeEvent(event)
 
     def done(self, result: int) -> None:
-        self.stop_all_tasks(cancel=False)
+        self.stop_all_tasks(cancel=result == QDialog.DialogCode.Rejected)
         super().done(result)
 
     def _dispatch_event(self, event: ToolEvent) -> None:

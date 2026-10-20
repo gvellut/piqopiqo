@@ -126,6 +126,7 @@ class ExtractGpsTimeShiftProgressDialog(ToolFlowDialog):
                     min_width=460,
                     show_progress=True,
                     show_progress_count=False,
+                    close_policy="cancel",
                 ),
                 "result": ToolScreen(
                     id="result",
@@ -190,6 +191,7 @@ class ExtractGpsTimeShiftProgressDialog(ToolFlowDialog):
         )
 
     def _on_success(self, extracted_clock: str, time_shift: str) -> None:
+        self.stop_task("extract_time_shift", cancel=False)
         self._result_shift = time_shift
         self.transition_to("result")
         self.result_text.set_lines(
@@ -200,6 +202,7 @@ class ExtractGpsTimeShiftProgressDialog(ToolFlowDialog):
         self.sync_size_to_content()
 
     def _on_error(self, message: str) -> None:
+        self.stop_task("extract_time_shift", cancel=False)
         self._result_shift = None
         self.transition_to("result")
         error_format = QTextCharFormat()
@@ -589,8 +592,12 @@ class ApplyGpxProgressDialog(ToolFlowDialog):
         self.sync_size_to_content()
 
     def _on_cancel(self) -> None:
-        self.cancel_requested.emit()
         self.reject()
+
+    def done(self, result: int) -> None:
+        if result == QDialog.DialogCode.Rejected and self.cancel_btn.isEnabled():
+            self.cancel_requested.emit()
+        super().done(result)
 
     def _on_show_finder(self) -> None:
         if not self._kml_paths:
@@ -682,5 +689,9 @@ class ClearGpsProgressDialog(ToolFlowDialog):
         self.sync_size_to_content()
 
     def _on_cancel(self) -> None:
-        self.cancel_requested.emit()
         self.reject()
+
+    def done(self, result: int) -> None:
+        if result == QDialog.DialogCode.Rejected and self.cancel_btn.isEnabled():
+            self.cancel_requested.emit()
+        super().done(result)

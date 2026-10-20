@@ -356,6 +356,9 @@ def test_settings_dialog_passes_unsaved_labels_to_transition_dialog(
         def get_value(self):
             return []
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
     monkeypatch.setattr(lte, "_LabelTransitionsDialog", _DialogStub)
 
     transitions_editor = dialog._editors[UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS]

@@ -22,3 +22,5 @@ __pycache__
 CLAUDE.md
 
 src/piqopiqo/_build_info.py
+
+coredump.txt

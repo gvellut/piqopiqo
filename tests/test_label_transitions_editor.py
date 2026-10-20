@@ -171,6 +171,9 @@ def test_label_transitions_dialog_add_edit_delete_and_button_state(
         def get_value(self):
             return self._value
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
     monkeypatch.setattr(lte, "_LabelTransitionRuleDialog", _DialogStub)
 
     dialog._on_add()
@@ -263,6 +266,9 @@ def test_label_transitions_editor_summary_updates_after_dialog_accept(
         def get_value(self):
             return returned_rules
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
     monkeypatch.setattr(lte, "_LabelTransitionsDialog", _DialogStub)
 
     emitted: list[bool] = []
@@ -293,6 +299,9 @@ def test_label_transitions_editor_passes_provider_status_labels(
 
         def get_value(self):
             return []
+
+        def deleteLater(self):
+            self.deletion_scheduled = True
 
     monkeypatch.setattr(lte, "_LabelTransitionsDialog", _DialogStub)
 

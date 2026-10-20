@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.components.summary_text_edit import SummaryLine, SummaryTextEdit
+from piqopiqo.dialogs.modal import managed_modal_dialog
 from piqopiqo.metadata.exif_write import build_exif_tags
 from piqopiqo.model import ImageItem
 from piqopiqo.tools.tool_flow import (
@@ -40,7 +41,11 @@ def launch_save_exif(window: MainWindow) -> None:
         return
 
     dialog = SaveExifDialog(items, window.media_manager, window)
-    dialog.exec()
+    with managed_modal_dialog(dialog):
+        try:
+            dialog.exec()
+        finally:
+            dialog.stop_all_tasks(cancel=True)
 
 
 class SaveExifDialog(ToolFlowDialog):

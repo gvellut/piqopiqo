@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.dialogs.modal import managed_modal_dialog
 from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from piqopiqo.model import MapLinkOption
 
@@ -374,10 +375,12 @@ class _MapLinksDialog(UnsavedChangesDialog):
 
     def _on_add(self) -> None:
         dialog = _MapLinkOptionDialog(title="Add Map Link", parent=self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
+        with managed_modal_dialog(dialog):
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            value = dialog.get_value()
 
-        self._options.append(dialog.get_value())
+        self._options.append(value)
         self._refresh_list()
 
     def _on_edit(self) -> None:
@@ -390,10 +393,12 @@ class _MapLinksDialog(UnsavedChangesDialog):
             initial=self._options[index],
             parent=self,
         )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
+        with managed_modal_dialog(dialog):
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            value = dialog.get_value()
 
-        self._options[index] = dialog.get_value()
+        self._options[index] = value
         self._refresh_list(selected_index=index)
 
     def _on_delete(self) -> None:
@@ -461,10 +466,12 @@ class MapLinksEditor(QWidget):
 
     def _on_edit(self) -> None:
         dialog = _MapLinksDialog(self._options, parent=self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
+        with managed_modal_dialog(dialog):
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            value = dialog.get_value()
 
-        self._options = dialog.get_value()
+        self._options = value
         self._refresh_summary()
         self.value_changed.emit()
 

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.dialogs.modal import managed_modal_dialog
 from piqopiqo.storage import StorageWriteFault
 
 
@@ -96,19 +97,20 @@ def wait_for_storage_retry(
         retry_description=retry_description,
         parent=parent,
     )
-    current_fault = fault
-    while True:
-        dialog.set_fault(current_fault)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return False
-        try:
-            retry_fault = retry()
-        except OSError as exc:
-            retry_fault = StorageWriteFault(
-                target_path=current_fault.target_path,
-                operation=current_fault.operation,
-                error_message=str(exc) or exc.__class__.__name__,
-            )
-        if retry_fault is None:
-            return True
-        current_fault = retry_fault
+    with managed_modal_dialog(dialog):
+        current_fault = fault
+        while True:
+            dialog.set_fault(current_fault)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return False
+            try:
+                retry_fault = retry()
+            except OSError as exc:
+                retry_fault = StorageWriteFault(
+                    target_path=current_fault.target_path,
+                    operation=current_fault.operation,
+                    error_message=str(exc) or exc.__class__.__name__,
+                )
+            if retry_fault is None:
+                return True
+            current_fault = retry_fault

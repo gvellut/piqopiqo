@@ -17,6 +17,7 @@ EXPECTED_PYTHON_OWNED_RUNNABLES = (
     ("tools/archive.py", "ArchiveMoveWorker"),
     ("tools/copy_sd.py", "CopySdWorker"),
     ("tools/copy_sd.py", "_ResolveDatesWorker"),
+    ("tools/copy_sd.py", "_EjectWorker"),
     ("tools/flickr_tools/upload/workers.py", "FlickrLoginWorker"),
     ("tools/flickr_tools/upload/workers.py", "FlickrTokenValidationWorker"),
     ("tools/flickr_tools/upload/workers.py", "FlickrAlbumCheckWorker"),

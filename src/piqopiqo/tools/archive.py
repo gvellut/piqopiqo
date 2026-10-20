@@ -23,6 +23,7 @@ from piqopiqo.cache_paths import (
     clear_thumb_cache_for_folders,
 )
 from piqopiqo.components.summary_text_edit import SummaryLine, SummaryTextEdit
+from piqopiqo.dialogs.modal import managed_modal_dialog
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
@@ -223,7 +224,11 @@ def launch_archive(window: MainWindow) -> None:
         watcher_control=window.workspace_watcher_control,
         parent=window,
     )
-    dialog.exec()
+    with managed_modal_dialog(dialog):
+        try:
+            dialog.exec()
+        finally:
+            dialog.stop_all_tasks(cancel=True)
 
 
 class ArchiveDialog(ToolFlowDialog):

@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from piqopiqo.cache_paths import get_flickr_cache_dir, get_flickr_token_file_path
 from piqopiqo.components.ellided_label import EllidedLabel
 from piqopiqo.components.summary_text_edit import SummaryLine, SummaryTextEdit
+from piqopiqo.dialogs.modal import managed_modal_dialog
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
@@ -127,6 +128,7 @@ class FlickrPreflightDialog(UnsavedChangesDialog):
         self._label_validation_worker: FlickrMetadataPrecheckWorker | None = None
         self._closed = False
         self._validation_started = False
+        self._validation_connections = []
 
         self._visible_count = len(self._visible_upload_items)
         self._label_count = len(self._label_upload_items)
@@ -452,29 +454,37 @@ class FlickrPreflightDialog(UnsavedChangesDialog):
                 upload_items=upload_items,
             )
             self._set_validation_worker(use_label_scope, worker)
-            worker.signals.finished.connect(
-                lambda missing_paths_obj, use_label_scope=use_label_scope: (
-                    self._on_metadata_validation_finished(  # noqa: B023
-                        use_label_scope,
-                        missing_paths_obj,
-                    )
-                )
+            callbacks = (
+                (
+                    worker.signals.finished,
+                    lambda missing_paths_obj, use_label_scope=use_label_scope: (
+                        self._on_metadata_validation_finished(  # noqa: B023
+                            use_label_scope,
+                            missing_paths_obj,
+                        )
+                    ),
+                ),
+                (
+                    worker.signals.cancelled,
+                    lambda use_label_scope=use_label_scope: (
+                        self._on_metadata_validation_cancelled(  # noqa: B023
+                            use_label_scope
+                        )
+                    ),
+                ),
+                (
+                    worker.signals.error,
+                    lambda message, use_label_scope=use_label_scope: (
+                        self._on_metadata_validation_error(  # noqa: B023
+                            use_label_scope,
+                            message,
+                        )
+                    ),
+                ),
             )
-            worker.signals.cancelled.connect(
-                lambda use_label_scope=use_label_scope: (
-                    self._on_metadata_validation_cancelled(  # noqa: B023
-                        use_label_scope
-                    )
-                )
-            )
-            worker.signals.error.connect(
-                lambda message, use_label_scope=use_label_scope: (
-                    self._on_metadata_validation_error(  # noqa: B023
-                        use_label_scope,
-                        message,
-                    )
-                )
-            )
+            for signal, callback in callbacks:
+                signal.connect(callback)
+                self._validation_connections.append((signal, callback))
             QThreadPool.globalInstance().start(worker)
 
         self._refresh_scope_state()
@@ -524,7 +534,11 @@ class FlickrPreflightDialog(UnsavedChangesDialog):
             self.selected_album_text = str(self.album_input.text() or "")
         self.accept()
 
-    def closeEvent(self, event) -> None:
+    def done(self, result: int) -> None:
+        self._stop_metadata_validation()
+        super().done(result)
+
+    def _stop_metadata_validation(self) -> None:
         self._closed = True
         for worker in (
             self._visible_validation_worker,
@@ -535,7 +549,9 @@ class FlickrPreflightDialog(UnsavedChangesDialog):
             worker.request_cancel()
         self._visible_validation_worker = None
         self._label_validation_worker = None
-        super().closeEvent(event)
+        while self._validation_connections:
+            signal, callback = self._validation_connections.pop()
+            signal.disconnect(callback)
 
 
 class FlickrLoginProgressDialog(ToolFlowDialog):
@@ -555,6 +571,7 @@ class FlickrLoginProgressDialog(ToolFlowDialog):
                     buttons=(ToolButton("cancel", "Cancel"),),
                     min_width=460,
                     show_progress=True,
+                    close_policy="cancel",
                     show_progress_count=False,
                 )
             },
@@ -678,6 +695,7 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
                     ),
                     min_width=620,
                     show_progress=True,
+                    close_policy="cancel",
                 ),
                 "transition_applying": ToolScreen(
                     id="transition_applying",
@@ -685,6 +703,7 @@ class FlickrUploadProgressDialog(ToolFlowDialog):
                     buttons=(ToolButton("cancel", "Cancel"),),
                     min_width=620,
                     show_progress=True,
+                    close_policy="cancel",
                     show_progress_count=False,
                 ),
                 "transition_result": ToolScreen(
@@ -1614,31 +1633,49 @@ def _launch_flickr_upload_flow(
             show_album_link=cached_album_from_folder_data,
             parent=parent,
         )
-        if preflight.exec() != QDialog.DialogCode.Accepted:
-            label_filter_after_clear = None
-            if (
-                use_lifecycle
-                and label_override_text
-                and _preflight_has_active_label_scope(preflight)
-            ):
-                label_filter_after_clear = label_override_text
+        with managed_modal_dialog(preflight):
+            try:
+                accepted = preflight.exec() == QDialog.DialogCode.Accepted
+                if not accepted:
+                    missing_paths = preflight.active_metadata_validation_missing_paths()
+                    label_filter_after_clear = (
+                        label_override_text
+                        if use_lifecycle
+                        and _preflight_has_active_label_scope(preflight)
+                        else None
+                    )
+                else:
+                    session_album_text = preflight.selected_album_text
+                    session_use_label_scope = preflight.selected_use_label_scope
+                    selected_action = preflight.selected_action
+                    scope_items = (
+                        preflight.selected_upload_scope_items()
+                        if selected_action != "login"
+                        else []
+                    )
+                    scope_checkbox = getattr(preflight, "scope_checkbox", None)
+                    remember_scope = (
+                        use_lifecycle
+                        and scope_checkbox is not None
+                        and scope_checkbox.isEnabled()
+                    )
+            finally:
+                # Also cover an exception before exec() completes.
+                preflight._stop_metadata_validation()
+        if not accepted:
             _select_missing_metadata_paths_on_cancel(
                 parent,
-                preflight.active_metadata_validation_missing_paths(),
+                missing_paths,
                 label_filter_after_clear=label_filter_after_clear,
             )
             return
-
-        session_album_text = preflight.selected_album_text
-        session_use_label_scope = preflight.selected_use_label_scope
-        scope_checkbox = getattr(preflight, "scope_checkbox", None)
-        if use_lifecycle and scope_checkbox is not None and scope_checkbox.isEnabled():
+        if remember_scope:
             set_state_value(
                 StateKey.FLICKR_UPLOAD_USE_LIFECYCLE_SCOPE,
                 bool(session_use_label_scope),
             )
 
-        if preflight.selected_action == "login":
+        if selected_action == "login":
             worker = FlickrLoginWorker(
                 api_key=api_key,
                 api_secret=api_secret,
@@ -1647,24 +1684,22 @@ def _launch_flickr_upload_flow(
                 ),
             )
             login_dialog = FlickrLoginProgressDialog(parent=parent)
-            login_dialog.start(worker)
-            if login_dialog.exec() != QDialog.DialogCode.Accepted:
-                return
-
-            if login_dialog.error_message:
-                QMessageBox.warning(
-                    parent,
-                    "Upload to Flickr",
-                    login_dialog.error_message,
-                )
+            with managed_modal_dialog(login_dialog):
+                try:
+                    login_dialog.start(worker)
+                    if login_dialog.exec() != QDialog.DialogCode.Accepted:
+                        return
+                    error_message = login_dialog.error_message
+                finally:
+                    login_dialog.stop_all_tasks(cancel=True)
+            if error_message:
+                QMessageBox.warning(parent, "Upload to Flickr", error_message)
             # refresh preflight after login attempt
             continue
 
         # Upload flow
         session_album_error = ""
-        upload_items = _build_upload_items(
-            parent, preflight.selected_upload_scope_items()
-        )
+        upload_items = _build_upload_items(parent, scope_items)
         transition_scope_items = _build_transition_scope_items(parent)
         exiftool_path = str(get_user_setting(UserSettingKey.EXIFTOOL_PATH) or "")
 
@@ -1699,26 +1734,32 @@ def _launch_flickr_upload_flow(
         def _on_manager_finished(_manager: FlickrUploadManager) -> None:
             parent._active_flickr_upload_manager = None
 
-        upload_dialog.manager_started.connect(_on_manager_started)
-        upload_dialog.manager_finished.connect(_on_manager_finished)
-        upload_dialog.exec()
+        with managed_modal_dialog(upload_dialog):
+            try:
+                upload_dialog.manager_started.connect(_on_manager_started)
+                upload_dialog.manager_finished.connect(_on_manager_finished)
+                upload_dialog.exec()
+                invalid_token = upload_dialog.invalid_token
+                album_validation_error = upload_dialog.album_validation_error
+                resolved_album_plan = upload_dialog.resolved_album_plan
+            finally:
+                upload_dialog.stop_all_tasks(cancel=True)
+                if parent._active_flickr_upload_manager is not None:
+                    parent._active_flickr_upload_manager.stop(timeout_s=0.5)
+                    parent._active_flickr_upload_manager = None
 
-        if upload_dialog.invalid_token:
+        if invalid_token:
             continue
 
-        if upload_dialog.album_validation_error:
-            session_album_error = upload_dialog.album_validation_error
+        if album_validation_error:
+            session_album_error = album_validation_error
             cached_album_plan = None
             cached_album_from_folder_data = False
             continue
 
-        if upload_dialog.resolved_album_plan is not None:
-            cached_album_plan = upload_dialog.resolved_album_plan
+        if resolved_album_plan is not None:
+            cached_album_plan = resolved_album_plan
             cached_album_from_folder_data = False
-
-        if parent._active_flickr_upload_manager is not None:
-            parent._active_flickr_upload_manager.stop(timeout_s=0.5)
-            parent._active_flickr_upload_manager = None
 
         return
 

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import uuid
 
-from PySide6.QtCore import QCoreApplication, QObject, Signal
-from PySide6.QtWidgets import QApplication, QLabel, QWidget
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QTimer, Signal
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QWidget
 import pytest
+from shiboken6 import isValid
 
 from piqopiqo.background.media_man import FolderPrimingResult
+from piqopiqo.cache_paths import set_cache_base_dir
 from piqopiqo.components.summary_text_edit import SummaryTextEdit
 from piqopiqo.main_window import MainWindow
 from piqopiqo.model import FilterCriteria, ImageItem
@@ -218,6 +220,7 @@ def settings_store():
 
 @pytest.fixture
 def main_window(qapp, settings_store, monkeypatch, tmp_path):  # noqa: ARG001
+    set_cache_base_dir(tmp_path / "cache")
     _MediaManagerStub.next_priming_result = FolderPrimingResult({}, set())
     monkeypatch.setattr("piqopiqo.main_window.MediaManager", _MediaManagerStub)
     monkeypatch.setattr(
@@ -347,12 +350,45 @@ def test_launch_archive_uses_all_photos_not_visible_photos(
         def exec(self) -> int:
             return 0
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
+        def stop_all_tasks(self, *, cancel):
+            self.tasks_cancelled = cancel
+
     monkeypatch.setattr("piqopiqo.tools.archive.ArchiveDialog", _DialogStub)
 
     launch_archive(window)
 
     assert captured["items"] == [all_photo]
     assert captured["source_folders"] == ["/photos/root"]
+
+
+def test_launch_archive_schedules_native_dialog_deletion(
+    qapp,
+    settings_store,
+    tmp_path,
+    monkeypatch,
+):
+    root_folder = tmp_path / "photos"
+    root_folder.mkdir()
+    destination = tmp_path / "archive"
+    destination.mkdir()
+    set_user_setting(UserSettingKey.ARCHIVE_DESTINATION, str(destination))
+    window = _FakeLaunchWindow(root_folder=str(root_folder))
+    window.media_manager = _FakeArchiveMediaManager()
+    dialogs = []
+
+    def dismiss(dialog):
+        dialogs.append(dialog)
+        QTimer.singleShot(0, dialog.reject)
+        return QDialog.exec(dialog)
+
+    monkeypatch.setattr(ArchiveDialog, "exec", dismiss)
+    launch_archive(window)
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert not isValid(dialogs[0])
+    assert root_folder.is_dir()
 
 
 def test_launch_archive_passes_workspace_watcher_control(
@@ -381,6 +417,12 @@ def test_launch_archive_passes_workspace_watcher_control(
 
         def exec(self) -> int:
             return 0
+
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
+        def stop_all_tasks(self, *, cancel):
+            self.tasks_cancelled = cancel
 
     monkeypatch.setattr("piqopiqo.tools.archive.ArchiveDialog", _DialogStub)
 

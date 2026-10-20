@@ -76,6 +76,9 @@ def test_manual_lenses_editor_add_edit_delete(monkeypatch, qapp):  # noqa: ARG00
         def get_value(self):
             return self._value
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
     monkeypatch.setattr(mle, "_ManualLensPresetDialog", _DialogStub)
 
     editor._on_add()

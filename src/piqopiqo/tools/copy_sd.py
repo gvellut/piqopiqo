@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.components.summary_text_edit import SummaryLine, SummaryTextEdit
+from piqopiqo.dialogs.modal import managed_modal_dialog
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
@@ -744,9 +745,28 @@ class CopySdInputDialog(UnsavedChangesDialog):
         )
 
 
-class CopySdProgressDialog(ToolFlowDialog):
-    _eject_done = Signal(str)  # empty string on success, error message on failure
+class _EjectSignals(QObject):
+    finished = Signal(str)  # empty string on success, error message on failure
 
+
+class _EjectWorker(PythonOwnedRunnable):
+    def __init__(self, volume: PhotoVolume, timeout_s: float):
+        super().__init__()
+        self._volume = volume
+        self._timeout_s = timeout_s
+        self.signals = _EjectSignals()
+
+    def run(self) -> None:
+        try:
+            eject_volume(self._volume, timeout_s=self._timeout_s)
+        except Exception as exc:
+            logger.exception("Error ejecting %s", self._volume.name)
+            self.signals.finished.emit(str(exc))
+        else:
+            self.signals.finished.emit("")
+
+
+class CopySdProgressDialog(ToolFlowDialog):
     def __init__(
         self,
         volume: PhotoVolume,
@@ -768,7 +788,7 @@ class CopySdProgressDialog(ToolFlowDialog):
         self._ignore_eject_result = False
         self._exit_application_requested = False
         self._storage_full_fault: StorageWriteFault | None = None
-        self._eject_thread: threading.Thread | None = None
+        self._eject_worker: _EjectWorker | None = None
         self._no_images_message = (
             no_images_message or "No images found for the selected date(s)."
         )
@@ -869,13 +889,15 @@ class CopySdProgressDialog(ToolFlowDialog):
                 ("*", "finished"): lambda dialog, event: dialog._on_finished(
                     *event.args
                 ),
+                ("*", "eject_done"): lambda dialog, event: dialog._on_eject_done(
+                    *event.args
+                ),
             },
         )
         super().__init__(workflow, parent=parent)
         self._setup_eject_checkbox()
         self.progress_bar.setRange(0, 0)
         self.set_status("Preparing copy...")
-        self._eject_done.connect(self._on_eject_done)
 
     @property
     def copied_count(self) -> int:
@@ -1126,25 +1148,24 @@ class CopySdProgressDialog(ToolFlowDialog):
         self.transition_to("ejecting")
         self.set_status("Ejecting SD Card...")
         self.set_progress(0, 0)
-        self._start_eject_thread()
+        self._start_eject_worker()
 
-    def _start_eject_thread(self) -> None:
-        self._eject_thread = threading.Thread(
-            target=self._eject_in_background,
-            daemon=True,
+    def _start_eject_worker(self) -> None:
+        worker = _EjectWorker(
+            self._volume,
+            get_runtime_setting(RuntimeSettingKey.COPY_SD_EJECT_TIMEOUT_S),
         )
-        self._eject_thread.start()
-
-    def _eject_in_background(self):
-        try:
-            timeout_s = get_runtime_setting(RuntimeSettingKey.COPY_SD_EJECT_TIMEOUT_S)
-            eject_volume(self._volume, timeout_s=timeout_s)
-            self._eject_done.emit("")
-        except Exception as exc:
-            logger.exception("Error ejecting %s", self._volume.name)
-            self._eject_done.emit(str(exc))
+        self._eject_worker = worker
+        self.start_task(
+            "eject_sd",
+            ToolTaskHandle.from_qrunnable(
+                worker=worker,
+                signal_map={worker.signals.finished: "eject_done"},
+            ),
+        )
 
     def _on_eject_done(self, error: str):
+        self.stop_task("eject_sd", cancel=False)
         if self._ignore_eject_result or self.current_screen_id != "ejecting":
             return
         if error:
@@ -1239,7 +1260,8 @@ def _confirm_copy(
     base_name: str,
 ):
     dialog = _CopySdConfirmDialog(parent, volume, dates, base_name)
-    return dialog.exec() == QDialog.DialogCode.Accepted
+    with managed_modal_dialog(dialog):
+        return dialog.exec() == QDialog.DialogCode.Accepted
 
 
 class _ResolveDatesSignals(QObject):
@@ -1280,12 +1302,17 @@ def _resolve_dates_with_progress(parent, date_spec: str, volume: PhotoVolume):
     error_holder: list[str] = []
 
     worker = _ResolveDatesWorker(normalized, volume)
+    active = True
 
     def on_finished(dates):
+        if not active:
+            return
         result_holder.append(dates)
         wait_dialog.accept()
 
     def on_error(msg):
+        if not active:
+            return
         error_holder.append(msg)
         wait_dialog.accept()
 
@@ -1309,10 +1336,15 @@ def _resolve_dates_with_progress(parent, date_spec: str, volume: PhotoVolume):
     cancel_btn.clicked.connect(wait_dialog.reject)
     layout.addWidget(cancel_btn)
 
-    QThreadPool.globalInstance().start(worker)
-
-    if wait_dialog.exec() != QDialog.DialogCode.Accepted:
-        return None
+    with managed_modal_dialog(wait_dialog):
+        try:
+            QThreadPool.globalInstance().start(worker)
+            if wait_dialog.exec() != QDialog.DialogCode.Accepted:
+                return None
+        finally:
+            active = False
+            worker.signals.finished.disconnect(on_finished)
+            worker.signals.error.disconnect(on_error)
 
     if error_holder:
         return error_holder[0]
@@ -1413,10 +1445,10 @@ def launch_copy_sd(
             name=name,
             date_spec=date_spec,
         )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-
-        name, date_spec = dialog.get_values()
+        with managed_modal_dialog(dialog):
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            name, date_spec = dialog.get_values()
 
         result = _resolve_dates_with_progress(parent, date_spec, volume)
         if result is None:
@@ -1437,10 +1469,15 @@ def launch_copy_sd(
                 parent=parent,
                 no_images_message=_build_no_images_message(date_spec, volume),
             )
-            progress_dialog.exec()
+            with managed_modal_dialog(progress_dialog):
+                try:
+                    progress_dialog.exec()
+                    eject_requested = progress_dialog.eject_requested
+                finally:
+                    progress_dialog.stop_all_tasks(cancel=True)
             state.set(StateKey.COPY_SD_NAME_SUFFIX, name)
             state.set(StateKey.COPY_SD_DATE_SPEC, date_spec)
-            state.set(StateKey.COPY_SD_EJECT, progress_dialog.eject_requested)
+            state.set(StateKey.COPY_SD_EJECT, eject_requested)
             return
 
         if not isinstance(dates, list):
@@ -1465,15 +1502,18 @@ def launch_copy_sd(
         volume, dates, target_dirs, should_eject=should_eject, parent=parent
     )
 
-    try:
-        if watcher_control is not None:
-            watcher_control.suspend()
-        progress_dialog.exec()
-    finally:
-        if watcher_control is not None:
-            watcher_control.resume_and_refresh()
+    with managed_modal_dialog(progress_dialog):
+        try:
+            if watcher_control is not None:
+                watcher_control.suspend()
+            progress_dialog.exec()
+            eject_requested = progress_dialog.eject_requested
+        finally:
+            progress_dialog.stop_all_tasks(cancel=True)
+            if watcher_control is not None:
+                watcher_control.resume_and_refresh()
 
     # Save user choices for next session
     state.set(StateKey.COPY_SD_NAME_SUFFIX, name)
     state.set(StateKey.COPY_SD_DATE_SPEC, date_spec)
-    state.set(StateKey.COPY_SD_EJECT, progress_dialog.eject_requested)
+    state.set(StateKey.COPY_SD_EJECT, eject_requested)

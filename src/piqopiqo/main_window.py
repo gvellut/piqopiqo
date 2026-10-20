@@ -23,6 +23,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.dialogs.modal import managed_modal_dialog
+
 from .background.media_man import FolderPrimingResult, MediaManager
 from .cache_paths import (
     clear_metadata_cache_for_folders,
@@ -1366,7 +1368,8 @@ class MainWindow(QMainWindow):
             self.media_manager.get_exif_errors(),
             self,
         )
-        dialog.exec()
+        with managed_modal_dialog(dialog):
+            dialog.exec()
 
     def _get_selected_items(self) -> list[ImageItem]:
         """Get list of currently selected items."""
@@ -2392,9 +2395,11 @@ class MainWindow(QMainWindow):
 
     def open_settings(self, tab_title: str | None = None) -> None:
         dialog = SettingsDialog(self, initial_tab_title=tab_title)
-        dialog.setting_saved.connect(self._on_setting_saved)
-        dialog.exec()
-        self._apply_settings_changes(dialog.changed_keys)
+        with managed_modal_dialog(dialog):
+            dialog.setting_saved.connect(self._on_setting_saved)
+            dialog.exec()
+            changed_keys = set(dialog.changed_keys)
+        self._apply_settings_changes(changed_keys)
 
     def open_settings_for_key(self, key: UserSettingKey) -> None:
         self.open_settings(tab_title=get_settings_tab_title_for_key(key))
@@ -2975,18 +2980,18 @@ class MainWindow(QMainWindow):
             parent=self,
         )
 
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
+        with managed_modal_dialog(dialog):
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            clear_thumb_cache = dialog.clear_thumb_cache_requested
+            clear_metadata = dialog.clear_metadata_requested
 
-        if (
-            not dialog.clear_thumb_cache_requested
-            and not dialog.clear_metadata_requested
-        ):
+        if not clear_thumb_cache and not clear_metadata:
             return
 
         self._start_workspace_cleanup(
-            clear_thumb_cache=dialog.clear_thumb_cache_requested,
-            clear_metadata=dialog.clear_metadata_requested,
+            clear_thumb_cache=clear_thumb_cache,
+            clear_metadata=clear_metadata,
         )
 
     def _start_workspace_cleanup(
@@ -4084,6 +4089,8 @@ class MainWindow(QMainWindow):
             )
 
         self._stop_folder_watcher()
+        if self._active_apply_gpx_worker is not None:
+            self._active_apply_gpx_worker.request_cancel()
         if self._active_flickr_metadata_precheck_worker is not None:
             self._active_flickr_metadata_precheck_worker.request_cancel()
             self._active_flickr_metadata_precheck_worker = None

@@ -102,6 +102,7 @@ src/piqopiqo/
 │   ├── exif_write.py    # Shared DB->EXIF tag builder, including synchronized manual lens ranges
 │   └── save_workers.py  # Background worker to save metadata
 ├── dialogs/         # Standalone dialogs not tied to a specific feature
+│   ├── modal.py # managed_modal_dialog scopes result consumption before deferred main-thread deletion
 │   ├── error_list_dialog.py # Dialog showing loading errors (thumb/EXIF)
 │   ├── storage_full_dialog.py # Shared cache-full Retry/Exit dialog
 │   └── unsaved_changes_dialog.py # Shared dirty-input dismissal confirmation
@@ -135,7 +136,7 @@ src/piqopiqo/
 │   └── shortcuts_editor.py
 |-- tools
     ├── archive.py       # Folder archive workflow with plain failure/cancellation labels and separate result/error details
-    ├── copy_sd.py       # Copy-from-SD workflow (dialogs, scanning, copy worker, plain eject status labels)
+    ├── copy_sd.py       # Copy-from-SD workflow (dialogs, scan/copy/eject workers, plain eject status labels)
     ├── manual_lens.py   # Dialog + launcher for applying manual lens presets to selected/visible photos
     ├── save_exif.py    # Dialog + launcher for saving metadata to EXIF
     ├── flickr_utils.py  # Shared Flickr auth, token, paging, retry, ID and tag helpers
@@ -165,6 +166,8 @@ src/piqopiqo/
     └── macos.py     # macOS utilities (resolution, move_to_trash)
 
 tests/
+├── test_modal_dialog_lifecycle.py # Worker-GC dialog destruction regression and reusable storage Retry ownership
+├── test_modal_worker_callbacks.py # Late callbacks after GPX/Flickr/SD dialog disposal and queued task disconnection
 ├── test_exif_write.py # Manual lens tags + real ExifTool round trips for Save EXIF/Flickr, with/without Fujifilm MakerNotes
 ├── test_fullscreen_info_panel.py # Fullscreen loop rank, info panel layout, zoom overlay lifecycle
 ├── test_fullscreen_navigation_zoom.py # Absolute zoom across mixed orientations/resolutions, Retina, pan and fallback
@@ -377,6 +380,8 @@ Selection behavior:
 
 
 ## Considerations
+- Wrap application-created modal dialogs in `managed_modal_dialog` and consume/copy their results inside that scope. The scope schedules `deleteLater()`; never rely on Python garbage collection to destroy Qt dialogs, since collection can run inside a worker. Keep reusable dialogs (such as storage Retry) in one scope covering their complete retry loop.
+- Detach dialog UI callbacks and cancel unfinished dialog-owned tasks before disposing a modal dialog, including exceptional exits. `ToolTaskHandle.disconnect()` clears its dispatcher so queued callbacks become harmless. GPX completion callbacks outlive the progress dialog to reconcile the model, but skip UI/model work during shutdown. SD eject workers hold only their input and signal objects, never a bound dialog method.
 - Editable dialogs use `UnsavedChangesDialog` and explicit opening-state snapshots. Track only dialog-local values that would be discarded; reset or scope the baseline when a workflow consumes its input or exposes a later editable result choice.
 - Copy-from-SD uses `UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER` as the destination base; ensure the target volume is mounted.
 - Output folders are created as `YYYYMMDD_<name>/<VOLUME_NAME>` using the SD card volume name directly.

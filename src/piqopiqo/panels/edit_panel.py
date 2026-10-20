@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.dialogs.modal import managed_modal_dialog
 from piqopiqo.keyword_utils import (
     format_keywords,
     normalize_keyword_list,
@@ -692,10 +693,11 @@ class EditPanel(QWidget):
         )
 
         try:
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                modifications = dialog.get_modifications()
-                if modifications:
-                    self._apply_keyword_modifications(modifications)
+            with managed_modal_dialog(dialog):
+                accepted = dialog.exec() == QDialog.DialogCode.Accepted
+                modifications = dialog.get_modifications() if accepted else {}
+            if modifications:
+                self._apply_keyword_modifications(modifications)
         finally:
             self.interaction_finished.emit()
 

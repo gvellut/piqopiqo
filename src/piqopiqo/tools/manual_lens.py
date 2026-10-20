@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.dialogs.modal import managed_modal_dialog
 from piqopiqo.dialogs.settings_redirect import (
     prompt_open_settings_for_missing_setting,
 )
@@ -214,11 +215,12 @@ def launch_manual_lens(window: MainWindow) -> None:
         return
 
     picker = LensSelectionDialog(presets, parent=window)
-    if picker.exec() != QDialog.DialogCode.Accepted:
-        return
+    with managed_modal_dialog(picker):
+        if picker.exec() != QDialog.DialogCode.Accepted:
+            return
 
-    selected_clear = bool(getattr(picker, "selected_clear", False))
-    preset = getattr(picker, "selected_preset", None)
+        selected_clear = bool(getattr(picker, "selected_clear", False))
+        preset = getattr(picker, "selected_preset", None)
     if not selected_clear and preset is None:
         return
 

@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.components.ellided_label import EllidedLabel
+from piqopiqo.dialogs.modal import managed_modal_dialog
 from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from piqopiqo.label_transitions import is_valid_label_transition_rules
 from piqopiqo.model import LabelTransitionRule, StatusLabel
@@ -628,10 +629,12 @@ class _LabelTransitionsDialog(UnsavedChangesDialog):
             status_labels=self._status_labels,
             parent=self,
         )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
+        with managed_modal_dialog(dialog):
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            value = dialog.get_value()
 
-        self._rules.append(dialog.get_value())
+        self._rules.append(value)
         self._refresh_list()
 
     def _on_edit(self) -> None:
@@ -646,10 +649,12 @@ class _LabelTransitionsDialog(UnsavedChangesDialog):
             editing_index=index,
             parent=self,
         )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
+        with managed_modal_dialog(dialog):
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            value = dialog.get_value()
 
-        self._rules[index] = dialog.get_value()
+        self._rules[index] = value
         self._refresh_list(selected_index=index)
 
     def _on_delete(self) -> None:
@@ -735,10 +740,12 @@ class LabelTransitionsEditor(QWidget):
             status_labels=self._status_labels(),
             parent=self,
         )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
+        with managed_modal_dialog(dialog):
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            value = dialog.get_value()
 
-        self._rules = dialog.get_value()
+        self._rules = value
         self._refresh_summary()
         self.value_changed.emit()
 

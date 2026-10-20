@@ -432,7 +432,7 @@ def test_copy_result_ok_with_eject_shows_ejecting_screen(qapp, monkeypatch):  # 
     started: list[bool] = []
     monkeypatch.setattr(
         CopySdProgressDialog,
-        "_start_eject_thread",
+        "_start_eject_worker",
         lambda _dialog: started.append(True),
     )
     dialog = CopySdProgressDialog(
@@ -504,7 +504,7 @@ def test_copy_no_images_result_uses_custom_message(qapp):  # noqa: ARG001
 
 def test_copy_eject_success_shows_safe_remove_screen(qapp, monkeypatch):  # noqa: ARG001
     monkeypatch.setattr(
-        CopySdProgressDialog, "_start_eject_thread", lambda _dialog: None
+        CopySdProgressDialog, "_start_eject_worker", lambda _dialog: None
     )
     dialog = CopySdProgressDialog(
         volume=PhotoVolume("CARD", "/Volumes/CARD"),
@@ -533,7 +533,7 @@ def test_copy_eject_success_shows_safe_remove_screen(qapp, monkeypatch):  # noqa
 
 def test_copy_eject_failure_shows_error_screen(qapp, monkeypatch):  # noqa: ARG001
     monkeypatch.setattr(
-        CopySdProgressDialog, "_start_eject_thread", lambda _dialog: None
+        CopySdProgressDialog, "_start_eject_worker", lambda _dialog: None
     )
     dialog = CopySdProgressDialog(
         volume=PhotoVolume("CARD", "/Volumes/CARD"),
@@ -559,7 +559,7 @@ def test_copy_eject_failure_shows_error_screen(qapp, monkeypatch):  # noqa: ARG0
 
 def test_copy_eject_cancel_closes_and_ignores_late_completion(qapp, monkeypatch):  # noqa: ARG001
     monkeypatch.setattr(
-        CopySdProgressDialog, "_start_eject_thread", lambda _dialog: None
+        CopySdProgressDialog, "_start_eject_worker", lambda _dialog: None
     )
     dialog = CopySdProgressDialog(
         volume=PhotoVolume("CARD", "/Volumes/CARD"),
@@ -710,6 +710,9 @@ def test_launch_copy_sd_empty_resolved_dates_uses_result_eject_dialog(
         def get_values(self):
             return ("annecy", "since:last")
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
     class _FakeProgressDialog:
         def __init__(
             self,
@@ -731,6 +734,12 @@ def test_launch_copy_sd_empty_resolved_dates_uses_result_eject_dialog(
         def exec(self) -> int:
             captured["exec_called"] = True
             return QDialog.DialogCode.Accepted
+
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
+        def stop_all_tasks(self, *, cancel):
+            self.tasks_cancelled = cancel
 
     monkeypatch.setattr(
         "piqopiqo.tools.copy_sd.get_sd_volume",
@@ -802,6 +811,9 @@ def test_launch_copy_sd_suspends_and_resumes_watcher_control(monkeypatch, tmp_pa
         def get_values(self):
             return ("annecy", "20260301")
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
     class _FakeProgressDialog:
         def __init__(
             self,
@@ -823,6 +835,12 @@ def test_launch_copy_sd_suspends_and_resumes_watcher_control(monkeypatch, tmp_pa
 
         def exec(self) -> int:
             return QDialog.DialogCode.Accepted
+
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
+        def stop_all_tasks(self, *, cancel):
+            self.tasks_cancelled = cancel
 
     monkeypatch.setattr(
         "piqopiqo.tools.copy_sd.get_sd_volume",
@@ -878,6 +896,9 @@ def test_launch_copy_sd_resumes_watcher_control_for_partial_cancel(
         def get_values(self):
             return ("trip", "20260303")
 
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
     class _FakeProgressDialog:
         def __init__(
             self,
@@ -899,6 +920,12 @@ def test_launch_copy_sd_resumes_watcher_control_for_partial_cancel(
 
         def exec(self) -> int:
             return QDialog.DialogCode.Accepted
+
+        def deleteLater(self):
+            self.deletion_scheduled = True
+
+        def stop_all_tasks(self, *, cancel):
+            self.tasks_cancelled = cancel
 
     monkeypatch.setattr(
         "piqopiqo.tools.copy_sd.get_sd_volume",
