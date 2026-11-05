@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import uuid
 
-from PySide6.QtCore import QCoreApplication, QPoint, QPointF, Qt
-from PySide6.QtGui import QWheelEvent
+from PySide6.QtCore import QCoreApplication, QEvent, QMimeData, QPoint, QPointF, Qt
+from PySide6.QtGui import QFocusEvent, QKeyEvent, QTextCursor, QWheelEvent
 from PySide6.QtWidgets import QApplication
 import pytest
 
@@ -753,7 +753,23 @@ def test_exif_lens_data_does_not_reveal_or_overwrite_manual_lens_rows(qapp):
     assert panel.lens_model_edit.text() == "Manual Model"
 
 
-def test_keywords_save_normalizes_value_and_widget_text(qapp, monkeypatch):
+@pytest.mark.parametrize(
+    "temporary_reason",
+    [None, Qt.FocusReason.ActiveWindowFocusReason, Qt.FocusReason.PopupFocusReason],
+)
+@pytest.mark.parametrize(
+    ("focus_reason", "key"),
+    [
+        (Qt.FocusReason.MouseFocusReason, None),
+        (Qt.FocusReason.TabFocusReason, None),
+        (None, Qt.Key.Key_Return),
+        (None, Qt.Key.Key_Enter),
+    ],
+    ids=["mouse", "tab", "return", "enter"],
+)
+def test_keywords_save_normalizes_value_and_widget_text(
+    qapp, monkeypatch, temporary_reason, focus_reason, key
+):
     init_qsettings_store(dyn=True)
 
     panel = EditPanel(_StubDBManager())
@@ -774,11 +790,91 @@ def test_keywords_save_normalizes_value_and_widget_text(qapp, monkeypatch):
     )
 
     panel.keywords_edit.setPlainText("alpha,, beta, , ALPHA")
-    panel._on_field_saved(DBFields.KEYWORDS)
+    if temporary_reason is not None:
+        panel.keywords_edit.focusOutEvent(
+            QFocusEvent(QEvent.Type.FocusOut, temporary_reason)
+        )
+        assert saved == []
+        panel.keywords_edit.focusInEvent(
+            QFocusEvent(QEvent.Type.FocusIn, temporary_reason)
+        )
+
+    if focus_reason is not None:
+        panel.keywords_edit.focusOutEvent(
+            QFocusEvent(QEvent.Type.FocusOut, focus_reason)
+        )
+    else:
+        panel.keywords_edit.keyPressEvent(
+            QKeyEvent(QEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier)
+        )
 
     assert saved == [(DBFields.KEYWORDS, "alpha, beta")]
     assert panel.keywords_edit.text() == "alpha, beta"
     assert panel.keywords_edit._original_value == "alpha, beta"
+
+
+@pytest.mark.parametrize(
+    "temporary_reason",
+    [Qt.FocusReason.ActiveWindowFocusReason, Qt.FocusReason.PopupFocusReason],
+)
+@pytest.mark.parametrize(
+    ("anchor", "position", "pasted_text", "expected_text"),
+    [
+        (7, 7, "gamma, ", "alpha, gamma, beta, "),
+        (13, 13, "gamma", "alpha, beta, gamma"),
+        (11, 7, "gamma", "alpha, gamma, "),
+    ],
+    ids=["middle", "trailing-separator", "selection"],
+)
+def test_keywords_temporary_focus_loss_preserves_edit_and_paste(
+    qapp, monkeypatch, temporary_reason, anchor, position, pasted_text, expected_text
+):
+    init_qsettings_store(dyn=True)
+
+    panel = EditPanel(_StubDBManager())
+    item = ImageItem(
+        path="/tmp/keywords-paste.jpg",
+        name="keywords-paste.jpg",
+        created="2020-01-01 00:00:00",
+        source_folder="/tmp",
+        db_metadata={DBFields.KEYWORDS: "alpha, beta"},
+    )
+    panel.update_for_selection([item])
+
+    saved: list[tuple[str, str | None]] = []
+    monkeypatch.setattr(
+        panel,
+        "_save_field_for_item",
+        lambda _item, field_name, value: saved.append((field_name, value)),
+    )
+
+    edit = panel.keywords_edit
+    cursor = edit.textCursor()
+    cursor.movePosition(QTextCursor.MoveOperation.End)
+    edit.setTextCursor(cursor)
+    edit.insertPlainText(", ")
+    cursor = edit.textCursor()
+    cursor.setPosition(anchor)
+    cursor.setPosition(position, QTextCursor.MoveMode.KeepAnchor)
+    edit.setTextCursor(cursor)
+
+    edit.focusOutEvent(QFocusEvent(QEvent.Type.FocusOut, temporary_reason))
+    edit.focusInEvent(QFocusEvent(QEvent.Type.FocusIn, temporary_reason))
+
+    assert saved == []
+    assert edit.text() == "alpha, beta, "
+    assert edit._original_value == "alpha, beta"
+    assert edit.document().isModified()
+    assert edit.textCursor().anchor() == anchor
+    assert edit.textCursor().position() == position
+
+    source = QMimeData()
+    source.setText(pasted_text)
+    edit.insertFromMimeData(source)
+
+    assert edit.text() == expected_text
+    assert edit.textCursor().position() == min(anchor, position) + len(pasted_text)
+    assert saved == []
 
 
 def test_keyword_tree_modifications_normalize_existing_keywords(qapp, monkeypatch):

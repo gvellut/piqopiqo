@@ -377,7 +377,15 @@ class KeywordsEdit(QPlainTextEdit):
             self.insertPlainText(text)
 
     def focusOutEvent(self, event):
-        """Save on focus out if value changed and not Multiple Values."""
+        """Save changed keywords unless focus is temporarily interrupted."""
+        if event.reason() in (
+            Qt.FocusReason.ActiveWindowFocusReason,
+            Qt.FocusReason.PopupFocusReason,
+        ):
+            # Clipboard managers must keep the pending text and paste position.
+            super().focusOutEvent(event)
+            return
+
         text = self.toPlainText()
         if text == MULTIPLE_VALUES:
             super().focusOutEvent(event)

@@ -121,7 +121,7 @@ src/piqopiqo/
 │   └── context_menu.py  # Right-click context menu and file operations (duplicate, trash, external apps)
 ├── panels/          # Side panels and tightly coupled editing dialogs
 │   ├── edit_panel.py      # Editable metadata panel
-│   ├── edit_widgets.py    # Field editor widgets
+│   ├── edit_widgets.py    # Field editors; Keywords preserves pending edits during temporary focus loss
 │   ├── exif_panel.py      # Read-only EXIF display
 │   ├── filter_panel.py    # Filtering UI
     └── keyword
@@ -172,7 +172,7 @@ tests/
 ├── test_fullscreen_info_panel.py # Fullscreen loop rank, info panel layout, zoom overlay lifecycle
 ├── test_fullscreen_navigation_zoom.py # Absolute zoom across mixed orientations/resolutions, Retina, pan and fallback
 ├── test_unsaved_changes_dialog.py # Shared dirty-dialog dismissal behavior
-├── test_edit_panel.py # Edit panel UI behavior (description field visibility + pending selection summary)
+├── test_edit_panel.py # Edit panel UI behavior, including Keywords focus/paste preservation and save normalization
 ├── test_exif_panel.py # EXIF panel display formatting and pending selection summary
 ├── test_photo_grid_shortcuts.py # Grid view-scoped shortcut ownership + text-input guard behavior
 ├── test_photo_grid_selection_refresh.py # Visible-only grid selection highlight refresh path
@@ -299,6 +299,7 @@ EXIF fields are defined in `RuntimeSettingKey.EXIF_FIELDS` as a list of `ExifFie
 The edit panel supports editing metadata fields (title, description, keywords, coordinates, time taken).
 - The Description row visibility is configurable in `Settings > Interface > Metadata Panel > Show description field` (default enabled).
 - **Auto-save on focus out**: When user leaves a field to focus elsewhere, changes are automatically saved to DB
+- **Keywords temporary focus loss**: Opening another window (including Maccy) or a popup preserves pending text, trailing separators, cursor, and selection. Keywords save/normalization is deferred until Enter or another non-temporary focus change.
 - **Enter/Tab**: Saves the field and moves focus
 - **Escape**: Reverts changes and cancels edit
 - Validation is applied for coordinates and datetime fields (red border on invalid input)
@@ -476,6 +477,7 @@ Selection behavior:
 - Fullscreen info panel label swatches draw a solid, square-cornered border inside the existing 20×20 footprint. Border color/width use internal `FULLSCREEN_INFO_PANEL_SWATCH_BORDER_*` runtime settings; missing or unrecognized labels stay transparent and borderless while retaining their layout space.
 - Grid label swatches retain their 16×16 rectangle and 4-pixel margin. Their border uses internal `GRID_ITEM_SWATCH_BORDER_*` runtime settings (black, 1 pixel by default); `GRID_ITEM_SHOW_LABEL_SWATCH` still controls visibility, and missing or unrecognized labels show no swatch.
 - Filter/Edit/EXIF panel interactions can hand focus back to the grid via `interaction_finished` signals (explicit interaction end); edit-panel focus restore uses explicit Enter/Escape completion, not passive focus-out saves between fields.
+- `KeywordsEdit.focusOutEvent` skips saving for `ActiveWindowFocusReason` and `PopupFocusReason`, while still calling the base Qt handler. Keep temporary window/popup interruptions from normalizing the pending edit buffer and resetting its paste position; other focus reasons and Enter retain normal save/normalization behavior.
 - Large grid selections (for example `Cmd+A`) use a responsive-first panel update path in `MainWindow`: visible grid selection highlights refresh immediately without a full grid render, while Metadata/EXIF panel aggregation is deferred/coalesced with a short single-shot timer. During that pending refresh, Metadata/EXIF panels keep their previous visible contents and editing is disabled; selection-refresh activity is indicated only by the status bar's indeterminate progress bar, and folder loading progress takes precedence.
 - `EditPanel` metadata rows are top-anchored for layout stability: the form `QGridLayout` uses `Qt.AlignTop`, the scroll-area content container uses a non-fixed vertical size policy, and the `Keywords:` label is top-aligned so only the keyword editor row height change is visible when `KeywordsEdit` auto-height changes.
 - Filter panel controls still emit synchronously, but `MainWindow` queues filter application to the next event-loop turn (`QTimer.singleShot(0, ...)`) so checkbox/button/combo visual feedback appears before the model/grid refresh work.
