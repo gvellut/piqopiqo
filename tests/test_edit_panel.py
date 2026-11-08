@@ -6,13 +6,16 @@ import uuid
 
 from PySide6.QtCore import QCoreApplication, QEvent, QMimeData, QPoint, QPointF, Qt
 from PySide6.QtGui import QFocusEvent, QKeyEvent, QTextCursor, QWheelEvent
-from PySide6.QtWidgets import QApplication
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QLineEdit, QMessageBox
 import pytest
 
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.model import ImageItem, MapLinkOption
 from piqopiqo.panels.edit_panel import EditPanel
 from piqopiqo.panels.edit_widgets import MULTIPLE_VALUES, KeywordsEdit
+from piqopiqo.panels.keyword.keyword_tree import KeywordTreeManager
+from piqopiqo.panels.keyword.keyword_tree_dialog import KeywordTreeDialog
 from piqopiqo.ssf.settings_state import (
     UserSettingKey,
     init_qsettings_store,
@@ -910,6 +913,61 @@ def test_keyword_tree_modifications_normalize_existing_keywords(qapp, monkeypatc
     assert saved == [(DBFields.KEYWORDS, "alpha, Gamma, delta")]
     assert item.db_metadata[DBFields.KEYWORDS] == "alpha, Gamma, delta"
     assert panel.keywords_edit.text() == "alpha, Gamma, delta"
+
+
+def test_add_keyword_targets_selected_occurrence(qapp, monkeypatch, tmp_path):
+    init_qsettings_store(dyn=True)
+    manager = KeywordTreeManager()
+    manager.reset()
+    tree_path = tmp_path / "keyword-tree.json"
+    monkeypatch.setattr(manager, "get_tree_path", lambda: tree_path)
+
+    events = manager.root.add_child("Events")
+    events.add_child("Picnic")
+    first_parent = events.add_child("Summer")
+    selected_parent = manager.root.add_child("Seasons").add_child("Summer")
+
+    dialog = KeywordTreeDialog([], manager)
+    parent_item = dialog.tree.topLevelItem(0).child(1).child(0)
+    dialog._add_keyword(parent_item)
+    editor = dialog.tree.itemWidget(parent_item.child(0), 0)
+    assert isinstance(editor, QLineEdit)
+    editor.setText("Picnic")
+    QTest.keyClick(editor, Qt.Key.Key_Return)
+
+    assert [child.name for child in selected_parent.children] == ["Picnic"]
+    assert first_parent.children == []
+    current_item = dialog.tree.currentItem()
+    assert current_item.text(0) == "Picnic"
+    assert current_item.parent().text(0) == "Summer"
+    assert current_item.parent().parent().text(0) == "Seasons"
+
+
+def test_delete_keyword_targets_selected_occurrence(qapp, monkeypatch, tmp_path):
+    init_qsettings_store(dyn=True)
+    manager = KeywordTreeManager()
+    manager.reset()
+    tree_path = tmp_path / "keyword-tree.json"
+    monkeypatch.setattr(manager, "get_tree_path", lambda: tree_path)
+
+    first_parent = manager.root.add_child("Events").add_child("Summer")
+    first_picnic = first_parent.add_child("Picnic")
+    selected_parent = manager.root.add_child("Seasons").add_child("Summer")
+    sibling = selected_parent.add_child("Picnic")
+    target = selected_parent.add_child("Picnic")
+    sibling.add_child("Blanket")
+    target.add_child("Blanket")
+
+    dialog = KeywordTreeDialog([], manager)
+    parent_item = dialog.tree.topLevelItem(0).child(1).child(0)
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda *_args: QMessageBox.StandardButton.Yes
+    )
+    dialog._delete_keyword(parent_item.child(1))
+
+    assert first_parent.children == [first_picnic]
+    assert len(selected_parent.children) == 1
+    assert selected_parent.children[0] is sibling
 
 
 def test_title_refresh_with_same_saved_value_preserves_cursor_position(qapp):

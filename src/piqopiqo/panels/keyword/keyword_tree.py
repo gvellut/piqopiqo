@@ -102,17 +102,10 @@ class KeywordNode:
         self.children.sort(key=lambda n: n.name.lower())
         return new_node
 
-    def remove_child(self, name: str) -> bool:
-        """Remove a child by name.
-
-        Args:
-            name: The keyword name to remove.
-
-        Returns:
-            True if found and removed, False otherwise.
-        """
+    def remove_child(self, node: "KeywordNode") -> bool:
+        """Remove the given child node by identity and return whether it was found."""
         for i, child in enumerate(self.children):
-            if child.name == name:
+            if child is node:
                 del self.children[i]
                 return True
         return False

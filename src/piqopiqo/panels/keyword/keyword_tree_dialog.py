@@ -21,7 +21,7 @@ from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
 from piqopiqo.keyword_utils import parse_keywords
 from piqopiqo.model import ImageItem
 
-from .keyword_tree import KeywordTreeManager
+from .keyword_tree import KeywordNode, KeywordTreeManager
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ ADDITIONAL_KEYWORDS_NAME = "Additional keywords"
 
 # User roles for tree items
 ROLE_TYPE = Qt.ItemDataRole.UserRole
-ROLE_KEYWORD_PATH = Qt.ItemDataRole.UserRole + 1  # Full path in tree for finding node
+ROLE_KEYWORD_NODE = Qt.ItemDataRole.UserRole + 1
 
 
 class KeywordTreeDialog(UnsavedChangesDialog):
@@ -192,8 +192,8 @@ class KeywordTreeDialog(UnsavedChangesDialog):
         self.tree.blockSignals(True)
         self.tree.clear()
 
-        # Get predefined keywords
-        predefined = self._tree_manager.root.get_all_keywords()
+        root_node = self._tree_manager.root
+        predefined = root_node.get_all_keywords()
 
         # Build the tree recursively
         root_item = QTreeWidgetItem(self.tree, ["Keywords"])
@@ -201,8 +201,9 @@ class KeywordTreeDialog(UnsavedChangesDialog):
             root_item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable  # type: ignore[operator]
         )
         root_item.setData(0, ROLE_TYPE, "ROOT")
+        root_item.setData(0, ROLE_KEYWORD_NODE, root_node)
 
-        self._add_children(root_item, self._tree_manager.root)
+        self._add_children(root_item, root_node)
 
         # Add "Additional keywords" section for keywords not in the tree
         additional = self._all_keywords - predefined
@@ -228,11 +229,12 @@ class KeywordTreeDialog(UnsavedChangesDialog):
             self._restore_expanded_from_set(expanded)
             self.tree.verticalScrollBar().setValue(scroll_value)
 
-    def _add_children(self, parent_item: QTreeWidgetItem, node):
+    def _add_children(self, parent_item: QTreeWidgetItem, node: KeywordNode):
         """Recursively add children to a tree item."""
         for child in node.children:
             item = QTreeWidgetItem(parent_item, [child.name])
             item.setData(0, ROLE_TYPE, "KEYWORD")
+            item.setData(0, ROLE_KEYWORD_NODE, child)
             self._set_check_state_for_keyword(item, child.name)
             self._add_children(item, child)
 
@@ -407,16 +409,7 @@ class KeywordTreeDialog(UnsavedChangesDialog):
         # Mark as finished to prevent double handling
         self._editing_finished = True
 
-        # Find the corresponding node in the tree manager
-        role = self._editing_parent.data(0, ROLE_TYPE)
-        if role == "ROOT":
-            parent_node = self._tree_manager.root
-        else:
-            parent_name = self._editing_parent.text(0)
-            parent_node = self._tree_manager.root.find_node(parent_name)
-            if not parent_node:
-                self._clear_editing_state()
-                return
+        parent_node: KeywordNode = self._editing_parent.data(0, ROLE_KEYWORD_NODE)
 
         # Check if keyword already exists
         for child in parent_node.children:
@@ -430,7 +423,7 @@ class KeywordTreeDialog(UnsavedChangesDialog):
                 return
 
         # Add to tree manager
-        parent_node.add_child(keyword)
+        new_node = parent_node.add_child(keyword)
         self._tree_manager.save()
 
         # Clear editing state before repopulating
@@ -440,7 +433,7 @@ class KeywordTreeDialog(UnsavedChangesDialog):
         self._populate_tree(preserve_state=True)
 
         # Find and scroll to the new keyword
-        self._scroll_to_keyword(keyword)
+        self._scroll_to_node(new_node)
 
     def _clear_editing_state(self):
         """Clear the editing state variables."""
@@ -451,12 +444,12 @@ class KeywordTreeDialog(UnsavedChangesDialog):
         self._editing_item = None
         self._editing_parent = None
 
-    def _scroll_to_keyword(self, keyword: str):
-        """Find and scroll to a keyword in the tree."""
+    def _scroll_to_node(self, node: KeywordNode):
+        """Select and scroll to the item for this node."""
         iterator = QTreeWidgetItemIterator(self.tree)
         while iterator.value():
             item = iterator.value()
-            if item and item.text(0) == keyword:
+            if item and item.data(0, ROLE_KEYWORD_NODE) is node:
                 self.tree.scrollToItem(item)
                 self.tree.setCurrentItem(item)
                 break
@@ -471,16 +464,18 @@ class KeywordTreeDialog(UnsavedChangesDialog):
 
     def _delete_keyword(self, item: QTreeWidgetItem):
         """Delete a keyword from the tree."""
-        keyword = item.text(0)
+        parent_item = item.parent()
+        if not parent_item:
+            return
 
-        # Check if this keyword has children
-        has_children = item.childCount() > 0
+        node: KeywordNode = item.data(0, ROLE_KEYWORD_NODE)
+        parent_node: KeywordNode = parent_item.data(0, ROLE_KEYWORD_NODE)
 
         # Build confirmation message
-        if has_children:
-            msg = f'Delete keyword "{keyword}" and all its children?'
+        if node.children:
+            msg = f'Delete keyword "{node.name}" and all its children?'
         else:
-            msg = f'Delete keyword "{keyword}"?'
+            msg = f'Delete keyword "{node.name}"?'
 
         # Confirmation dialog
         reply = QMessageBox.question(
@@ -493,21 +488,9 @@ class KeywordTreeDialog(UnsavedChangesDialog):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        # Find and remove from tree
-        parent_item = item.parent()
-        if not parent_item:
+        if not parent_node.remove_child(node):
             return
-
-        parent_role = parent_item.data(0, ROLE_TYPE)
-        if parent_role == "ROOT":
-            parent_node = self._tree_manager.root
-        else:
-            parent_name = parent_item.text(0)
-            parent_node = self._tree_manager.root.find_node(parent_name)
-
-        if parent_node:
-            parent_node.remove_child(keyword)
-            self._tree_manager.save()
+        self._tree_manager.save()
 
         # Refresh the tree, preserving expanded state and scroll position
         self._populate_tree(preserve_state=True)
