@@ -62,29 +62,32 @@ def test_fetch_album_info_not_found_raises(monkeypatch) -> None:
         fetch_album_info(_FakeFlickr(), "721", timeout_s=5.0)
 
 
-def test_find_album_by_exact_title_first_page_match(monkeypatch) -> None:
+def test_find_album_by_exact_title_matches_500th_album(monkeypatch) -> None:
     class _FakeFlickr:
         class photosets:
             @staticmethod
             def getList(per_page: int, page: int, timeout: int):
-                assert per_page == 100
+                assert per_page == 500
                 assert page == 1
                 assert timeout == 5.0
                 return {
                     "photosets": {
                         "owner": "22539273@N00",
                         "photoset": [
-                            {"id": "11", "title": {"_content": "A"}},
-                            {"id": "22", "title": {"_content": "Trip"}},
+                            {
+                                "id": str(album_id),
+                                "title": {"_content": f"Album {album_id}"},
+                            }
+                            for album_id in range(1, per_page + 1)
                         ],
                     }
                 }
 
     monkeypatch.setattr("piqopiqo.tools.flickr_tools.upload.albums.API_RETRIES", 1)
-    info = find_album_by_exact_title(_FakeFlickr(), "Trip", timeout_s=5.0)
+    info = find_album_by_exact_title(_FakeFlickr(), "Album 500", timeout_s=5.0)
     assert info is not None
-    assert info.album_id == "22"
-    assert info.title == "Trip"
+    assert info.album_id == "500"
+    assert info.title == "Album 500"
 
 
 def test_resolve_album_plan_title_miss_creates_album(monkeypatch) -> None:

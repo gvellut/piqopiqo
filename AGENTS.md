@@ -460,6 +460,7 @@ Selection behavior:
 - Missing DB metadata for a photo is allowed: upload uses a temporary copy of the original file without DB-driven EXIF updates for that file.
 - Flickr token validation runs before upload and invalid tokens trigger token file deletion so the flow returns to Login.
 - Flickr preflight shows an `Add to album` field only when token file is present (Upload mode); it accepts album title, numeric album ID, or Flickr album URL.
+- Flickr upload title lookup checks only the first page returned by `photosets.getList`, using Flickr's maximum of 500 albums per page. The first exact, case-sensitive title match is reused. Album IDs and URLs resolve directly.
 - When `Add to album` is empty at upload launch, `FLICKR_ALBUM_ID` is cleared for all loaded source folders.
 - Folder DB metadata key `FLICKR_ALBUM_ID` is written for all loaded source folders:
   - before upload starts for existing album (resolved from title/ID/URL),

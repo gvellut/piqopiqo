@@ -120,14 +120,14 @@ def find_album_by_exact_title(
     *,
     timeout_s: float,
 ) -> FlickrAlbumInfo | None:
-    """Find first exact title match from first page of albums list."""
+    """Find the first exact title match on Flickr's first page of up to 500 albums."""
     wanted = str(title or "").strip()
     if not wanted:
         return None
 
     response = retry(
         API_RETRIES,
-        lambda: flickr.photosets.getList(per_page=100, page=1, timeout=timeout_s),
+        lambda: flickr.photosets.getList(per_page=500, page=1, timeout=timeout_s),
     )
     if not isinstance(response, dict):
         return None
