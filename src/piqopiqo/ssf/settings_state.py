@@ -38,6 +38,10 @@ ORG_DOMAIN = "vellut"  # com. is added by Qt
 
 ENV_PREFIX = "PIQO_"
 
+FOCAL_LENGTH_35MM_TAG = "EXIF:FocalLengthIn35mmFormat"
+COMPOSITE_FOCAL_LENGTH_35MM_TAG = "Composite:FocalLength35efl"
+COMPOSITE_CROP_FACTOR_TAG = "Composite:ScaleFactor35efl"
+
 
 class SettingsPanelSaveMode(Enum):
     AUTOSAVE = auto()
@@ -975,7 +979,7 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
             ExifField("EXIF:LensModel"),
             ExifField("EXIF:FocalLength", format="focal_mm"),
             ExifField(
-                "EXIF:FocalLengthIn35mmFormat",
+                FOCAL_LENGTH_35MM_TAG,
                 "Focal Length (35 mm)",
                 "focal_mm",
             ),
@@ -1346,7 +1350,11 @@ def get_effective_exif_panel_fields() -> list[ExifField]:
 
 
 def get_effective_exif_panel_field_keys() -> list[str]:
-    return [field.key for field in get_effective_exif_panel_fields()]
+    """Return extraction keys for the visible rows and their fallback values."""
+    keys = [field.key for field in get_effective_exif_panel_fields()]
+    if FOCAL_LENGTH_35MM_TAG in keys:
+        keys.extend((COMPOSITE_FOCAL_LENGTH_35MM_TAG, COMPOSITE_CROP_FACTOR_TAG))
+    return list(dict.fromkeys(keys))
 
 
 # Backward-compatible aliases for existing callsites.

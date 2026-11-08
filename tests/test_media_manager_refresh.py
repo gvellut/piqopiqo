@@ -14,7 +14,10 @@ from piqopiqo.background.media_man import MediaManager, _FileInfo
 from piqopiqo.cache_paths import ensure_thumb_dir, set_cache_base_dir
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBManager
-from piqopiqo.ssf.settings_state import init_qsettings_store
+from piqopiqo.ssf.settings_state import (
+    get_effective_exif_panel_fields,
+    init_qsettings_store,
+)
 from piqopiqo.storage import StorageWriteFault
 
 
@@ -155,6 +158,35 @@ def test_startup_bulk_priming_uses_fully_cached_files(manager, tmp_path):
     assert manager._thumb_done == set(image_paths)
     assert manager._pending_combined_other == {}
     assert manager._pending_hq_other == {}
+
+
+def test_startup_backfills_35mm_focal_length_composite_tags(manager, tmp_path):
+    source_folder = str(tmp_path)
+    image_path = str(tmp_path / "a.jpg")
+    db = manager._db_manager.get_db_for_folder(source_folder)
+    db.save_metadata(image_path, {DBFields.TITLE: "Cached"})
+    db.save_exif_fields(
+        image_path, {field.key: None for field in get_effective_exif_panel_fields()}
+    )
+    thumb_dir = ensure_thumb_dir(source_folder)
+    (thumb_dir / "embedded" / "a.jpg").write_bytes(b"embedded")
+    (thumb_dir / "hq" / "a.jpg").write_bytes(b"hq")
+
+    manager.reset_for_folder([image_path], [source_folder])
+
+    need = manager._pending_combined_other[image_path]
+    assert need.want_panel
+    assert not need.want_editable
+    assert not need.want_embedded
+    assert not manager._pending_hq_other
+
+    db.save_exif_fields(
+        image_path,
+        {"Composite:FocalLength35efl": "42.915", "Composite:ScaleFactor35efl": None},
+    )
+    manager.reset_for_folder([image_path], [source_folder])
+
+    assert not manager._pending_combined_other
 
 
 def test_startup_lowres_only_uses_bulk_embedded_cache_snapshot(

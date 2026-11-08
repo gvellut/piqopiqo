@@ -84,6 +84,34 @@ def test_exif_panel_uses_formatters_in_display(qapp, monkeypatch):
     assert values_by_key["Composite:ShutterSpeed"] == "1/125 s"
 
 
+def test_exif_panel_35mm_focal_length_fallback(qapp, monkeypatch):
+    _init_dyn_settings(monkeypatch)
+    panel = ExifPanel()
+    item = ImageItem(path="/tmp/a.jpg", name="a.jpg", created="2025-01-01")
+    keys = [label.toolTip() for label in panel.field_labels]
+    value_label = panel.value_labels[keys.index("EXIF:FocalLengthIn35mmFormat")]
+
+    cases = [
+        ("50", "232.953767164846", "5.42825974985078", "50 mm"),
+        (None, "232.953767164846", "5.42825974985078", "233 mm"),
+        ("0", "232.953767164846", "5.42825974985078", "233 mm"),
+        (None, "50", "1", "50 mm"),
+        (None, "42.915", None, "<Not Present>"),
+        (None, "42.915", "inf", "<Not Present>"),
+        (None, None, "5.42825974985078", "<Not Present>"),
+    ]
+    for stored, equivalent, crop_factor, expected in cases:
+        item.exif_data = {
+            "EXIF:FocalLengthIn35mmFormat": stored,
+            "Composite:FocalLength35efl": equivalent,
+            "Composite:ScaleFactor35efl": crop_factor,
+        }
+
+        panel.update_exif([item])
+
+        assert value_label.toolTip() == expected, item.exif_data
+
+
 def test_exif_panel_custom_fields_are_appended_and_deduped(qapp, monkeypatch):
     _init_dyn_settings(monkeypatch, exif_auto_format=True)
     set_user_setting(

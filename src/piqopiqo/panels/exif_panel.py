@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import logging
+import math
 import re
 
 from PySide6.QtCore import QEvent, Qt, Signal
@@ -19,6 +20,9 @@ from PySide6.QtWidgets import (
 from piqopiqo.components.ellided_label import EllidedLabel
 from piqopiqo.model import ExifField, ImageItem
 from piqopiqo.ssf.settings_state import (
+    COMPOSITE_CROP_FACTOR_TAG,
+    COMPOSITE_FOCAL_LENGTH_35MM_TAG,
+    FOCAL_LENGTH_35MM_TAG,
     RuntimeSettingKey,
     get_effective_exif_panel_fields,
     get_runtime_setting,
@@ -105,6 +109,31 @@ def _format_focal_mm_value(value: str) -> str:
     except (TypeError, ValueError):
         return value
     return f"{_format_number_1_decimal(numeric)} mm"
+
+
+def _is_positive_finite_number(value: str | int | float | None) -> bool:
+    if value is None:
+        return False
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(number) and number > 0
+
+
+def _get_focal_length_35mm(exif_data: dict) -> str | int | float | None:
+    stored = exif_data.get(FOCAL_LENGTH_35MM_TAG)
+    if _is_positive_finite_number(stored):
+        return stored
+
+    # Without a scale factor, ExifTool may return the actual focal length here.
+    equivalent = exif_data.get(COMPOSITE_FOCAL_LENGTH_35MM_TAG)
+    crop_factor = exif_data.get(COMPOSITE_CROP_FACTOR_TAG)
+    if _is_positive_finite_number(crop_factor) and _is_positive_finite_number(
+        equivalent
+    ):
+        return equivalent
+    return None
 
 
 def _format_ev_value(value: str) -> str:
@@ -261,7 +290,10 @@ class ExifPanel(QWidget):
                     values.add("Reading...")
                     continue
 
-                value = item.exif_data.get(field.key)
+                if field.key == FOCAL_LENGTH_35MM_TAG:
+                    value = _get_focal_length_35mm(item.exif_data)
+                else:
+                    value = item.exif_data.get(field.key)
                 if value is None:
                     values.add("<Not Present>")
                     continue

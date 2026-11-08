@@ -173,7 +173,7 @@ tests/
 ├── test_fullscreen_navigation_zoom.py # Absolute zoom across mixed orientations/resolutions, Retina, pan and fallback
 ├── test_unsaved_changes_dialog.py # Shared dirty-dialog dismissal behavior
 ├── test_edit_panel.py # Edit panel UI behavior, including Keywords focus/paste preservation and save normalization
-├── test_exif_panel.py # EXIF panel display formatting and pending selection summary
+├── test_exif_panel.py # EXIF panel formatting, 35 mm focal length fallback, and pending selection summary
 ├── test_photo_grid_shortcuts.py # Grid view-scoped shortcut ownership + text-input guard behavior
 ├── test_photo_grid_selection_refresh.py # Visible-only grid selection highlight refresh path
 ├── test_flickr_upload_timeouts.py # Flickr API timeout-class and worker-payload coverage
@@ -292,6 +292,7 @@ EXIF fields are defined in `RuntimeSettingKey.EXIF_FIELDS` as a list of `ExifFie
 - `ExifField(key, label, format)` - key is the exiftool field (e.g., "EXIF:DateTimeOriginal"), label is optional display name, `format` is an optional display-only formatter id used by the EXIF panel UI
 - If `label` is None and `EXIF_AUTO_FORMAT` is True, the key is auto-formatted (e.g., "File:FileName" → "File Name")
 - Built-in EXIF panel fields can use display formatters (currently `shutter_speed`, `focal_mm`) without affecting DB values or EXIF writes
+- **Focal Length (35 mm)** prefers a positive stored `EXIF:FocalLengthIn35mmFormat`. For a missing or zero stored value, it displays `Composite:FocalLength35efl` when ExifTool also provides a valid `Composite:ScaleFactor35efl`.
 - `format_exif_key(key)` function handles the auto-formatting (removes prefix, adds spaces around capitals)
 
 ## Edit Panel
@@ -403,6 +404,7 @@ Selection behavior:
   - Legacy `*_embedded.jpg` / `*_hq.jpg` are migrated best-effort.
 - EXIF panel fields are cached in the per-folder DB (`photo_exif_fields` key/value table).
 - EXIF panel field list is the effective merge of `RuntimeSettingKey.EXIF_FIELDS` + `UserSettingKey.CUSTOM_EXIF_FIELDS` (base fields first, custom fields appended, deduped by key, empty custom keys ignored).
+- When the 35 mm row is requested, both composite tags are included in the extraction keys. The existing EXIF coverage check backfills the cache for photos missing either key. Add the tags as custom fields to display their raw values separately.
 - `UserSettingKey.CUSTOM_EXIF_FIELDS` changes are applied at runtime: `MainWindow` rebuilds the EXIF panel rows and `MediaManager.refresh_exif_field_keys(...)` incrementally backfills missing EXIF rows (no folder rescan needed).
 - EXIF panel extraction requests use exiftool `-n` (numeric output); EXIF panel display formatters convert those raw values for user display only.
 - Folder watching uses `watchfiles`; internal create/delete actions suppress watcher events briefly to avoid double-processing.
