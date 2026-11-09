@@ -237,7 +237,9 @@ def test_qgis_mapping_normalizes_path_and_keeps_label_and_index_distinct(qapp): 
 
 def test_qgis_mapping_manager_cancel_discards_changes(monkeypatch, qapp):  # noqa: ARG001
     editor = mle.QgisRemoteControlEditor()
-    original = QgisRemoteControlSettings(mappings=(QgisLayerMapping(".", 0),))
+    original = QgisRemoteControlSettings(
+        enabled=True, mappings=(QgisLayerMapping(".", 0),)
+    )
     editor.set_value(original)
     results = iter((QDialog.DialogCode.Rejected, QDialog.DialogCode.Accepted))
 
@@ -252,4 +254,4 @@ def test_qgis_mapping_manager_cancel_discards_changes(monkeypatch, qapp):  # noq
     editor.mappings_btn.click()
     assert editor.get_value() == original
     editor.mappings_btn.click()
-    assert editor.get_value() == QgisRemoteControlSettings()
+    assert editor.get_value() == QgisRemoteControlSettings(enabled=True)

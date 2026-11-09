@@ -2434,7 +2434,7 @@ class MainWindow(QMainWindow):
             settings,
             timeout_ms,
             coordinates=(lat, lon),
-            zoom=get_runtime_setting(RuntimeSettingKey.QGIS_REMOTE_CONTROL_ZOOM),
+            zoom=get_user_setting(UserSettingKey.QGIS_REMOTE_CONTROL_ZOOM),
         )
         worker.signals.finished.connect(
             self._on_qgis_map_finished, Qt.ConnectionType.QueuedConnection
@@ -2642,6 +2642,7 @@ class MainWindow(QMainWindow):
         if self.edit_panel is not None and changed_keys & {
             UserSettingKey.MAP_LINKS,
             UserSettingKey.QGIS_REMOTE_CONTROL,
+            UserSettingKey.QGIS_REMOTE_CONTROL_ZOOM,
         }:
             self.edit_panel.reload_map_links()
 

@@ -483,6 +483,8 @@ def test_qgis_map_failure_warning_and_retry_update_inline_status(
     window, qapp, monkeypatch, entry
 ):
     window.root_folder = "/photos"
+    monkeypatch.delenv("PIQO_QGIS_REMOTE_CONTROL_ZOOM", raising=False)
+    set_user_setting(UserSettingKey.QGIS_REMOTE_CONTROL_ZOOM, 18)
     monkeypatch.setattr(
         window.db_manager,
         "get_db_for_image",
@@ -532,7 +534,7 @@ def test_qgis_map_failure_warning_and_retry_update_inline_status(
 
     def select_photo(*_args, coordinates, zoom):
         assert coordinates == (48.0, 2.0)
-        assert zoom == 17
+        assert zoom == 18
         result = next(results)
         if isinstance(result, QgisRemoteControlError):
             raise result

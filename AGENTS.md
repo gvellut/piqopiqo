@@ -90,7 +90,7 @@ src/piqopiqo/
 ├── shortcuts.py     # Keyboard shortcut utilities + view-scope shortcut registries
 ├── storage.py       # Qt-free storage write probes + full-volume fault payloads/classification
 ├── model.py         # Data models (ImageItem, FilterCriteria, StatusLabel, ExifField)
-├── external_apps.py # External application integration (file manager, viewer, editor)
+├── external_apps.py # Finder photo selection by folder, external viewer/editor launch
 ├── utils.py         # Logging setup and utilities
 ├── label_utils.py   # Status label color utilities
 ├── orientation.py   # EXIF orientation handling and rotation utilities
@@ -168,6 +168,7 @@ src/piqopiqo/
     └── macos.py     # macOS utilities (resolution, move_to_trash)
 
 tests/
+├── test_external_apps.py # Finder reveal sends one selection per photo folder
 ├── test_modal_dialog_lifecycle.py # Worker-GC dialog destruction regression and reusable storage Retry ownership
 ├── test_modal_worker_callbacks.py # Late callbacks after GPX/Flickr/SD dialog disposal and queued task disconnection
 ├── test_exif_write.py # Manual lens tags + real ExifTool round trips for Save EXIF/Flickr, with/without Fujifilm MakerNotes
@@ -239,9 +240,9 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - `UserSettingKey.FORCE_SRGB` (default `False`) skips image-profile extraction and tags fullscreen/grid images as sRGB before optional screen conversion.
 - `UserSettingKey.SCREEN_COLOR_PROFILE` (default `FROM_MAIN_SCREEN`) controls the display conversion target (`From main screen`, `sRGB`, `Display P3`, `Bt2020`, `No conversion`) used by fullscreen and color-managed thumbnails.
 - `UserSettingKey.SHOW_DESCRIPTION_FIELD` (default `True`) controls whether the Description editor row is shown in the Metadata panel (`EditPanel`); hiding it is UI-only and does not change DB/EXIF behavior.
-- `UserSettingKey.QGIS_REMOTE_CONTROL` stores the optional QGIS Map action, its socket name (`qgis-remote-control` by default), and workspace-relative folder mappings to exact layer labels or zero-based indexes. HTTP templates keep their own setting.
+- `UserSettingKey.QGIS_REMOTE_CONTROL` stores the optional QGIS Map action, its socket name (`qgis-remote-control` by default), and workspace-relative folder mappings to exact layer labels or zero-based indexes. The checkbox enables the socket, Zoom, and **Edit mappings…** controls. HTTP templates keep their own setting.
 - `RuntimeSettingKey.QGIS_REMOTE_CONTROL_TIMEOUT_MS` (default `5000`) limits the full QGIS socket exchange. Override it with `PIQO_QGIS_REMOTE_CONTROL_TIMEOUT_MS`.
-- `RuntimeSettingKey.QGIS_REMOTE_CONTROL_ZOOM` (default `17`) is the Web Mercator zoom level used when QGIS moves to a photo's coordinates. Override it with `PIQO_QGIS_REMOTE_CONTROL_ZOOM`.
+- `UserSettingKey.QGIS_REMOTE_CONTROL_ZOOM` (default `17`) sets the Web Mercator zoom level for QGIS Map moves. Edit it on the QGIS Remote Control row in Settings. The `PIQO_QGIS_REMOTE_CONTROL_ZOOM` environment variable takes precedence over the saved value.
 - `UserSettingKey.MANUAL_LENSES` (default `[]`) stores lens presets used by `Tools > Set Lens Info ...`.
 - `StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER` (default `True`) remembers whether Flickr album reorder saves the current order first.
 - `UserSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS` (default `False`) adds a final album-ordering stage only after photos are added to a newly created Flickr album.
@@ -377,7 +378,7 @@ The `orientation.py` module provides utilities for:
 ## Context Menu (Right-Click)
 
 Right-click on a photo in the grid to access:
-- **Reveal in Finder**: Opens system file manager with files selected (uses `show-in-file-manager` package). Handles multiple files across multiple folders.
+- **Reveal in Finder**: Opens each containing folder with all its selected photos highlighted together.
 - **View in {App}**: Opens selected photos in external viewer (only shown if `EXTERNAL_VIEWER` is configured)
 - **Edit in {App}**: Duplicates selected photos first, then opens duplicates in external editor (only shown if `EXTERNAL_EDITOR` is configured)
 - **Map**: Opens the sole configured map or lists the providers in a submenu. It is enabled for a single selected photo with valid coordinates.
@@ -390,6 +391,7 @@ Selection behavior:
 
 
 ## Considerations
+- Send photo file URLs to `NSWorkspace.activateFileViewerSelectingURLs_` in one request per containing folder. A separate reveal request for each file can replace the previous selection in that folder.
 - Wrap application-created modal dialogs in `managed_modal_dialog` and consume/copy their results inside that scope. The scope schedules `deleteLater()`; never rely on Python garbage collection to destroy Qt dialogs, since collection can run inside a worker. Keep reusable dialogs (such as storage Retry) in one scope covering their complete retry loop.
 - Detach dialog UI callbacks and cancel unfinished dialog-owned tasks before disposing a modal dialog, including exceptional exits. `ToolTaskHandle.disconnect()` clears its dispatcher so queued callbacks become harmless. GPX completion callbacks outlive the progress dialog to reconcile the model, but skip UI/model work during shutdown. SD eject workers hold only their input and signal objects, never a bound dialog method.
 - Editable dialogs use `UnsavedChangesDialog` and explicit opening-state snapshots. Track only dialog-local values that would be discarded; reset or scope the baseline when a workflow consumes its input or exposes a later editable result choice.

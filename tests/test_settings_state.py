@@ -423,23 +423,27 @@ def test_map_links_env_override(isolated_settings, monkeypatch):
 
 def test_qgis_remote_control_round_trip(isolated_settings, monkeypatch):
     key = UserSettingKey.QGIS_REMOTE_CONTROL
+    zoom_key = UserSettingKey.QGIS_REMOTE_CONTROL_ZOOM
     assert get_user_setting(key) == QgisRemoteControlSettings()
+    assert get_user_setting(zoom_key) == 17
     settings = QgisRemoteControlSettings(
         enabled=True,
         socket_name="qgis-test",
         mappings=(QgisLayerMapping(".", 0), QgisLayerMapping("Paris", "0")),
     )
     set_user_setting(key, settings)
+    set_user_setting(zoom_key, 21)
     init_qsettings_store(dyn=False)
 
     assert get_user_setting(key) == settings
     assert get_user_setting(UserSettingKey.MAP_LINKS) == []
     assert get_runtime_setting(RuntimeSettingKey.QGIS_REMOTE_CONTROL_TIMEOUT_MS) == 5000
-    assert get_runtime_setting(RuntimeSettingKey.QGIS_REMOTE_CONTROL_ZOOM) == 17
+    assert get_user_setting(zoom_key) == 21
 
     monkeypatch.setenv("PIQO_QGIS_REMOTE_CONTROL_ZOOM", "19")
-    init_qsettings_store(dyn=False)
-    assert get_runtime_setting(RuntimeSettingKey.QGIS_REMOTE_CONTROL_ZOOM) == 19
+    assert get_user_setting(zoom_key) == 19
+    monkeypatch.setenv("PIQO_QGIS_REMOTE_CONTROL_ZOOM", "31")
+    assert get_user_setting(zoom_key) == 21
 
 
 def test_env_override_takes_priority_over_persisted_values(

@@ -645,9 +645,11 @@ class QgisRemoteControlEditor(QWidget):
         layout.addWidget(self.socket_edit, 1)
         self.mappings_btn = QPushButton("Edit mappings…", self)
         self.mappings_btn.setAttribute(Qt.WidgetAttribute.WA_LayoutUsesWidgetRect)
+        self.mappings_btn.setEnabled(False)
         layout.addWidget(self.mappings_btn)
 
         self.enabled_checkbox.toggled.connect(self.socket_edit.setEnabled)
+        self.enabled_checkbox.toggled.connect(self.mappings_btn.setEnabled)
         self.enabled_checkbox.toggled.connect(self._update_socket_validity)
         self.enabled_checkbox.toggled.connect(self.value_changed)
         self.socket_edit.textChanged.connect(self._update_socket_validity)

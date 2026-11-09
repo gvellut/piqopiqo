@@ -1,6 +1,8 @@
 """External application integration (file manager, viewer, editor)."""
 
+from collections import defaultdict
 import logging
+from pathlib import Path
 import subprocess
 
 from .model import ImageItem
@@ -13,36 +15,37 @@ def get_reveal_in_file_manager_label_macos() -> str:
     return "Reveal in Finder"
 
 
-def reveal_paths_in_file_manager_macos(paths: list[str]) -> None:
-    """Reveal filesystem paths in the system file manager."""
-    if not paths:
+def reveal_path_in_file_manager_macos(path: str) -> None:
+    """Open a folder in Finder or reveal a single file."""
+    if not path:
         return
 
     try:
         import showinfm
 
-        showinfm.show_in_file_manager(paths)
+        showinfm.show_in_file_manager(path)
     except Exception as e:
-        logger.error("Failed to reveal paths in file manager: %s", e)
-
-
-def reveal_path_in_file_manager_macos(path: str) -> None:
-    """Reveal a single path in the system file manager."""
-    if not path:
-        return
-    reveal_paths_in_file_manager_macos([path])
+        logger.error("Failed to reveal path in Finder: %s", e)
 
 
 def reveal_in_file_manager_macos(photos: list[ImageItem]) -> None:
-    """Reveal photos in the system file manager.
+    """Open each photo's folder in Finder with its photos selected together."""
+    if not photos:
+        return
 
-    Groups files by folder and opens each folder with its files selected.
+    try:
+        from Cocoa import NSURL, NSWorkspace
 
-    Args:
-        photos: List of ImageItem objects to reveal.
-    """
-    paths = [photo.path for photo in photos]
-    reveal_paths_in_file_manager_macos(paths)
+        urls_by_folder = defaultdict(list)
+        for photo in photos:
+            path = Path(photo.path).resolve()
+            urls_by_folder[path.parent].append(NSURL.fileURLWithPath_(str(path)))
+
+        workspace = NSWorkspace.sharedWorkspace()
+        for urls in urls_by_folder.values():
+            workspace.activateFileViewerSelectingURLs_(urls)
+    except Exception as e:
+        logger.error("Failed to reveal photos in Finder: %s", e)
 
 
 def open_in_external_app_macos(app_name: str, paths: list[str]) -> None:

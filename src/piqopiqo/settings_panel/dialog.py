@@ -36,7 +36,7 @@ from piqopiqo.ssf.settings_state import (
     validate_mandatory_setting_value,
 )
 
-from .editors import BaseEditor, build_editor
+from .editors import BaseEditor, QgisRemoteControlEditorAdapter, build_editor
 from .map_links_editor import format_map_links_summary
 from .schema import SETTINGS_TABS, EditorKind, FieldSpec
 
@@ -65,6 +65,14 @@ def _settings_form_row_spacing() -> int:
 
 def _natural_height(widget: QWidget) -> int:
     return max(widget.sizeHint().height(), widget.minimumSizeHint().height())
+
+
+def _natural_row_geometry(label: QLabel, editor: QWidget) -> tuple[int, int]:
+    label_height = _natural_height(label)
+    row_height = max(label_height, _natural_height(editor))
+    # Qt rounds the label's offset and its center separately.
+    label_center = (row_height - label_height) // 2 + label_height // 2
+    return row_height, label_center
 
 
 def _use_background_color(widget: QWidget, color: QColor) -> None:
@@ -143,16 +151,19 @@ class _SettingsFormLayout(QGridLayout):
         if len(self._rows) < 2:
             return 0
 
-        row_heights = [
-            max(_natural_height(label), _natural_height(editor))
+        row_geometry = [
+            _natural_row_geometry(label, editor)
             for _row, label, editor, _alignment in self._rows
         ]
         return max(
             (
-                (previous + current + 1) // 2
-                for previous, current, previous_row, current_row in zip(
-                    row_heights[:-1],
-                    row_heights[1:],
+                previous_height - previous_center + current_center
+                for (previous_height, previous_center), (
+                    _,
+                    current_center,
+                ), previous_row, current_row in zip(
+                    row_geometry[:-1],
+                    row_geometry[1:],
                     self._rows[:-1],
                     self._rows[1:],
                     strict=True,
@@ -178,8 +189,8 @@ class _SettingsFormLayout(QGridLayout):
         if len(self._rows) < 2:
             return
 
-        row_heights = [
-            max(_natural_height(label), _natural_height(editor))
+        row_geometry = [
+            _natural_row_geometry(label, editor)
             for _row, label, editor, _alignment in self._rows
         ]
         minimum_center_delta = max(
@@ -188,9 +199,12 @@ class _SettingsFormLayout(QGridLayout):
         )
         target_center_delta = minimum_center_delta + self._row_spacing
 
-        for previous, current, previous_row, current_row in zip(
-            row_heights[:-1],
-            row_heights[1:],
+        for (previous_height, previous_center), (
+            _,
+            current_center,
+        ), previous_row, current_row in zip(
+            row_geometry[:-1],
+            row_geometry[1:],
             self._rows[:-1],
             self._rows[1:],
             strict=True,
@@ -206,7 +220,7 @@ class _SettingsFormLayout(QGridLayout):
                 self.setRowMinimumHeight(gap_row, self._row_spacing)
                 continue
 
-            natural_center_delta = (previous + current + 1) // 2
+            natural_center_delta = previous_height - previous_center + current_center
             self.setRowMinimumHeight(
                 gap_row,
                 max(0, target_center_delta - natural_center_delta),
@@ -352,11 +366,18 @@ class SettingsDialog(UnsavedChangesDialog):
                             vertical_alignment=Qt.AlignmentFlag.AlignVCenter,
                         )
                         label = QLabel(section.panel)
-                    group_layout.add_settings_row(
-                        label,
-                        editor,
-                        vertical_alignment=_settings_label_vertical_alignment(field),
-                    )
+                    if field.key == UserSettingKey.QGIS_REMOTE_CONTROL_ZOOM:
+                        qgis = self._editors[UserSettingKey.QGIS_REMOTE_CONTROL]
+                        assert isinstance(qgis, QgisRemoteControlEditorAdapter)
+                        qgis.add_zoom_editor(label, editor)
+                    else:
+                        group_layout.add_settings_row(
+                            label,
+                            editor,
+                            vertical_alignment=_settings_label_vertical_alignment(
+                                field
+                            ),
+                        )
 
                     if self._mode == SettingsPanelSaveMode.AUTOSAVE:
                         editor.value_changed.connect(

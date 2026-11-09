@@ -8,7 +8,7 @@ from attrs import define
 
 from piqopiqo.color_management import ScreenColorProfileMode
 from piqopiqo.model import OnFullscreenExitMultipleSelected
-from piqopiqo.ssf.settings_state import UserSettingKey
+from piqopiqo.ssf.settings_state import QGIS_ZOOM_MAX, QGIS_ZOOM_MIN, UserSettingKey
 
 
 class EditorKind(Enum):
@@ -173,6 +173,13 @@ SETTINGS_TABS: list[TabSpec] = [
                         key=UserSettingKey.QGIS_REMOTE_CONTROL,
                         label="",
                         editor=EditorKind.QGIS_REMOTE_CONTROL,
+                    ),
+                    FieldSpec(
+                        key=UserSettingKey.QGIS_REMOTE_CONTROL_ZOOM,
+                        label="Zoom",
+                        editor=EditorKind.NUMBER,
+                        min_value=QGIS_ZOOM_MIN,
+                        max_value=QGIS_ZOOM_MAX,
                     ),
                 ],
             ),

@@ -77,7 +77,10 @@ class NumberEditor(BaseEditor):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self._spin = QSpinBox()
-        self._spin.setRange(min_value or -999999, max_value or 999999)
+        self._spin.setRange(
+            -999999 if min_value is None else min_value,
+            999999 if max_value is None else max_value,
+        )
         self._spin.valueChanged.connect(self.value_changed)
         layout.addWidget(self._spin)
 
@@ -416,6 +419,18 @@ class QgisRemoteControlEditorAdapter(BaseEditor):
         self._editor = QgisRemoteControlEditor()
         self._editor.value_changed.connect(self.value_changed)
         layout.addWidget(self._editor)
+
+    def add_zoom_editor(self, label: QLabel, editor: BaseEditor) -> None:
+        layout = self._editor.layout()
+        index = layout.indexOf(self._editor.mappings_btn)
+        editor.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        layout.insertWidget(index, label)
+        layout.insertWidget(index + 1, editor)
+        checkbox = self._editor.enabled_checkbox
+        label.setEnabled(checkbox.isChecked())
+        editor.setEnabled(checkbox.isChecked())
+        checkbox.toggled.connect(label.setEnabled)
+        checkbox.toggled.connect(editor.setEnabled)
 
     def set_value(self, value):
         self._editor.set_value(value)

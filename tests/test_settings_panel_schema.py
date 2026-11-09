@@ -51,6 +51,7 @@ def test_interface_tab_layout_matches_expected_groups_and_fields():
         UserSettingKey.PROTECT_NON_TEXT_METADATA,
         UserSettingKey.MAP_LINKS,
         UserSettingKey.QGIS_REMOTE_CONTROL,
+        UserSettingKey.QGIS_REMOTE_CONTROL_ZOOM,
     ]
     assert [field.key for field in interface_tab.groups[3].fields] == [
         UserSettingKey.FAVORITE_FOLDER

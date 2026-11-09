@@ -40,6 +40,8 @@ ORG_NAME = "Guilhem V"
 ORG_DOMAIN = "vellut"  # com. is added by Qt
 
 ENV_PREFIX = "PIQO_"
+QGIS_ZOOM_MIN = 0
+QGIS_ZOOM_MAX = 30
 
 FOCAL_LENGTH_35MM_TAG = "EXIF:FocalLengthIn35mmFormat"
 COMPOSITE_FOCAL_LENGTH_35MM_TAG = "Composite:FocalLength35efl"
@@ -101,6 +103,7 @@ class UserSettingKey(StrEnum):
     PROTECT_NON_TEXT_METADATA = "protectNonTextMetadata"
     MAP_LINKS = "mapLinks"
     QGIS_REMOTE_CONTROL = "qgisRemoteControl"
+    QGIS_REMOTE_CONTROL_ZOOM = "qgisRemoteControlZoom"
     STATUS_LABELS = "statusLabels"
     EXTERNAL_VIEWER = "externalViewer"
     EXTERNAL_EDITOR = "externalEditor"
@@ -152,7 +155,6 @@ class RuntimeSettingKey(StrEnum):
     MAX_EXIFTOOLS_IMAGE_BATCH = "maxExiftoolsImageBatch"
     SHUTDOWN_TIMEOUT_S = "shutdownTimeoutS"
     QGIS_REMOTE_CONTROL_TIMEOUT_MS = "qgisRemoteControlTimeoutMs"
-    QGIS_REMOTE_CONTROL_ZOOM = "qgisRemoteControlZoom"
     COPY_SD_EJECT_TIMEOUT_S = "copySdEjectTimeoutS"
     PADDING = "padding"
     FONT_SIZE = "fontSize"
@@ -377,6 +379,13 @@ def _deserialize_map_links(data: Any) -> list[MapLinkOption]:
             )
         )
     return out
+
+
+def _parse_qgis_zoom(raw: str) -> int:
+    zoom = int(raw)
+    if not QGIS_ZOOM_MIN <= zoom <= QGIS_ZOOM_MAX:
+        raise ValueError("QGIS zoom level is out of range")
+    return zoom
 
 
 def _serialize_qgis_remote_control(value: QgisRemoteControlSettings) -> dict:
@@ -715,6 +724,12 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         deserializer=_deserialize_qgis_remote_control,
         env_parser=lambda raw: _deserialize_qgis_remote_control(_parse_json(raw)),
     ),
+    UserSettingKey.QGIS_REMOTE_CONTROL_ZOOM: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default=17,
+        read_type=int,
+        env_parser=_parse_qgis_zoom,
+    ),
     UserSettingKey.STATUS_LABELS: SettingDef(
         group=SettingsGroup.SETTINGS,
         default=[
@@ -963,7 +978,6 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.QGIS_REMOTE_CONTROL_TIMEOUT_MS: SettingDef(
         default=5000, read_type=int
     ),
-    RuntimeSettingKey.QGIS_REMOTE_CONTROL_ZOOM: SettingDef(default=17, read_type=int),
     RuntimeSettingKey.COPY_SD_EJECT_TIMEOUT_S: SettingDef(
         default=30.0, read_type=float
     ),

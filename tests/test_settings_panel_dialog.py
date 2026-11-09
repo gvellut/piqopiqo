@@ -540,8 +540,14 @@ def test_settings_dialog_keeps_simple_rows_at_natural_height(qapp, monkeypatch):
     assert summary_label.alignment() & Qt.AlignmentFlag.AlignVCenter
 
 
-def test_map_links_rows_count_http_and_qgis(qapp, monkeypatch):
+def test_map_links_rows_count_http_and_qgis(qapp, monkeypatch, tmp_path):
     monkeypatch.delenv("PIQO_SETTINGS_PANEL_SAVE_MODE", raising=False)
+    monkeypatch.delenv("PIQO_QGIS_REMOTE_CONTROL_ZOOM", raising=False)
+    exiftool = tmp_path / "exiftool"
+    exiftool.write_text("#!/bin/sh\n")
+    exiftool.chmod(0o755)
+    monkeypatch.setenv("PIQO_CACHE_BASE_DIR", str(tmp_path))
+    monkeypatch.setenv("PIQO_EXIFTOOL_PATH", str(exiftool))
     init_qsettings_store(dyn=True)
     set_user_setting(
         UserSettingKey.MAP_LINKS,
@@ -562,18 +568,37 @@ def test_map_links_rows_count_http_and_qgis(qapp, monkeypatch):
     assert total.text() == "1 option defined"
     assert http._editor._summary_label.text() == "1 HTTP option"
     assert not qgis._editor.socket_edit.isEnabled()
+    assert not qgis._editor.mappings_btn.isEnabled()
     assert qgis._editor.socket_edit.text() == "qgis-remote-control"
+    zoom_key = UserSettingKey.QGIS_REMOTE_CONTROL_ZOOM
+    zoom = dialog._editors[zoom_key]
+    assert qgis.isAncestorOf(zoom)
+    assert not zoom.isEnabled()
+    assert zoom.get_value() == 17
+    assert (zoom._spin.minimum(), zoom._spin.maximum()) == (0, 30)
 
     qgis._editor.enabled_checkbox.click()
     assert total.text() == "2 options defined"
     assert http._editor._summary_label.text() == "1 HTTP option"
     assert qgis._editor.socket_edit.isEnabled()
+    assert qgis._editor.mappings_btn.isEnabled()
+    assert zoom.isEnabled()
+    zoom._spin.setValue(0)
     qgis._editor.socket_edit.setText("  ")
     qgis._editor.socket_edit.editingFinished.emit()
     assert not dialog._save_btn.isEnabled()
     qgis._editor.enabled_checkbox.click()
     assert total.text() == "1 option defined"
+    assert not qgis._editor.socket_edit.isEnabled()
+    assert not qgis._editor.mappings_btn.isEnabled()
+    assert not zoom.isEnabled()
     assert dialog._save_btn.isEnabled()
+    qgis._editor.socket_edit.setText("qgis-remote-control")
+    monkeypatch.setattr(
+        QMessageBox, "warning", lambda _parent, _title, message: pytest.fail(message)
+    )
+    dialog._on_save()
+    assert get_user_setting(zoom_key) == 0
 
 
 def test_settings_dialog_scroll_area_preserves_manual_lens_minimums(qapp, monkeypatch):
