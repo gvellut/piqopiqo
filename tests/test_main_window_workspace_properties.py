@@ -530,9 +530,9 @@ def test_qgis_map_failure_warning_and_retry_update_inline_status(
         None,
     ])
 
-    def select_photo(*_args, coordinates, fallback_zoom):
+    def select_photo(*_args, coordinates, zoom):
         assert coordinates == (48.0, 2.0)
-        assert fallback_zoom == 17
+        assert zoom == 17
         result = next(results)
         if isinstance(result, QgisRemoteControlError):
             raise result

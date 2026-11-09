@@ -2434,7 +2434,7 @@ class MainWindow(QMainWindow):
             settings,
             timeout_ms,
             coordinates=(lat, lon),
-            fallback_zoom=get_runtime_setting(
+            zoom=get_runtime_setting(
                 RuntimeSettingKey.QGIS_REMOTE_CONTROL_FALLBACK_ZOOM
             ),
         )

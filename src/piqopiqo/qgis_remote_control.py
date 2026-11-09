@@ -1,4 +1,4 @@
-"""Zoom to a photo feature or its GPS position using the QGIS local socket."""
+"""Select a photo feature and move to its GPS position using the QGIS local socket."""
 
 from __future__ import annotations
 
@@ -30,10 +30,6 @@ class QgisRemoteControlError(Exception):
 
 class QgisConnectionError(QgisRemoteControlError):
     status = QgisMapStatus.CONNECTION
-
-
-class _QgisEmptySelectionError(QgisRemoteControlError):
-    pass
 
 
 def resolve_photo_layer(
@@ -116,13 +112,7 @@ def _send_request(
         raise QgisRemoteControlError(f"QGIS sent an unexpected reply to {method}.")
     if reply.get("ok") is not True:
         detail = reply.get("error") or "QGIS rejected the request."
-        message = f"{method} failed. {detail}"
-        if (
-            method == "zoomToSelection"
-            and detail == "The layer has no selected features."
-        ):
-            raise _QgisEmptySelectionError(message)
-        raise QgisRemoteControlError(message)
+        raise QgisRemoteControlError(f"{method} failed. {detail}")
     return reply
 
 
@@ -133,7 +123,7 @@ def select_photo(
     timeout_ms: int,
     *,
     coordinates: tuple[float, float],
-    fallback_zoom: int,
+    zoom: int,
 ) -> QgisMapStatus | None:
     deadline = QDeadlineTimer(max(1, timeout_ms))
     socket = QLocalSocket()
@@ -165,19 +155,12 @@ def select_photo(
                 selected_count,
             )
 
-        move_id = 2
-        if selected_count != 0:
-            try:
-                _send_request(socket, deadline, 2, "zoomToSelection", {"layer": layer})
-            except _QgisEmptySelectionError:
-                move_id = 3
-            else:
-                return None
-
         lat, lon = coordinates
-        params = {"lat": lat, "lon": lon, "z": fallback_zoom}
+        params = {"lat": lat, "lon": lon, "z": zoom, "marker": True}
         logger.debug("QGIS move for %r with params %s", filename, params)
-        _send_request(socket, deadline, move_id, "move", params)
+        _send_request(socket, deadline, 2, "move", params)
+        if selected_count != 0:
+            return None
         status = QgisMapStatus.ZOOMED_TO_POSITION
         logger.warning("QGIS Map for %r on layer %r: %s", filename, layer, status.value)
         return status
@@ -204,7 +187,7 @@ class QgisPhotoWorker(PythonOwnedRunnable):
         timeout_ms: int,
         *,
         coordinates: tuple[float, float],
-        fallback_zoom: int,
+        zoom: int,
     ):
         super().__init__()
         self._photo = Path(photo_path)
@@ -212,7 +195,7 @@ class QgisPhotoWorker(PythonOwnedRunnable):
         self._settings = settings
         self._timeout_ms = timeout_ms
         self._coordinates = coordinates
-        self._fallback_zoom = fallback_zoom
+        self._zoom = zoom
         self.signals = _QgisPhotoWorkerSignals()
 
     def run(self) -> None:
@@ -228,7 +211,7 @@ class QgisPhotoWorker(PythonOwnedRunnable):
                 filename,
                 self._timeout_ms,
                 coordinates=self._coordinates,
-                fallback_zoom=self._fallback_zoom,
+                zoom=self._zoom,
             )
         except QgisRemoteControlError as error:
             _log_map_error(filename, str(error))

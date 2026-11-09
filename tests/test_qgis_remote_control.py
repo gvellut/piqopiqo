@@ -33,10 +33,9 @@ def test_resolve_layer_from_workspace_relative_folder():
 class _Socket:
     LocalSocketState = QLocalSocket.LocalSocketState
 
-    def __init__(self, rejected_method, selected_count, error_detail):
+    def __init__(self, rejected_method, selected_count):
         self.rejected_method = rejected_method
         self.selected_count = selected_count
-        self.error_detail = error_detail
         self.addresses = []
         self.requests = []
         self.closed = False
@@ -62,7 +61,7 @@ class _Socket:
         request = self.requests[-1]
         reply = {"id": request["id"], "ok": request["method"] != self.rejected_method}
         if not reply["ok"]:
-            reply["error"] = self.error_detail
+            reply["error"] = "Rejected for testing"
         elif request["method"] == "select" and self.selected_count is not None:
             reply["selectedCount"] = self.selected_count
         return json.dumps(reply).encode() + b"\n"
@@ -72,24 +71,20 @@ class _Socket:
 
 
 @pytest.mark.parametrize(
-    ("rejected_method", "selected_count", "empty_zoom"),
+    ("rejected_method", "selected_count"),
     [
-        (None, None, False),
-        (None, 12, False),
-        ("select", 12, False),
-        ("zoomToSelection", 12, False),
-        ("zoomToSelection", None, True),
-        (None, 0, False),
-        ("move", 0, False),
+        (None, None),
+        (None, 12),
+        (None, 0),
+        ("select", 12),
+        ("move", 12),
+        ("move", 0),
     ],
 )
-def test_select_photo_zooms_to_selection_or_moves_to_coordinates(
-    monkeypatch, caplog, rejected_method, selected_count, empty_zoom
+def test_select_photo_moves_to_coordinates_after_selection(
+    monkeypatch, caplog, rejected_method, selected_count
 ):
-    error_detail = (
-        "The layer has no selected features." if empty_zoom else "Rejected for testing"
-    )
-    socket = _Socket(rejected_method, selected_count, error_detail)
+    socket = _Socket(rejected_method, selected_count)
     caplog.set_level(logging.DEBUG, logger=qgis.__name__)
 
     class SocketFactory:
@@ -101,8 +96,8 @@ def test_select_photo_zooms_to_selection_or_moves_to_coordinates(
     monkeypatch.setattr(qgis, "QLocalSocket", SocketFactory)
     filename = "L'été\\Paris\tPhoto\n.JPG"
     coordinates = (0.0, -8.0)
-    moves = selected_count == 0 or empty_zoom
-    if rejected_method and not empty_zoom:
+    moves = rejected_method != "select"
+    if rejected_method:
         with pytest.raises(qgis.QgisRemoteControlError) as caught:
             qgis.select_photo(
                 "test-qgis",
@@ -110,15 +105,17 @@ def test_select_photo_zooms_to_selection_or_moves_to_coordinates(
                 filename,
                 5000,
                 coordinates=coordinates,
-                fallback_zoom=17,
+                zoom=17,
             )
-        assert str(caught.value) == f"{rejected_method} failed. {error_detail}"
+        assert str(caught.value) == f"{rejected_method} failed. Rejected for testing"
         assert caught.value.status is qgis.QgisMapStatus.OPERATION
     else:
         status = qgis.select_photo(
-            "test-qgis", 0, filename, 5000, coordinates=coordinates, fallback_zoom=17
+            "test-qgis", 0, filename, 5000, coordinates=coordinates, zoom=17
         )
-        assert status is (qgis.QgisMapStatus.ZOOMED_TO_POSITION if moves else None)
+        assert status is (
+            qgis.QgisMapStatus.ZOOMED_TO_POSITION if selected_count == 0 else None
+        )
 
     expected = [
         {
@@ -130,15 +127,9 @@ def test_select_photo_zooms_to_selection_or_moves_to_coordinates(
             },
         }
     ]
-    if rejected_method != "select" and selected_count != 0:
-        expected.append({"id": 2, "method": "zoomToSelection", "params": {"layer": 0}})
-    move_params = {"lat": 0.0, "lon": -8.0, "z": 17}
+    move_params = {"lat": 0.0, "lon": -8.0, "z": 17, "marker": True}
     if moves:
-        expected.append({
-            "id": len(expected) + 1,
-            "method": "move",
-            "params": move_params,
-        })
+        expected.append({"id": 2, "method": "move", "params": move_params})
     assert socket.requests == expected
     assert socket.addresses == ["test-qgis"]
     assert socket.closed
@@ -156,7 +147,7 @@ def test_select_photo_zooms_to_selection_or_moves_to_coordinates(
     warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
     assert warnings == (
         [f"QGIS Map for {filename!r} on layer 0: Image not found. Zoomed to position"]
-        if moves and rejected_method != "move"
+        if selected_count == 0 and rejected_method is None
         else []
     )
 
@@ -188,7 +179,7 @@ def test_qgis_map_logs_one_line_per_record(
         QgisRemoteControlSettings(mappings=(QgisLayerMapping("Paris", layer),)),
         5000,
         coordinates=(48.0, 2.0),
-        fallback_zoom=17,
+        zoom=17,
     )
     results = []
     worker.signals.finished.connect(results.append)
