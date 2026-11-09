@@ -176,7 +176,7 @@ tests/
 ├── test_fullscreen_navigation_zoom.py # Absolute zoom across mixed orientations/resolutions, Retina, pan and fallback
 ├── test_unsaved_changes_dialog.py # Shared dirty-dialog dismissal behavior
 ├── test_edit_panel.py # Edit panel UI behavior, including Keywords focus/paste preservation and save normalization
-├── test_qgis_remote_control.py # Workspace-relative layer resolution and acknowledged select/zoom requests
+├── test_qgis_remote_control.py # Workspace-relative layer resolution and acknowledged select, move, and raiseWindow requests
 ├── test_exif_panel.py # EXIF panel formatting, 35 mm focal length fallback, and pending selection summary
 ├── test_photo_grid_shortcuts.py # Grid view-scoped shortcut ownership + text-input guard behavior
 ├── test_photo_grid_selection_refresh.py # Visible-only grid selection highlight refresh path
@@ -311,7 +311,7 @@ The edit panel supports editing metadata fields (title, description, keywords, c
 - **Enter/Tab**: Saves the field and moves focus
 - **Escape**: Reverts changes and cancels edit
 - Validation is applied for coordinates and datetime fields (red border on invalid input)
-- **Open map** requires a single selected photo with valid coordinates. The grid context menu uses the same activation rules and map providers as the Metadata panel button. QGIS uses the workspace-relative parent folder as the layer label when there is no mapping, with `.` for the workspace root. The Qt worker selects features whose `Name` matches the full filename, then sends `move` with the photo coordinates, configured zoom, and `marker: true`.
+- **Open map** requires a single selected photo with valid coordinates. The grid context menu uses the same activation rules and map providers as the Metadata panel button. QGIS uses the workspace-relative parent folder as the layer label when there is no mapping, with `.` for the workspace root. The Qt worker selects features whose `Name` matches the full filename, then sends `move` with the photo coordinates, configured zoom, and `marker: true`. After the move succeeds, it sends `raiseWindow` on the same connection.
 - The eliding label next to **Open map** shows a yellow **Image not found. Zoomed to position** warning when the move succeeds and `selectedCount` is zero. Errors appear in red. A selection change clears the status and invalidates pending replies for the old selection. Retrying or reloading Map settings also clears the status. The first DEBUG log records the filename, workspace-relative folder, and mapped layer. Later entries identify the mapped layer and record `selectedCount` and `move` parameters at DEBUG, zero matches at WARNING, and failures at ERROR with one record per line.
 
 ## Save EXIF (Tools Menu)

@@ -160,6 +160,7 @@ def select_photo(
         params = {"lat": lat, "lon": lon, "z": zoom, "marker": True}
         logger.debug("QGIS move for layer %r with params %s", layer, params)
         _send_request(socket, deadline, 2, "move", params)
+        _send_request(socket, deadline, 3, "raiseWindow", {})
         if selected_count != 0:
             return None
         status = QgisMapStatus.ZOOMED_TO_POSITION

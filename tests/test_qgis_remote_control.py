@@ -80,9 +80,10 @@ class _Socket:
         ("select", 12),
         ("move", 12),
         ("move", 0),
+        ("raiseWindow", 0),
     ],
 )
-def test_select_photo_moves_to_coordinates_after_selection(
+def test_select_photo_moves_and_raises_window_after_selection(
     monkeypatch, caplog, rejected_method, selected_count
 ):
     socket = _Socket(rejected_method, selected_count)
@@ -131,6 +132,8 @@ def test_select_photo_moves_to_coordinates_after_selection(
     move_params = {"lat": 0.0, "lon": -8.0, "z": 17, "marker": True}
     if moves:
         expected.append({"id": 2, "method": "move", "params": move_params})
+    if rejected_method not in ("select", "move"):
+        expected.append({"id": 3, "method": "raiseWindow", "params": {}})
     assert socket.requests == expected
     assert socket.addresses == ["test-qgis"]
     assert socket.closed
