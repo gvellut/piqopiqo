@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum, auto
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 import attr
@@ -44,6 +45,26 @@ class ManualLensPreset:
 class MapLinkOption:
     name: str
     url_template: str
+
+
+def normalize_qgis_folder(value: str) -> str:
+    path = PurePosixPath(value)
+    if not value.strip() or path.is_absolute() or ".." in path.parts:
+        raise ValueError("Enter a workspace-relative folder such as 2026/Paris or .")
+    return path.as_posix()
+
+
+@define(frozen=True)
+class QgisLayerMapping:
+    folder: str
+    layer: str | int
+
+
+@define(frozen=True)
+class QgisRemoteControlSettings:
+    enabled: bool = False
+    socket_name: str = "qgis-remote-control"
+    mappings: tuple[QgisLayerMapping, ...] = ()
 
 
 @define(frozen=True)

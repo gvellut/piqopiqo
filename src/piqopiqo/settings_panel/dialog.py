@@ -37,6 +37,7 @@ from piqopiqo.ssf.settings_state import (
 )
 
 from .editors import BaseEditor, build_editor
+from .map_links_editor import format_map_links_summary
 from .schema import SETTINGS_TABS, EditorKind, FieldSpec
 
 _GCP_OCR_FIELD_KEYS = {
@@ -343,6 +344,14 @@ class SettingsDialog(UnsavedChangesDialog):
                     self._fields[field.key] = field
 
                     label = QLabel(field.label, section.panel)
+                    if field.key == UserSettingKey.MAP_LINKS:
+                        self._map_links_summary = QLabel(section.panel)
+                        group_layout.add_settings_row(
+                            label,
+                            self._map_links_summary,
+                            vertical_alignment=Qt.AlignmentFlag.AlignVCenter,
+                        )
+                        label = QLabel(section.panel)
                     group_layout.add_settings_row(
                         label,
                         editor,
@@ -393,6 +402,9 @@ class SettingsDialog(UnsavedChangesDialog):
         root.addWidget(self._button_box)
 
     def _wire_editor_dependencies(self) -> None:
+        for key in (UserSettingKey.MAP_LINKS, UserSettingKey.QGIS_REMOTE_CONTROL):
+            self._editors[key].value_changed.connect(self._refresh_map_links_summary)
+
         labels_editor = self._editors.get(UserSettingKey.STATUS_LABELS)
         transitions_editor = self._editors.get(
             UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS
@@ -411,6 +423,13 @@ class SettingsDialog(UnsavedChangesDialog):
                     set_provider(provider)
 
         self._sync_flickr_lifecycle_editors()
+
+    def _refresh_map_links_summary(self) -> None:
+        http = self._editors[UserSettingKey.MAP_LINKS].get_value()
+        qgis = self._editors[UserSettingKey.QGIS_REMOTE_CONTROL].get_value()
+        self._map_links_summary.setText(
+            format_map_links_summary(len(http) + qgis.enabled)
+        )
 
     def _should_include_field(self, field: FieldSpec) -> bool:
         if field.key not in _GCP_OCR_FIELD_KEYS:
@@ -468,6 +487,7 @@ class SettingsDialog(UnsavedChangesDialog):
                 self._initial_values[key] = value
         finally:
             self._loading = False
+        self._refresh_map_links_summary()
         self._sync_flickr_lifecycle_editors()
         self._update_save_enabled()
 

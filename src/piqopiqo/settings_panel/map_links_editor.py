@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from string import Formatter
 
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
     QDialog,
+    QFormLayout,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -23,7 +27,12 @@ from PySide6.QtWidgets import (
 
 from piqopiqo.dialogs.modal import managed_modal_dialog
 from piqopiqo.dialogs.unsaved_changes_dialog import UnsavedChangesDialog
-from piqopiqo.model import MapLinkOption
+from piqopiqo.model import (
+    MapLinkOption,
+    QgisLayerMapping,
+    QgisRemoteControlSettings,
+    normalize_qgis_folder,
+)
 
 _INVALID_STYLE = "QLineEdit { border: 2px solid red; }"
 _ALLOWED_MAP_LINK_FIELDS = {"lat", "lon"}
@@ -251,13 +260,21 @@ class _MapLinkOptionDialog(UnsavedChangesDialog):
         )
 
 
-class _MapLinksDialog(UnsavedChangesDialog):
-    def __init__(self, options: list[MapLinkOption] | None = None, parent=None):
+class _ListEditorDialog[T](UnsavedChangesDialog):
+    def __init__(
+        self,
+        title: str,
+        entry_name: str,
+        entries: list[T],
+        display_name: Callable[[T], str],
+        parent=None,
+    ):
         super().__init__(parent)
-        self.setWindowTitle("Map Links")
+        self.setWindowTitle(title)
         self.setModal(True)
         self.setMinimumWidth(520)
-        self._options: list[MapLinkOption] = []
+        self._entries = list(entries)
+        self._display_name = display_name
 
         layout = QVBoxLayout(self)
 
@@ -274,7 +291,7 @@ class _MapLinksDialog(UnsavedChangesDialog):
 
         self._add_btn = QToolButton(self)
         self._add_btn.setIcon(_build_plus_icon())
-        self._add_btn.setToolTip("Add map link")
+        self._add_btn.setToolTip(f"Add {entry_name}")
         self._add_btn.setAccessibleName("Add")
         self._add_btn.setIconSize(QSize(16, 16))
         self._add_btn.setFixedSize(28, 28)
@@ -285,7 +302,7 @@ class _MapLinksDialog(UnsavedChangesDialog):
 
         self._edit_btn = QToolButton(self)
         self._edit_btn.setIcon(_build_edit_icon())
-        self._edit_btn.setToolTip("Edit selected map link")
+        self._edit_btn.setToolTip(f"Edit selected {entry_name}")
         self._edit_btn.setAccessibleName("Edit")
         self._edit_btn.setIconSize(QSize(16, 16))
         self._edit_btn.setFixedSize(28, 28)
@@ -296,7 +313,7 @@ class _MapLinksDialog(UnsavedChangesDialog):
 
         self._delete_btn = QToolButton(self)
         self._delete_btn.setIcon(_build_minus_icon())
-        self._delete_btn.setToolTip("Delete selected map link")
+        self._delete_btn.setToolTip(f"Delete selected {entry_name}")
         self._delete_btn.setAccessibleName("Delete")
         self._delete_btn.setIconSize(QSize(16, 16))
         self._delete_btn.setFixedSize(28, 28)
@@ -327,8 +344,8 @@ class _MapLinksDialog(UnsavedChangesDialog):
 
         layout.addLayout(button_row)
 
-        self.set_value(options or [])
-        self._set_unsaved_changes_state(lambda: tuple(self._options))
+        self._refresh_list()
+        self._set_unsaved_changes_state(lambda: tuple(self._entries))
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -339,7 +356,7 @@ class _MapLinksDialog(UnsavedChangesDialog):
         if len(selected_indexes) != 1:
             return None
         index = selected_indexes[0].row()
-        if index < 0 or index >= len(self._options):
+        if index < 0 or index >= len(self._entries):
             return None
         return index
 
@@ -359,8 +376,8 @@ class _MapLinksDialog(UnsavedChangesDialog):
 
     def _refresh_list(self, *, selected_index: int | None = None) -> None:
         self._list.clear()
-        for option in self._options:
-            self._list.addItem(option.name)
+        for entry in self._entries:
+            self._list.addItem(self._display_name(entry))
         if selected_index is None or selected_index >= self._list.count():
             self._clear_selection()
             return
@@ -374,31 +391,24 @@ class _MapLinksDialog(UnsavedChangesDialog):
         self._update_buttons()
 
     def _on_add(self) -> None:
-        dialog = _MapLinkOptionDialog(title="Add Map Link", parent=self)
-        with managed_modal_dialog(dialog):
-            if dialog.exec() != QDialog.DialogCode.Accepted:
-                return
-            value = dialog.get_value()
-
-        self._options.append(value)
-        self._refresh_list()
+        self._edit_entry(None)
 
     def _on_edit(self) -> None:
         index = self._selected_index()
-        if index is None:
-            return
+        if index is not None:
+            self._edit_entry(index)
 
-        dialog = _MapLinkOptionDialog(
-            title="Edit Map Link",
-            initial=self._options[index],
-            parent=self,
-        )
+    def _edit_entry(self, index: int | None) -> None:
+        dialog = self._entry_dialog(index)
         with managed_modal_dialog(dialog):
             if dialog.exec() != QDialog.DialogCode.Accepted:
                 return
             value = dialog.get_value()
 
-        self._options[index] = value
+        if index is None:
+            self._entries.append(value)
+        else:
+            self._entries[index] = value
         self._refresh_list(selected_index=index)
 
     def _on_delete(self) -> None:
@@ -406,31 +416,32 @@ class _MapLinksDialog(UnsavedChangesDialog):
         if index is None:
             return
 
-        del self._options[index]
+        del self._entries[index]
         self._refresh_list()
 
-    def is_valid(self) -> bool:
-        for option in self._options:
-            name = str(option.name).strip()
-            url_template = str(option.url_template).strip()
-            if not name or not url_template:
-                return False
-            if not is_valid_map_link_template(url_template):
-                return False
-        return True
+    def _entry_dialog(self, index: int | None):
+        raise NotImplementedError
 
-    def set_value(self, value: list[MapLinkOption] | None) -> None:
-        self._options = [
-            MapLinkOption(
-                name=str(option.name).strip(),
-                url_template=str(option.url_template).strip(),
-            )
-            for option in (value or [])
-        ]
-        self._refresh_list()
+    def get_value(self) -> list[T]:
+        return list(self._entries)
 
-    def get_value(self) -> list[MapLinkOption]:
-        return list(self._options)
+
+class _MapLinksDialog(_ListEditorDialog[MapLinkOption]):
+    def __init__(self, options: list[MapLinkOption] | None = None, parent=None):
+        super().__init__(
+            "HTTP Map Templates",
+            "HTTP template",
+            options or [],
+            lambda option: option.name,
+            parent,
+        )
+
+    def _entry_dialog(self, index: int | None) -> _MapLinkOptionDialog:
+        return _MapLinkOptionDialog(
+            title="Add Map Link" if index is None else "Edit Map Link",
+            initial=None if index is None else self._entries[index],
+            parent=self,
+        )
 
 
 class MapLinksEditor(QWidget):
@@ -441,7 +452,6 @@ class MapLinksEditor(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._options: list[MapLinkOption] = []
-
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
@@ -452,17 +462,19 @@ class MapLinksEditor(QWidget):
         )
         layout.addWidget(self._summary_label)
 
-        self._edit_btn = QPushButton("Edit...", self)
+        self._edit_btn = QPushButton("Edit HTTP templates…", self)
         self._edit_btn.setAttribute(Qt.WidgetAttribute.WA_LayoutUsesWidgetRect)
         self._edit_btn.clicked.connect(self._on_edit)
         layout.addWidget(self._edit_btn)
-
         layout.addStretch(1)
 
         self._refresh_summary()
 
     def _refresh_summary(self) -> None:
-        self._summary_label.setText(format_map_links_summary(len(self._options)))
+        count = len(self._options)
+        self._summary_label.setText(
+            f"{count} HTTP {'option' if count == 1 else 'options'}"
+        )
 
     def _on_edit(self) -> None:
         dialog = _MapLinksDialog(self._options, parent=self)
@@ -497,3 +509,175 @@ class MapLinksEditor(QWidget):
 
     def get_value(self) -> list[MapLinkOption]:
         return list(self._options)
+
+
+class _QgisMappingDialog(UnsavedChangesDialog):
+    def __init__(
+        self, initial: QgisLayerMapping | None, used_folders: set[str], parent=None
+    ):
+        super().__init__(parent)
+        self.setWindowTitle(
+            "Add QGIS Mapping" if initial is None else "Edit QGIS Mapping"
+        )
+        self._used_folders = used_folders
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        form.setLabelAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+
+        self.folder_edit = QLineEdit(self)
+        self.folder_edit.setPlaceholderText("2026/Paris or . for the opened folder")
+        form.addRow("Photo folder", self.folder_edit)
+
+        layer_field = QWidget(self)
+        layer_row = QHBoxLayout(layer_field)
+        layer_row.setContentsMargins(0, 0, 0, 0)
+        self.layer_kind = QComboBox(layer_field)
+        self.layer_kind.addItems(["Label", "Index"])
+        layer_row.addWidget(self.layer_kind)
+        self.layer_edit = QLineEdit(layer_field)
+        layer_row.addWidget(self.layer_edit, 1)
+        form.addRow("QGIS layer", layer_field)
+        layout.addLayout(form)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        cancel_btn = QPushButton("Cancel", self)
+        cancel_btn.setAutoDefault(False)
+        cancel_btn.clicked.connect(self.reject)
+        buttons.addWidget(cancel_btn)
+        self.ok_btn = QPushButton("OK", self)
+        self.ok_btn.setAutoDefault(False)
+        self.ok_btn.clicked.connect(self.accept)
+        buttons.addWidget(self.ok_btn)
+        layout.addLayout(buttons)
+
+        if initial is not None:
+            self.folder_edit.setText(initial.folder)
+            self.layer_kind.setCurrentIndex(int(isinstance(initial.layer, int)))
+            self.layer_edit.setText(str(initial.layer))
+        self.folder_edit.textChanged.connect(self._update_validity)
+        self.layer_kind.currentIndexChanged.connect(self._update_validity)
+        self.layer_edit.textChanged.connect(self._update_validity)
+        self._update_validity()
+        self._set_unsaved_changes_state(
+            lambda: (
+                self.folder_edit.text(),
+                self.layer_kind.currentIndex(),
+                self.layer_edit.text(),
+            )
+        )
+
+    def _folder(self) -> str | None:
+        try:
+            folder = normalize_qgis_folder(self.folder_edit.text())
+        except ValueError:
+            return None
+        return None if folder in self._used_folders else folder
+
+    def _layer(self) -> str | int | None:
+        text = self.layer_edit.text()
+        if self.layer_kind.currentIndex() == 0:
+            return text if text.strip() else None
+        index = text.strip()
+        if index.isascii() and index.isdecimal():
+            try:
+                return int(index)
+            except ValueError:
+                pass
+        return None
+
+    def _update_validity(self) -> None:
+        self.layer_edit.setPlaceholderText(
+            "Zero-based layer index"
+            if self.layer_kind.currentIndex()
+            else "Exact layer label"
+        )
+        folder_valid = self._folder() is not None
+        layer_valid = self._layer() is not None
+        self.folder_edit.setStyleSheet("" if folder_valid else _INVALID_STYLE)
+        self.layer_edit.setStyleSheet("" if layer_valid else _INVALID_STYLE)
+        self.ok_btn.setEnabled(folder_valid and layer_valid)
+
+    def get_value(self) -> QgisLayerMapping:
+        folder, layer = self._folder(), self._layer()
+        assert folder is not None and layer is not None
+        return QgisLayerMapping(folder, layer)
+
+
+class _QgisMappingsDialog(_ListEditorDialog[QgisLayerMapping]):
+    def __init__(self, mappings: tuple[QgisLayerMapping, ...], parent=None):
+        super().__init__(
+            "QGIS Layer Mappings",
+            "folder mapping",
+            list(mappings),
+            lambda mapping: mapping.folder,
+            parent,
+        )
+
+    def _entry_dialog(self, index: int | None) -> _QgisMappingDialog:
+        return _QgisMappingDialog(
+            None if index is None else self._entries[index],
+            {mapping.folder for i, mapping in enumerate(self._entries) if i != index},
+            parent=self,
+        )
+
+
+class QgisRemoteControlEditor(QWidget):
+    value_changed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._mappings: tuple[QgisLayerMapping, ...] = ()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        self.enabled_checkbox = QCheckBox("QGIS Remote Control", self)
+        layout.addWidget(self.enabled_checkbox)
+        self.socket_edit = QLineEdit(self)
+        self.socket_edit.setAccessibleName("Qt socket name")
+        self.socket_edit.setPlaceholderText("Qt socket name")
+        self.socket_edit.setEnabled(False)
+        layout.addWidget(self.socket_edit, 1)
+        self.mappings_btn = QPushButton("Edit mappings…", self)
+        self.mappings_btn.setAttribute(Qt.WidgetAttribute.WA_LayoutUsesWidgetRect)
+        layout.addWidget(self.mappings_btn)
+
+        self.enabled_checkbox.toggled.connect(self.socket_edit.setEnabled)
+        self.enabled_checkbox.toggled.connect(self._update_socket_validity)
+        self.enabled_checkbox.toggled.connect(self.value_changed)
+        self.socket_edit.textChanged.connect(self._update_socket_validity)
+        self.socket_edit.editingFinished.connect(self.value_changed)
+        self.mappings_btn.clicked.connect(self._on_edit_mappings)
+
+    def _update_socket_validity(self) -> None:
+        self.socket_edit.setStyleSheet("" if self.is_valid() else _INVALID_STYLE)
+
+    def _on_edit_mappings(self) -> None:
+        dialog = _QgisMappingsDialog(self._mappings, parent=self)
+        with managed_modal_dialog(dialog):
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            self._mappings = tuple(dialog.get_value())
+        self.value_changed.emit()
+
+    def is_valid(self) -> bool:
+        return not self.enabled_checkbox.isChecked() or bool(
+            self.socket_edit.text().strip()
+        )
+
+    def set_value(self, value: QgisRemoteControlSettings) -> None:
+        self._mappings = value.mappings
+        self.socket_edit.setText(value.socket_name)
+        self.enabled_checkbox.setChecked(value.enabled)
+
+    def get_value(self) -> QgisRemoteControlSettings:
+        return QgisRemoteControlSettings(
+            self.enabled_checkbox.isChecked(),
+            self.socket_edit.text().strip(),
+            self._mappings,
+        )

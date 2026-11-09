@@ -24,6 +24,7 @@ class EditorKind(Enum):
     SHORTCUTS = auto()
     MANUAL_LENSES = auto()
     MAP_LINKS = auto()
+    QGIS_REMOTE_CONTROL = auto()
     LABEL_TRANSITIONS = auto()
     STATUS_LABEL_COMBO = auto()
 
@@ -167,6 +168,11 @@ SETTINGS_TABS: list[TabSpec] = [
                         key=UserSettingKey.MAP_LINKS,
                         label="Map links",
                         editor=EditorKind.MAP_LINKS,
+                    ),
+                    FieldSpec(
+                        key=UserSettingKey.QGIS_REMOTE_CONTROL,
+                        label="",
+                        editor=EditorKind.QGIS_REMOTE_CONTROL,
                     ),
                 ],
             ),

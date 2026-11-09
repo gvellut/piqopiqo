@@ -24,7 +24,7 @@ import pytest
 
 from piqopiqo.color_management import ScreenColorProfileMode
 from piqopiqo.main_window import MainWindow
-from piqopiqo.model import LabelTransitionRule, StatusLabel
+from piqopiqo.model import LabelTransitionRule, MapLinkOption, StatusLabel
 from piqopiqo.settings_panel import label_transitions_editor as lte
 from piqopiqo.settings_panel.dialog import (
     SettingsDialog,
@@ -519,12 +519,12 @@ def test_settings_dialog_keeps_simple_rows_at_natural_height(qapp, monkeypatch):
     edit_btn = next(
         button
         for button in map_links_editor.findChildren(QPushButton)
-        if button.text() == "Edit..."
+        if button.text() == "Edit HTTP templates…"
     )
     summary_label = next(
         label
         for label in map_links_editor.findChildren(QLabel)
-        if "options defined" in label.text()
+        if "HTTP options" in label.text()
     )
     summary_top = summary_label.mapTo(
         map_links_editor, summary_label.rect().topLeft()
@@ -538,6 +538,42 @@ def test_settings_dialog_keeps_simple_rows_at_natural_height(qapp, monkeypatch):
     assert edit_btn.testAttribute(Qt.WidgetAttribute.WA_LayoutUsesWidgetRect)
     assert summary_top == 0
     assert summary_label.alignment() & Qt.AlignmentFlag.AlignVCenter
+
+
+def test_map_links_rows_count_http_and_qgis(qapp, monkeypatch):
+    monkeypatch.delenv("PIQO_SETTINGS_PANEL_SAVE_MODE", raising=False)
+    init_qsettings_store(dyn=True)
+    set_user_setting(
+        UserSettingKey.MAP_LINKS,
+        [
+            MapLinkOption("Map A", "https://example.com/{lat}/{lon}"),
+        ],
+    )
+    dialog = SettingsDialog(initial_tab_title="Interface")
+    dialog.show()
+    qapp.processEvents()
+
+    rows = _settings_layout_rows(_section_layout(dialog, "Metadata Panel"))
+    (label, total), (_, http), (_, qgis) = rows[-3:]
+    assert label.text() == "Map links"
+    assert total.x() == http.x() == qgis.x()
+    assert total.y() < http.y() < qgis.y()
+    assert not total.findChildren(QPushButton)
+    assert total.text() == "1 option defined"
+    assert http._editor._summary_label.text() == "1 HTTP option"
+    assert not qgis._editor.socket_edit.isEnabled()
+    assert qgis._editor.socket_edit.text() == "qgis-remote-control"
+
+    qgis._editor.enabled_checkbox.click()
+    assert total.text() == "2 options defined"
+    assert http._editor._summary_label.text() == "1 HTTP option"
+    assert qgis._editor.socket_edit.isEnabled()
+    qgis._editor.socket_edit.setText("  ")
+    qgis._editor.socket_edit.editingFinished.emit()
+    assert not dialog._save_btn.isEnabled()
+    qgis._editor.enabled_checkbox.click()
+    assert total.text() == "1 option defined"
+    assert dialog._save_btn.isEnabled()
 
 
 def test_settings_dialog_scroll_area_preserves_manual_lens_minimums(qapp, monkeypatch):

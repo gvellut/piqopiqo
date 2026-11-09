@@ -16,6 +16,8 @@ from piqopiqo.model import (
     LabelTransitionRule,
     ManualLensPreset,
     MapLinkOption,
+    QgisLayerMapping,
+    QgisRemoteControlSettings,
     StatusLabel,
     TimeShiftOcrProvider,
 )
@@ -100,6 +102,8 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_PILLOW_FOR_EXTRACT_IMAGE_COLOR_PROFILE",
         "PIQO_OCR_TIME_SHIFT_PROVIDER",
         "PIQO_MAP_LINKS",
+        "PIQO_QGIS_REMOTE_CONTROL",
+        "PIQO_QGIS_REMOTE_CONTROL_TIMEOUT_MS",
         "PIQO_FLICKR_UPLOAD_USE_LIFECYCLE",
         "PIQO_FLICKR_UPLOAD_LABEL_TRANSITIONS",
         "PIQO_FLICKR_UPLOAD_APPLY_TRANSITIONS",
@@ -414,6 +418,22 @@ def test_map_links_env_override(isolated_settings, monkeypatch):
             url_template="https://maps.example/?q={lat},{lon}",
         ),
     ]
+
+
+def test_qgis_remote_control_round_trip(isolated_settings):
+    key = UserSettingKey.QGIS_REMOTE_CONTROL
+    assert get_user_setting(key) == QgisRemoteControlSettings()
+    settings = QgisRemoteControlSettings(
+        enabled=True,
+        socket_name="qgis-test",
+        mappings=(QgisLayerMapping(".", 0), QgisLayerMapping("Paris", "0")),
+    )
+    set_user_setting(key, settings)
+    init_qsettings_store(dyn=False)
+
+    assert get_user_setting(key) == settings
+    assert get_user_setting(UserSettingKey.MAP_LINKS) == []
+    assert get_runtime_setting(RuntimeSettingKey.QGIS_REMOTE_CONTROL_TIMEOUT_MS) == 5000
 
 
 def test_env_override_takes_priority_over_persisted_values(

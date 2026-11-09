@@ -28,7 +28,7 @@ from .label_transitions_editor import (
     StatusLabelProvider,
 )
 from .manual_lenses_editor import ManualLensesEditor
-from .map_links_editor import MapLinksEditor
+from .map_links_editor import MapLinksEditor, QgisRemoteControlEditor
 from .schema import ChoiceOption, EditorKind
 from .shortcuts_editor import ShortcutsEditor
 from .status_labels_editor import StatusLabelsEditor
@@ -408,6 +408,25 @@ class MapLinksEditorAdapter(BaseEditor):
         return self._editor.is_valid()
 
 
+class QgisRemoteControlEditorAdapter(BaseEditor):
+    def __init__(self):
+        super().__init__()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self._editor = QgisRemoteControlEditor()
+        self._editor.value_changed.connect(self.value_changed)
+        layout.addWidget(self._editor)
+
+    def set_value(self, value):
+        self._editor.set_value(value)
+
+    def get_value(self):
+        return self._editor.get_value()
+
+    def is_valid(self) -> bool:
+        return self._editor.is_valid()
+
+
 class LabelTransitionsEditorAdapter(BaseEditor):
     def __init__(self, status_label_provider: StatusLabelProvider | None = None):
         super().__init__()
@@ -498,6 +517,8 @@ def build_editor(kind: EditorKind, **kwargs) -> BaseEditor:
         return ManualLensesEditorAdapter()
     if kind == EditorKind.MAP_LINKS:
         return MapLinksEditorAdapter()
+    if kind == EditorKind.QGIS_REMOTE_CONTROL:
+        return QgisRemoteControlEditorAdapter()
     if kind == EditorKind.LABEL_TRANSITIONS:
         return LabelTransitionsEditorAdapter()
     if kind == EditorKind.STATUS_LABEL_COMBO:

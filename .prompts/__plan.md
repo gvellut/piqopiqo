@@ -160,3 +160,4 @@
 ! [White border label fullscreen](Ee_tasks/Ge_White_border_label_fullscreen.md)
 ! [reorder when creating album](Ee_tasks/He_reorder_when_creating_album.md)
 ! [Fix fullscreen zoom mixed](Ee_tasks/Ie_Fix_fullscreen_zoom_mixed.md)
+! [Add Qgis map option](Ee_tasks/Je_Add_Qgis_map_option.md)

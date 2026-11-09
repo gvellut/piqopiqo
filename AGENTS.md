@@ -86,6 +86,7 @@ src/piqopiqo/
 ├── ssf
     ├── settings_state.py # QSettings-backed state + settings registries/accessors
 ├── photo_model.py   # PhotoListModel: filtering, sorting, selection, add/remove photos
+├── qgis_remote_control.py # Map action worker, workspace-relative layer lookup and QGIS local socket commands
 ├── shortcuts.py     # Keyboard shortcut utilities + view-scope shortcut registries
 ├── storage.py       # Qt-free storage write probes + full-volume fault payloads/classification
 ├── model.py         # Data models (ImageItem, FilterCriteria, StatusLabel, ExifField)
@@ -131,6 +132,7 @@ src/piqopiqo/
 │   ├── dialog.py
 │   ├── schema.py
 │   ├── editors.py
+│   ├── map_links_editor.py # HTTP template and QGIS layer mapping editors with a shared list dialog
 │   ├── manual_lenses_editor.py
 │   ├── status_labels_editor.py
 │   └── shortcuts_editor.py
@@ -173,6 +175,7 @@ tests/
 ├── test_fullscreen_navigation_zoom.py # Absolute zoom across mixed orientations/resolutions, Retina, pan and fallback
 ├── test_unsaved_changes_dialog.py # Shared dirty-dialog dismissal behavior
 ├── test_edit_panel.py # Edit panel UI behavior, including Keywords focus/paste preservation and save normalization
+├── test_qgis_remote_control.py # Workspace-relative layer resolution and acknowledged select/zoom requests
 ├── test_exif_panel.py # EXIF panel formatting, 35 mm focal length fallback, and pending selection summary
 ├── test_photo_grid_shortcuts.py # Grid view-scoped shortcut ownership + text-input guard behavior
 ├── test_photo_grid_selection_refresh.py # Visible-only grid selection highlight refresh path
@@ -236,6 +239,8 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - `UserSettingKey.FORCE_SRGB` (default `False`) skips image-profile extraction and tags fullscreen/grid images as sRGB before optional screen conversion.
 - `UserSettingKey.SCREEN_COLOR_PROFILE` (default `FROM_MAIN_SCREEN`) controls the display conversion target (`From main screen`, `sRGB`, `Display P3`, `Bt2020`, `No conversion`) used by fullscreen and color-managed thumbnails.
 - `UserSettingKey.SHOW_DESCRIPTION_FIELD` (default `True`) controls whether the Description editor row is shown in the Metadata panel (`EditPanel`); hiding it is UI-only and does not change DB/EXIF behavior.
+- `UserSettingKey.QGIS_REMOTE_CONTROL` stores the optional QGIS Map action, its socket name (`qgis-remote-control` by default), and workspace-relative folder mappings to exact layer labels or zero-based indexes. HTTP templates keep their own setting.
+- `RuntimeSettingKey.QGIS_REMOTE_CONTROL_TIMEOUT_MS` (default `5000`) limits the full QGIS socket exchange. Override it with `PIQO_QGIS_REMOTE_CONTROL_TIMEOUT_MS`.
 - `UserSettingKey.MANUAL_LENSES` (default `[]`) stores lens presets used by `Tools > Set Lens Info ...`.
 - `StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER` (default `True`) remembers whether Flickr album reorder saves the current order first.
 - `UserSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS` (default `False`) adds a final album-ordering stage only after photos are added to a newly created Flickr album.
@@ -304,6 +309,7 @@ The edit panel supports editing metadata fields (title, description, keywords, c
 - **Enter/Tab**: Saves the field and moves focus
 - **Escape**: Reverts changes and cancels edit
 - Validation is applied for coordinates and datetime fields (red border on invalid input)
+- **Map** requires a single selected photo with valid coordinates. QGIS uses the workspace-relative parent folder as the layer label when there is no mapping, with `.` for the workspace root. The Qt worker matches the full filename against `Name` and sends `zoomToSelection` after `select` succeeds.
 
 ## Save EXIF (Tools Menu)
 

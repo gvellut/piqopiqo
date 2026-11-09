@@ -61,6 +61,7 @@ class EditPanel(QWidget):
     edit_finished = Signal()  # Emitted when editing is complete (for focus return)
     interaction_finished = Signal()  # Explicit user completion/cancel for focus restore
     metadata_saved = Signal(str)  # DBFields name for synchronization
+    qgis_map_requested = Signal(str)  # photo path
 
     def __init__(self, db_manager: MetadataDBManager, parent=None):
         super().__init__(parent)
@@ -74,6 +75,7 @@ class EditPanel(QWidget):
         self._show_description_field = True
         self._show_hidden_metadata_fields_if_not_empty = False
         self._map_links: list[MapLinkOption] = []
+        self._qgis_map_enabled = False
         self._map_menu: QMenu | None = None
 
         self._setup_ui()
@@ -326,8 +328,14 @@ class EditPanel(QWidget):
 
     def reload_map_links(self) -> None:
         self._map_links = list(get_user_setting(UserSettingKey.MAP_LINKS) or [])
-        has_map_links = bool(self._map_links)
-        self.map_btn.setVisible(has_map_links)
+        self._qgis_map_enabled = get_user_setting(
+            UserSettingKey.QGIS_REMOTE_CONTROL
+        ).enabled
+        self.map_btn.setVisible(bool(self._map_links) or self._qgis_map_enabled)
+        if self._map_menu is not None:
+            self._map_menu.close()
+            self._map_menu.deleteLater()
+            self._map_menu = None
         self._update_map_button_state()
 
     def _metadata_value_is_visible(self, value: object) -> bool:
@@ -569,12 +577,14 @@ class EditPanel(QWidget):
         webbrowser.open_new_tab(url)
 
     def _on_open_map(self) -> None:
-        if not self.map_btn.isEnabled() or not self._map_links:
+        if not self.map_btn.isEnabled():
             return
 
-        if len(self._map_links) == 1:
-            self._map_menu = None
-            self._open_map_option(self._map_links[0])
+        if len(self._map_links) + self._qgis_map_enabled == 1:
+            if self._qgis_map_enabled:
+                self._request_qgis_map()
+            else:
+                self._open_map_option(self._map_links[0])
             return
 
         if self._map_menu is not None:
@@ -588,8 +598,14 @@ class EditPanel(QWidget):
                     current_option
                 )
             )
+        if self._qgis_map_enabled:
+            menu.addAction("QGIS Remote Control", self._request_qgis_map)
         self._map_menu = menu
         menu.popup(self.map_btn.mapToGlobal(self.map_btn.rect().bottomLeft()))
+
+    def _request_qgis_map(self) -> None:
+        if self._qgis_map_enabled and self.map_btn.isEnabled():
+            self.qgis_map_requested.emit(self._current_items[0].path)
 
     def _on_field_saved(self, field_name: str):
         """Handle field save event."""

@@ -22,8 +22,11 @@ from piqopiqo.model import (
     ManualLensPreset,
     MapLinkOption,
     OnFullscreenExitMultipleSelected,
+    QgisLayerMapping,
+    QgisRemoteControlSettings,
     StatusLabel,
     TimeShiftOcrProvider,
+    normalize_qgis_folder,
 )
 from piqopiqo.photo_model import SortOrder
 from piqopiqo.shortcuts import Shortcut
@@ -97,6 +100,7 @@ class UserSettingKey(StrEnum):
     SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY = "showHiddenMetadataFieldsIfNotEmpty"
     PROTECT_NON_TEXT_METADATA = "protectNonTextMetadata"
     MAP_LINKS = "mapLinks"
+    QGIS_REMOTE_CONTROL = "qgisRemoteControl"
     STATUS_LABELS = "statusLabels"
     EXTERNAL_VIEWER = "externalViewer"
     EXTERNAL_EDITOR = "externalEditor"
@@ -147,6 +151,7 @@ class RuntimeSettingKey(StrEnum):
     MIN_IDLE_WORKERS = "minIdleWorkers"
     MAX_EXIFTOOLS_IMAGE_BATCH = "maxExiftoolsImageBatch"
     SHUTDOWN_TIMEOUT_S = "shutdownTimeoutS"
+    QGIS_REMOTE_CONTROL_TIMEOUT_MS = "qgisRemoteControlTimeoutMs"
     COPY_SD_EJECT_TIMEOUT_S = "copySdEjectTimeoutS"
     PADDING = "padding"
     FONT_SIZE = "fontSize"
@@ -371,6 +376,51 @@ def _deserialize_map_links(data: Any) -> list[MapLinkOption]:
             )
         )
     return out
+
+
+def _serialize_qgis_remote_control(value: QgisRemoteControlSettings) -> dict:
+    return {
+        "enabled": value.enabled,
+        "socket_name": value.socket_name,
+        "mappings": [
+            {"folder": mapping.folder, "layer": mapping.layer}
+            for mapping in value.mappings
+        ],
+    }
+
+
+def _deserialize_qgis_remote_control(data: Any) -> QgisRemoteControlSettings:
+    if not isinstance(data, dict):
+        raise ValueError("Expected an object for QGIS Remote Control settings")
+
+    defaults = QgisRemoteControlSettings()
+    enabled = data.get("enabled", defaults.enabled)
+    socket_name = data.get("socket_name", defaults.socket_name)
+    rows = data.get("mappings", [])
+    if not isinstance(enabled, bool) or not isinstance(socket_name, str):
+        raise ValueError("Invalid QGIS Remote Control setting")
+    socket_name = socket_name.strip()
+    if (enabled and not socket_name) or not isinstance(rows, list):
+        raise ValueError("Invalid QGIS socket name or mapping list")
+
+    mappings: dict[str, str | int] = {}
+    for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get("folder"), str):
+            raise ValueError("Invalid QGIS folder mapping")
+        folder = normalize_qgis_folder(row["folder"])
+        layer = row.get("layer")
+        valid_layer = (isinstance(layer, str) and bool(layer.strip())) or (
+            type(layer) is int and layer >= 0
+        )
+        if folder in mappings or not valid_layer:
+            raise ValueError("Duplicate QGIS folder or invalid layer")
+        mappings[folder] = layer
+
+    return QgisRemoteControlSettings(
+        enabled,
+        socket_name,
+        tuple(QgisLayerMapping(folder, layer) for folder, layer in mappings.items()),
+    )
 
 
 def _serialize_label_transition_rules(
@@ -655,6 +705,15 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         deserializer=_deserialize_map_links,
         env_parser=lambda raw: _deserialize_map_links(_parse_json(raw)),
     ),
+    UserSettingKey.QGIS_REMOTE_CONTROL: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default=QgisRemoteControlSettings(),
+        read_type=str,
+        json_storage=True,
+        serializer=_serialize_qgis_remote_control,
+        deserializer=_deserialize_qgis_remote_control,
+        env_parser=lambda raw: _deserialize_qgis_remote_control(_parse_json(raw)),
+    ),
     UserSettingKey.STATUS_LABELS: SettingDef(
         group=SettingsGroup.SETTINGS,
         default=[
@@ -900,6 +959,9 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.MIN_IDLE_WORKERS: SettingDef(default=1, read_type=int),
     RuntimeSettingKey.MAX_EXIFTOOLS_IMAGE_BATCH: SettingDef(default=8, read_type=int),
     RuntimeSettingKey.SHUTDOWN_TIMEOUT_S: SettingDef(default=5.0, read_type=float),
+    RuntimeSettingKey.QGIS_REMOTE_CONTROL_TIMEOUT_MS: SettingDef(
+        default=5000, read_type=int
+    ),
     RuntimeSettingKey.COPY_SD_EJECT_TIMEOUT_S: SettingDef(
         default=30.0, read_type=float
     ),

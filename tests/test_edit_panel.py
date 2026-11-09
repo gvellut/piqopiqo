@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication, QLineEdit, QMessageBox
 import pytest
 
 from piqopiqo.metadata.db_fields import DBFields
-from piqopiqo.model import ImageItem, MapLinkOption
+from piqopiqo.model import ImageItem, MapLinkOption, QgisRemoteControlSettings
 from piqopiqo.panels.edit_panel import EditPanel
 from piqopiqo.panels.edit_widgets import MULTIPLE_VALUES, KeywordsEdit
 from piqopiqo.panels.keyword.keyword_tree import KeywordTreeManager
@@ -1243,3 +1243,53 @@ def test_map_button_builds_menu_for_multiple_options(monkeypatch, qapp):
     panel._map_menu.actions()[1].trigger()
 
     assert opened_urls == ["https://www.openstreetmap.org/#map=15/48.8566/2.3522"]
+
+
+@pytest.mark.parametrize("include_http", [False, True])
+def test_map_button_opens_qgis_only_for_single_photo_with_gps(
+    include_http,
+    monkeypatch,
+    qapp,
+):
+    init_qsettings_store(dyn=True)
+    set_user_setting(
+        UserSettingKey.QGIS_REMOTE_CONTROL, QgisRemoteControlSettings(enabled=True)
+    )
+    if include_http:
+        set_user_setting(
+            UserSettingKey.MAP_LINKS,
+            [
+                MapLinkOption("HTTP Map", "https://example.com/{lat}/{lon}"),
+            ],
+        )
+    monkeypatch.setattr("piqopiqo.panels.edit_panel.QMenu.popup", lambda *_args: None)
+    panel = EditPanel(_StubDBManager())
+    item = ImageItem(
+        path="/tmp/Paris/DSCF1234.JPG", name="DSCF1234.JPG", created="", db_metadata={}
+    )
+    another = ImageItem(path="/tmp/Paris/DSCF1235.JPG", name="DSCF1235.JPG", created="")
+    requested: list[str] = []
+    panel.qgis_map_requested.connect(requested.append)
+
+    assert not panel.map_btn.isHidden()
+    panel.update_for_selection([item])
+    assert not panel.map_btn.isEnabled()
+    item.db_metadata = {DBFields.LATITUDE: "48", DBFields.LONGITUDE: "2"}
+    another.db_metadata = item.db_metadata.copy()
+    panel.update_for_selection([item, another])
+    assert not panel.map_btn.isEnabled()
+    panel.update_for_selection([item])
+    assert panel.map_btn.isEnabled()
+
+    panel.map_btn.click()
+    if include_http:
+        assert not requested
+        actions = panel._map_menu.actions()
+        assert [action.text() for action in actions] == [
+            "HTTP Map",
+            "QGIS Remote Control",
+        ]
+        actions[-1].trigger()
+    else:
+        assert panel._map_menu is None
+    assert requested == [item.path]

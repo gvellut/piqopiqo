@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 )
 import pytest
 
-from piqopiqo.model import MapLinkOption
+from piqopiqo.model import MapLinkOption, QgisLayerMapping, QgisRemoteControlSettings
 from piqopiqo.settings_panel import map_links_editor as mle
 
 
@@ -182,7 +182,7 @@ def test_map_links_dialog_add_edit_delete_and_button_state(monkeypatch, qapp):  
 
 def test_map_links_editor_summary_updates_after_dialog_accept(monkeypatch, qapp):  # noqa: ARG001
     editor = mle.MapLinksEditor()
-    assert editor._summary_label.text() == "0 options defined"
+    assert editor._summary_label.text() == "0 HTTP options"
 
     returned_options = [
         MapLinkOption(
@@ -214,6 +214,42 @@ def test_map_links_editor_summary_updates_after_dialog_accept(monkeypatch, qapp)
     editor.value_changed.connect(lambda: emitted.append(True))
     editor._on_edit()
 
-    assert editor._summary_label.text() == "2 options defined"
+    assert editor._summary_label.text() == "2 HTTP options"
     assert editor.get_value() == returned_options
     assert emitted == [True]
+
+
+def test_qgis_mapping_normalizes_path_and_keeps_label_and_index_distinct(qapp):  # noqa: ARG001
+    dialog = mle._QgisMappingDialog(None, {"2026/Paris"})
+    dialog.layer_edit.setText("0")
+    for invalid_path in ("", "./2026//Paris/", "/Paris", "../Paris"):
+        dialog.folder_edit.setText(invalid_path)
+        assert not dialog.ok_btn.isEnabled()
+
+    dialog.folder_edit.setText("./2026//Lyon/")
+    assert dialog.ok_btn.isEnabled()
+    assert dialog.get_value() == QgisLayerMapping("2026/Lyon", "0")
+    dialog.layer_kind.setCurrentIndex(1)
+    assert dialog.get_value() == QgisLayerMapping("2026/Lyon", 0)
+    dialog.layer_edit.setText("-1")
+    assert not dialog.ok_btn.isEnabled()
+
+
+def test_qgis_mapping_manager_cancel_discards_changes(monkeypatch, qapp):  # noqa: ARG001
+    editor = mle.QgisRemoteControlEditor()
+    original = QgisRemoteControlSettings(mappings=(QgisLayerMapping(".", 0),))
+    editor.set_value(original)
+    results = iter((QDialog.DialogCode.Rejected, QDialog.DialogCode.Accepted))
+
+    def edit_list(dialog):
+        dialog._list.setCurrentRow(0)
+        dialog._on_delete()
+        assert dialog.get_value() == []
+        return next(results)
+
+    monkeypatch.setattr(mle._QgisMappingsDialog, "exec", edit_list)
+    assert editor.mappings_btn.isEnabled()
+    editor.mappings_btn.click()
+    assert editor.get_value() == original
+    editor.mappings_btn.click()
+    assert editor.get_value() == QgisRemoteControlSettings()

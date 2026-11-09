@@ -65,6 +65,7 @@ from .model import (
 from .orientation import rotate_orientation_left, rotate_orientation_right
 from .panels import EditPanel, ExifPanel, FilterPanel
 from .photo_model import PhotoListModel, SortOrder
+from .qgis_remote_control import QgisPhotoWorker
 from .qt_workers import PythonOwnedRunnable
 from .settings_panel import SettingsDialog
 from .settings_panel.schema import get_settings_tab_title_for_key
@@ -185,6 +186,7 @@ class MainWindow(QMainWindow):
         self._active_apply_gpx_worker = None
         self._active_flickr_upload_manager = None
         self._active_flickr_metadata_precheck_worker = None
+        self._qgis_photo_worker: QgisPhotoWorker | None = None
         self._shutdown_started = False
         self._selected_paths_cache: set[str] = set()
         self._selected_count_cache = 0
@@ -273,6 +275,7 @@ class MainWindow(QMainWindow):
                 self._schedule_grid_focus_restore
             )
             self.edit_panel.metadata_saved.connect(self._on_edit_panel_metadata_saved)
+            self.edit_panel.qgis_map_requested.connect(self._on_qgis_map_requested)
             self._right_splitter.addWidget(self.edit_panel)
 
             self.exif_panel = ExifPanel()
@@ -2410,6 +2413,45 @@ class MainWindow(QMainWindow):
         )
         self._apply_settings_changes({resolved_key})
 
+    def _on_qgis_map_requested(self, photo_path: str) -> None:
+        if (
+            self._shutdown_started
+            or self._qgis_photo_worker is not None
+            or not self.root_folder
+        ):
+            return
+
+        settings = get_user_setting(UserSettingKey.QGIS_REMOTE_CONTROL)
+        if not settings.enabled:
+            return
+        timeout_ms = get_runtime_setting(
+            RuntimeSettingKey.QGIS_REMOTE_CONTROL_TIMEOUT_MS
+        )
+        worker = QgisPhotoWorker(photo_path, self.root_folder, settings, timeout_ms)
+        worker.signals.finished.connect(
+            self._on_qgis_map_finished, Qt.ConnectionType.QueuedConnection
+        )
+        self._qgis_photo_worker = worker
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_qgis_map_finished(self, error_message: str | None) -> None:
+        self._qgis_photo_worker = None
+        if error_message is None:
+            return
+        logger.warning("QGIS Remote Control: %s", error_message)
+        if self._shutdown_started or not self.isVisible():
+            return
+        dialog = QMessageBox(
+            QMessageBox.Icon.Warning,
+            "QGIS Remote Control",
+            error_message,
+            QMessageBox.StandardButton.Ok,
+            self,
+        )
+        dialog.setTextFormat(Qt.TextFormat.PlainText)
+        with managed_modal_dialog(dialog):
+            dialog.exec()
+
     def _get_grid_num_column_bounds(self) -> tuple[int, int]:
         min_cols = max(
             1,
@@ -2601,7 +2643,10 @@ class MainWindow(QMainWindow):
                 bool(get_user_setting(UserSettingKey.PROTECT_NON_TEXT_METADATA))
             )
 
-        if UserSettingKey.MAP_LINKS in changed_keys and self.edit_panel is not None:
+        if self.edit_panel is not None and changed_keys & {
+            UserSettingKey.MAP_LINKS,
+            UserSettingKey.QGIS_REMOTE_CONTROL,
+        }:
             self.edit_panel.reload_map_links()
 
         if (
