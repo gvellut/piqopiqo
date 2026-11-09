@@ -591,7 +591,10 @@ class MainWindow(QMainWindow):
             # Capture the current label before changing
             previous_labels[item.path] = item.db_metadata.get(DBFields.LABEL)
 
-        if record_undo:
+        if record_undo and any(
+            (previous_label or "") != (label_name or "")
+            for previous_label in previous_labels.values()
+        ):
             self._record_label_undo_entry(
                 selected_items,
                 previous_labels,
@@ -777,10 +780,9 @@ class MainWindow(QMainWindow):
             source="undo_redo_label",
             allow_fullscreen_filter=True,
         )
-        if not is_redo:
-            self._restore_visible_items_after_label_undo(entry)
+        self._select_visible_items_from_label_entry(entry)
 
-    def _restore_visible_items_after_label_undo(
+    def _select_visible_items_from_label_entry(
         self,
         entry: LabelUndoEntry,
     ) -> None:

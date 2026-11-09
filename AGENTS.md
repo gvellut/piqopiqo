@@ -180,6 +180,7 @@ tests/
 ├── test_exif_panel.py # EXIF panel formatting, 35 mm focal length fallback, and pending selection summary
 ├── test_photo_grid_shortcuts.py # Grid view-scoped shortcut ownership + text-input guard behavior
 ├── test_photo_grid_selection_refresh.py # Visible-only grid selection highlight refresh path
+├── test_main_window_label_undo.py # Label undo/redo history and selection after filtering
 ├── test_flickr_upload_timeouts.py # Flickr API timeout-class and worker-payload coverage
 ├── test_flickr_upload_reorder.py # New-album early-stop insertion, configurable cutoff, exhaustion and backup behavior
 ├── test_flickr_upload_dialogs.py # Flickr upload dialogs, single-line album progress and content-sized phase transitions
@@ -481,6 +482,7 @@ Selection behavior:
 - Flickr Upload new-album reorder uses `reorder_progress(completed, total, status, album_title)`: keep the stage and bounded runtime-window count on the same top row, with `Fetching dates...` and a plain-text, single-line elided album title below. Normalize embedded title line breaks to spaces and fall back to the album ID. Hide the title outside date fetching and clear reorder details on stage exit/completion; resize to visible content when entering or leaving loading, fetching, applying, and result phases. Title length must never change dialog dimensions.
 - Model/filter/sort synchronization after metadata writes is centralized in `MainWindow.sync_model_after_metadata_update(...)`. Any new feature/tool that mutates metadata DB fields must call this method with the changed fields so grid filtering, sort order, selection panels, and fullscreen loop state stay consistent.
 - `PhotoGrid` owns grid label shortcuts plus shared grid-view `Space`/`Select All` shortcuts. `FullscreenOverlay` owns fullscreen label shortcuts and zoom/navigation keys. Fullscreen label shortcuts act on the current fullscreen image only; grid label undo/redo is disabled/ignored while fullscreen is active.
+- Preserve the current label undo/redo entry when all target photos already have the requested label. A missing or empty label counts as unlabeled. Undo and Redo both reselect the photos in the entry that pass the current grid filter after the labels are applied.
 - Grid shared-view shortcuts (`Space`, `Select All`) are attached to the central grid+panels scope so they still work after non-text panel interactions, but editable text widgets win focus (search/metadata fields keep normal typing + `Cmd+A` text selection).
 - `MainWindow` binds menu actions from **Settings > Shortcuts > Tool Shortcuts** and refreshes them after saves. The defaults are `Cmd+Shift+Z` for Undo/Redo Label, `Cmd+Shift+C` for Copy from SD, `Cmd+Shift+G` for Apply GPX, and `Cmd+Shift+U` for Upload to Flickr. Older shortcut mappings receive defaults for missing tool keys. Save cleared tool fields as explicit empty strings to keep them disabled.
 - When fullscreen opens, `MainWindow` disables all menu actions (and their menu shortcuts) except Quit; this prevents `Cmd+O`, `Cmd+,`, and future menu shortcuts from acting on the hidden grid view.

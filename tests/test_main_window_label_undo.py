@@ -419,11 +419,11 @@ class _LabelUndoWindow:
     def _on_undo_redo_label(self) -> None:
         MainWindow._on_undo_redo_label(self)
 
-    def _restore_visible_items_after_label_undo(
+    def _select_visible_items_from_label_entry(
         self,
         entry: LabelUndoEntry,
     ) -> None:
-        MainWindow._restore_visible_items_after_label_undo(self, entry)
+        MainWindow._select_visible_items_from_label_entry(self, entry)
 
     def _refresh_undo_label_action_enabled_for_context(self) -> None:
         MainWindow._refresh_undo_label_action_enabled_for_context(self)
@@ -498,6 +498,66 @@ def _patch_label_undo_environment(monkeypatch) -> None:
             "metadata": metadata,
         },
     )
+
+
+def test_reapplying_current_label_preserves_undo_and_redo(monkeypatch):
+    _patch_label_undo_environment(monkeypatch)
+
+    model = PhotoListModel(MetadataDBManager())
+    first = _item("/photos/a.jpg", label="", selected=True)
+    second = _item("/photos/b.jpg", label="Approved")
+    model.set_photos([first, second], ["/photos"])
+    window = _LabelUndoWindow(model)
+
+    window._apply_label_to_grid_selection(None)
+
+    assert window._label_undo_entry is None
+    assert not window._undo_label_action.enabled
+
+    window._apply_label_to_grid_selection("Approved")
+    entry = window._label_undo_entry
+    assert entry is not None
+
+    window.select_paths_in_grid([second.path])
+    window._apply_label_to_grid_selection("Approved")
+
+    assert window._label_undo_entry is entry
+    assert window._undo_label_action.text == "Undo label"
+
+    window._on_undo_redo_label()
+    assert not first.db_metadata[DBFields.LABEL]
+    window._apply_label_to_grid_selection(None)
+
+    assert window._label_undo_entry is entry
+    assert window._undo_label_action.text == "Redo label"
+
+    window._on_undo_redo_label()
+    assert first.db_metadata[DBFields.LABEL] == "Approved"
+
+
+def test_redo_selects_only_visible_affected_photos(monkeypatch):
+    _patch_label_undo_environment(monkeypatch)
+
+    model = PhotoListModel(MetadataDBManager())
+    hidden = _item("/photos/a.jpg", label="Approved", selected=True)
+    visible = _item("/photos/b.jpg", label="Approved", selected=True)
+    unrelated = _item("/photos/c.jpg", label="Approved")
+    visible.db_metadata[DBFields.TITLE] = "Keep"
+    unrelated.db_metadata[DBFields.TITLE] = "Keep"
+    model.set_photos([hidden, visible, unrelated], ["/photos"])
+    window = _LabelUndoWindow(model)
+
+    window._apply_label_to_grid_selection("Rejected")
+    window._on_undo_redo_label()
+    model.set_filter(FilterCriteria(search_text="Keep"))
+    window.select_paths_in_grid([unrelated.path])
+    window._on_undo_redo_label()
+
+    assert [item.path for item in window.images_data] == [visible.path, unrelated.path]
+    assert _selected_paths(window.images_data) == [visible.path]
+    assert window.grid.ensure_visible_paths[-1] == visible.path
+    assert hidden.db_metadata[DBFields.LABEL] == "Rejected"
+    assert visible.db_metadata[DBFields.LABEL] == "Rejected"
 
 
 def test_grid_undo_restores_filtered_item_selection_and_reveal(monkeypatch):
