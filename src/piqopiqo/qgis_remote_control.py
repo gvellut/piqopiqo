@@ -7,6 +7,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import traceback
 
 from PySide6.QtCore import QDeadlineTimer, QObject, Signal
 from PySide6.QtNetwork import QLocalSocket
@@ -144,6 +145,12 @@ class _QgisPhotoWorkerSignals(QObject):
     finished = Signal(object)  # QgisMapFailure or None
 
 
+def _log_map_error(filename: str, detail: str) -> None:
+    lines = [line for line in detail.splitlines() if line.strip()]
+    for line in lines or ["No error details provided."]:
+        logger.error("QGIS Remote Control failed for %r: %s", filename, line)
+
+
 class QgisPhotoWorker(PythonOwnedRunnable):
     def __init__(
         self,
@@ -161,23 +168,21 @@ class QgisPhotoWorker(PythonOwnedRunnable):
 
     def run(self) -> None:
         failure = None
+        filename = self._photo.name
         try:
             layer = resolve_photo_layer(
                 self._photo, self._workspace, self._settings.mappings
             )
-            select_photo(
-                self._settings.socket_name, layer, self._photo.name, self._timeout_ms
-            )
+            logger.debug("QGIS Map requested for %r on layer %r", filename, layer)
+            select_photo(self._settings.socket_name, layer, filename, self._timeout_ms)
         except QgisRemoteControlError as error:
-            logger.warning(
-                "QGIS Remote Control failed for %s: %s", self._photo.name, error
-            )
+            _log_map_error(filename, str(error))
             failure = (
                 QgisMapFailure.CONNECTION
                 if isinstance(error, QgisConnectionError)
                 else QgisMapFailure.OPERATION
             )
-        except Exception:
-            logger.exception("QGIS Remote Control failed for %s", self._photo.name)
+        except Exception as error:
+            _log_map_error(filename, "".join(traceback.format_exception(error)))
             failure = QgisMapFailure.OPERATION
         self.signals.finished.emit(failure)

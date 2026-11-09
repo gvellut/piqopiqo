@@ -310,7 +310,7 @@ The edit panel supports editing metadata fields (title, description, keywords, c
 - **Escape**: Reverts changes and cancels edit
 - Validation is applied for coordinates and datetime fields (red border on invalid input)
 - **Map** requires a single selected photo with valid coordinates. QGIS uses the workspace-relative parent folder as the layer label when there is no mapping, with `.` for the workspace root. The Qt worker matches the full filename against `Name` and sends `zoomToSelection` after `select` succeeds.
-- QGIS failures appear in an eliding red label next to **Map**. The label distinguishes connection failures from command errors. It clears on retry, selection changes, or map settings reload. Technical details go to the application log.
+- QGIS failures appear in an eliding red label next to **Map**. The label distinguishes connection failures from command errors. It clears on retry, selection changes, or map settings reload. QGIS logs the filename and resolved layer at DEBUG, and writes each line of failure details at ERROR in a separate record.
 
 ## Save EXIF (Tools Menu)
 

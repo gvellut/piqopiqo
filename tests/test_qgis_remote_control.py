@@ -1,11 +1,12 @@
 import json
+import logging
 from pathlib import Path
 
 from PySide6.QtNetwork import QLocalSocket
 import pytest
 
 from piqopiqo import qgis_remote_control as qgis
-from piqopiqo.model import QgisLayerMapping
+from piqopiqo.model import QgisLayerMapping, QgisRemoteControlSettings
 
 
 def test_resolve_layer_from_workspace_relative_folder():
@@ -102,3 +103,57 @@ def test_select_photo_sends_zoom_only_after_success(monkeypatch, rejected_method
     assert socket.requests == expected
     assert socket.addresses == ["test-qgis"]
     assert socket.closed
+
+
+@pytest.mark.parametrize(
+    ("error_type", "expected_failure"),
+    [
+        (None, None),
+        (qgis.QgisConnectionError, qgis.QgisMapFailure.CONNECTION),
+        (qgis.QgisRemoteControlError, qgis.QgisMapFailure.OPERATION),
+        (RuntimeError, qgis.QgisMapFailure.OPERATION),
+    ],
+)
+def test_qgis_map_logs_one_line_per_record(
+    monkeypatch, caplog, error_type, expected_failure
+):
+    filename = "Photo\n123.JPG"
+    layer = "Mapped\r\nlayer"
+
+    def select_photo(_socket_name, chosen_layer, chosen_filename, _timeout):
+        assert (chosen_layer, chosen_filename) == (layer, filename)
+        if error_type:
+            raise error_type("First detail\r\nSecond detail")
+
+    monkeypatch.setattr(qgis, "select_photo", select_photo)
+    worker = qgis.QgisPhotoWorker(
+        f"/photos/Paris/{filename}",
+        "/photos",
+        QgisRemoteControlSettings(mappings=(QgisLayerMapping("Paris", layer),)),
+        5000,
+    )
+    results = []
+    worker.signals.finished.connect(results.append)
+    with caplog.at_level(logging.DEBUG, logger=qgis.__name__):
+        worker.run()
+
+    assert results == [expected_failure]
+    records = [record for record in caplog.records if record.name == qgis.__name__]
+    debug, *errors = records
+    assert debug.levelno == logging.DEBUG
+    assert (
+        debug.getMessage() == f"QGIS Map requested for {filename!r} on layer {layer!r}"
+    )
+    assert all(record.exc_info is None for record in records)
+    assert all(len(record.getMessage().splitlines()) == 1 for record in records)
+    assert all(record.levelno == logging.ERROR for record in errors)
+    if error_type:
+        first, second = errors[-2:]
+        assert first.getMessage().endswith("First detail")
+        assert second.getMessage().endswith("Second detail")
+        if error_type is RuntimeError:
+            assert "Traceback" in errors[0].getMessage()
+        else:
+            assert len(errors) == 2
+    else:
+        assert not errors
