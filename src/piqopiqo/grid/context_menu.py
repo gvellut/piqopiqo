@@ -184,21 +184,25 @@ def show_context_menu(window: MainWindow, global_index: int, pos) -> None:
     reveal_action = menu.addAction(get_reveal_in_file_manager_label_macos())
     reveal_action.triggered.connect(lambda: reveal_in_file_manager_macos(selected))
 
-    # View in Application (only if configured)
+    # Open in Application (only if configured)
     external_viewer = get_user_setting(UserSettingKey.EXTERNAL_VIEWER)
     if external_viewer:
-        view_app_action = menu.addAction(
-            f"View in {display_external_app_name(external_viewer)}"
+        open_app_action = menu.addAction(
+            f"Open in {display_external_app_name(external_viewer)}"
         )
-        view_app_action.triggered.connect(
+        open_app_action.triggered.connect(
             lambda: open_in_external_app_macos(
                 external_viewer, [p.path for p in selected]
             )
         )
 
+    if window.edit_panel is not None:
+        window.edit_panel.add_map_action(menu)
+
     # Edit in Application (only if configured)
     external_editor = get_user_setting(UserSettingKey.EXTERNAL_EDITOR)
     if external_editor:
+        menu.addSeparator()
         edit_app_action = menu.addAction(
             f"Edit in {display_external_app_name(external_editor)}"
         )
@@ -207,18 +211,15 @@ def show_context_menu(window: MainWindow, global_index: int, pos) -> None:
         )
 
     menu.addSeparator()
+    other_commands = menu.addMenu("Other commands")
 
-    if window.edit_panel is not None and window.edit_panel.add_map_action(menu):
-        menu.addSeparator()
-
-    extract_shift_action = menu.addAction("Extract GPS Time Shift")
+    extract_shift_action = other_commands.addAction("Extract GPS Time Shift")
     extract_shift_action.setEnabled(len(selected) == 1)
     extract_shift_action.triggered.connect(
         lambda: extract_gps_time_shift_for_item(window, clicked_item)
     )
 
-    menu.addSeparator()
-    other_commands = menu.addMenu("Other commands")
+    other_commands.addSeparator()
 
     # Regenerate Thumbnail action
     if len(selected) == 1:

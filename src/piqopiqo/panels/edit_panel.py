@@ -249,7 +249,7 @@ class EditPanel(QWidget):
         self._map_row_layout.setContentsMargins(0, 0, 0, 0)
         self._map_row_layout.setSpacing(self.layout.horizontalSpacing())
 
-        self.map_btn = QPushButton("Map", self._map_row_widget)
+        self.map_btn = QPushButton("Open map", self._map_row_widget)
         self.map_btn.setObjectName("metadata_map_button")
         self.map_btn.clicked.connect(self._on_open_map)
         self.map_btn.setSizePolicy(
@@ -621,17 +621,17 @@ class EditPanel(QWidget):
         self._map_menu = menu
         menu.popup(self.map_btn.mapToGlobal(self.map_btn.rect().bottomLeft()))
 
-    def add_map_action(self, menu: QMenu) -> bool:
+    def add_map_action(self, menu: QMenu) -> None:
         if self.map_btn.isHidden():
-            return False
+            return
+        label = self.map_btn.text()
         if self._map_option_count() == 1:
-            action = menu.addAction("Map", self._on_open_map)
+            action = menu.addAction(label, self._on_open_map)
         else:
-            submenu = menu.addMenu("Map")
+            submenu = menu.addMenu(label)
             self._populate_map_menu(submenu)
             action = submenu.menuAction()
         action.setEnabled(self.map_btn.isEnabled())
-        return True
 
     def _populate_map_menu(self, menu: QMenu) -> None:
         for option in self._map_links:

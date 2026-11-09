@@ -506,7 +506,9 @@ def test_qgis_map_failure_warning_and_retry_update_inline_status(
     monkeypatch.setattr(window.photo_model, "get_selected_photos", lambda: [photo])
 
     def trigger_map(menu, _pos):
-        action = next(action for action in menu.actions() if action.text() == "Map")
+        action = next(
+            action for action in menu.actions() if action.text() == "Open map"
+        )
         assert action.isEnabled()
         action.trigger()
 
@@ -556,7 +558,11 @@ def test_qgis_map_failure_warning_and_retry_update_inline_status(
     assert label.isHidden()
 
 
-def test_grid_context_menu_preserves_sections_and_map_eligibility(window, monkeypatch):
+@pytest.mark.parametrize("viewer_configured", [False, True])
+@pytest.mark.parametrize("editor_configured", [False, True])
+def test_grid_context_menu_preserves_sections_and_map_eligibility(
+    window, monkeypatch, viewer_configured, editor_configured
+):
     monkeypatch.setattr(
         window.db_manager,
         "get_db_for_image",
@@ -573,6 +579,12 @@ def test_grid_context_menu_preserves_sections_and_map_eligibility(window, monkey
         UserSettingKey.QGIS_REMOTE_CONTROL,
         UserSettingKey.MAP_LINKS,
     })
+    monkeypatch.delenv("PIQO_EXTERNAL_VIEWER", raising=False)
+    monkeypatch.delenv("PIQO_EXTERNAL_EDITOR", raising=False)
+    if viewer_configured:
+        set_user_setting(UserSettingKey.EXTERNAL_VIEWER, "/Applications/Preview.app")
+    if editor_configured:
+        set_user_setting(UserSettingKey.EXTERNAL_EDITOR, "/Applications/Gimp.app")
     valid = ImageItem(
         path="/photos/position.JPG",
         name="position.JPG",
@@ -597,9 +609,18 @@ def test_grid_context_menu_preserves_sections_and_map_eligibility(window, monkey
         return menus[-1].actions()
 
     actions = open_menu([valid])
-    map_action = next(action for action in actions if action.text() == "Map")
-    index = actions.index(map_action)
-    assert actions[index - 1].isSeparator() and actions[index + 1].isSeparator()
+    expected = ["Reveal in Finder"]
+    if viewer_configured:
+        expected.append("Open in Preview")
+    expected.extend(["Open map", None])
+    if editor_configured:
+        expected.extend(["Edit in Gimp", None])
+    expected.append("Other commands")
+    assert [
+        None if action.isSeparator() else action.text() for action in actions
+    ] == expected
+    assert window.edit_panel.map_btn.text() == "Open map"
+    map_action = next(action for action in actions if action.text() == "Open map")
     assert map_action.isEnabled()
     assert [action.text() for action in map_action.menu().actions()] == [
         "HTTP Map",
@@ -611,6 +632,8 @@ def test_grid_context_menu_preserves_sections_and_map_eligibility(window, monkey
         action.text() if not action.isSeparator() else None
         for action in other_commands.menu().actions()
     ] == [
+        "Extract GPS Time Shift",
+        None,
         "Regenerate Thumbnail",
         "Reload EXIF",
         None,
@@ -621,10 +644,9 @@ def test_grid_context_menu_preserves_sections_and_map_eligibility(window, monkey
 
     for selection in ([missing], [valid, missing]):
         actions_by_name = {action.text(): action for action in open_menu(selection)}
-        assert not actions_by_name["Map"].isEnabled()
-        assert actions_by_name["Extract GPS Time Shift"].isEnabled() == (
-            len(selection) == 1
-        )
+        assert not actions_by_name["Open map"].isEnabled()
+        extract_action = actions_by_name["Other commands"].menu().actions()[0]
+        assert extract_action.isEnabled() == (len(selection) == 1)
 
 
 def test_about_action_uses_about_role_and_stays_in_help(window):

@@ -311,8 +311,8 @@ The edit panel supports editing metadata fields (title, description, keywords, c
 - **Enter/Tab**: Saves the field and moves focus
 - **Escape**: Reverts changes and cancels edit
 - Validation is applied for coordinates and datetime fields (red border on invalid input)
-- **Map** requires a single selected photo with valid coordinates. The grid context menu uses the same activation rules and map providers as the Metadata panel button. QGIS uses the workspace-relative parent folder as the layer label when there is no mapping, with `.` for the workspace root. The Qt worker selects features whose `Name` matches the full filename, then sends `move` with the photo coordinates, configured zoom, and `marker: true`.
-- The eliding label next to **Map** shows a yellow **Image not found. Zoomed to position** warning when the move succeeds and `selectedCount` is zero. Errors appear in red. A selection change clears the status and invalidates pending replies for the old selection. Retrying or reloading Map settings also clears the status. The first DEBUG log records the filename, workspace-relative folder, and mapped layer. Later entries identify the mapped layer and record `selectedCount` and `move` parameters at DEBUG, zero matches at WARNING, and failures at ERROR with one record per line.
+- **Open map** requires a single selected photo with valid coordinates. The grid context menu uses the same activation rules and map providers as the Metadata panel button. QGIS uses the workspace-relative parent folder as the layer label when there is no mapping, with `.` for the workspace root. The Qt worker selects features whose `Name` matches the full filename, then sends `move` with the photo coordinates, configured zoom, and `marker: true`.
+- The eliding label next to **Open map** shows a yellow **Image not found. Zoomed to position** warning when the move succeeds and `selectedCount` is zero. Errors appear in red. A selection change clears the status and invalidates pending replies for the old selection. Retrying or reloading Map settings also clears the status. The first DEBUG log records the filename, workspace-relative folder, and mapped layer. Later entries identify the mapped layer and record `selectedCount` and `move` parameters at DEBUG, zero matches at WARNING, and failures at ERROR with one record per line.
 
 ## Save EXIF (Tools Menu)
 
@@ -379,11 +379,10 @@ The `orientation.py` module provides utilities for:
 
 Right-click on a photo in the grid to access:
 - **Reveal in Finder**: Opens each containing folder with all its selected photos highlighted together.
-- **View in {App}**: Opens selected photos in external viewer (only shown if `EXTERNAL_VIEWER` is configured)
-- **Edit in {App}**: Duplicates selected photos first, then opens duplicates in external editor (only shown if `EXTERNAL_EDITOR` is configured)
-- **Map**: Opens the sole configured map or lists the providers in a submenu. It is enabled for a single selected photo with valid coordinates.
-- **Extract GPS Time Shift**: Enabled for a single selected photo.
-- **Other commands**: Groups **Regenerate Thumbnail(s)** and **Reload EXIF**, **Duplicate**, and **Move to Trash** in separate sections.
+- **Open in {App}**: Opens selected photos in the configured external viewer. It appears between **Reveal in Finder** and **Open map** in the same section.
+- **Open map**: Opens the sole configured map or lists the providers in a submenu. It is enabled for a single selected photo with valid coordinates.
+- **Edit in {App}**: Duplicates selected photos and opens them in the configured external editor. It appears in a separate section below **Open map**.
+- **Other commands**: Starts with **Extract GPS Time Shift**, enabled for a single selected photo. **Regenerate Thumbnail(s)** and **Reload EXIF**, **Duplicate**, and **Move to Trash** follow in separate sections.
 
 Selection behavior:
 - Right-click on unselected photo: selects only that photo
