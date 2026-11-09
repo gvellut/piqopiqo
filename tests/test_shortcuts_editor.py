@@ -48,6 +48,7 @@ def test_shortcuts_editor_uses_sectioned_two_column_layout(qapp):
         "Filter Shortcuts",
         "Grid Shortcuts",
         "Fullscreen Shortcuts",
+        "Tool Shortcuts",
     }
 
     set_labels = _section_labels(_section_group(editor, "Set Labels"))
@@ -97,6 +98,12 @@ def test_shortcuts_editor_uses_sectioned_two_column_layout(qapp):
         Shortcut.ZOOM_RESET.label,
         Shortcut.EJECT_FROM_LOOP.label,
     ]
+    assert _section_labels(_section_group(editor, "Tool Shortcuts")) == [
+        "Undo/Redo Label",
+        "Copy from SD",
+        "Apply GPX",
+        "Upload to Flickr",
+    ]
 
 
 def test_shortcuts_editor_accepts_enum_and_string_keys(qapp):
@@ -106,11 +113,17 @@ def test_shortcuts_editor_accepts_enum_and_string_keys(qapp):
         Shortcut.ZOOM_OUT.name: "-",
         Shortcut.SELECT_ALL.name: "ctrl+a",
         Shortcut.FILTER_LABEL_1.name: "Alt+1",
+        Shortcut.COPY_FROM_SD: "Ctrl+Shift+C",
+        Shortcut.APPLY_GPX.name: "Ctrl+Shift+G",
     })
+    editor._inputs[Shortcut.APPLY_GPX].clear()
 
     value = editor.get_value()
     assert value[Shortcut.ZOOM_IN] == "="
     assert value[Shortcut.ZOOM_OUT] == "-"
     assert value[Shortcut.SELECT_ALL] == "ctrl+a"
     assert value[Shortcut.FILTER_LABEL_1] == "Alt+1"
+    assert value[Shortcut.COPY_FROM_SD] == "Ctrl+Shift+C"
+    assert value[Shortcut.APPLY_GPX] == ""
+    assert Shortcut.ZOOM_RESET not in value
     assert set(editor._inputs.keys()) == set(Shortcut)

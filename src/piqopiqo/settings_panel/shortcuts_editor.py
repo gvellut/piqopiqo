@@ -5,7 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QFormLayout, QGridLayout, QGroupBox, QLineEdit, QWidget
 
-from piqopiqo.shortcuts import Shortcut
+from piqopiqo.shortcuts import TOOL_SHORTCUTS, Shortcut
 
 
 class ShortcutsEditor(QWidget):
@@ -75,6 +75,7 @@ class ShortcutsEditor(QWidget):
                     Shortcut.EJECT_FROM_LOOP,
                 ),
             ),
+            ("Tool Shortcuts", TOOL_SHORTCUTS),
         ]
 
         for i, (section_title, section_shortcuts) in enumerate(section_specs):
@@ -110,6 +111,6 @@ class ShortcutsEditor(QWidget):
         out: dict[Shortcut, str] = {}
         for key, line_edit in self._inputs.items():
             text = line_edit.text().strip()
-            if text:
+            if text or key in TOOL_SHORTCUTS:
                 out[key] = text
         return out

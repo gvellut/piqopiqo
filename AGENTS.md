@@ -87,7 +87,7 @@ src/piqopiqo/
     ├── settings_state.py # QSettings-backed state + settings registries/accessors
 ├── photo_model.py   # PhotoListModel: filtering, sorting, selection, add/remove photos
 ├── qgis_remote_control.py # Map action worker, workspace-relative layer lookup and QGIS local socket commands
-├── shortcuts.py     # Keyboard shortcut utilities + view-scope shortcut registries
+├── shortcuts.py     # Keyboard shortcut utilities + view and tool shortcut registries
 ├── storage.py       # Qt-free storage write probes + full-volume fault payloads/classification
 ├── model.py         # Data models (ImageItem, FilterCriteria, StatusLabel, ExifField)
 ├── external_apps.py # Finder photo selection by folder, external viewer/editor launch
@@ -135,7 +135,7 @@ src/piqopiqo/
 │   ├── map_links_editor.py # HTTP template and QGIS layer mapping editors with a shared list dialog
 │   ├── manual_lenses_editor.py
 │   ├── status_labels_editor.py
-│   └── shortcuts_editor.py
+│   └── shortcuts_editor.py # Sectioned shortcut editor, including Tool Shortcuts
 |-- tools
     ├── archive.py       # Folder archive workflow with plain failure/cancellation labels and separate result/error details
     ├── copy_sd.py       # Copy-from-SD workflow (dialogs, scan/copy/eject workers, plain eject status labels)
@@ -480,8 +480,9 @@ Selection behavior:
 - Flickr upload progress dialog keeps one running step label (`Step: ...`) above the progress bar, merges Add-to-album sub-status into that label, resizes height to fit currently visible content on every state change, and hides step/progress UI when finished so only the completion summary remains.
 - Flickr Upload new-album reorder uses `reorder_progress(completed, total, status, album_title)`: keep the stage and bounded runtime-window count on the same top row, with `Fetching dates...` and a plain-text, single-line elided album title below. Normalize embedded title line breaks to spaces and fall back to the album ID. Hide the title outside date fetching and clear reorder details on stage exit/completion; resize to visible content when entering or leaving loading, fetching, applying, and result phases. Title length must never change dialog dimensions.
 - Model/filter/sort synchronization after metadata writes is centralized in `MainWindow.sync_model_after_metadata_update(...)`. Any new feature/tool that mutates metadata DB fields must call this method with the changed fields so grid filtering, sort order, selection panels, and fullscreen loop state stay consistent.
-- Custom shortcuts are view-scoped and not handled in `MainWindow`: `PhotoGrid` owns grid label shortcuts plus shared grid-view `Space`/`Select All` shortcuts, while `FullscreenOverlay` owns fullscreen label shortcuts and zoom/navigation keys. Fullscreen label shortcuts act on the current fullscreen image only; grid label undo/redo is disabled/ignored while fullscreen is active.
+- `PhotoGrid` owns grid label shortcuts plus shared grid-view `Space`/`Select All` shortcuts. `FullscreenOverlay` owns fullscreen label shortcuts and zoom/navigation keys. Fullscreen label shortcuts act on the current fullscreen image only; grid label undo/redo is disabled/ignored while fullscreen is active.
 - Grid shared-view shortcuts (`Space`, `Select All`) are attached to the central grid+panels scope so they still work after non-text panel interactions, but editable text widgets win focus (search/metadata fields keep normal typing + `Cmd+A` text selection).
+- `MainWindow` binds menu actions from **Settings > Shortcuts > Tool Shortcuts** and refreshes them after saves. The defaults are `Cmd+Shift+Z` for Undo/Redo Label, `Cmd+Shift+C` for Copy from SD, `Cmd+Shift+G` for Apply GPX, and `Cmd+Shift+U` for Upload to Flickr. Older shortcut mappings receive defaults for missing tool keys. Save cleared tool fields as explicit empty strings to keep them disabled.
 - When fullscreen opens, `MainWindow` disables all menu actions (and their menu shortcuts) except Quit; this prevents `Cmd+O`, `Cmd+,`, and future menu shortcuts from acting on the hidden grid view.
 - Fullscreen exit selection/visibility restoration is path-based and centralized in `MainWindow` (single-image loop vs selected-images loop, `FILTER_IN_FULLSCREEN`, and `ON_FULLSCREEN_EXIT_SELECTION_MODE` all converge there). Hidden/filtered-out loop members are not kept selected in the grid on exit.
 - Fullscreen zoom percentages are absolute pixel mappings: 100% means one image pixel per physical render-buffer pixel (including Retina/device pixel ratio). Navigation and loop ejection preserve the selected percentage and image-center screen position, recalculating the fit-relative zoom multiplier after loading and orienting each destination image. Never carry the previous image's multiplier across different orientations or resolutions. Base view still fits without upscaling beyond 100%, and a completely offscreen destination falls back to base view.

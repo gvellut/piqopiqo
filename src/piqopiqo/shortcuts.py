@@ -47,6 +47,10 @@ class Shortcut(Enum):
     SELECT_ALL = auto(), "Select all"
     COLLAPSE_TO_LAST_SELECTED = auto(), "Keep last selected (grid)"
     TOGGLE_RIGHT_SIDEBAR = auto(), "Toggle right sidebar"
+    UNDO_REDO_LABEL = auto(), "Undo/Redo Label"
+    COPY_FROM_SD = auto(), "Copy from SD"
+    APPLY_GPX = auto(), "Apply GPX"
+    UPLOAD_TO_FLICKR = auto(), "Upload to Flickr"
 
     def __new__(cls, value, label):
         obj = object.__new__(cls)
@@ -57,8 +61,7 @@ class Shortcut(Enum):
         self.label = label
 
 
-# Configurable shortcut ownership by view (menu shortcuts such as Cmd+Q are
-# separate QAction shortcuts and intentionally not listed here).
+# Configurable shortcut ownership by view or menu action.
 LABEL_SHORTCUTS: tuple[Shortcut, ...] = (
     Shortcut.LABEL_1,
     Shortcut.LABEL_2,
@@ -104,6 +107,13 @@ FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS: tuple[Shortcut, ...] = (
     Shortcut.ZOOM_RESET,
     Shortcut.EJECT_FROM_LOOP,
     *LABEL_SHORTCUTS,
+)
+
+TOOL_SHORTCUTS: tuple[Shortcut, ...] = (
+    Shortcut.UNDO_REDO_LABEL,
+    Shortcut.COPY_FROM_SD,
+    Shortcut.APPLY_GPX,
+    Shortcut.UPLOAD_TO_FLICKR,
 )
 
 # Hardcoded (non-settings) shortcuts for reference and ownership clarity.

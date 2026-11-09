@@ -8,6 +8,7 @@ from piqopiqo.shortcuts import (
     GRID_VIEW_CONFIGURABLE_SHORTCUTS,
     GRID_VIEW_HARDCODED_SHORTCUTS,
     LABEL_SHORTCUTS,
+    TOOL_SHORTCUTS,
     Shortcut,
     build_filter_label_shortcut_bindings,
     build_label_shortcut_bindings,
@@ -34,7 +35,7 @@ def test_shortcut_labels_are_human_readable():
     assert Shortcut.TOGGLE_RIGHT_SIDEBAR.label == "Toggle right sidebar"
 
 
-def test_configurable_shortcut_view_registries_cover_all_shortcuts():
+def test_configurable_shortcut_registries_cover_all_shortcuts():
     assert Shortcut.SELECT_ALL in GRID_VIEW_CONFIGURABLE_SHORTCUTS
     assert Shortcut.SELECT_ALL not in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
     assert Shortcut.COLLAPSE_TO_LAST_SELECTED in GRID_VIEW_CONFIGURABLE_SHORTCUTS
@@ -72,7 +73,8 @@ def test_configurable_shortcut_view_registries_cover_all_shortcuts():
     union = set(GRID_VIEW_CONFIGURABLE_SHORTCUTS) | set(
         FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
     )
-    assert union == set(Shortcut)
+    assert union.isdisjoint(TOOL_SHORTCUTS)
+    assert union | set(TOOL_SHORTCUTS) == set(Shortcut)
 
 
 def test_hardcoded_shortcut_reference_lists_are_non_empty():

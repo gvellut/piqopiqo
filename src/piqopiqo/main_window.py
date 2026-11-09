@@ -69,6 +69,7 @@ from .qgis_remote_control import QgisMapStatus, QgisPhotoWorker
 from .qt_workers import PythonOwnedRunnable
 from .settings_panel import SettingsDialog
 from .settings_panel.schema import get_settings_tab_title_for_key
+from .shortcuts import Shortcut, lookup_shortcut, parse_shortcut
 from .ssf.settings_state import (
     APP_NAME,
     RuntimeSettingKey,
@@ -2221,8 +2222,6 @@ class MainWindow(QMainWindow):
         edit_menu = menubar.addMenu("Edit")
 
         self._undo_label_action = QAction("Undo label", self)
-        # no shortcut for Undo label
-        # self._undo_label_action.setShortcut("Ctrl+Z")
         self._undo_label_action.setEnabled(False)
         self._undo_label_action.triggered.connect(self._on_undo_redo_label)
         edit_menu.addAction(self._undo_label_action)
@@ -2337,7 +2336,20 @@ class MainWindow(QMainWindow):
         about_action.setMenuRole(QAction.MenuRole.AboutRole)
         about_action.triggered.connect(self.on_about)
         help_menu.addAction(about_action)
+
+        self._tool_shortcut_actions = {
+            Shortcut.UNDO_REDO_LABEL: self._undo_label_action,
+            Shortcut.COPY_FROM_SD: copy_sd_action,
+            Shortcut.APPLY_GPX: apply_gpx_action,
+            Shortcut.UPLOAD_TO_FLICKR: upload_flickr_action,
+        }
+        self._refresh_tool_shortcuts()
         self._initialize_fullscreen_menu_action_policy()
+
+    def _refresh_tool_shortcuts(self) -> None:
+        shortcuts = get_user_setting(UserSettingKey.SHORTCUTS)
+        for key, action in self._tool_shortcut_actions.items():
+            action.setShortcut(parse_shortcut(lookup_shortcut(shortcuts, key) or ""))
 
     def _initialize_fullscreen_menu_action_policy(self) -> None:
         self._fullscreen_menu_managed_actions = self._collect_menu_actions_for_policy()
@@ -2657,10 +2669,10 @@ class MainWindow(QMainWindow):
                 self._fullscreen_overlay._load_pixmap_at_current_index()
                 self._fullscreen_overlay.update()
 
-        if (
-            UserSettingKey.SHORTCUTS in changed_keys
-            or UserSettingKey.STATUS_LABELS in changed_keys
-        ):
+        if UserSettingKey.SHORTCUTS in changed_keys:
+            self._refresh_tool_shortcuts()
+
+        if changed_keys & {UserSettingKey.SHORTCUTS, UserSettingKey.STATUS_LABELS}:
             self._setup_shortcuts()
 
         if UserSettingKey.CACHE_BASE_DIR in changed_keys:

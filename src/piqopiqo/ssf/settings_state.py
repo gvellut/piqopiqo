@@ -496,11 +496,20 @@ def _serialize_shortcuts(value: dict[Shortcut, str] | dict[str, str]) -> dict[st
     return out
 
 
+_DEFAULT_TOOL_SHORTCUTS = {
+    Shortcut.UNDO_REDO_LABEL: "Ctrl+Shift+Z",
+    Shortcut.COPY_FROM_SD: "Ctrl+Shift+C",
+    Shortcut.APPLY_GPX: "Ctrl+Shift+G",
+    Shortcut.UPLOAD_TO_FLICKR: "Ctrl+Shift+U",
+}
+
+
 def _deserialize_shortcuts(data: Any) -> dict[Shortcut, str]:
     if not isinstance(data, dict):
         raise ValueError("Expected an object for shortcuts")
 
-    out: dict[Shortcut, str] = {}
+    # Older mappings lack tool entries. An explicit empty string disables one.
+    out = _DEFAULT_TOOL_SHORTCUTS.copy()
     for raw_key, raw_value in data.items():
         key_str = str(raw_key)
         shortcut = str(raw_value)
@@ -790,6 +799,7 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
             Shortcut.SELECT_ALL: "ctrl+a",
             Shortcut.COLLAPSE_TO_LAST_SELECTED: "Esc",
             Shortcut.TOGGLE_RIGHT_SIDEBAR: "Ctrl+]",
+            **_DEFAULT_TOOL_SHORTCUTS,
         },
         read_type=str,
         json_storage=True,

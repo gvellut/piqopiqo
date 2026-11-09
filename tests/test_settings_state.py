@@ -94,6 +94,7 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_FLICKR_API_VERY_LONG_TIMEOUT_S",
         "PIQO_PROTECT_NON_TEXT_METADATA",
         "PIQO_SHOW_HIDDEN_METADATA_FIELDS_IF_NOT_EMPTY",
+        "PIQO_SHORTCUTS",
         "PIQO_FORCE_SRGB",
         "PIQO_SCREEN_COLOR_PROFILE",
         "PIQO_FAVORITE_FOLDER",
@@ -320,11 +321,18 @@ def test_json_roundtrip_for_complex_user_settings(isolated_settings):
         Shortcut.ZOOM_IN: "=",
         Shortcut.ZOOM_OUT: "-",
         Shortcut.SELECT_ALL: "ctrl+a",
+        Shortcut.UNDO_REDO_LABEL: "Ctrl+Alt+Z",
+        Shortcut.COPY_FROM_SD: "Ctrl+Shift+C",
+        Shortcut.APPLY_GPX: "",
+        Shortcut.UPLOAD_TO_FLICKR: "Ctrl+Shift+U",
     }
 
     set_user_setting(UserSettingKey.STATUS_LABELS, labels)
     set_user_setting(UserSettingKey.SHORTCUTS, shortcuts)
     set_user_setting(UserSettingKey.CUSTOM_EXIF_FIELDS, ["File:FileSize", "EXIF:ISO"])
+
+    settings_state.sync_qsettings_store()
+    init_qsettings_store()
 
     roundtrip_labels = get_user_setting(UserSettingKey.STATUS_LABELS)
     roundtrip_shortcuts = get_user_setting(UserSettingKey.SHORTCUTS)
@@ -333,6 +341,21 @@ def test_json_roundtrip_for_complex_user_settings(isolated_settings):
     assert roundtrip_labels == labels
     assert roundtrip_shortcuts == shortcuts
     assert roundtrip_custom_fields == ["File:FileSize", "EXIF:ISO"]
+
+
+def test_legacy_shortcuts_get_tool_defaults_without_restoring_disabled_view_shortcuts(
+    isolated_settings,
+):
+    isolated_settings.setValue("Settings/shortcuts", '{"ZOOM_IN": "+"}')
+    isolated_settings.sync()
+
+    assert get_user_setting(UserSettingKey.SHORTCUTS) == {
+        Shortcut.ZOOM_IN: "+",
+        Shortcut.UNDO_REDO_LABEL: "Ctrl+Shift+Z",
+        Shortcut.COPY_FROM_SD: "Ctrl+Shift+C",
+        Shortcut.APPLY_GPX: "Ctrl+Shift+G",
+        Shortcut.UPLOAD_TO_FLICKR: "Ctrl+Shift+U",
+    }
 
 
 def test_shortcuts_defaults_include_filter_shortcuts(isolated_settings):
