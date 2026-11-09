@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 import uuid
 
-from PySide6.QtCore import QCoreApplication
+from PySide6.QtCore import QCoreApplication, QThreadPool
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 import pytest
@@ -14,8 +15,9 @@ from piqopiqo.background.media_man import FolderPrimingResult
 from piqopiqo.components.status_bar import NO_FOLDER_LOADED_TEXT
 from piqopiqo.main_window import MainWindow
 from piqopiqo.metadata.db_fields import DBFields
-from piqopiqo.model import ImageItem, MapLinkOption
+from piqopiqo.model import ImageItem, MapLinkOption, QgisRemoteControlSettings
 from piqopiqo.photo_model import SortOrder
+from piqopiqo.qgis_remote_control import QgisRemoteControlError
 from piqopiqo.ssf.settings_state import (
     APP_NAME,
     StateKey,
@@ -466,6 +468,55 @@ def test_map_links_setting_updates_edit_panel_visibility_live(window):
     set_user_setting(UserSettingKey.MAP_LINKS, [])
     window._apply_settings_changes({UserSettingKey.MAP_LINKS})
     assert window.edit_panel.map_btn.isHidden() is True
+
+
+def test_qgis_map_failure_and_retry_update_inline_status(window, qapp, monkeypatch):
+    window.root_folder = "/photos"
+    monkeypatch.setattr(
+        window.db_manager,
+        "get_db_for_image",
+        lambda _path: SimpleNamespace(has_metadata=lambda _path: True),
+    )
+    key = UserSettingKey.QGIS_REMOTE_CONTROL
+    set_user_setting(
+        key, QgisRemoteControlSettings(True, f"missing-{uuid.uuid4().hex}")
+    )
+    window._apply_settings_changes({key})
+    panel = window.edit_panel
+    panel.update_for_selection([
+        ImageItem(
+            path="/photos/test.JPG",
+            name="test.JPG",
+            created="",
+            db_metadata={DBFields.LATITUDE: "48", DBFields.LONGITUDE: "2"},
+        ),
+    ])
+
+    def click_and_finish():
+        panel.map_btn.click()
+        assert panel.qgis_map_error_label.isHidden()
+        assert QThreadPool.globalInstance().waitForDone(1000)
+        qapp.processEvents()
+
+    click_and_finish()
+    assert not panel.qgis_map_error_label.isHidden()
+    assert (
+        panel.qgis_map_error_label.full_text == "Cannot connect to QGIS Remote Control"
+    )
+
+    def reject(*_args):
+        raise QgisRemoteControlError("Technical details")
+
+    monkeypatch.setattr("piqopiqo.qgis_remote_control.select_photo", reject)
+    click_and_finish()
+    assert not panel.qgis_map_error_label.isHidden()
+    assert panel.qgis_map_error_label.full_text == "Error in QGIS Remote Control"
+
+    monkeypatch.setattr(
+        "piqopiqo.qgis_remote_control.select_photo", lambda *_args: None
+    )
+    click_and_finish()
+    assert panel.qgis_map_error_label.isHidden()
 
 
 def test_about_action_uses_about_role_and_stays_in_help(window):

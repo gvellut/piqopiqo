@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.components.ellided_label import EllidedLabel
 from piqopiqo.dialogs.modal import managed_modal_dialog
 from piqopiqo.keyword_utils import (
     format_keywords,
@@ -76,6 +77,7 @@ class EditPanel(QWidget):
         self._show_hidden_metadata_fields_if_not_empty = False
         self._map_links: list[MapLinkOption] = []
         self._qgis_map_enabled = False
+        self._qgis_map_pending = False
         self._map_menu: QMenu | None = None
 
         self._setup_ui()
@@ -243,7 +245,7 @@ class EditPanel(QWidget):
         )
         self._map_row_layout = QHBoxLayout(self._map_row_widget)
         self._map_row_layout.setContentsMargins(0, 0, 0, 0)
-        self._map_row_layout.setSpacing(0)
+        self._map_row_layout.setSpacing(self.layout.horizontalSpacing())
 
         self.map_btn = QPushButton("Map", self._map_row_widget)
         self.map_btn.setObjectName("metadata_map_button")
@@ -254,7 +256,17 @@ class EditPanel(QWidget):
         )
         self.map_btn.hide()
         self._map_row_layout.addWidget(self.map_btn, 0)
-        self._map_row_layout.addStretch(1)
+        self.qgis_map_error_label = EllidedLabel(parent=self._map_row_widget)
+        self.qgis_map_error_label.setStyleSheet("color: red;")
+        self.qgis_map_error_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.NoTextInteraction
+        )
+        self.qgis_map_error_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        self.qgis_map_error_label.hide()
+        self._map_row_layout.addWidget(self.qgis_map_error_label, 1)
+        self._map_row_layout.addStretch()
         self.layout.addWidget(self._map_row_widget, row, 1)
         row += 1
 
@@ -327,6 +339,7 @@ class EditPanel(QWidget):
         self._apply_metadata_read_only_state()
 
     def reload_map_links(self) -> None:
+        self._clear_qgis_map_status()
         self._map_links = list(get_user_setting(UserSettingKey.MAP_LINKS) or [])
         self._qgis_map_enabled = get_user_setting(
             UserSettingKey.QGIS_REMOTE_CONTROL
@@ -400,6 +413,7 @@ class EditPanel(QWidget):
         return completed
 
     def show_selection_pending(self, count: int) -> None:
+        self._clear_qgis_map_status()
         self._current_items = []
         self._is_multi_select = bool(count > 1)
         self._has_missing_data = False
@@ -417,6 +431,12 @@ class EditPanel(QWidget):
             items: List of selected ImageItem objects.
         """
         self.clear_selection_pending()
+        if (
+            len(items) != 1
+            or len(self._current_items) != 1
+            or items[0].path != self._current_items[0].path
+        ):
+            self._clear_qgis_map_status()
         self._current_items = items
         self._is_multi_select = len(items) > 1
 
@@ -606,6 +626,23 @@ class EditPanel(QWidget):
     def _request_qgis_map(self) -> None:
         if self._qgis_map_enabled and self.map_btn.isEnabled():
             self.qgis_map_requested.emit(self._current_items[0].path)
+
+    def _clear_qgis_map_status(self) -> None:
+        self._qgis_map_pending = False
+        self.qgis_map_error_label.hide()
+
+    def start_qgis_map_request(self) -> None:
+        self._clear_qgis_map_status()
+        self._qgis_map_pending = True
+
+    def finish_qgis_map_request(self, message: str) -> None:
+        if not self._qgis_map_pending:
+            return
+        self._qgis_map_pending = False
+        if message:
+            self.qgis_map_error_label.setText(message)
+            self.qgis_map_error_label.setToolTip(message)
+            self.qgis_map_error_label.show()
 
     def _on_field_saved(self, field_name: str):
         """Handle field save event."""

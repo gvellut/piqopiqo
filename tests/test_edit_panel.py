@@ -1293,3 +1293,43 @@ def test_map_button_opens_qgis_only_for_single_photo_with_gps(
     else:
         assert panel._map_menu is None
     assert requested == [item.path]
+
+
+def test_qgis_map_error_elides_and_clears_with_selection(qapp):
+    init_qsettings_store(dyn=True)
+    set_user_setting(
+        UserSettingKey.QGIS_REMOTE_CONTROL, QgisRemoteControlSettings(enabled=True)
+    )
+    panel = EditPanel(_StubDBManager())
+    item = ImageItem(
+        path="/tmp/first.JPG",
+        name="first.JPG",
+        created="",
+        db_metadata={DBFields.LATITUDE: "48", DBFields.LONGITUDE: "2"},
+    )
+    panel.update_for_selection([item])
+    panel.resize(300, 450)
+    panel.show()
+
+    message = "Cannot connect to QGIS Remote Control"
+    panel.start_qgis_map_request()
+    panel.finish_qgis_map_request(message)
+    qapp.processEvents()
+
+    label = panel.qgis_map_error_label
+    assert label.isVisible()
+    assert label.x() >= panel.map_btn.geometry().right()
+    assert label.text().endswith("…")
+    assert label.toolTip() == message
+
+    panel.resize(700, 450)
+    qapp.processEvents()
+    assert label.text() == message
+    panel.update_for_selection([item])
+    assert label.isVisible()
+
+    panel.start_qgis_map_request()
+    panel.update_for_selection([])
+    panel.finish_qgis_map_request(message)
+    assert label.isHidden()
+    panel.close()

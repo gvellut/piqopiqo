@@ -65,7 +65,7 @@ from .model import (
 from .orientation import rotate_orientation_left, rotate_orientation_right
 from .panels import EditPanel, ExifPanel, FilterPanel
 from .photo_model import PhotoListModel, SortOrder
-from .qgis_remote_control import QgisPhotoWorker
+from .qgis_remote_control import QgisMapFailure, QgisPhotoWorker
 from .qt_workers import PythonOwnedRunnable
 from .settings_panel import SettingsDialog
 from .settings_panel.schema import get_settings_tab_title_for_key
@@ -2416,6 +2416,7 @@ class MainWindow(QMainWindow):
     def _on_qgis_map_requested(self, photo_path: str) -> None:
         if (
             self._shutdown_started
+            or self.edit_panel is None
             or self._qgis_photo_worker is not None
             or not self.root_folder
         ):
@@ -2431,26 +2432,14 @@ class MainWindow(QMainWindow):
         worker.signals.finished.connect(
             self._on_qgis_map_finished, Qt.ConnectionType.QueuedConnection
         )
+        self.edit_panel.start_qgis_map_request()
         self._qgis_photo_worker = worker
         QThreadPool.globalInstance().start(worker)
 
-    def _on_qgis_map_finished(self, error_message: str | None) -> None:
+    def _on_qgis_map_finished(self, failure: QgisMapFailure | None) -> None:
         self._qgis_photo_worker = None
-        if error_message is None:
-            return
-        logger.warning("QGIS Remote Control: %s", error_message)
-        if self._shutdown_started or not self.isVisible():
-            return
-        dialog = QMessageBox(
-            QMessageBox.Icon.Warning,
-            "QGIS Remote Control",
-            error_message,
-            QMessageBox.StandardButton.Ok,
-            self,
-        )
-        dialog.setTextFormat(Qt.TextFormat.PlainText)
-        with managed_modal_dialog(dialog):
-            dialog.exec()
+        if not self._shutdown_started and self.edit_panel is not None:
+            self.edit_panel.finish_qgis_map_request(failure.value if failure else "")
 
     def _get_grid_num_column_bounds(self) -> tuple[int, int]:
         min_cols = max(

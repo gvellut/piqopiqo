@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import Enum
 import json
 import logging
 import os
@@ -18,6 +19,15 @@ logger = logging.getLogger(__name__)
 
 class QgisRemoteControlError(Exception):
     pass
+
+
+class QgisConnectionError(QgisRemoteControlError):
+    pass
+
+
+class QgisMapFailure(Enum):
+    CONNECTION = "Cannot connect to QGIS Remote Control"
+    OPERATION = "Error in QGIS Remote Control"
 
 
 def resolve_photo_layer(
@@ -110,12 +120,10 @@ def select_photo(
     socket = QLocalSocket()
     try:
         socket.connectToServer(socket_name)
-        operation = f"connecting to the QGIS socket {socket_name!r}"
         if socket.state() != QLocalSocket.LocalSocketState.ConnectedState and not (
-            socket.waitForConnected(_remaining_time(deadline, operation))
+            socket.waitForConnected(deadline.remainingTime())
         ):
-            _remaining_time(deadline, operation)
-            raise QgisRemoteControlError(
+            raise QgisConnectionError(
                 f"Could not connect to the QGIS socket {socket_name!r}. "
                 f"{socket.errorString()}"
             )
@@ -133,7 +141,7 @@ def select_photo(
 
 
 class _QgisPhotoWorkerSignals(QObject):
-    finished = Signal(object)  # error string or None
+    finished = Signal(object)  # QgisMapFailure or None
 
 
 class QgisPhotoWorker(PythonOwnedRunnable):
@@ -152,7 +160,7 @@ class QgisPhotoWorker(PythonOwnedRunnable):
         self.signals = _QgisPhotoWorkerSignals()
 
     def run(self) -> None:
-        error_message = None
+        failure = None
         try:
             layer = resolve_photo_layer(
                 self._photo, self._workspace, self._settings.mappings
@@ -161,12 +169,15 @@ class QgisPhotoWorker(PythonOwnedRunnable):
                 self._settings.socket_name, layer, self._photo.name, self._timeout_ms
             )
         except QgisRemoteControlError as error:
-            error_message = str(error)
-        except Exception:
-            logger.exception("QGIS Remote Control failed")
-            error_message = (
-                "An unexpected error occurred while communicating with QGIS."
+            logger.warning(
+                "QGIS Remote Control failed for %s: %s", self._photo.name, error
             )
-        if error_message is not None:
-            error_message = f"{self._photo.name}\n\n{error_message}"
-        self.signals.finished.emit(error_message)
+            failure = (
+                QgisMapFailure.CONNECTION
+                if isinstance(error, QgisConnectionError)
+                else QgisMapFailure.OPERATION
+            )
+        except Exception:
+            logger.exception("QGIS Remote Control failed for %s", self._photo.name)
+            failure = QgisMapFailure.OPERATION
+        self.signals.finished.emit(failure)
