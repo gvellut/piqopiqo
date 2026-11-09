@@ -17,7 +17,7 @@ from piqopiqo.main_window import MainWindow
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.model import ImageItem, MapLinkOption, QgisRemoteControlSettings
 from piqopiqo.photo_model import SortOrder
-from piqopiqo.qgis_remote_control import QgisRemoteControlError
+from piqopiqo.qgis_remote_control import QgisImageNotFoundError, QgisRemoteControlError
 from piqopiqo.ssf.settings_state import (
     APP_NAME,
     StateKey,
@@ -470,7 +470,16 @@ def test_map_links_setting_updates_edit_panel_visibility_live(window):
     assert window.edit_panel.map_btn.isHidden() is True
 
 
-def test_qgis_map_failure_and_retry_update_inline_status(window, qapp, monkeypatch):
+@pytest.mark.parametrize(
+    ("error_type", "expected_message"),
+    [
+        (QgisRemoteControlError, "Error in QGIS Remote Control"),
+        (QgisImageNotFoundError, "Image not found in QGIS"),
+    ],
+)
+def test_qgis_map_failure_and_retry_update_inline_status(
+    window, qapp, monkeypatch, error_type, expected_message
+):
     window.root_folder = "/photos"
     monkeypatch.setattr(
         window.db_manager,
@@ -505,12 +514,12 @@ def test_qgis_map_failure_and_retry_update_inline_status(window, qapp, monkeypat
     )
 
     def reject(*_args):
-        raise QgisRemoteControlError("Technical details")
+        raise error_type("Technical details")
 
     monkeypatch.setattr("piqopiqo.qgis_remote_control.select_photo", reject)
     click_and_finish()
     assert not panel.qgis_map_error_label.isHidden()
-    assert panel.qgis_map_error_label.full_text == "Error in QGIS Remote Control"
+    assert panel.qgis_map_error_label.full_text == expected_message
 
     monkeypatch.setattr(
         "piqopiqo.qgis_remote_control.select_photo", lambda *_args: None

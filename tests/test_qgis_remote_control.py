@@ -33,9 +33,10 @@ def test_resolve_layer_from_workspace_relative_folder():
 class _Socket:
     LocalSocketState = QLocalSocket.LocalSocketState
 
-    def __init__(self, rejected_method, selected_count):
+    def __init__(self, rejected_method, selected_count, error_detail):
         self.rejected_method = rejected_method
         self.selected_count = selected_count
+        self.error_detail = error_detail
         self.addresses = []
         self.requests = []
         self.closed = False
@@ -61,7 +62,7 @@ class _Socket:
         request = self.requests[-1]
         reply = {"id": request["id"], "ok": request["method"] != self.rejected_method}
         if not reply["ok"]:
-            reply["error"] = "Rejected for testing"
+            reply["error"] = self.error_detail
         elif request["method"] == "select" and self.selected_count is not None:
             reply["selectedCount"] = self.selected_count
         return json.dumps(reply).encode() + b"\n"
@@ -71,13 +72,25 @@ class _Socket:
 
 
 @pytest.mark.parametrize(
-    ("rejected_method", "selected_count"),
-    [(None, None), (None, 12), ("select", 12), ("zoomToSelection", 0)],
+    ("rejected_method", "selected_count", "image_not_found"),
+    [
+        (None, None, False),
+        (None, 12, False),
+        ("select", 12, False),
+        ("zoomToSelection", 12, False),
+        ("zoomToSelection", None, True),
+        (None, 0, True),
+    ],
 )
 def test_select_photo_sends_zoom_only_after_success(
-    monkeypatch, caplog, rejected_method, selected_count
+    monkeypatch, caplog, rejected_method, selected_count, image_not_found
 ):
-    socket = _Socket(rejected_method, selected_count)
+    error_detail = (
+        "The layer has no selected features."
+        if image_not_found
+        else "Rejected for testing"
+    )
+    socket = _Socket(rejected_method, selected_count, error_detail)
     caplog.set_level(logging.DEBUG, logger=qgis.__name__)
 
     class SocketFactory:
@@ -88,12 +101,20 @@ def test_select_photo_sends_zoom_only_after_success(
 
     monkeypatch.setattr(qgis, "QLocalSocket", SocketFactory)
     filename = "L'été\\Paris\tPhoto\n.JPG"
-    if rejected_method:
+    if selected_count == 0:
         with pytest.raises(
-            qgis.QgisRemoteControlError,
-            match=rf"{rejected_method} failed. Rejected for testing",
+            qgis.QgisImageNotFoundError, match="select matched no features"
         ):
             qgis.select_photo("test-qgis", 0, filename, 5000)
+    elif rejected_method:
+        with pytest.raises(qgis.QgisRemoteControlError) as caught:
+            qgis.select_photo("test-qgis", 0, filename, 5000)
+        assert str(caught.value) == f"{rejected_method} failed. {error_detail}"
+        assert caught.value.failure == (
+            qgis.QgisMapFailure.IMAGE_NOT_FOUND
+            if image_not_found
+            else qgis.QgisMapFailure.OPERATION
+        )
     else:
         qgis.select_photo("test-qgis", 0, filename, 5000)
 
@@ -107,7 +128,7 @@ def test_select_photo_sends_zoom_only_after_success(
             },
         }
     ]
-    if rejected_method != "select":
+    if rejected_method != "select" and selected_count != 0:
         expected.append({"id": 2, "method": "zoomToSelection", "params": {"layer": 0}})
     assert socket.requests == expected
     assert socket.addresses == ["test-qgis"]

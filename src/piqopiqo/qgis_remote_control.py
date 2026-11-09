@@ -18,17 +18,22 @@ from piqopiqo.qt_workers import PythonOwnedRunnable
 logger = logging.getLogger(__name__)
 
 
-class QgisRemoteControlError(Exception):
-    pass
-
-
-class QgisConnectionError(QgisRemoteControlError):
-    pass
-
-
 class QgisMapFailure(Enum):
     CONNECTION = "Cannot connect to QGIS Remote Control"
     OPERATION = "Error in QGIS Remote Control"
+    IMAGE_NOT_FOUND = "Image not found in QGIS"
+
+
+class QgisRemoteControlError(Exception):
+    failure = QgisMapFailure.OPERATION
+
+
+class QgisConnectionError(QgisRemoteControlError):
+    failure = QgisMapFailure.CONNECTION
+
+
+class QgisImageNotFoundError(QgisRemoteControlError):
+    failure = QgisMapFailure.IMAGE_NOT_FOUND
 
 
 def resolve_photo_layer(
@@ -111,7 +116,13 @@ def _send_request(
         raise QgisRemoteControlError(f"QGIS sent an unexpected reply to {method}.")
     if reply.get("ok") is not True:
         detail = reply.get("error") or "QGIS rejected the request."
-        raise QgisRemoteControlError(f"{method} failed. {detail}")
+        message = f"{method} failed. {detail}"
+        if (
+            method == "zoomToSelection"
+            and detail == "The layer has no selected features."
+        ):
+            raise QgisImageNotFoundError(message)
+        raise QgisRemoteControlError(message)
     return reply
 
 
@@ -145,6 +156,10 @@ def select_photo(
                 layer,
                 selected_count,
             )
+            if selected_count == 0:
+                raise QgisImageNotFoundError(
+                    f"select matched no features on layer {layer!r}."
+                )
         _send_request(socket, deadline, 2, "zoomToSelection", {"layer": layer})
     finally:
         socket.abort()
@@ -186,11 +201,7 @@ class QgisPhotoWorker(PythonOwnedRunnable):
             select_photo(self._settings.socket_name, layer, filename, self._timeout_ms)
         except QgisRemoteControlError as error:
             _log_map_error(filename, str(error))
-            failure = (
-                QgisMapFailure.CONNECTION
-                if isinstance(error, QgisConnectionError)
-                else QgisMapFailure.OPERATION
-            )
+            failure = error.failure
         except Exception as error:
             _log_map_error(filename, "".join(traceback.format_exception(error)))
             failure = QgisMapFailure.OPERATION
