@@ -34,7 +34,8 @@ class QgisConnectionError(QgisRemoteControlError):
 
 def resolve_photo_layer(
     photo: Path, workspace: Path, mappings: tuple[QgisLayerMapping, ...]
-) -> str | int:
+) -> tuple[str, str | int]:
+    """Return the workspace-relative photo folder and its QGIS layer."""
     try:
         parent = Path(os.path.abspath(photo.parent))
         folder = parent.relative_to(Path(os.path.abspath(workspace))).as_posix()
@@ -42,9 +43,10 @@ def resolve_photo_layer(
         raise QgisRemoteControlError(
             "The photo is outside the opened folder."
         ) from error
-    return next(
+    layer = next(
         (mapping.layer for mapping in mappings if mapping.folder == folder), folder
     )
+    return folder, layer
 
 
 def photo_expression(filename: str) -> str:
@@ -149,20 +151,19 @@ def select_photo(
             selected_count = None
         if selected_count is not None:
             logger.debug(
-                "QGIS select for %r on layer %r returned selectedCount=%d",
-                filename,
+                "QGIS select on layer %r returned selectedCount=%d",
                 layer,
                 selected_count,
             )
 
         lat, lon = coordinates
         params = {"lat": lat, "lon": lon, "z": zoom, "marker": True}
-        logger.debug("QGIS move for %r with params %s", filename, params)
+        logger.debug("QGIS move for layer %r with params %s", layer, params)
         _send_request(socket, deadline, 2, "move", params)
         if selected_count != 0:
             return None
         status = QgisMapStatus.ZOOMED_TO_POSITION
-        logger.warning("QGIS Map for %r on layer %r: %s", filename, layer, status.value)
+        logger.warning("QGIS Map on layer %r: %s", layer, status.value)
         return status
     finally:
         socket.abort()
@@ -172,10 +173,13 @@ class _QgisPhotoWorkerSignals(QObject):
     finished = Signal(object)  # QgisMapStatus or None
 
 
-def _log_map_error(filename: str, detail: str) -> None:
+def _log_map_error(layer: str | int | None, detail: str) -> None:
+    context = "QGIS Remote Control failed"
+    if layer is not None:
+        context += f" on layer {layer!r}"
     lines = [line for line in detail.splitlines() if line.strip()]
     for line in lines or ["No error details provided."]:
-        logger.error("QGIS Remote Control failed for %r: %s", filename, line)
+        logger.error("%s: %s", context, line)
 
 
 class QgisPhotoWorker(PythonOwnedRunnable):
@@ -200,11 +204,17 @@ class QgisPhotoWorker(PythonOwnedRunnable):
 
     def run(self) -> None:
         filename = self._photo.name
+        layer = None
         try:
-            layer = resolve_photo_layer(
+            folder, layer = resolve_photo_layer(
                 self._photo, self._workspace, self._settings.mappings
             )
-            logger.debug("QGIS Map requested for %r on layer %r", filename, layer)
+            logger.debug(
+                "QGIS Map requested for %r from folder %r on layer %r",
+                filename,
+                folder,
+                layer,
+            )
             status = select_photo(
                 self._settings.socket_name,
                 layer,
@@ -214,9 +224,9 @@ class QgisPhotoWorker(PythonOwnedRunnable):
                 zoom=self._zoom,
             )
         except QgisRemoteControlError as error:
-            _log_map_error(filename, str(error))
+            _log_map_error(layer, str(error))
             status = error.status
         except Exception as error:
-            _log_map_error(filename, "".join(traceback.format_exception(error)))
+            _log_map_error(layer, "".join(traceback.format_exception(error)))
             status = QgisMapStatus.OPERATION
         self.signals.finished.emit(status)

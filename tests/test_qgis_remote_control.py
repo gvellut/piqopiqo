@@ -13,18 +13,19 @@ def test_resolve_layer_from_workspace_relative_folder():
     workspace = Path("/photos")
     nested = workspace / "2026/Paris/DSCF1234.JPG"
     root = workspace / "DSCF1234.JPG"
-    assert qgis.resolve_photo_layer(nested, workspace, ()) == "2026/Paris"
-    assert qgis.resolve_photo_layer(root, workspace, ()) == "."
-    assert (
-        qgis.resolve_photo_layer(
-            nested,
-            workspace,
-            (QgisLayerMapping("Paris", 1), QgisLayerMapping("2026/Paris", 0)),
-        )
-        == 0
+    assert qgis.resolve_photo_layer(nested, workspace, ()) == (
+        "2026/Paris",
+        "2026/Paris",
     )
-    assert (
-        qgis.resolve_photo_layer(root, workspace, (QgisLayerMapping(".", "0"),)) == "0"
+    assert qgis.resolve_photo_layer(root, workspace, ()) == (".", ".")
+    assert qgis.resolve_photo_layer(
+        nested,
+        workspace,
+        (QgisLayerMapping("Paris", 1), QgisLayerMapping("2026/Paris", 0)),
+    ) == ("2026/Paris", 0)
+    assert qgis.resolve_photo_layer(root, workspace, (QgisLayerMapping(".", "0"),)) == (
+        ".",
+        "0",
     )
     with pytest.raises(qgis.QgisRemoteControlError, match="outside"):
         qgis.resolve_photo_layer(workspace / "../other/DSCF1234.JPG", workspace, ())
@@ -136,17 +137,16 @@ def test_select_photo_moves_to_coordinates_after_selection(
     debug_messages = []
     if rejected_method != "select" and selected_count is not None:
         debug_messages.append(
-            f"QGIS select for {filename!r} on layer 0 returned "
-            f"selectedCount={selected_count}"
+            f"QGIS select on layer 0 returned selectedCount={selected_count}"
         )
     if moves:
-        debug_messages.append(f"QGIS move for {filename!r} with params {move_params}")
+        debug_messages.append(f"QGIS move for layer 0 with params {move_params}")
     assert [
         r.getMessage() for r in caplog.records if r.levelno == logging.DEBUG
     ] == debug_messages
     warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
     assert warnings == (
-        [f"QGIS Map for {filename!r} on layer 0: Image not found. Zoomed to position"]
+        ["QGIS Map on layer 0: Image not found. Zoomed to position"]
         if selected_count == 0 and rejected_method is None
         else []
     )
@@ -165,6 +165,7 @@ def test_qgis_map_logs_one_line_per_record(
     monkeypatch, caplog, error_type, expected_failure
 ):
     filename = "Photo\n123.JPG"
+    folder = "2026/Paris\nTrip"
     layer = "Mapped\r\nlayer"
 
     def select_photo(_socket_name, chosen_layer, chosen_filename, _timeout, **_kwargs):
@@ -174,9 +175,9 @@ def test_qgis_map_logs_one_line_per_record(
 
     monkeypatch.setattr(qgis, "select_photo", select_photo)
     worker = qgis.QgisPhotoWorker(
-        f"/photos/Paris/{filename}",
+        f"/photos/{folder}/{filename}",
         "/photos",
-        QgisRemoteControlSettings(mappings=(QgisLayerMapping("Paris", layer),)),
+        QgisRemoteControlSettings(mappings=(QgisLayerMapping(folder, layer),)),
         5000,
         coordinates=(48.0, 2.0),
         zoom=17,
@@ -190,12 +191,18 @@ def test_qgis_map_logs_one_line_per_record(
     records = [record for record in caplog.records if record.name == qgis.__name__]
     debug, *errors = records
     assert debug.levelno == logging.DEBUG
-    assert (
-        debug.getMessage() == f"QGIS Map requested for {filename!r} on layer {layer!r}"
+    assert debug.getMessage() == (
+        f"QGIS Map requested for {filename!r} from folder {folder!r} on layer {layer!r}"
     )
     assert all(record.exc_info is None for record in records)
     assert all(len(record.getMessage().splitlines()) == 1 for record in records)
     assert all(record.levelno == logging.ERROR for record in errors)
+    assert all(
+        record.getMessage().startswith(
+            f"QGIS Remote Control failed on layer {layer!r}: "
+        )
+        for record in errors
+    )
     if error_type:
         first, second = errors[-2:]
         assert first.getMessage().endswith("First detail")

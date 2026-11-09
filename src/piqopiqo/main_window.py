@@ -2434,9 +2434,7 @@ class MainWindow(QMainWindow):
             settings,
             timeout_ms,
             coordinates=(lat, lon),
-            zoom=get_runtime_setting(
-                RuntimeSettingKey.QGIS_REMOTE_CONTROL_FALLBACK_ZOOM
-            ),
+            zoom=get_runtime_setting(RuntimeSettingKey.QGIS_REMOTE_CONTROL_ZOOM),
         )
         worker.signals.finished.connect(
             self._on_qgis_map_finished, Qt.ConnectionType.QueuedConnection

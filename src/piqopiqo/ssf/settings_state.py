@@ -152,7 +152,7 @@ class RuntimeSettingKey(StrEnum):
     MAX_EXIFTOOLS_IMAGE_BATCH = "maxExiftoolsImageBatch"
     SHUTDOWN_TIMEOUT_S = "shutdownTimeoutS"
     QGIS_REMOTE_CONTROL_TIMEOUT_MS = "qgisRemoteControlTimeoutMs"
-    QGIS_REMOTE_CONTROL_FALLBACK_ZOOM = "qgisRemoteControlFallbackZoom"
+    QGIS_REMOTE_CONTROL_ZOOM = "qgisRemoteControlZoom"
     COPY_SD_EJECT_TIMEOUT_S = "copySdEjectTimeoutS"
     PADDING = "padding"
     FONT_SIZE = "fontSize"
@@ -963,9 +963,7 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.QGIS_REMOTE_CONTROL_TIMEOUT_MS: SettingDef(
         default=5000, read_type=int
     ),
-    RuntimeSettingKey.QGIS_REMOTE_CONTROL_FALLBACK_ZOOM: SettingDef(
-        default=17, read_type=int
-    ),
+    RuntimeSettingKey.QGIS_REMOTE_CONTROL_ZOOM: SettingDef(default=17, read_type=int),
     RuntimeSettingKey.COPY_SD_EJECT_TIMEOUT_S: SettingDef(
         default=30.0, read_type=float
     ),

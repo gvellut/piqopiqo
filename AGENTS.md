@@ -241,7 +241,7 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - `UserSettingKey.SHOW_DESCRIPTION_FIELD` (default `True`) controls whether the Description editor row is shown in the Metadata panel (`EditPanel`); hiding it is UI-only and does not change DB/EXIF behavior.
 - `UserSettingKey.QGIS_REMOTE_CONTROL` stores the optional QGIS Map action, its socket name (`qgis-remote-control` by default), and workspace-relative folder mappings to exact layer labels or zero-based indexes. HTTP templates keep their own setting.
 - `RuntimeSettingKey.QGIS_REMOTE_CONTROL_TIMEOUT_MS` (default `5000`) limits the full QGIS socket exchange. Override it with `PIQO_QGIS_REMOTE_CONTROL_TIMEOUT_MS`.
-- `RuntimeSettingKey.QGIS_REMOTE_CONTROL_FALLBACK_ZOOM` (default `17`) is the Web Mercator zoom level used when QGIS moves to a photo's coordinates. Override it with `PIQO_QGIS_REMOTE_CONTROL_FALLBACK_ZOOM`.
+- `RuntimeSettingKey.QGIS_REMOTE_CONTROL_ZOOM` (default `17`) is the Web Mercator zoom level used when QGIS moves to a photo's coordinates. Override it with `PIQO_QGIS_REMOTE_CONTROL_ZOOM`.
 - `UserSettingKey.MANUAL_LENSES` (default `[]`) stores lens presets used by `Tools > Set Lens Info ...`.
 - `StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER` (default `True`) remembers whether Flickr album reorder saves the current order first.
 - `UserSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS` (default `False`) adds a final album-ordering stage only after photos are added to a newly created Flickr album.
@@ -311,7 +311,7 @@ The edit panel supports editing metadata fields (title, description, keywords, c
 - **Escape**: Reverts changes and cancels edit
 - Validation is applied for coordinates and datetime fields (red border on invalid input)
 - **Map** requires a single selected photo with valid coordinates. The grid context menu uses the same activation rules and map providers as the Metadata panel button. QGIS uses the workspace-relative parent folder as the layer label when there is no mapping, with `.` for the workspace root. The Qt worker selects features whose `Name` matches the full filename, then sends `move` with the photo coordinates, configured zoom, and `marker: true`.
-- The eliding label next to **Map** shows a yellow **Image not found. Zoomed to position** warning when the move succeeds and `selectedCount` is zero. Errors appear in red. A selection change clears the status and invalidates pending replies for the old selection. Retrying or reloading Map settings also clears the status. QGIS logs the filename, resolved layer, reported `selectedCount`, and `move` parameters at DEBUG. A move with zero matches logs at WARNING, and failure details use one ERROR record per line.
+- The eliding label next to **Map** shows a yellow **Image not found. Zoomed to position** warning when the move succeeds and `selectedCount` is zero. Errors appear in red. A selection change clears the status and invalidates pending replies for the old selection. Retrying or reloading Map settings also clears the status. The first DEBUG log records the filename, workspace-relative folder, and mapped layer. Later entries identify the mapped layer and record `selectedCount` and `move` parameters at DEBUG, zero matches at WARNING, and failures at ERROR with one record per line.
 
 ## Save EXIF (Tools Menu)
 

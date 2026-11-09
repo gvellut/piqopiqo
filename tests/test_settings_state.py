@@ -104,6 +104,7 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_MAP_LINKS",
         "PIQO_QGIS_REMOTE_CONTROL",
         "PIQO_QGIS_REMOTE_CONTROL_TIMEOUT_MS",
+        "PIQO_QGIS_REMOTE_CONTROL_ZOOM",
         "PIQO_FLICKR_UPLOAD_USE_LIFECYCLE",
         "PIQO_FLICKR_UPLOAD_LABEL_TRANSITIONS",
         "PIQO_FLICKR_UPLOAD_APPLY_TRANSITIONS",
@@ -420,7 +421,7 @@ def test_map_links_env_override(isolated_settings, monkeypatch):
     ]
 
 
-def test_qgis_remote_control_round_trip(isolated_settings):
+def test_qgis_remote_control_round_trip(isolated_settings, monkeypatch):
     key = UserSettingKey.QGIS_REMOTE_CONTROL
     assert get_user_setting(key) == QgisRemoteControlSettings()
     settings = QgisRemoteControlSettings(
@@ -434,6 +435,11 @@ def test_qgis_remote_control_round_trip(isolated_settings):
     assert get_user_setting(key) == settings
     assert get_user_setting(UserSettingKey.MAP_LINKS) == []
     assert get_runtime_setting(RuntimeSettingKey.QGIS_REMOTE_CONTROL_TIMEOUT_MS) == 5000
+    assert get_runtime_setting(RuntimeSettingKey.QGIS_REMOTE_CONTROL_ZOOM) == 17
+
+    monkeypatch.setenv("PIQO_QGIS_REMOTE_CONTROL_ZOOM", "19")
+    init_qsettings_store(dyn=False)
+    assert get_runtime_setting(RuntimeSettingKey.QGIS_REMOTE_CONTROL_ZOOM) == 19
 
 
 def test_env_override_takes_priority_over_persisted_values(
