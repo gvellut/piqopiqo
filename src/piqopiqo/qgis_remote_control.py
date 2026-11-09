@@ -70,7 +70,7 @@ def _send_request(
     request_id: int,
     method: str,
     params: dict,
-) -> None:
+) -> dict:
     operation = f"running {method} in QGIS"
     _remaining_time(deadline, operation)
     frame = (
@@ -112,6 +112,7 @@ def _send_request(
     if reply.get("ok") is not True:
         detail = reply.get("error") or "QGIS rejected the request."
         raise QgisRemoteControlError(f"{method} failed. {detail}")
+    return reply
 
 
 def select_photo(
@@ -129,13 +130,21 @@ def select_photo(
                 f"{socket.errorString()}"
             )
 
-        _send_request(
+        reply = _send_request(
             socket,
             deadline,
             1,
             "select",
             {"layer": layer, "expression": photo_expression(filename)},
         )
+        selected_count = reply.get("selectedCount")
+        if type(selected_count) is int and selected_count >= 0:
+            logger.debug(
+                "QGIS select for %r on layer %r returned selectedCount=%d",
+                filename,
+                layer,
+                selected_count,
+            )
         _send_request(socket, deadline, 2, "zoomToSelection", {"layer": layer})
     finally:
         socket.abort()

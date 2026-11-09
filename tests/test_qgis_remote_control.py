@@ -33,8 +33,9 @@ def test_resolve_layer_from_workspace_relative_folder():
 class _Socket:
     LocalSocketState = QLocalSocket.LocalSocketState
 
-    def __init__(self, rejected_method):
+    def __init__(self, rejected_method, selected_count):
         self.rejected_method = rejected_method
+        self.selected_count = selected_count
         self.addresses = []
         self.requests = []
         self.closed = False
@@ -61,15 +62,23 @@ class _Socket:
         reply = {"id": request["id"], "ok": request["method"] != self.rejected_method}
         if not reply["ok"]:
             reply["error"] = "Rejected for testing"
+        elif request["method"] == "select" and self.selected_count is not None:
+            reply["selectedCount"] = self.selected_count
         return json.dumps(reply).encode() + b"\n"
 
     def abort(self):
         self.closed = True
 
 
-@pytest.mark.parametrize("rejected_method", [None, "select", "zoomToSelection"])
-def test_select_photo_sends_zoom_only_after_success(monkeypatch, rejected_method):
-    socket = _Socket(rejected_method)
+@pytest.mark.parametrize(
+    ("rejected_method", "selected_count"),
+    [(None, None), (None, 12), ("select", 12), ("zoomToSelection", 0)],
+)
+def test_select_photo_sends_zoom_only_after_success(
+    monkeypatch, caplog, rejected_method, selected_count
+):
+    socket = _Socket(rejected_method, selected_count)
+    caplog.set_level(logging.DEBUG, logger=qgis.__name__)
 
     class SocketFactory:
         LocalSocketState = QLocalSocket.LocalSocketState
@@ -103,6 +112,13 @@ def test_select_photo_sends_zoom_only_after_success(monkeypatch, rejected_method
     assert socket.requests == expected
     assert socket.addresses == ["test-qgis"]
     assert socket.closed
+    if rejected_method == "select" or selected_count is None:
+        assert not caplog.messages
+    else:
+        assert caplog.messages == [
+            f"QGIS select for {filename!r} on layer 0 returned "
+            f"selectedCount={selected_count}"
+        ]
 
 
 @pytest.mark.parametrize(
