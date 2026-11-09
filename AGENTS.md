@@ -241,6 +241,7 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - `UserSettingKey.SHOW_DESCRIPTION_FIELD` (default `True`) controls whether the Description editor row is shown in the Metadata panel (`EditPanel`); hiding it is UI-only and does not change DB/EXIF behavior.
 - `UserSettingKey.QGIS_REMOTE_CONTROL` stores the optional QGIS Map action, its socket name (`qgis-remote-control` by default), and workspace-relative folder mappings to exact layer labels or zero-based indexes. HTTP templates keep their own setting.
 - `RuntimeSettingKey.QGIS_REMOTE_CONTROL_TIMEOUT_MS` (default `5000`) limits the full QGIS socket exchange. Override it with `PIQO_QGIS_REMOTE_CONTROL_TIMEOUT_MS`.
+- `RuntimeSettingKey.QGIS_REMOTE_CONTROL_FALLBACK_ZOOM` (default `17`) is the Web Mercator zoom level used when QGIS moves to a photo's coordinates after an empty selection. Override it with `PIQO_QGIS_REMOTE_CONTROL_FALLBACK_ZOOM`.
 - `UserSettingKey.MANUAL_LENSES` (default `[]`) stores lens presets used by `Tools > Set Lens Info ...`.
 - `StateKey.FLICKR_REORDER_SAVE_EXISTING_ORDER` (default `True`) remembers whether Flickr album reorder saves the current order first.
 - `UserSettingKey.FLICKR_UPLOAD_REORDER_NEW_ALBUMS` (default `False`) adds a final album-ordering stage only after photos are added to a newly created Flickr album.
@@ -309,8 +310,8 @@ The edit panel supports editing metadata fields (title, description, keywords, c
 - **Enter/Tab**: Saves the field and moves focus
 - **Escape**: Reverts changes and cancels edit
 - Validation is applied for coordinates and datetime fields (red border on invalid input)
-- **Map** requires a single selected photo with valid coordinates. QGIS uses the workspace-relative parent folder as the layer label when there is no mapping, with `.` for the workspace root. The Qt worker matches the full filename against `Name` and sends `zoomToSelection` after `select` succeeds unless `selectedCount` is zero.
-- QGIS failures appear in an eliding red label next to **Map**. A zero `selectedCount` or an empty selection reported by `zoomToSelection` shows **Image not found in QGIS**. Connection failures and other command errors have their own messages. The label clears on retry, selection changes, or map settings reload. QGIS logs the filename, resolved layer, and reported `selectedCount` at DEBUG, and writes each line of failure details at ERROR in a separate record.
+- **Map** requires a single selected photo with valid coordinates. The grid context menu uses the same activation rules and map providers as the Metadata panel button. QGIS uses the workspace-relative parent folder as the layer label when there is no mapping, with `.` for the workspace root. The Qt worker matches the full filename against `Name` and zooms to the selected features. On an empty selection, it sends `move` with the photo coordinates and the fallback zoom.
+- The eliding label next to **Map** shows a yellow **Image not found. Zoomed to position** warning after a successful fallback. Errors appear in red. A selection change clears the status and invalidates pending replies for the old selection. Retrying or reloading Map settings also clears the status. QGIS logs the filename, resolved layer, reported `selectedCount`, and fallback `move` parameters at DEBUG. A successful fallback logs at WARNING, and failure details use one ERROR record per line.
 
 ## Save EXIF (Tools Menu)
 
@@ -379,9 +380,9 @@ Right-click on a photo in the grid to access:
 - **Reveal in Finder**: Opens system file manager with files selected (uses `show-in-file-manager` package). Handles multiple files across multiple folders.
 - **View in {App}**: Opens selected photos in external viewer (only shown if `EXTERNAL_VIEWER` is configured)
 - **Edit in {App}**: Duplicates selected photos first, then opens duplicates in external editor (only shown if `EXTERNAL_EDITOR` is configured)
-- **Regenerate Thumbnail(s)**: Re-queues thumbnail generation while retaining the last valid preview until replacement
-- **Duplicate**: Creates a copy with " copy" suffix (or " copy2", etc.)
-- **Move to Trash**: Moves file to macOS Trash
+- **Map**: Opens the sole configured map or lists the providers in a submenu. It is enabled for a single selected photo with valid coordinates.
+- **Extract GPS Time Shift**: Enabled for a single selected photo.
+- **Other commands**: Groups **Regenerate Thumbnail(s)** and **Reload EXIF**, **Duplicate**, and **Move to Trash** in separate sections.
 
 Selection behavior:
 - Right-click on unselected photo: selects only that photo

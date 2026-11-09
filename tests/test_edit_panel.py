@@ -16,6 +16,7 @@ from piqopiqo.panels.edit_panel import EditPanel
 from piqopiqo.panels.edit_widgets import MULTIPLE_VALUES, KeywordsEdit
 from piqopiqo.panels.keyword.keyword_tree import KeywordTreeManager
 from piqopiqo.panels.keyword.keyword_tree_dialog import KeywordTreeDialog
+from piqopiqo.qgis_remote_control import QgisMapStatus
 from piqopiqo.ssf.settings_state import (
     UserSettingKey,
     init_qsettings_store,
@@ -1268,8 +1269,8 @@ def test_map_button_opens_qgis_only_for_single_photo_with_gps(
         path="/tmp/Paris/DSCF1234.JPG", name="DSCF1234.JPG", created="", db_metadata={}
     )
     another = ImageItem(path="/tmp/Paris/DSCF1235.JPG", name="DSCF1235.JPG", created="")
-    requested: list[str] = []
-    panel.qgis_map_requested.connect(requested.append)
+    requested: list[tuple[str, float, float]] = []
+    panel.qgis_map_requested.connect(lambda *args: requested.append(args))
 
     assert not panel.map_btn.isHidden()
     panel.update_for_selection([item])
@@ -1292,7 +1293,7 @@ def test_map_button_opens_qgis_only_for_single_photo_with_gps(
         actions[-1].trigger()
     else:
         assert panel._map_menu is None
-    assert requested == [item.path]
+    assert requested == [(item.path, 48.0, 2.0)]
 
 
 def test_qgis_map_error_elides_and_clears_with_selection(qapp):
@@ -1311,12 +1312,13 @@ def test_qgis_map_error_elides_and_clears_with_selection(qapp):
     panel.resize(300, 450)
     panel.show()
 
-    message = "Cannot connect to QGIS Remote Control"
+    status = QgisMapStatus.CONNECTION
+    message = status.value
     panel.start_qgis_map_request()
-    panel.finish_qgis_map_request(message)
+    panel.finish_qgis_map_request(status)
     qapp.processEvents()
 
-    label = panel.qgis_map_error_label
+    label = panel.qgis_map_status_label
     assert label.isVisible()
     assert label.x() >= panel.map_btn.geometry().right()
     assert label.text().endswith("…")
@@ -1328,8 +1330,24 @@ def test_qgis_map_error_elides_and_clears_with_selection(qapp):
     panel.update_for_selection([item])
     assert label.isVisible()
 
+    other = ImageItem(
+        path="/tmp/second.JPG", name="second.JPG", created="", db_metadata={}
+    )
+    panel.update_for_selection([other])
+    panel.update_for_selection([item])
+    assert label.isHidden()
+    assert not label.full_text
+
     panel.start_qgis_map_request()
-    panel.update_for_selection([])
-    panel.finish_qgis_map_request(message)
+    panel.finish_qgis_map_request(QgisMapStatus.ZOOMED_TO_POSITION)
+    panel.update_for_selection([item, other])
+    panel.update_for_selection([item])
+    assert label.isHidden()
+    assert not label.full_text
+
+    panel.start_qgis_map_request()
+    panel.update_for_selection([other])
+    panel.update_for_selection([item])
+    panel.finish_qgis_map_request(status)
     assert label.isHidden()
     panel.close()

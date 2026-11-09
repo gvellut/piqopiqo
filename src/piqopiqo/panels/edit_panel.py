@@ -4,6 +4,7 @@ import logging
 import webbrowser
 
 from PySide6.QtCore import Qt, QThreadPool, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QDialog,
     QGridLayout,
@@ -33,6 +34,7 @@ from piqopiqo.metadata.db_fields import (
 from piqopiqo.metadata.metadata_db import MetadataDBManager
 from piqopiqo.metadata.save_workers import MetadataSaveWorker, drain_qthread_pool
 from piqopiqo.model import ImageItem, MapLinkOption
+from piqopiqo.qgis_remote_control import QgisMapStatus
 from piqopiqo.ssf.settings_state import UserSettingKey, get_user_setting
 
 from .edit_widgets import (
@@ -62,7 +64,7 @@ class EditPanel(QWidget):
     edit_finished = Signal()  # Emitted when editing is complete (for focus return)
     interaction_finished = Signal()  # Explicit user completion/cancel for focus restore
     metadata_saved = Signal(str)  # DBFields name for synchronization
-    qgis_map_requested = Signal(str)  # photo path
+    qgis_map_requested = Signal(str, float, float)  # photo path, latitude, longitude
 
     def __init__(self, db_manager: MetadataDBManager, parent=None):
         super().__init__(parent)
@@ -256,16 +258,15 @@ class EditPanel(QWidget):
         )
         self.map_btn.hide()
         self._map_row_layout.addWidget(self.map_btn, 0)
-        self.qgis_map_error_label = EllidedLabel(parent=self._map_row_widget)
-        self.qgis_map_error_label.setStyleSheet("color: red;")
-        self.qgis_map_error_label.setTextInteractionFlags(
+        self.qgis_map_status_label = EllidedLabel(parent=self._map_row_widget)
+        self.qgis_map_status_label.setTextInteractionFlags(
             Qt.TextInteractionFlag.NoTextInteraction
         )
-        self.qgis_map_error_label.setSizePolicy(
+        self.qgis_map_status_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
         )
-        self.qgis_map_error_label.hide()
-        self._map_row_layout.addWidget(self.qgis_map_error_label, 1)
+        self.qgis_map_status_label.hide()
+        self._map_row_layout.addWidget(self.qgis_map_status_label, 1)
         self._map_row_layout.addStretch()
         self.layout.addWidget(self._map_row_widget, row, 1)
         row += 1
@@ -344,7 +345,7 @@ class EditPanel(QWidget):
         self._qgis_map_enabled = get_user_setting(
             UserSettingKey.QGIS_REMOTE_CONTROL
         ).enabled
-        self.map_btn.setVisible(bool(self._map_links) or self._qgis_map_enabled)
+        self.map_btn.setVisible(self._map_option_count() > 0)
         if self._map_menu is not None:
             self._map_menu.close()
             self._map_menu.deleteLater()
@@ -550,7 +551,7 @@ class EditPanel(QWidget):
         elif value == "" or value is None:
             widget.set_value(None)
         else:
-            widget.set_value(float(value) if value else None)
+            widget.set_value(float(value))
 
     def _clear_fields(self):
         """Clear all fields."""
@@ -565,8 +566,14 @@ class EditPanel(QWidget):
         self._update_map_button_state()
         self._sync_hidden_metadata_row_visibility()
 
-    def _map_coordinates(self) -> tuple[float | None, float | None]:
-        return self.lat_edit.get_value(), self.lon_edit.get_value()
+    def _map_option_count(self) -> int:
+        return len(self._map_links) + self._qgis_map_enabled
+
+    def _map_coordinates(self) -> tuple[float, float] | None:
+        lat, lon = self.lat_edit.get_value(), self.lon_edit.get_value()
+        if lat is None or lon is None:
+            return None
+        return lat, lon
 
     def _update_map_button_state(self) -> None:
         if not hasattr(self, "map_btn"):
@@ -575,20 +582,19 @@ class EditPanel(QWidget):
             self.map_btn.setEnabled(False)
             return
 
-        lat, lon = self._map_coordinates()
         can_open = (
             len(self._current_items) == 1
             and not self._is_multi_select
             and not self._has_missing_data
-            and lat is not None
-            and lon is not None
+            and self._map_coordinates() is not None
         )
         self.map_btn.setEnabled(can_open)
 
     def _open_map_option(self, option: MapLinkOption) -> None:
-        lat, lon = self._map_coordinates()
-        if lat is None or lon is None:
+        coordinates = self._map_coordinates()
+        if not self.map_btn.isEnabled() or coordinates is None:
             return
+        lat, lon = coordinates
         try:
             url = option.url_template.format(lat=lat, lon=lon)
         except Exception:
@@ -600,7 +606,7 @@ class EditPanel(QWidget):
         if not self.map_btn.isEnabled():
             return
 
-        if len(self._map_links) + self._qgis_map_enabled == 1:
+        if self._map_option_count() == 1:
             if self._qgis_map_enabled:
                 self._request_qgis_map()
             else:
@@ -611,6 +617,23 @@ class EditPanel(QWidget):
             self._map_menu.deleteLater()
 
         menu = QMenu(self.map_btn)
+        self._populate_map_menu(menu)
+        self._map_menu = menu
+        menu.popup(self.map_btn.mapToGlobal(self.map_btn.rect().bottomLeft()))
+
+    def add_map_action(self, menu: QMenu) -> bool:
+        if self.map_btn.isHidden():
+            return False
+        if self._map_option_count() == 1:
+            action = menu.addAction("Map", self._on_open_map)
+        else:
+            submenu = menu.addMenu("Map")
+            self._populate_map_menu(submenu)
+            action = submenu.menuAction()
+        action.setEnabled(self.map_btn.isEnabled())
+        return True
+
+    def _populate_map_menu(self, menu: QMenu) -> None:
         for option in self._map_links:
             action = menu.addAction(option.name)
             action.triggered.connect(
@@ -620,29 +643,42 @@ class EditPanel(QWidget):
             )
         if self._qgis_map_enabled:
             menu.addAction("QGIS Remote Control", self._request_qgis_map)
-        self._map_menu = menu
-        menu.popup(self.map_btn.mapToGlobal(self.map_btn.rect().bottomLeft()))
 
     def _request_qgis_map(self) -> None:
-        if self._qgis_map_enabled and self.map_btn.isEnabled():
-            self.qgis_map_requested.emit(self._current_items[0].path)
+        coordinates = self._map_coordinates()
+        if (
+            self._qgis_map_enabled
+            and self.map_btn.isEnabled()
+            and coordinates is not None
+        ):
+            self.qgis_map_requested.emit(self._current_items[0].path, *coordinates)
 
     def _clear_qgis_map_status(self) -> None:
         self._qgis_map_pending = False
-        self.qgis_map_error_label.hide()
+        label = self.qgis_map_status_label
+        label.hide()
+        if label.full_text:
+            label.setText("")
+            label.setToolTip("")
 
     def start_qgis_map_request(self) -> None:
         self._clear_qgis_map_status()
         self._qgis_map_pending = True
 
-    def finish_qgis_map_request(self, message: str) -> None:
+    def finish_qgis_map_request(self, status: QgisMapStatus | None) -> None:
         if not self._qgis_map_pending:
             return
         self._qgis_map_pending = False
-        if message:
-            self.qgis_map_error_label.setText(message)
-            self.qgis_map_error_label.setToolTip(message)
-            self.qgis_map_error_label.show()
+        if status is not None:
+            color = (
+                Qt.GlobalColor.darkYellow
+                if status is QgisMapStatus.ZOOMED_TO_POSITION
+                else Qt.GlobalColor.red
+            )
+            self.qgis_map_status_label.setStyleSheet(f"color: {QColor(color).name()};")
+            self.qgis_map_status_label.setText(status.value)
+            self.qgis_map_status_label.setToolTip(status.value)
+            self.qgis_map_status_label.show()
 
     def _on_field_saved(self, field_name: str):
         """Handle field save event."""

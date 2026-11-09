@@ -1,4 +1,4 @@
-"""Select a photo feature and zoom to it using the QGIS local socket."""
+"""Zoom to a photo feature or its GPS position using the QGIS local socket."""
 
 from __future__ import annotations
 
@@ -18,22 +18,22 @@ from piqopiqo.qt_workers import PythonOwnedRunnable
 logger = logging.getLogger(__name__)
 
 
-class QgisMapFailure(Enum):
+class QgisMapStatus(Enum):
     CONNECTION = "Cannot connect to QGIS Remote Control"
     OPERATION = "Error in QGIS Remote Control"
-    IMAGE_NOT_FOUND = "Image not found in QGIS"
+    ZOOMED_TO_POSITION = "Image not found. Zoomed to position"
 
 
 class QgisRemoteControlError(Exception):
-    failure = QgisMapFailure.OPERATION
+    status = QgisMapStatus.OPERATION
 
 
 class QgisConnectionError(QgisRemoteControlError):
-    failure = QgisMapFailure.CONNECTION
+    status = QgisMapStatus.CONNECTION
 
 
-class QgisImageNotFoundError(QgisRemoteControlError):
-    failure = QgisMapFailure.IMAGE_NOT_FOUND
+class _QgisEmptySelectionError(QgisRemoteControlError):
+    pass
 
 
 def resolve_photo_layer(
@@ -121,14 +121,20 @@ def _send_request(
             method == "zoomToSelection"
             and detail == "The layer has no selected features."
         ):
-            raise QgisImageNotFoundError(message)
+            raise _QgisEmptySelectionError(message)
         raise QgisRemoteControlError(message)
     return reply
 
 
 def select_photo(
-    socket_name: str, layer: str | int, filename: str, timeout_ms: int
-) -> None:
+    socket_name: str,
+    layer: str | int,
+    filename: str,
+    timeout_ms: int,
+    *,
+    coordinates: tuple[float, float],
+    fallback_zoom: int,
+) -> QgisMapStatus | None:
     deadline = QDeadlineTimer(max(1, timeout_ms))
     socket = QLocalSocket()
     try:
@@ -149,24 +155,38 @@ def select_photo(
             {"layer": layer, "expression": photo_expression(filename)},
         )
         selected_count = reply.get("selectedCount")
-        if type(selected_count) is int and selected_count >= 0:
+        if type(selected_count) is not int or selected_count < 0:
+            selected_count = None
+        if selected_count is not None:
             logger.debug(
                 "QGIS select for %r on layer %r returned selectedCount=%d",
                 filename,
                 layer,
                 selected_count,
             )
-            if selected_count == 0:
-                raise QgisImageNotFoundError(
-                    f"select matched no features on layer {layer!r}."
-                )
-        _send_request(socket, deadline, 2, "zoomToSelection", {"layer": layer})
+
+        move_id = 2
+        if selected_count != 0:
+            try:
+                _send_request(socket, deadline, 2, "zoomToSelection", {"layer": layer})
+            except _QgisEmptySelectionError:
+                move_id = 3
+            else:
+                return None
+
+        lat, lon = coordinates
+        params = {"lat": lat, "lon": lon, "z": fallback_zoom}
+        logger.debug("QGIS move for %r with params %s", filename, params)
+        _send_request(socket, deadline, move_id, "move", params)
+        status = QgisMapStatus.ZOOMED_TO_POSITION
+        logger.warning("QGIS Map for %r on layer %r: %s", filename, layer, status.value)
+        return status
     finally:
         socket.abort()
 
 
 class _QgisPhotoWorkerSignals(QObject):
-    finished = Signal(object)  # QgisMapFailure or None
+    finished = Signal(object)  # QgisMapStatus or None
 
 
 def _log_map_error(filename: str, detail: str) -> None:
@@ -182,27 +202,38 @@ class QgisPhotoWorker(PythonOwnedRunnable):
         workspace: str,
         settings: QgisRemoteControlSettings,
         timeout_ms: int,
+        *,
+        coordinates: tuple[float, float],
+        fallback_zoom: int,
     ):
         super().__init__()
         self._photo = Path(photo_path)
         self._workspace = Path(workspace)
         self._settings = settings
         self._timeout_ms = timeout_ms
+        self._coordinates = coordinates
+        self._fallback_zoom = fallback_zoom
         self.signals = _QgisPhotoWorkerSignals()
 
     def run(self) -> None:
-        failure = None
         filename = self._photo.name
         try:
             layer = resolve_photo_layer(
                 self._photo, self._workspace, self._settings.mappings
             )
             logger.debug("QGIS Map requested for %r on layer %r", filename, layer)
-            select_photo(self._settings.socket_name, layer, filename, self._timeout_ms)
+            status = select_photo(
+                self._settings.socket_name,
+                layer,
+                filename,
+                self._timeout_ms,
+                coordinates=self._coordinates,
+                fallback_zoom=self._fallback_zoom,
+            )
         except QgisRemoteControlError as error:
             _log_map_error(filename, str(error))
-            failure = error.failure
+            status = error.status
         except Exception as error:
             _log_map_error(filename, "".join(traceback.format_exception(error)))
-            failure = QgisMapFailure.OPERATION
-        self.signals.finished.emit(failure)
+            status = QgisMapStatus.OPERATION
+        self.signals.finished.emit(status)

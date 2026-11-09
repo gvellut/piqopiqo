@@ -72,23 +72,22 @@ class _Socket:
 
 
 @pytest.mark.parametrize(
-    ("rejected_method", "selected_count", "image_not_found"),
+    ("rejected_method", "selected_count", "empty_zoom"),
     [
         (None, None, False),
         (None, 12, False),
         ("select", 12, False),
         ("zoomToSelection", 12, False),
         ("zoomToSelection", None, True),
-        (None, 0, True),
+        (None, 0, False),
+        ("move", 0, False),
     ],
 )
-def test_select_photo_sends_zoom_only_after_success(
-    monkeypatch, caplog, rejected_method, selected_count, image_not_found
+def test_select_photo_zooms_to_selection_or_moves_to_coordinates(
+    monkeypatch, caplog, rejected_method, selected_count, empty_zoom
 ):
     error_detail = (
-        "The layer has no selected features."
-        if image_not_found
-        else "Rejected for testing"
+        "The layer has no selected features." if empty_zoom else "Rejected for testing"
     )
     socket = _Socket(rejected_method, selected_count, error_detail)
     caplog.set_level(logging.DEBUG, logger=qgis.__name__)
@@ -101,22 +100,25 @@ def test_select_photo_sends_zoom_only_after_success(
 
     monkeypatch.setattr(qgis, "QLocalSocket", SocketFactory)
     filename = "L'été\\Paris\tPhoto\n.JPG"
-    if selected_count == 0:
-        with pytest.raises(
-            qgis.QgisImageNotFoundError, match="select matched no features"
-        ):
-            qgis.select_photo("test-qgis", 0, filename, 5000)
-    elif rejected_method:
+    coordinates = (0.0, -8.0)
+    moves = selected_count == 0 or empty_zoom
+    if rejected_method and not empty_zoom:
         with pytest.raises(qgis.QgisRemoteControlError) as caught:
-            qgis.select_photo("test-qgis", 0, filename, 5000)
+            qgis.select_photo(
+                "test-qgis",
+                0,
+                filename,
+                5000,
+                coordinates=coordinates,
+                fallback_zoom=17,
+            )
         assert str(caught.value) == f"{rejected_method} failed. {error_detail}"
-        assert caught.value.failure == (
-            qgis.QgisMapFailure.IMAGE_NOT_FOUND
-            if image_not_found
-            else qgis.QgisMapFailure.OPERATION
-        )
+        assert caught.value.status is qgis.QgisMapStatus.OPERATION
     else:
-        qgis.select_photo("test-qgis", 0, filename, 5000)
+        status = qgis.select_photo(
+            "test-qgis", 0, filename, 5000, coordinates=coordinates, fallback_zoom=17
+        )
+        assert status is (qgis.QgisMapStatus.ZOOMED_TO_POSITION if moves else None)
 
     expected = [
         {
@@ -130,25 +132,42 @@ def test_select_photo_sends_zoom_only_after_success(
     ]
     if rejected_method != "select" and selected_count != 0:
         expected.append({"id": 2, "method": "zoomToSelection", "params": {"layer": 0}})
+    move_params = {"lat": 0.0, "lon": -8.0, "z": 17}
+    if moves:
+        expected.append({
+            "id": len(expected) + 1,
+            "method": "move",
+            "params": move_params,
+        })
     assert socket.requests == expected
     assert socket.addresses == ["test-qgis"]
     assert socket.closed
-    if rejected_method == "select" or selected_count is None:
-        assert not caplog.messages
-    else:
-        assert caplog.messages == [
+    debug_messages = []
+    if rejected_method != "select" and selected_count is not None:
+        debug_messages.append(
             f"QGIS select for {filename!r} on layer 0 returned "
             f"selectedCount={selected_count}"
-        ]
+        )
+    if moves:
+        debug_messages.append(f"QGIS move for {filename!r} with params {move_params}")
+    assert [
+        r.getMessage() for r in caplog.records if r.levelno == logging.DEBUG
+    ] == debug_messages
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert warnings == (
+        [f"QGIS Map for {filename!r} on layer 0: Image not found. Zoomed to position"]
+        if moves and rejected_method != "move"
+        else []
+    )
 
 
 @pytest.mark.parametrize(
     ("error_type", "expected_failure"),
     [
         (None, None),
-        (qgis.QgisConnectionError, qgis.QgisMapFailure.CONNECTION),
-        (qgis.QgisRemoteControlError, qgis.QgisMapFailure.OPERATION),
-        (RuntimeError, qgis.QgisMapFailure.OPERATION),
+        (qgis.QgisConnectionError, qgis.QgisMapStatus.CONNECTION),
+        (qgis.QgisRemoteControlError, qgis.QgisMapStatus.OPERATION),
+        (RuntimeError, qgis.QgisMapStatus.OPERATION),
     ],
 )
 def test_qgis_map_logs_one_line_per_record(
@@ -157,7 +176,7 @@ def test_qgis_map_logs_one_line_per_record(
     filename = "Photo\n123.JPG"
     layer = "Mapped\r\nlayer"
 
-    def select_photo(_socket_name, chosen_layer, chosen_filename, _timeout):
+    def select_photo(_socket_name, chosen_layer, chosen_filename, _timeout, **_kwargs):
         assert (chosen_layer, chosen_filename) == (layer, filename)
         if error_type:
             raise error_type("First detail\r\nSecond detail")
@@ -168,6 +187,8 @@ def test_qgis_map_logs_one_line_per_record(
         "/photos",
         QgisRemoteControlSettings(mappings=(QgisLayerMapping("Paris", layer),)),
         5000,
+        coordinates=(48.0, 2.0),
+        fallback_zoom=17,
     )
     results = []
     worker.signals.finished.connect(results.append)

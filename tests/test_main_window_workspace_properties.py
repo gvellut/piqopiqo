@@ -6,9 +6,9 @@ import os
 from types import SimpleNamespace
 import uuid
 
-from PySide6.QtCore import QCoreApplication, QThreadPool
-from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
+from PySide6.QtCore import QCoreApplication, QPoint, QThreadPool
+from PySide6.QtGui import QAction, QColor
+from PySide6.QtWidgets import QApplication, QDialog, QMenu, QMessageBox
 import pytest
 
 from piqopiqo.background.media_man import FolderPrimingResult
@@ -17,7 +17,7 @@ from piqopiqo.main_window import MainWindow
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.model import ImageItem, MapLinkOption, QgisRemoteControlSettings
 from piqopiqo.photo_model import SortOrder
-from piqopiqo.qgis_remote_control import QgisImageNotFoundError, QgisRemoteControlError
+from piqopiqo.qgis_remote_control import QgisMapStatus, QgisRemoteControlError
 from piqopiqo.ssf.settings_state import (
     APP_NAME,
     StateKey,
@@ -137,6 +137,14 @@ def _menu_by_title(window: MainWindow, title: str):
         if menu is not None and menu.title() == title:
             return menu
     return None
+
+
+def _intercept_context_menu_exec(monkeypatch, callback):
+    class ContextMenu(QMenu):
+        def exec(self, pos):
+            callback(self, pos)
+
+    monkeypatch.setattr("piqopiqo.grid.context_menu.QMenu", ContextMenu)
 
 
 def _action_by_text(
@@ -470,15 +478,9 @@ def test_map_links_setting_updates_edit_panel_visibility_live(window):
     assert window.edit_panel.map_btn.isHidden() is True
 
 
-@pytest.mark.parametrize(
-    ("error_type", "expected_message"),
-    [
-        (QgisRemoteControlError, "Error in QGIS Remote Control"),
-        (QgisImageNotFoundError, "Image not found in QGIS"),
-    ],
-)
-def test_qgis_map_failure_and_retry_update_inline_status(
-    window, qapp, monkeypatch, error_type, expected_message
+@pytest.mark.parametrize("entry", ["metadata", "grid"])
+def test_qgis_map_failure_warning_and_retry_update_inline_status(
+    window, qapp, monkeypatch, entry
 ):
     window.root_folder = "/photos"
     monkeypatch.setattr(
@@ -492,40 +494,135 @@ def test_qgis_map_failure_and_retry_update_inline_status(
     )
     window._apply_settings_changes({key})
     panel = window.edit_panel
-    panel.update_for_selection([
-        ImageItem(
-            path="/photos/test.JPG",
-            name="test.JPG",
-            created="",
-            db_metadata={DBFields.LATITUDE: "48", DBFields.LONGITUDE: "2"},
-        ),
-    ])
+    photo = ImageItem(
+        path="/photos/test.JPG",
+        name="test.JPG",
+        created="",
+        db_metadata={DBFields.LATITUDE: "48", DBFields.LONGITUDE: "2"},
+    )
+    panel.update_for_selection([photo])
+    monkeypatch.setattr(window.photo_model, "get_selected_photos", lambda: [photo])
+
+    def trigger_map(menu, _pos):
+        action = next(action for action in menu.actions() if action.text() == "Map")
+        assert action.isEnabled()
+        action.trigger()
+
+    _intercept_context_menu_exec(monkeypatch, trigger_map)
+    label = panel.qgis_map_status_label
 
     def click_and_finish():
-        panel.map_btn.click()
-        assert panel.qgis_map_error_label.isHidden()
+        if entry == "grid":
+            window._show_context_menu(0, QPoint())
+        else:
+            panel.map_btn.click()
+        assert label.isHidden()
         assert QThreadPool.globalInstance().waitForDone(1000)
         qapp.processEvents()
 
     click_and_finish()
-    assert not panel.qgis_map_error_label.isHidden()
-    assert (
-        panel.qgis_map_error_label.full_text == "Cannot connect to QGIS Remote Control"
-    )
+    assert not label.isHidden()
+    assert label.full_text == "Cannot connect to QGIS Remote Control"
 
-    def reject(*_args):
-        raise error_type("Technical details")
+    results = iter([
+        QgisRemoteControlError("Technical details"),
+        QgisMapStatus.ZOOMED_TO_POSITION,
+        None,
+    ])
 
-    monkeypatch.setattr("piqopiqo.qgis_remote_control.select_photo", reject)
+    def select_photo(*_args, coordinates, fallback_zoom):
+        assert coordinates == (48.0, 2.0)
+        assert fallback_zoom == 17
+        result = next(results)
+        if isinstance(result, QgisRemoteControlError):
+            raise result
+        return result
+
+    monkeypatch.setattr("piqopiqo.qgis_remote_control.select_photo", select_photo)
     click_and_finish()
-    assert not panel.qgis_map_error_label.isHidden()
-    assert panel.qgis_map_error_label.full_text == expected_message
+    assert not label.isHidden()
+    assert label.full_text == "Error in QGIS Remote Control"
+    red = label.styleSheet()
 
+    click_and_finish()
+    assert not label.isHidden()
+    assert label.full_text == "Image not found. Zoomed to position"
+    assert label.styleSheet() == f"color: {QColor('olive').name()};"
+    assert label.styleSheet() != red
+
+    click_and_finish()
+    assert label.isHidden()
+
+
+def test_grid_context_menu_preserves_sections_and_map_eligibility(window, monkeypatch):
     monkeypatch.setattr(
-        "piqopiqo.qgis_remote_control.select_photo", lambda *_args: None
+        window.db_manager,
+        "get_db_for_image",
+        lambda _path: SimpleNamespace(has_metadata=lambda _path: True),
     )
-    click_and_finish()
-    assert panel.qgis_map_error_label.isHidden()
+    set_user_setting(
+        UserSettingKey.QGIS_REMOTE_CONTROL, QgisRemoteControlSettings(enabled=True)
+    )
+    set_user_setting(
+        UserSettingKey.MAP_LINKS,
+        [MapLinkOption("HTTP Map", "https://example.com/{lat}/{lon}")],
+    )
+    window._apply_settings_changes({
+        UserSettingKey.QGIS_REMOTE_CONTROL,
+        UserSettingKey.MAP_LINKS,
+    })
+    valid = ImageItem(
+        path="/photos/position.JPG",
+        name="position.JPG",
+        created="",
+        db_metadata={DBFields.LATITUDE: 0.0, DBFields.LONGITUDE: 2.0},
+    )
+    missing = ImageItem(
+        path="/photos/no-position.JPG",
+        name="no-position.JPG",
+        created="",
+        db_metadata={},
+    )
+    menus = []
+    _intercept_context_menu_exec(monkeypatch, lambda menu, _pos: menus.append(menu))
+
+    def open_menu(selection):
+        monkeypatch.setattr(
+            window.photo_model, "get_selected_photos", lambda: selection
+        )
+        window.edit_panel.update_for_selection(selection)
+        window._show_context_menu(0, QPoint())
+        return menus[-1].actions()
+
+    actions = open_menu([valid])
+    map_action = next(action for action in actions if action.text() == "Map")
+    index = actions.index(map_action)
+    assert actions[index - 1].isSeparator() and actions[index + 1].isSeparator()
+    assert map_action.isEnabled()
+    assert [action.text() for action in map_action.menu().actions()] == [
+        "HTTP Map",
+        "QGIS Remote Control",
+    ]
+    other_commands = actions[-1]
+    assert other_commands.text() == "Other commands"
+    assert [
+        action.text() if not action.isSeparator() else None
+        for action in other_commands.menu().actions()
+    ] == [
+        "Regenerate Thumbnail",
+        "Reload EXIF",
+        None,
+        "Duplicate",
+        None,
+        "Move to Trash",
+    ]
+
+    for selection in ([missing], [valid, missing]):
+        actions_by_name = {action.text(): action for action in open_menu(selection)}
+        assert not actions_by_name["Map"].isEnabled()
+        assert actions_by_name["Extract GPS Time Shift"].isEnabled() == (
+            len(selection) == 1
+        )
 
 
 def test_about_action_uses_about_role_and_stays_in_help(window):

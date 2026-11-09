@@ -208,47 +208,63 @@ def show_context_menu(window: MainWindow, global_index: int, pos) -> None:
 
     menu.addSeparator()
 
+    if window.edit_panel is not None and window.edit_panel.add_map_action(menu):
+        menu.addSeparator()
+
+    extract_shift_action = menu.addAction("Extract GPS Time Shift")
+    extract_shift_action.setEnabled(len(selected) == 1)
+    extract_shift_action.triggered.connect(
+        lambda: extract_gps_time_shift_for_item(window, clicked_item)
+    )
+
+    menu.addSeparator()
+    other_commands = menu.addMenu("Other commands")
+
     # Regenerate Thumbnail action
     if len(selected) == 1:
-        regen_action = menu.addAction("Regenerate Thumbnail")
+        regen_action = other_commands.addAction("Regenerate Thumbnail")
     else:
-        regen_action = menu.addAction(f"Regenerate Thumbnails ({len(selected)} photos)")
+        regen_action = other_commands.addAction(
+            f"Regenerate Thumbnails ({len(selected)} photos)"
+        )
     regen_action.triggered.connect(
         lambda: regenerate_selected_thumbnails(window, selected)
     )
 
     # Regenerate EXIF action
     if len(selected) == 1:
-        regen_exif_action = menu.addAction("Reload EXIF")
+        regen_exif_action = other_commands.addAction("Reload EXIF")
     else:
-        regen_exif_action = menu.addAction(f"Reload EXIF ({len(selected)} photos)")
+        regen_exif_action = other_commands.addAction(
+            f"Reload EXIF ({len(selected)} photos)"
+        )
     regen_exif_action.triggered.connect(
         lambda: window.media_manager.reload_exif([p.path for p in selected])
     )
 
-    menu.addSeparator()
-
-    extract_shift_action = menu.addAction("Extract GPS Time Shift")
-    extract_shift_action.triggered.connect(
-        lambda: extract_gps_time_shift_for_item(window, clicked_item)
-    )
-
-    menu.addSeparator()
+    other_commands.addSeparator()
 
     # Duplicate action
     if len(selected) == 1:
-        duplicate_action = menu.addAction("Duplicate")
+        duplicate_action = other_commands.addAction("Duplicate")
     else:
-        duplicate_action = menu.addAction(f"Duplicate ({len(selected)} photos)")
+        duplicate_action = other_commands.addAction(
+            f"Duplicate ({len(selected)} photos)"
+        )
     duplicate_action.triggered.connect(lambda: duplicate_photos(window, selected))
 
-    menu.addSeparator()
+    other_commands.addSeparator()
 
     # Move to Trash action
     if len(selected) == 1:
-        trash_action = menu.addAction("Move to Trash")
+        trash_action = other_commands.addAction("Move to Trash")
     else:
-        trash_action = menu.addAction(f"Move to Trash ({len(selected)} photos)")
+        trash_action = other_commands.addAction(
+            f"Move to Trash ({len(selected)} photos)"
+        )
     trash_action.triggered.connect(lambda: move_to_trash(window, selected))
 
-    menu.exec(pos)
+    try:
+        menu.exec(pos)
+    finally:
+        menu.deleteLater()

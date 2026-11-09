@@ -65,7 +65,7 @@ from .model import (
 from .orientation import rotate_orientation_left, rotate_orientation_right
 from .panels import EditPanel, ExifPanel, FilterPanel
 from .photo_model import PhotoListModel, SortOrder
-from .qgis_remote_control import QgisMapFailure, QgisPhotoWorker
+from .qgis_remote_control import QgisMapStatus, QgisPhotoWorker
 from .qt_workers import PythonOwnedRunnable
 from .settings_panel import SettingsDialog
 from .settings_panel.schema import get_settings_tab_title_for_key
@@ -2413,7 +2413,7 @@ class MainWindow(QMainWindow):
         )
         self._apply_settings_changes({resolved_key})
 
-    def _on_qgis_map_requested(self, photo_path: str) -> None:
+    def _on_qgis_map_requested(self, photo_path: str, lat: float, lon: float) -> None:
         if (
             self._shutdown_started
             or self.edit_panel is None
@@ -2428,7 +2428,16 @@ class MainWindow(QMainWindow):
         timeout_ms = get_runtime_setting(
             RuntimeSettingKey.QGIS_REMOTE_CONTROL_TIMEOUT_MS
         )
-        worker = QgisPhotoWorker(photo_path, self.root_folder, settings, timeout_ms)
+        worker = QgisPhotoWorker(
+            photo_path,
+            self.root_folder,
+            settings,
+            timeout_ms,
+            coordinates=(lat, lon),
+            fallback_zoom=get_runtime_setting(
+                RuntimeSettingKey.QGIS_REMOTE_CONTROL_FALLBACK_ZOOM
+            ),
+        )
         worker.signals.finished.connect(
             self._on_qgis_map_finished, Qt.ConnectionType.QueuedConnection
         )
@@ -2436,10 +2445,10 @@ class MainWindow(QMainWindow):
         self._qgis_photo_worker = worker
         QThreadPool.globalInstance().start(worker)
 
-    def _on_qgis_map_finished(self, failure: QgisMapFailure | None) -> None:
+    def _on_qgis_map_finished(self, status: QgisMapStatus | None) -> None:
         self._qgis_photo_worker = None
         if not self._shutdown_started and self.edit_panel is not None:
-            self.edit_panel.finish_qgis_map_request(failure.value if failure else "")
+            self.edit_panel.finish_qgis_map_request(status)
 
     def _get_grid_num_column_bounds(self) -> tuple[int, int]:
         min_cols = max(
