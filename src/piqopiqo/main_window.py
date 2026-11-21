@@ -3880,6 +3880,35 @@ class MainWindow(QMainWindow):
         self._apply_live_grid_selection_from_fullscreen(state)
         overlay.close()
 
+    def _on_fullscreen_flush_loop_requested(self) -> None:
+        overlay = getattr(self, "_fullscreen_overlay", None)
+        if overlay is None:
+            return
+
+        loop_paths = overlay.get_visible_paths()
+        current_path = overlay.get_current_path()
+        valid_paths = {item.path for item in self.images_data}
+        removed_paths = set(loop_paths).difference(valid_paths)
+        if not removed_paths:
+            return
+
+        preferred_path = current_path
+        if current_path in removed_paths:
+            preferred_path = MainWindow._pick_replacement_path_in_order(
+                loop_paths, valid_paths, current_path
+            )
+
+        if overlay.remove_paths_from_loop(removed_paths, preferred_path=preferred_path):
+            if overlay is self._fullscreen_overlay:
+                self._apply_live_grid_selection_from_fullscreen()
+            return
+
+        state = self._capture_fullscreen_selection_state(
+            overlay, current_path_override=current_path
+        )
+        self._apply_live_grid_selection_from_fullscreen(state)
+        overlay.close()
+
     def _handle_fullscreen_overlay(self, selected_indices: list):
         """Display the selected image in a fullscreen overlay."""
         if not selected_indices:
@@ -3924,6 +3953,9 @@ class MainWindow(QMainWindow):
         )
         overlay_ref.eject_from_loop_requested.connect(
             self._on_fullscreen_eject_from_loop_requested
+        )
+        overlay_ref.flush_loop_requested.connect(
+            self._on_fullscreen_flush_loop_requested
         )
         self._setup_shortcuts()
         self._set_fullscreen_menu_action_policy(True)

@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import QCoreApplication, QEvent, Qt
+from PySide6.QtGui import QColor, QKeyEvent, QPixmap
+from PySide6.QtWidgets import QApplication
+import pytest
+
+from piqopiqo.fullscreen.overlay import FullscreenOverlay
 from piqopiqo.main_window import MainWindow
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBManager
@@ -11,7 +17,12 @@ from piqopiqo.model import (
     OnFullscreenExitMultipleSelected,
 )
 from piqopiqo.photo_model import PhotoListModel
-from piqopiqo.ssf.settings_state import UserSettingKey
+from piqopiqo.shortcuts import Shortcut
+from piqopiqo.ssf.settings_state import (
+    UserSettingKey,
+    init_qsettings_store,
+    set_user_setting,
+)
 
 
 def _item(
@@ -207,7 +218,7 @@ class _FullscreenSyncWindow:
     def __init__(
         self,
         photo_model: PhotoListModel,
-        overlay: _FakeFullscreenOverlay | None,
+        overlay: _FakeFullscreenOverlay | FullscreenOverlay | None,
         *,
         started_with_multi_selection: bool,
     ) -> None:
@@ -350,6 +361,9 @@ class _FullscreenSyncWindow:
     def _on_fullscreen_eject_from_loop_requested(self) -> None:
         MainWindow._on_fullscreen_eject_from_loop_requested(self)
 
+    def _on_fullscreen_flush_loop_requested(self) -> None:
+        MainWindow._on_fullscreen_flush_loop_requested(self)
+
     def select_paths_in_grid(
         self,
         paths: list[str],
@@ -423,6 +437,60 @@ def _patch_settings(
         "piqopiqo.main_window.get_user_setting",
         fake_get_user_setting,
     )
+
+
+@pytest.fixture
+def make_flush_window(monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+    app.setOrganizationName("PiqoPiqoTests")
+    app.setApplicationName("piqopiqo-test-fullscreen-flush")
+    init_qsettings_store(dyn=True)
+    monkeypatch.setattr(
+        "piqopiqo.fullscreen.overlay.atexit.register", lambda *_args: None
+    )
+    monkeypatch.setattr(FullscreenOverlay, "_update_info_panel", lambda self: None)
+    pixmap = QPixmap(160, 120)
+    pixmap.fill(QColor("white"))
+    monkeypatch.setattr(
+        FullscreenOverlay,
+        "_load_fullscreen_pixmap_with_color_management",
+        lambda self: pixmap,
+    )
+    overlays = []
+
+    def make(model, loop_paths, current_path, *, started_with_multi_selection):
+        items = list(model.photos)
+        path_to_index = {item.path: index for index, item in enumerate(items)}
+        overlay = FullscreenOverlay(
+            items,
+            [path_to_index[path] for path in loop_paths],
+            path_to_index[current_path],
+        )
+        overlays.append(overlay)
+        window = _FullscreenSyncWindow(
+            model,
+            overlay,
+            started_with_multi_selection=started_with_multi_selection,
+        )
+        overlay.index_changed.connect(window._on_fullscreen_index_changed)
+        overlay.about_to_close.connect(
+            lambda: window._on_fullscreen_overlay_about_to_close(overlay)
+        )
+        overlay.flush_loop_requested.connect(window._on_fullscreen_flush_loop_requested)
+        overlay.eject_from_loop_requested.connect(
+            window._on_fullscreen_eject_from_loop_requested
+        )
+        window._apply_live_grid_selection_from_fullscreen()
+        return window, overlay
+
+    yield make
+
+    for overlay in overlays:
+        overlay.close()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
 
 def test_single_selection_navigation_updates_grid_selection_live(monkeypatch):
@@ -895,3 +963,260 @@ def test_last_eject_applies_fallback_before_close_and_close_does_not_reselect(
 
     assert len(window.grid.select_calls) == select_call_count
     assert _selected_paths(window.images_data) == ["/photos/c.jpg"]
+
+
+@pytest.mark.parametrize("filter_in_fullscreen", [False, True])
+@pytest.mark.parametrize("started_with_multi_selection", [False, True])
+@pytest.mark.parametrize("exit_mode", list(OnFullscreenExitMultipleSelected))
+@pytest.mark.parametrize(
+    ("rejected_indices", "destination_index"),
+    [
+        ([], 2),
+        ([0, 1], 2),
+        ([2], 3),
+        ([2, 3], 4),
+        ([2, 3, 4], 1),
+        ([1, 2, 3, 4], 0),
+        ([0, 1, 2, 3, 4], None),
+    ],
+)
+def test_flush_prunes_loop_and_resolves_selection(
+    monkeypatch,
+    make_flush_window,
+    filter_in_fullscreen,
+    started_with_multi_selection,
+    exit_mode,
+    rejected_indices,
+    destination_index,
+):
+    _patch_settings(
+        monkeypatch,
+        filter_in_fullscreen=filter_in_fullscreen,
+        exit_mode=exit_mode,
+    )
+    items = [
+        _item(f"/photos/{name}.jpg", label="Review" if index % 2 else "Approved")
+        for index, name in enumerate("abcde")
+    ]
+    loop_paths = [item.path for item in items]
+    if started_with_multi_selection:
+        items.append(_item("/photos/f.jpg", label="Approved"))
+    model = _make_model(*items)
+    model.set_filter(FilterCriteria(labels={"Review", "Approved"}))
+    window, overlay = make_flush_window(
+        model,
+        loop_paths,
+        loop_paths[2],
+        started_with_multi_selection=started_with_multi_selection,
+    )
+
+    for index in rejected_indices:
+        items[index].db_metadata[DBFields.LABEL] = "Rejected"
+    # Ordinary metadata refreshes update the grid without automatic loop pruning.
+    window.sync_model_after_metadata_update({DBFields.LABEL}, source="test")
+    assert overlay.get_visible_paths() == loop_paths
+
+    window._on_fullscreen_flush_loop_requested()
+
+    survivors = [
+        path for index, path in enumerate(loop_paths) if index not in rejected_indices
+    ]
+    assert overlay.get_visible_paths() == survivors
+    assert set(overlay.get_ejected_paths()) == {
+        loop_paths[index] for index in rejected_indices
+    }
+    if destination_index is not None:
+        destination_path = loop_paths[destination_index]
+        assert window._fullscreen_overlay is overlay
+        assert overlay.get_current_path() == destination_path
+        expected_selection = (
+            survivors
+            if started_with_multi_selection
+            and exit_mode == OnFullscreenExitMultipleSelected.KEEP_SELECTION
+            else [destination_path]
+        )
+        assert _selected_paths(window.images_data) == expected_selection
+        assert window.grid._last_selected_path == destination_path
+    else:
+        assert window._fullscreen_overlay is None
+        assert _selected_paths(window.images_data) == (
+            ["/photos/f.jpg"] if started_with_multi_selection else []
+        )
+        if started_with_multi_selection:
+            assert window.grid.ensure_visible_paths[-1] == "/photos/f.jpg"
+
+    select_call_count = len(window.grid.select_calls)
+    window._on_fullscreen_flush_loop_requested()
+    assert len(window.grid.select_calls) == select_call_count
+
+
+@pytest.mark.parametrize(
+    ("criteria", "survivor_names"),
+    [
+        (FilterCriteria(folder="/photos"), "abde"),
+        (FilterCriteria(labels={"Approved", "Review"}), "abc"),
+        (
+            FilterCriteria(
+                include_no_label=True, explicit_labels={"Approved", "Review"}
+            ),
+            "de",
+        ),
+        (FilterCriteria(search_text="sea"), "bce"),
+        (
+            FilterCriteria(
+                folder="/photos",
+                labels={"Approved", "Review"},
+                search_text="sea",
+            ),
+            "b",
+        ),
+    ],
+)
+def test_flush_uses_complete_current_grid_filter(
+    monkeypatch, make_flush_window, criteria, survivor_names
+):
+    _patch_settings(monkeypatch)
+    items = [
+        _item(f"/photos/{name}.jpg", label=label)
+        for name, label in zip(
+            "abcde", ["Approved", "Review", "Approved", None, "Old"], strict=True
+        )
+    ]
+    items[0].db_metadata[DBFields.TITLE] = "Mountain"
+    items[1].db_metadata[DBFields.KEYWORDS] = "sea"
+    items[2].db_metadata[DBFields.TITLE] = "Sea View"
+    items[2].source_folder = "/other"
+    items[4].db_metadata[DBFields.KEYWORDS] = "SEA"
+    model = _make_model(*items)
+    loop_paths = [item.path for item in items]
+    window, overlay = make_flush_window(
+        model, loop_paths, loop_paths[0], started_with_multi_selection=False
+    )
+    model.set_filter(criteria)
+    metadata_before = [dict(item.db_metadata) for item in items]
+
+    window._on_fullscreen_flush_loop_requested()
+
+    expected_paths = [f"/photos/{name}.jpg" for name in survivor_names]
+    assert overlay.get_visible_paths() == expected_paths
+    assert overlay.get_current_path() == expected_paths[0]
+    assert [item.path for item in window.images_data] == expected_paths
+    assert [item.db_metadata for item in items] == metadata_before
+    assert model._filter == model.normalize_filter_criteria(criteria)
+
+
+def test_flush_does_not_restore_removed_photos_or_add_photos_outside_loop(
+    monkeypatch, make_flush_window
+):
+    _patch_settings(monkeypatch)
+    items = [_item(f"/photos/{name}.jpg", label="Approved") for name in "abcd"]
+    model = _make_model(*items)
+    model.set_filter(FilterCriteria(labels={"Approved"}))
+    loop_paths = [item.path for item in items[:3]]
+    window, overlay = make_flush_window(
+        model, loop_paths, loop_paths[0], started_with_multi_selection=True
+    )
+    window._on_fullscreen_eject_from_loop_requested()
+    items[2].db_metadata[DBFields.LABEL] = "Rejected"
+    window.sync_model_after_metadata_update(
+        {DBFields.LABEL}, source="test", allow_fullscreen_filter=True
+    )
+
+    window._on_fullscreen_flush_loop_requested()
+    items[2].db_metadata[DBFields.LABEL] = "Approved"
+    window.sync_model_after_metadata_update(
+        {DBFields.LABEL}, source="test", allow_fullscreen_filter=True
+    )
+    window._on_fullscreen_flush_loop_requested()
+
+    assert overlay.get_visible_paths() == [items[1].path]
+    assert overlay.get_ejected_paths() == [items[0].path, items[2].path]
+    assert _selected_paths(window.images_data) == [items[1].path]
+
+
+@pytest.mark.parametrize("fallback_direction", ["next", "previous"])
+def test_empty_flush_skips_previously_ejected_grid_photos(
+    monkeypatch, make_flush_window, fallback_direction
+):
+    _patch_settings(monkeypatch)
+    items = [_item(f"/photos/{name}.jpg", label="Approved") for name in "abcd"]
+    model = _make_model(*items)
+    model.set_filter(FilterCriteria(labels={"Approved"}))
+    loop_paths = [items[1].path, items[2].path]
+    window, overlay = make_flush_window(
+        model, loop_paths, items[2].path, started_with_multi_selection=True
+    )
+    window._on_fullscreen_eject_from_loop_requested()
+    assert overlay.get_current_path() == items[1].path
+    items[1].db_metadata[DBFields.LABEL] = "Rejected"
+    if fallback_direction == "previous":
+        items[3].db_metadata[DBFields.LABEL] = "Rejected"
+    window.sync_model_after_metadata_update({DBFields.LABEL}, source="test")
+
+    window._on_fullscreen_flush_loop_requested()
+
+    target = items[3].path if fallback_direction == "next" else items[0].path
+    assert window._fullscreen_overlay is None
+    assert overlay.get_visible_paths() == []
+    assert _selected_paths(window.images_data) == [target]
+    assert window.grid.ensure_visible_paths[-1] == target
+
+
+def test_flush_with_no_grid_filter_leaves_loop_unchanged(
+    monkeypatch, make_flush_window
+):
+    _patch_settings(monkeypatch)
+    items = [_item(f"/photos/{name}.jpg", label="Rejected") for name in "abc"]
+    model = _make_model(*items)
+    loop_paths = [item.path for item in items]
+    window, overlay = make_flush_window(
+        model, loop_paths, loop_paths[1], started_with_multi_selection=False
+    )
+    select_call_count = len(window.grid.select_calls)
+
+    window._on_fullscreen_flush_loop_requested()
+
+    assert window._fullscreen_overlay is overlay
+    assert overlay.get_visible_paths() == loop_paths
+    assert overlay.get_current_path() == loop_paths[1]
+    assert overlay.get_ejected_paths() == []
+    assert len(window.grid.select_calls) == select_call_count
+
+
+@pytest.mark.parametrize(
+    ("shortcut", "key", "modifiers", "should_flush"),
+    [
+        ("Shift+\\", Qt.Key_Backslash, Qt.ShiftModifier, True),
+        ("Shift+\\", Qt.Key_Bar, Qt.ShiftModifier, True),
+        ("Ctrl+Shift+F", Qt.Key_F, Qt.ControlModifier | Qt.ShiftModifier, True),
+        ("", Qt.Key_Backslash, Qt.ShiftModifier, False),
+        ("Ctrl+Shift+F", Qt.Key_Backslash, Qt.ShiftModifier, False),
+    ],
+)
+def test_fullscreen_flush_shortcut_dispatch(
+    monkeypatch, make_flush_window, shortcut, key, modifiers, should_flush
+):
+    _patch_settings(monkeypatch)
+    set_user_setting(
+        UserSettingKey.SHORTCUTS,
+        {Shortcut.EJECT_FROM_LOOP: "\\", Shortcut.FLUSH_LOOP: shortcut},
+    )
+    items = [_item(f"/photos/{name}.jpg", label="Approved") for name in "abc"]
+    model = _make_model(*items)
+    model.set_filter(FilterCriteria(labels={"Approved"}))
+    loop_paths = [item.path for item in items]
+    window, overlay = make_flush_window(
+        model, loop_paths, loop_paths[1], started_with_multi_selection=False
+    )
+    ejected = []
+    overlay.eject_from_loop_requested.connect(lambda: ejected.append(True))
+    items[0].db_metadata[DBFields.LABEL] = "Rejected"
+    items[2].db_metadata[DBFields.LABEL] = "Rejected"
+    window.sync_model_after_metadata_update({DBFields.LABEL}, source="test")
+
+    overlay.keyPressEvent(QKeyEvent(QEvent.KeyPress, key, modifiers))
+
+    assert overlay.get_visible_paths() == (
+        [items[1].path] if should_flush else loop_paths
+    )
+    assert ejected == []

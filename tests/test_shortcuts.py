@@ -1,5 +1,9 @@
 """Tests for shortcut enum metadata."""
 
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtGui import QKeyEvent
+import pytest
+
 from piqopiqo.model import StatusLabel
 from piqopiqo.shortcuts import (
     FILTER_LABEL_SHORTCUTS,
@@ -13,6 +17,7 @@ from piqopiqo.shortcuts import (
     build_filter_label_shortcut_bindings,
     build_label_shortcut_bindings,
     lookup_shortcut,
+    match_shortcut_sequence,
 )
 
 
@@ -21,6 +26,7 @@ def test_shortcut_labels_are_human_readable():
     assert Shortcut.ZOOM_OUT.label == "Zoom out"
     assert Shortcut.ZOOM_RESET.label == "Zoom reset"
     assert Shortcut.EJECT_FROM_LOOP.label == "Eject from loop"
+    assert Shortcut.FLUSH_LOOP.label == "Flush loop"
     assert Shortcut.LABEL_1.label == "Label 1"
     assert Shortcut.LABEL_NONE.label == "No label"
     assert Shortcut.FILTER_LABEL_1.label == "Filter label 1"
@@ -51,6 +57,8 @@ def test_configurable_shortcut_registries_cover_all_shortcuts():
     assert Shortcut.ZOOM_RESET in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
     assert Shortcut.EJECT_FROM_LOOP in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
     assert Shortcut.EJECT_FROM_LOOP not in GRID_VIEW_CONFIGURABLE_SHORTCUTS
+    assert Shortcut.FLUSH_LOOP in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
+    assert Shortcut.FLUSH_LOOP not in GRID_VIEW_CONFIGURABLE_SHORTCUTS
 
     for label_shortcut in LABEL_SHORTCUTS:
         assert label_shortcut in GRID_VIEW_CONFIGURABLE_SHORTCUTS
@@ -80,6 +88,22 @@ def test_configurable_shortcut_registries_cover_all_shortcuts():
 def test_hardcoded_shortcut_reference_lists_are_non_empty():
     assert GRID_VIEW_HARDCODED_SHORTCUTS
     assert FULLSCREEN_VIEW_HARDCODED_SHORTCUTS
+
+
+@pytest.mark.parametrize("key", [Qt.Key_Backslash, Qt.Key_Bar])
+def test_shifted_backslash_matches_flush_without_matching_eject(key):
+    event = QKeyEvent(QEvent.KeyPress, key, Qt.ShiftModifier)
+
+    assert match_shortcut_sequence(event, "Shift+\\")
+    assert not match_shortcut_sequence(event, "\\")
+    assert not match_shortcut_sequence(event, "Alt+\\")
+
+
+def test_plain_backslash_matches_eject_without_matching_flush():
+    event = QKeyEvent(QEvent.KeyPress, Qt.Key_Backslash, Qt.NoModifier)
+
+    assert match_shortcut_sequence(event, "\\")
+    assert not match_shortcut_sequence(event, "Shift+\\")
 
 
 def test_build_label_shortcut_bindings_resolves_status_labels_and_label_none():

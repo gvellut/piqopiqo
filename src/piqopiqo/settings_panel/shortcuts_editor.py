@@ -73,6 +73,7 @@ class ShortcutsEditor(QWidget):
                     Shortcut.ZOOM_OUT,
                     Shortcut.ZOOM_RESET,
                     Shortcut.EJECT_FROM_LOOP,
+                    Shortcut.FLUSH_LOOP,
                 ),
             ),
             ("Tool Shortcuts", TOOL_SHORTCUTS),
@@ -111,6 +112,6 @@ class ShortcutsEditor(QWidget):
         out: dict[Shortcut, str] = {}
         for key, line_edit in self._inputs.items():
             text = line_edit.text().strip()
-            if text or key in TOOL_SHORTCUTS:
+            if text or key == Shortcut.FLUSH_LOOP or key in TOOL_SHORTCUTS:
                 out[key] = text
         return out

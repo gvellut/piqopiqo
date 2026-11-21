@@ -1,0 +1,4 @@
+Add a shortcut for fullscreen to flush : It would apply the same filter as for the grid but for the photo in the fullscreen loops.
+By default will be Shift+\
+So for ex: i nthe Grid, Review and Approved are the filters. I start the loop. I changed some photos to Rejected. Then call Flush. All the Rejected photos are removed from the loop. 
+Same behaviour as Eject \ generally : eg when a current image is removed from the loop : the next one is made visible, if it is also removed the next one and so on. If the last, go in the other direction (something like that is already done for some other functionality I think so y oucan reuse ; confirm). If no photo remains in the loop, exit and select the next photo (same behaviour as with Eject \).

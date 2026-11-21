@@ -320,6 +320,7 @@ def test_json_roundtrip_for_complex_user_settings(isolated_settings):
     shortcuts = {
         Shortcut.ZOOM_IN: "=",
         Shortcut.ZOOM_OUT: "-",
+        Shortcut.FLUSH_LOOP: "Shift+\\",
         Shortcut.SELECT_ALL: "ctrl+a",
         Shortcut.UNDO_REDO_LABEL: "Ctrl+Alt+Z",
         Shortcut.COPY_FROM_SD: "Ctrl+Shift+C",
@@ -351,6 +352,7 @@ def test_legacy_shortcuts_get_tool_defaults_without_restoring_disabled_view_shor
 
     assert get_user_setting(UserSettingKey.SHORTCUTS) == {
         Shortcut.ZOOM_IN: "+",
+        Shortcut.FLUSH_LOOP: "Shift+\\",
         Shortcut.UNDO_REDO_LABEL: "Ctrl+Shift+Z",
         Shortcut.COPY_FROM_SD: "Ctrl+Shift+C",
         Shortcut.APPLY_GPX: "Ctrl+Shift+G",
@@ -362,6 +364,7 @@ def test_shortcuts_defaults_include_filter_shortcuts(isolated_settings):
     shortcuts = get_user_setting(UserSettingKey.SHORTCUTS)
 
     assert shortcuts[Shortcut.EJECT_FROM_LOOP] == "\\"
+    assert shortcuts[Shortcut.FLUSH_LOOP] == "Shift+\\"
     assert shortcuts[Shortcut.FILTER_LABEL_1] == "Alt+1"
     assert shortcuts[Shortcut.FILTER_LABEL_2] == "Alt+2"
     assert shortcuts[Shortcut.FILTER_LABEL_3] == "Alt+3"
@@ -378,6 +381,17 @@ def test_shortcuts_defaults_include_filter_shortcuts(isolated_settings):
     assert shortcuts[Shortcut.FILTER_CLEAR_ALL] == "Alt+\\"
     assert shortcuts[Shortcut.FILTER_FOCUS_SEARCH] == "Ctrl+F"
     assert shortcuts[Shortcut.TOGGLE_RIGHT_SIDEBAR] == "Ctrl+]"
+
+
+@pytest.mark.parametrize("shortcut", ["Ctrl+Shift+F", ""])
+def test_flush_shortcut_customization_and_disabling_survive_reload(
+    isolated_settings, shortcut
+):
+    set_user_setting(UserSettingKey.SHORTCUTS, {Shortcut.FLUSH_LOOP: shortcut})
+    settings_state.sync_qsettings_store()
+    init_qsettings_store()
+
+    assert get_user_setting(UserSettingKey.SHORTCUTS)[Shortcut.FLUSH_LOOP] == shortcut
 
 
 def test_manual_lenses_roundtrip(isolated_settings):

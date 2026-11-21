@@ -113,7 +113,7 @@ src/piqopiqo/
 │   ├── summary_text_edit.py # Shared tool results/details with optional per-line formatting and scrollbar height allowance
 │   └── status_bar.py        # Loading status bar with progress and error button
 ├── fullscreen/      # Fullscreen image viewing
-│   ├── overlay.py   # Fullscreen overlay + dynamic loop rank and configurable label swatch border
+│   ├── overlay.py   # Fullscreen overlay + shared Eject/Flush loop removal, dynamic rank and label swatch border
 │   ├── pan.py       # Pan logic for zoomed images
 │   └── zoom.py      # Absolute pixel zoom states + per-image fit-relative multipliers
 ├── grid/            # Photo grid display
@@ -174,6 +174,7 @@ tests/
 ├── test_exif_write.py # Manual lens tags + real ExifTool round trips for Save EXIF/Flickr, with/without Fujifilm MakerNotes
 ├── test_fullscreen_info_panel.py # Fullscreen loop rank, info panel layout, zoom overlay lifecycle
 ├── test_fullscreen_navigation_zoom.py # Absolute zoom across mixed orientations/resolutions, Retina, pan and fallback
+├── test_main_window_fullscreen_sync.py # Live grid/fullscreen selection, Eject/Flush filtering, navigation and shortcut dispatch
 ├── test_unsaved_changes_dialog.py # Shared dirty-dialog dismissal behavior
 ├── test_edit_panel.py # Edit panel UI behavior, including Keywords focus/paste preservation and save normalization
 ├── test_qgis_remote_control.py # Workspace-relative layer resolution and acknowledged select, move, and raiseWindow requests
@@ -214,6 +215,7 @@ tests/
 - **Flickr menu**: Contains Upload to Flickr, album reordering by modal photo-taken date, and remote title/tag Find & Replace with shared login/token handling
 - **Upload to Flickr**: Flickr menu workflow uploads only currently visible (filtered) photos in current sort order, with login/token validation, album preflight input (title/ID/URL), temp EXIF write, upload-date reset, make-public, optional album add/create, and optional ordering of newly created albums
 - **Fullscreen filter sync**: Optional `FILTER_IN_FULLSCREEN` setting immediately updates fullscreen loop membership after label shortcut changes without leaving fullscreen
+- **Flush loop**: Fullscreen-only configurable shortcut (`Shift+\` by default) removes active loop photos that fail the current grid filters, independently of `FILTER_IN_FULLSCREEN`. It keeps a matching current photo, otherwise advances to the next survivor or falls backward; an empty loop exits with Eject's grid-selection fallback.
 - **Full-storage recovery**: Cache/SQLite/thumbnail and Copy-from-SD writes report a clear Retry/Exit flow; cache work resumes manually after a successful write probe
 
 ## PhotoListModel Architecture
@@ -487,6 +489,8 @@ Selection behavior:
 - `MainWindow` binds menu actions from **Settings > Shortcuts > Tool Shortcuts** and refreshes them after saves. The defaults are `Cmd+Shift+Z` for Undo/Redo Label, `Cmd+Shift+C` for Copy from SD, `Cmd+Shift+G` for Apply GPX, and `Cmd+Shift+U` for Upload to Flickr. Older shortcut mappings receive defaults for missing tool keys. Save cleared tool fields as explicit empty strings to keep them disabled.
 - When fullscreen opens, `MainWindow` disables all menu actions (and their menu shortcuts) except Quit; this prevents `Cmd+O`, `Cmd+,`, and future menu shortcuts from acting on the hidden grid view.
 - Fullscreen exit selection/visibility restoration is path-based and centralized in `MainWindow` (single-image loop vs selected-images loop, `FILTER_IN_FULLSCREEN`, and `ON_FULLSCREEN_EXIT_SELECTION_MODE` all converge there). Hidden/filtered-out loop members are not kept selected in the grid on exit.
+- `FullscreenOverlay.remove_paths_from_loop(...)` shares batch removal between Eject and Flush. Flush intersects only the existing loop with current filtered grid paths and records removals as session-ejected paths. Use `MainWindow._pick_replacement_path_in_order` for forward-then-backward replacement without wrapping, preserve zoom/pan, and apply empty-loop grid fallback before closing. A surviving current image only needs its loop rank refreshed, without reloading it.
+- `Shortcut.FLUSH_LOOP` appears under Fullscreen Shortcuts and defaults to `Shift+\`, including when older saved mappings lack it. Preserve an explicit empty string when clearing it so default backfill does not re-enable it. Shifted-backslash matching also accepts Qt's `Shift+|` event representation; plain `\` remains Eject.
 - Fullscreen zoom percentages are absolute pixel mappings: 100% means one image pixel per physical render-buffer pixel (including Retina/device pixel ratio). Navigation and loop ejection preserve the selected percentage and image-center screen position, recalculating the fit-relative zoom multiplier after loading and orienting each destination image. Never carry the previous image's multiplier across different orientations or resolutions. Base view still fits without upscaling beyond 100%, and a completely offscreen destination falls back to base view.
 - Fullscreen info panel starts with `#N`, the current 1-based position in the active loop (`current_visible_idx + 1`). Single-selection entry uses the filtered grid order; multi-selection entry uses the selected loop. Navigation, ejection, filtering, and filesystem rebinding refresh the rank without gaps, even when the current photo path stays unchanged or image decoding fails. Rank is never stored in photo metadata.
 - Fullscreen info panel label swatches draw a solid, square-cornered border inside the existing 20×20 footprint. Border color/width use internal `FULLSCREEN_INFO_PANEL_SWATCH_BORDER_*` runtime settings; missing or unrecognized labels stay transparent and borderless while retaining their layout space.

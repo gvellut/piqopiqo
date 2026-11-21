@@ -508,8 +508,9 @@ def _deserialize_shortcuts(data: Any) -> dict[Shortcut, str]:
     if not isinstance(data, dict):
         raise ValueError("Expected an object for shortcuts")
 
-    # Older mappings lack tool entries. An explicit empty string disables one.
-    out = _DEFAULT_TOOL_SHORTCUTS.copy()
+    # Backfill new actions without restoring cleared older view shortcuts.
+    # An explicit empty string disables an action.
+    out = {Shortcut.FLUSH_LOOP: "Shift+\\", **_DEFAULT_TOOL_SHORTCUTS}
     for raw_key, raw_value in data.items():
         key_str = str(raw_key)
         shortcut = str(raw_value)
@@ -771,6 +772,7 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
             Shortcut.ZOOM_OUT: "-",
             Shortcut.ZOOM_RESET: "0",
             Shortcut.EJECT_FROM_LOOP: "\\",
+            Shortcut.FLUSH_LOOP: "Shift+\\",
             Shortcut.LABEL_1: "1",
             Shortcut.LABEL_2: "2",
             Shortcut.LABEL_3: "3",

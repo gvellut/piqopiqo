@@ -107,6 +107,7 @@ class FullscreenOverlay(QWidget):
     index_changed = Signal(int)
     label_shortcut_requested = Signal(object)  # str | None
     eject_from_loop_requested = Signal()
+    flush_loop_requested = Signal()
 
     def __init__(self, all_items: list, visible_indices: list, start_index: int):
         super().__init__()
@@ -322,36 +323,70 @@ class FullscreenOverlay(QWidget):
         current_path = self.get_current_path()
         if current_path is None:
             return None
-        if not self.visible_indices:
-            return None
-        if not (0 <= self.current_visible_idx < len(self.visible_indices)):
-            return None
 
-        old_visible_indices = list(self.visible_indices)
-        old_current_visible_idx = self.current_visible_idx
-        old_global_index = old_visible_indices[old_current_visible_idx]
-        self._ejected_paths.add(current_path)
-
-        new_visible_indices = (
-            old_visible_indices[:old_current_visible_idx]
-            + old_visible_indices[old_current_visible_idx + 1 :]
+        remaining_paths = [
+            path for path in self.get_visible_paths() if path != current_path
+        ]
+        preferred_path = (
+            remaining_paths[min(self.current_visible_idx, len(remaining_paths) - 1)]
+            if remaining_paths
+            else None
         )
+        has_remaining = self.remove_paths_from_loop(
+            {current_path}, preferred_path=preferred_path
+        )
+        result: dict[str, object] = {
+            "auto_close": not has_remaining,
+            "ejected_path": current_path,
+        }
+        if has_remaining:
+            result["current_path"] = self.get_current_path()
+        return result
+
+    def remove_paths_from_loop(
+        self,
+        paths: set[str],
+        *,
+        preferred_path: str | None,
+    ) -> bool:
+        """Remove loop members, returning whether any remain, as with Eject."""
+        current_path = self.get_current_path()
+        if current_path is None:
+            return False
+
+        removed_paths = paths.intersection(self.get_visible_paths())
+        if not removed_paths:
+            return True
+
+        old_global_index = self.visible_indices[self.current_visible_idx]
+        new_visible_indices = [
+            index
+            for index in self.visible_indices
+            if self.all_items[index].path not in removed_paths
+        ]
+        self._ejected_paths.update(removed_paths)
         if not new_visible_indices:
             self.visible_indices = []
             self.current_visible_idx = 0
-            return {"auto_close": True, "ejected_path": current_path}
+            return False
 
-        target_visible_idx = min(old_current_visible_idx, len(new_visible_indices) - 1)
+        if current_path not in removed_paths:
+            self.visible_indices = new_visible_indices
+            self.current_visible_idx = new_visible_indices.index(old_global_index)
+            self._update_info_panel()
+            return True
+
+        target_visible_idx = next(
+            index
+            for index, global_index in enumerate(new_visible_indices)
+            if self.all_items[global_index].path == preferred_path
+        )
         self._navigate_to_preserve_zoom(
             target_visible_idx,
             visible_indices=new_visible_indices,
             old_global_index=old_global_index,
         )
-        return {
-            "auto_close": False,
-            "ejected_path": current_path,
-            "current_path": self.get_current_path(),
-        }
+        return True
 
     def _setup_zoom_overlay(self):
         """Creates the zoom level overlay widget."""
@@ -1022,6 +1057,11 @@ class FullscreenOverlay(QWidget):
             get_user_setting(UserSettingKey.SHORTCUTS).get(Shortcut.EJECT_FROM_LOOP),
         ):
             self.eject_from_loop_requested.emit()
+        elif match_shortcut_sequence(
+            event,
+            get_user_setting(UserSettingKey.SHORTCUTS).get(Shortcut.FLUSH_LOOP),
+        ):
+            self.flush_loop_requested.emit()
         else:
             for shortcut_str, label_name in self._label_shortcut_bindings:
                 if match_shortcut_sequence(event, shortcut_str):

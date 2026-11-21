@@ -19,6 +19,7 @@ class Shortcut(Enum):
     ZOOM_OUT = auto(), "Zoom out"
     ZOOM_RESET = auto(), "Zoom reset"
     EJECT_FROM_LOOP = auto(), "Eject from loop"
+    FLUSH_LOOP = auto(), "Flush loop"
     LABEL_1 = auto(), "Label 1"
     LABEL_2 = auto(), "Label 2"
     LABEL_3 = auto(), "Label 3"
@@ -106,6 +107,7 @@ FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS: tuple[Shortcut, ...] = (
     Shortcut.ZOOM_OUT,
     Shortcut.ZOOM_RESET,
     Shortcut.EJECT_FROM_LOOP,
+    Shortcut.FLUSH_LOOP,
     *LABEL_SHORTCUTS,
 )
 
@@ -235,7 +237,15 @@ def match_shortcut_sequence(event: QKeyEvent, shortcut_str: str) -> bool:
 
     logger.debug(event_sequence.toString())
 
-    return expected_sequence == event_sequence
+    if expected_sequence == event_sequence:
+        return True
+
+    # Qt may report Shift+Backslash as the resulting pipe character.
+    if event.key() == Qt.Key_Bar and clean_modifiers & Qt.ShiftModifier:
+        return expected_sequence == QKeySequence(
+            QKeyCombination(clean_modifiers, Qt.Key_Backslash)
+        )
+    return False
 
 
 def match_simple_shortcut(event: QKeyEvent, key: int) -> bool:

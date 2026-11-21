@@ -97,6 +97,7 @@ def test_shortcuts_editor_uses_sectioned_two_column_layout(qapp):
         Shortcut.ZOOM_OUT.label,
         Shortcut.ZOOM_RESET.label,
         Shortcut.EJECT_FROM_LOOP.label,
+        Shortcut.FLUSH_LOOP.label,
     ]
     assert _section_labels(_section_group(editor, "Tool Shortcuts")) == [
         "Undo/Redo Label",
@@ -127,3 +128,12 @@ def test_shortcuts_editor_accepts_enum_and_string_keys(qapp):
     assert value[Shortcut.APPLY_GPX] == ""
     assert Shortcut.ZOOM_RESET not in value
     assert set(editor._inputs.keys()) == set(Shortcut)
+
+
+def test_flush_shortcut_can_be_customized_and_explicitly_disabled(qapp):
+    editor = ShortcutsEditor()
+    editor.set_value({Shortcut.FLUSH_LOOP.name: "Ctrl+Shift+F"})
+    assert editor.get_value()[Shortcut.FLUSH_LOOP] == "Ctrl+Shift+F"
+
+    editor._inputs[Shortcut.FLUSH_LOOP].clear()
+    assert editor.get_value()[Shortcut.FLUSH_LOOP] == ""

@@ -253,3 +253,38 @@ def test_ejecting_current_image_preserves_destination_zoom(make_overlay, dpr):
     assert result["current_path"] == "/virtual/photo-1.jpg"
     assert overlay._zoom_state == ZoomState.ZOOM_100
     _assert_physical_pixel_scale(overlay, 1.0)
+
+
+@pytest.mark.parametrize("dpr", [1.0, 2.0])
+@pytest.mark.parametrize("current_survives", [False, True])
+def test_batch_removal_preserves_absolute_zoom_and_pan(
+    make_overlay, dpr, current_survives
+):
+    overlay = make_overlay([(3600, 2400, 1), (1800, 1200, 1), (1800, 600, 6)], dpr)
+    overlay._zoom_to_state(
+        ZoomState.ZOOM_200,
+        overlay._get_zoom_anchor_for_screen_pos(QPointF(600.0, 400.0)),
+    )
+    scale = overlay._zoom_level * overlay._get_base_scale_factor()
+    overlay._transform.translate(70.0 / scale, -60.0 / scale)
+    overlay._set_allowed_extra_space_from_current()
+    overlay._clamp_pan()
+    center = overlay._get_image_center_screen_coords()
+    pixmap_key = overlay._pixmap.cacheKey()
+    changed_indices = []
+    overlay.index_changed.connect(changed_indices.append)
+    paths = overlay.get_visible_paths()
+
+    assert overlay.remove_paths_from_loop(
+        set(paths[1:]) if current_survives else set(paths[:2]),
+        preferred_path=paths[0] if current_survives else paths[2],
+    )
+
+    assert overlay._zoom_state == ZoomState.ZOOM_200
+    _assert_physical_pixel_scale(overlay, 2.0)
+    current_center = overlay._get_image_center_screen_coords()
+    assert current_center.x() == pytest.approx(center.x())
+    assert current_center.y() == pytest.approx(center.y())
+    assert changed_indices == ([] if current_survives else [2])
+    if current_survives:
+        assert overlay._pixmap.cacheKey() == pixmap_key

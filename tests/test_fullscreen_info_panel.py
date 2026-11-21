@@ -143,6 +143,41 @@ def test_ejecting_only_photo_closes_real_overlay(make_overlay):
     assert overlay.get_visible_paths() == []
 
 
+@pytest.mark.parametrize("decode_fails", [False, True])
+@pytest.mark.parametrize(
+    ("removed", "destination", "rank"),
+    [([0, 1], 2, "#1"), ([2, 3], 4, "#3"), ([2, 3, 4], 1, "#2")],
+)
+def test_batch_loop_removal_refreshes_rank_without_loading_skipped_photos(
+    make_overlay, monkeypatch, decode_fails, removed, destination, rank
+):
+    overlay = make_overlay([0, 1, 2, 3, 4], 2)
+    loads = []
+    pixmap = QPixmap() if decode_fails else QPixmap(160, 120)
+
+    def load(self):
+        loads.append(self.image_path)
+        return pixmap
+
+    monkeypatch.setattr(
+        FullscreenOverlay, "_load_fullscreen_pixmap_with_color_management", load
+    )
+    preferred_path = f"/virtual/photo-{destination}.jpg"
+
+    assert overlay.remove_paths_from_loop(
+        {f"/virtual/photo-{index}.jpg" for index in removed},
+        preferred_path=preferred_path,
+    )
+
+    assert overlay.rank_label.text() == rank
+    assert overlay.get_current_path() == preferred_path
+    if destination == 2:
+        assert loads == []
+    else:
+        # Decode failure can retry the destination in base view, as with Eject.
+        assert loads and set(loads) == {preferred_path}
+
+
 @pytest.mark.parametrize("replace_items", [False, True])
 def test_rebinding_updates_rank_when_current_photo_survives(
     make_overlay, replace_items

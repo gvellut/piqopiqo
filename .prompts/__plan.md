@@ -163,3 +163,4 @@
 ! [Add Qgis map option](Ee_tasks/Je_Add_Qgis_map_option.md)
 ! [Map context menu](Ee_tasks/Ke_Map_context_menu.md)
 ! [add shortcuts](Ee_tasks/Le_add_shortcuts.md)
+! [flush](Ee_tasks/Me_flush.md)
