@@ -25,6 +25,7 @@ from piqopiqo.shortcuts import Shortcut
 import piqopiqo.ssf.settings_state as settings_state
 from piqopiqo.ssf.settings_state import (
     DialogDiscardConfirmationMode,
+    KeyboardPanDirection,
     MandatorySettingInputKind,
     RuntimeSettingKey,
     SettingsPanelSaveMode,
@@ -78,6 +79,9 @@ def isolated_settings(qcore_app, monkeypatch):
         "PIQO_STATUS_BAR_FOLDER_LABEL_MAX_WIDTH_RATIO",
         "PIQO_SETTINGS_PANEL_SAVE_MODE",
         "PIQO_DIALOG_DISCARD_CONFIRMATION_MODE",
+        "PIQO_KEYBOARD_PAN_PERCENT",
+        "PIQO_KEYBOARD_PAN_FAST_PERCENT",
+        "PIQO_KEYBOARD_PAN_DIRECTION",
         "PIQO_SETTINGS_PANEL_ROW_SPACING",
         "PIQO_FONT_SIZE",
         "PIQO_INFO_PANEL_RANK_FONT_SIZE",
@@ -252,6 +256,37 @@ def test_dialog_discard_confirmation_runtime_mode(isolated_settings, monkeypatch
         get_runtime_setting(RuntimeSettingKey.DIALOG_DISCARD_CONFIRMATION_MODE)
         == DialogDiscardConfirmationMode.EVERY_DISMISSAL
     )
+
+
+def test_keyboard_pan_runtime_defaults(isolated_settings):
+    assert get_runtime_setting(RuntimeSettingKey.KEYBOARD_PAN_PERCENT) == 10.0
+    assert get_runtime_setting(RuntimeSettingKey.KEYBOARD_PAN_FAST_PERCENT) == 25.0
+    assert (
+        get_runtime_setting(RuntimeSettingKey.KEYBOARD_PAN_DIRECTION)
+        == KeyboardPanDirection.VIEW_DIRECTION
+    )
+    assert not any("keyboardPan" in key for key in isolated_settings.allKeys())
+
+
+@pytest.mark.parametrize(
+    ("direction", "expected"),
+    [
+        ("VIEW_DIRECTION", KeyboardPanDirection.VIEW_DIRECTION),
+        ("REVERSED", KeyboardPanDirection.REVERSED),
+        ("invalid", KeyboardPanDirection.VIEW_DIRECTION),
+    ],
+)
+def test_keyboard_pan_runtime_env_overrides(
+    isolated_settings, monkeypatch, direction, expected
+):
+    monkeypatch.setenv("PIQO_KEYBOARD_PAN_PERCENT", "12.5")
+    monkeypatch.setenv("PIQO_KEYBOARD_PAN_FAST_PERCENT", "37.5")
+    monkeypatch.setenv("PIQO_KEYBOARD_PAN_DIRECTION", direction)
+    init_qsettings_store(dyn=True)
+
+    assert get_runtime_setting(RuntimeSettingKey.KEYBOARD_PAN_PERCENT) == 12.5
+    assert get_runtime_setting(RuntimeSettingKey.KEYBOARD_PAN_FAST_PERCENT) == 37.5
+    assert get_runtime_setting(RuntimeSettingKey.KEYBOARD_PAN_DIRECTION) == expected
 
 
 def test_recent_folders_state_default_and_roundtrip(isolated_settings):

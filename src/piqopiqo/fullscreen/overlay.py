@@ -40,6 +40,7 @@ from piqopiqo.shortcuts import (
     match_simple_shortcut,
 )
 from piqopiqo.ssf.settings_state import (
+    KeyboardPanDirection,
     RuntimeSettingKey,
     UserSettingKey,
     get_runtime_setting,
@@ -1017,7 +1018,11 @@ class FullscreenOverlay(QWidget):
             painter.end()
 
     def keyPressEvent(self, event: QKeyEvent):
-        """Handle keyboard events to dismiss the overlay and navigate images."""
+        """Handle fullscreen dismissal, navigation, zoom, and panning."""
+
+        if self._handle_keyboard_pan(event):
+            event.accept()
+            return
 
         # Hardcoded shortcuts (non-configurable)
         if match_simple_shortcut(event, Qt.Key_Escape) or match_simple_shortcut(
@@ -1068,6 +1073,41 @@ class FullscreenOverlay(QWidget):
                     self.label_shortcut_requested.emit(label_name)
                     return
             super().keyPressEvent(event)
+
+    def _handle_keyboard_pan(self, event: QKeyEvent) -> bool:
+        """Consume Cmd-arrow shortcuts, including when panning is blocked."""
+        arrows = {
+            Qt.Key_Left: ("Left", 1, 0),
+            Qt.Key_Right: ("Right", -1, 0),
+            Qt.Key_Up: ("Up", 0, 1),
+            Qt.Key_Down: ("Down", 0, -1),
+        }
+        arrow = arrows.get(event.key())
+        if arrow is None:
+            return False
+
+        name, dx, dy = arrow
+        # Qt's Ctrl modifier maps to Command on macOS.
+        if match_shortcut_sequence(event, f"Ctrl+Shift+{name}"):
+            percent_key = RuntimeSettingKey.KEYBOARD_PAN_FAST_PERCENT
+        elif match_shortcut_sequence(event, f"Ctrl+{name}"):
+            percent_key = RuntimeSettingKey.KEYBOARD_PAN_PERCENT
+        else:
+            return False
+
+        if self._zoom_state == ZoomState.BASE_VIEW or self._zoom_level <= 1.0:
+            return True
+
+        fraction = float(get_runtime_setting(percent_key)) / 100.0
+        if (
+            get_runtime_setting(RuntimeSettingKey.KEYBOARD_PAN_DIRECTION)
+            == KeyboardPanDirection.REVERSED
+        ):
+            fraction = -fraction
+        self._pan_by_screen_delta(
+            QPointF(dx * self.width() * fraction, dy * self.height() * fraction)
+        )
+        return True
 
     def _screen_to_image_coords(self, screen_pos: QPointF) -> QPointF:
         """Convert screen coordinates to image coordinates."""
@@ -1374,16 +1414,24 @@ class FullscreenOverlay(QWidget):
                 self._pan_cursor_timer.stop()
                 self.setCursor(Qt.ClosedHandCursor)
 
-        # Get base scale to convert delta to image coordinates
-        base_scale = self._get_base_scale_factor()
+        self._pan_by_screen_delta(delta)
+
+    def _pan_by_screen_delta(self, delta: QPointF):
+        """Apply a mouse or keyboard pan with the shared screen-space limits."""
+        if self._pixmap.isNull():
+            return
+
+        scale = self._zoom_level * self._get_base_scale_factor()
+        if math.isclose(scale, 0.0):
+            return
 
         # Apply the translation (in image coordinates)
         self._transform.translate(
-            delta.x() / (self._zoom_level * base_scale),
-            delta.y() / (self._zoom_level * base_scale),
+            delta.x() / scale,
+            delta.y() / scale,
         )
 
-        # Clamp immediately to prevent going beyond boundaries during drag
+        # Clamp immediately to prevent going beyond boundaries
         self._clamp_pan_smooth()
 
         # Update allowed extra space - if user reduced space below PAN_EMPTY_SPACE,

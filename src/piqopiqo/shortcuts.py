@@ -128,6 +128,8 @@ FULLSCREEN_VIEW_HARDCODED_SHORTCUTS: tuple[str, ...] = (
     "Escape / Space (exit fullscreen)",
     "Left / Right (navigate fullscreen loop)",
     "Up / Down (ignored)",
+    "Cmd + Arrow keys (pan zoomed image)",
+    "Cmd + Shift + Arrow keys (pan zoomed image faster)",
 )
 
 

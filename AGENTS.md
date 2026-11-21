@@ -113,7 +113,7 @@ src/piqopiqo/
 │   ├── summary_text_edit.py # Shared tool results/details with optional per-line formatting and scrollbar height allowance
 │   └── status_bar.py        # Loading status bar with progress and error button
 ├── fullscreen/      # Fullscreen image viewing
-│   ├── overlay.py   # Fullscreen overlay + shared Eject/Flush loop removal, dynamic rank and label swatch border
+│   ├── overlay.py   # Fullscreen overlay + mouse/keyboard pan, shared Eject/Flush loop removal, dynamic rank and label swatch border
 │   ├── pan.py       # Pan logic for zoomed images
 │   └── zoom.py      # Absolute pixel zoom states + per-image fit-relative multipliers
 ├── grid/            # Photo grid display
@@ -173,7 +173,7 @@ tests/
 ├── test_modal_worker_callbacks.py # Late callbacks after GPX/Flickr/SD dialog disposal and queued task disconnection
 ├── test_exif_write.py # Manual lens tags + real ExifTool round trips for Save EXIF/Flickr, with/without Fujifilm MakerNotes
 ├── test_fullscreen_info_panel.py # Fullscreen loop rank, info panel layout, zoom overlay lifecycle
-├── test_fullscreen_navigation_zoom.py # Absolute zoom across mixed orientations/resolutions, Retina, pan and fallback
+├── test_fullscreen_navigation_zoom.py # Absolute zoom, Retina, navigation, keyboard pan steps/direction and shared mouse limits
 ├── test_main_window_fullscreen_sync.py # Live grid/fullscreen selection, Eject/Flush filtering, navigation and shortcut dispatch
 ├── test_unsaved_changes_dialog.py # Shared dirty-dialog dismissal behavior
 ├── test_edit_panel.py # Edit panel UI behavior, including Keywords focus/paste preservation and save normalization
@@ -192,6 +192,7 @@ tests/
 
 - **Grid view**: Thumbnails with configurable columns, lazy loading
 - **Fullscreen**: Full resolution with zoom/pan, keyboard navigation. The fullscreen view can be started with a single image selected (then it can go on a user-controlled loop through the complete image list) OR it is started with a list of selected images (then it can go on a loop though those images).
+- **Fullscreen keyboard pan**: `Cmd+Arrow` pans by 10% of the viewport width/height; `Cmd+Shift+Arrow` pans by 25%, only when zoomed beyond base view and with the same boundaries as mouse dragging. Arrows reveal more of the image in their direction by default; internal settings configure both percentages and reversed direction.
 - **EXIF panel**: Read-only EXIF data display (uses pyexiftool)
 - **Edit panel**: Editable metadata (title, description, keywords, coordinates, time taken)
 - **Filter panel**: Fields to use for filtering the images displayed on the photo grid
@@ -256,6 +257,7 @@ State and settings are managed in `settings_state.py` using `QSettings` (native 
 - `RuntimeSettingKey.FLICKR_API_HEAVY_TIMEOUT_S` (default `30.0`) is the per-attempt timeout for image upload/replace, upload album-photo listing, album creation, and `photosets.editPhotos`.
 - `RuntimeSettingKey.FLICKR_API_VERY_LONG_TIMEOUT_S` (default `120.0`) is the per-attempt timeout for bulk `photosets.orderSets` and `photosets.reorderPhotos` operations.
 - `RuntimeSettingKey.DIALOG_DISCARD_CONFIRMATION_MODE` (default `ESC_ONLY`) controls whether dirty input dialogs confirm only on Escape or on every dismissal (`EVERY_DISMISSAL`).
+- `RuntimeSettingKey.KEYBOARD_PAN_PERCENT` (default `10.0`) and `KEYBOARD_PAN_FAST_PERCENT` (default `25.0`) set fullscreen keyboard pan distances as percentages of the viewport width or height. `KEYBOARD_PAN_DIRECTION` defaults to `KeyboardPanDirection.VIEW_DIRECTION` (Right reveals farther right); `REVERSED` moves the image itself in the arrow's direction. These settings are internal and memory-only, with `PIQO_` environment overrides.
 - `RuntimeSettingKey.INFO_PANEL_RANK_FONT_SIZE` (default `18`) sets the fullscreen info panel rank font size in points; override with `PIQO_INFO_PANEL_RANK_FONT_SIZE`.
 - `RuntimeSettingKey.FULLSCREEN_INFO_PANEL_SWATCH_BORDER_COLOR` (default `"white"`) sets the fullscreen info panel label swatch border color; override with `PIQO_FULLSCREEN_INFO_PANEL_SWATCH_BORDER_COLOR`.
 - `RuntimeSettingKey.FULLSCREEN_INFO_PANEL_SWATCH_BORDER_WIDTH` (default `1`) sets the fullscreen info panel label swatch border width in pixels (`0` disables it); override with `PIQO_FULLSCREEN_INFO_PANEL_SWATCH_BORDER_WIDTH`.
@@ -272,6 +274,8 @@ Useful env vars for agent testing:
 - `PIQO_MIN_IDLE_WORKERS` - Idle worker processes to keep (default: 1)
 - `PIQO_MAX_EXIFTOOLS_IMAGE_BATCH` - Max images per EXIF batch (default: 8)
 - `PIQO_INITIAL_RESOLUTION` - Initial window size as `WIDTHxHEIGHT` (e.g. `1280x800`). If not set, window opens maximized.
+- `PIQO_KEYBOARD_PAN_PERCENT` / `PIQO_KEYBOARD_PAN_FAST_PERCENT` - Fullscreen keyboard pan distance as a viewport percentage (defaults: 10 / 25).
+- `PIQO_KEYBOARD_PAN_DIRECTION` - `VIEW_DIRECTION` (default) or `REVERSED`.
 - `PIQO_GRID_HQ_THUMB_DELAY_ENABLED` - If true, keeps embedded previews while navigating and switches to HQ after idle delay
 - `PIQO_GRID_HQ_THUMB_LOAD_DELAY_MS` - Idle delay before switching grid thumbnails to HQ when delay mode is enabled
 - `PIQO_GRID_EMBEDDED_BUFFER_ROWS` - Rows around visible area to keep embedded thumbnails in memory (default: 20)
@@ -492,6 +496,7 @@ Selection behavior:
 - `FullscreenOverlay.remove_paths_from_loop(...)` shares batch removal between Eject and Flush. Flush intersects only the existing loop with current filtered grid paths and records removals as session-ejected paths. Use `MainWindow._pick_replacement_path_in_order` for forward-then-backward replacement without wrapping, preserve zoom/pan, and apply empty-loop grid fallback before closing. A surviving current image only needs its loop rank refreshed, without reloading it.
 - `Shortcut.FLUSH_LOOP` appears under Fullscreen Shortcuts and defaults to `Shift+\`, including when older saved mappings lack it. Preserve an explicit empty string when clearing it so default backfill does not re-enable it. Shifted-backslash matching also accepts Qt's `Shift+|` event representation; plain `\` remains Eject.
 - Fullscreen zoom percentages are absolute pixel mappings: 100% means one image pixel per physical render-buffer pixel (including Retina/device pixel ratio). Navigation and loop ejection preserve the selected percentage and image-center screen position, recalculating the fit-relative zoom multiplier after loading and orienting each destination image. Never carry the previous image's multiplier across different orientations or resolutions. Base view still fits without upscaling beyond 100%, and a completely offscreen destination falls back to base view.
+- Fullscreen keyboard pan reserves exact `Cmd+Arrow` and `Cmd+Shift+Arrow` combinations before configurable shortcuts; consume them even in base view or at a boundary. Qt's `Ctrl` modifier maps to Command on macOS. Pan only when the fit-relative zoom multiplier exceeds `1.0` outside base view. Both input paths use `_pan_by_screen_delta` for screen-to-image translation, immediate clamping, per-side extra-space updates, and repaint; keep mouse gesture/cursor handling outside that helper. Viewport percentage steps use logical widget dimensions without an extra device-pixel-ratio multiplier.
 - Fullscreen info panel starts with `#N`, the current 1-based position in the active loop (`current_visible_idx + 1`). Single-selection entry uses the filtered grid order; multi-selection entry uses the selected loop. Navigation, ejection, filtering, and filesystem rebinding refresh the rank without gaps, even when the current photo path stays unchanged or image decoding fails. Rank is never stored in photo metadata.
 - Fullscreen info panel label swatches draw a solid, square-cornered border inside the existing 20×20 footprint. Border color/width use internal `FULLSCREEN_INFO_PANEL_SWATCH_BORDER_*` runtime settings; missing or unrecognized labels stay transparent and borderless while retaining their layout space.
 - Grid label swatches retain their 16×16 rectangle and 4-pixel margin. Their border uses internal `GRID_ITEM_SWATCH_BORDER_*` runtime settings (black, 1 pixel by default); `GRID_ITEM_SHOW_LABEL_SWATCH` still controls visibility, and missing or unrecognized labels show no swatch.

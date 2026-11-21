@@ -58,6 +58,11 @@ class DialogDiscardConfirmationMode(Enum):
     EVERY_DISMISSAL = auto()
 
 
+class KeyboardPanDirection(Enum):
+    VIEW_DIRECTION = auto()
+    REVERSED = auto()
+
+
 class StateGroup(StrEnum):
     APP_STATE = "AppState"
     QT = "AppState/Qt"
@@ -175,6 +180,9 @@ class RuntimeSettingKey(StrEnum):
     ZOOM_WHEEL_SENSITIVITY = "zoomWheelSensitivity"
     PAN_EMPTY_SPACE = "panEmptySpace"
     PAN_CURSOR_DELAY_MS = "panCursorDelayMs"
+    KEYBOARD_PAN_PERCENT = "keyboardPanPercent"
+    KEYBOARD_PAN_FAST_PERCENT = "keyboardPanFastPercent"
+    KEYBOARD_PAN_DIRECTION = "keyboardPanDirection"
     INFO_PANEL_BACKGROUND_COLOR = "infoPanelBackgroundColor"
     INFO_PANEL_BACKGROUND_TRANSPARENCY = "infoPanelBackgroundTransparency"
     INFO_PANEL_TEXT_COLOR = "infoPanelTextColor"
@@ -1032,6 +1040,17 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     RuntimeSettingKey.ZOOM_WHEEL_SENSITIVITY: SettingDef(default=1, read_type=int),
     RuntimeSettingKey.PAN_EMPTY_SPACE: SettingDef(default=300, read_type=int),
     RuntimeSettingKey.PAN_CURSOR_DELAY_MS: SettingDef(default=100, read_type=int),
+    RuntimeSettingKey.KEYBOARD_PAN_PERCENT: SettingDef(default=10.0, read_type=float),
+    RuntimeSettingKey.KEYBOARD_PAN_FAST_PERCENT: SettingDef(
+        default=25.0, read_type=float
+    ),
+    RuntimeSettingKey.KEYBOARD_PAN_DIRECTION: SettingDef(
+        default=KeyboardPanDirection.VIEW_DIRECTION,
+        read_type=str,
+        env_parser=lambda raw: _parse_enum(
+            raw, KeyboardPanDirection, KeyboardPanDirection.VIEW_DIRECTION
+        ),
+    ),
     RuntimeSettingKey.INFO_PANEL_BACKGROUND_COLOR: SettingDef(
         default="black", read_type=str
     ),

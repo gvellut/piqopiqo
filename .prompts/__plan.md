@@ -164,3 +164,4 @@
 ! [Map context menu](Ee_tasks/Ke_Map_context_menu.md)
 ! [add shortcuts](Ee_tasks/Le_add_shortcuts.md)
 ! [flush](Ee_tasks/Me_flush.md)
+! [fullscreen pan with arrow keys](Ee_tasks/Ne_fullscreen_pan_with_arrow_keys.md)
