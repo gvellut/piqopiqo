@@ -32,6 +32,32 @@ uv sync
 uv run piqopiqo /path/to/your/images
 ```
 
+### Keyboard shortcuts
+
+In Settings, shortcut fields are plain text: type the key name instead of pressing the key to record it. Use these spellings for common special keys:
+
+| Key | Text to enter |
+| --- | --- |
+| Page Up | `PgUp` |
+| Page Down | `PgDown` |
+| Home | `Home` |
+| End | `End` |
+| Delete (forward delete) | `Del` or `Delete` |
+| Backspace | `Backspace` |
+| Insert | `Ins` |
+| Escape | `Esc` |
+| Space bar | `Space` |
+| Tab | `Tab` |
+| Return | `Return` |
+| Enter (keypad) | `Enter` |
+| Function keys | `F1`, `F2`, …, `F12` |
+
+Letters, digits, and punctuation can be entered directly, such as `A`, `1`, or `-`. Modifiers can be added with `+`, for example `Shift+PgUp` or `Alt+End`.
+
+`PgDn`, `PageUp`, and `PageDown` are not accepted; use `PgDown` and `PgUp` as shown above. Invalid names currently produce no warning.
+
+Fullscreen zoom and loop-ejection shortcuts accept these key names. Previous/next photo navigation is fixed to Left/Right and cannot be reassigned in Settings.
+
 ## pyinstaller
 
 It is possible to generate a `.app`. Run:
