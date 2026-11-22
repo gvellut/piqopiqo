@@ -87,7 +87,8 @@ class FilterCriteria:
     explicit_labels: set[str] = attr.Factory(
         set
     )  # Known label choices from settings/UI.
-    search_text: str = ""  # Search in keywords + title (case insensitive)
+    # Substring search in keywords + title, ignoring case, accents, and œ/æ ligatures.
+    search_text: str = ""
 
 
 # TODO define the dynamic attributes explicitly ; remove the slots=False

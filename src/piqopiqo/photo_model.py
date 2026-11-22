@@ -7,6 +7,7 @@ from enum import Enum, auto
 import logging
 import os
 from typing import TYPE_CHECKING
+import unicodedata
 
 from PySide6.QtCore import QObject, Signal
 
@@ -19,6 +20,16 @@ if TYPE_CHECKING:
 from .metadata.metadata_db import MetadataDBUnavailableError
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_search_text(text: str) -> str:
+    """Fold case, accents, cedillas, and oe/ae ligatures for text matching."""
+    text = text.casefold().replace("œ", "oe").replace("æ", "ae")
+    return "".join(
+        char
+        for char in unicodedata.normalize("NFD", text)
+        if unicodedata.category(char) != "Mn"
+    )
 
 
 class SortOrder(Enum):
@@ -450,14 +461,16 @@ class PhotoListModel(QObject):
 
         # Search filter
         if self._filter.search_text:
-            search_lower = self._filter.search_text.lower()
             if not photo.db_metadata:
                 return False
 
-            title = (photo.db_metadata.get(DBFields.TITLE) or "").lower()
-            keywords = (photo.db_metadata.get(DBFields.KEYWORDS) or "").lower()
+            search_text = _normalize_search_text(self._filter.search_text)
+            title = _normalize_search_text(photo.db_metadata.get(DBFields.TITLE) or "")
+            keywords = _normalize_search_text(
+                photo.db_metadata.get(DBFields.KEYWORDS) or ""
+            )
 
-            if search_lower not in title and search_lower not in keywords:
+            if search_text not in title and search_text not in keywords:
                 return False
 
         return True

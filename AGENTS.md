@@ -85,7 +85,7 @@ src/piqopiqo/
 ├── main_window.py   # Main application window
 ├── ssf
     ├── settings_state.py # QSettings-backed state + settings registries/accessors
-├── photo_model.py   # PhotoListModel: filtering, sorting, selection, add/remove photos
+├── photo_model.py   # PhotoListModel: accent/ligature-insensitive text filtering, sorting, selection, add/remove photos
 ├── qgis_remote_control.py # QGIS socket commands, coded failures, frozen result payloads and missing-layer GPS fallback
 ├── shortcuts.py     # Keyboard shortcut utilities + view and tool shortcut registries
 ├── storage.py       # Qt-free storage write probes + full-volume fault payloads/classification
@@ -168,6 +168,7 @@ src/piqopiqo/
     └── macos.py     # macOS utilities (resolution, move_to_trash)
 
 tests/
+├── test_photo_model_sync.py # Metadata refresh, accent/ligature-insensitive search, filter normalization and path updates
 ├── test_external_apps.py # Finder reveal sends one selection per photo folder
 ├── test_modal_dialog_lifecycle.py # Worker-GC dialog destruction regression and reusable storage Retry ownership
 ├── test_modal_worker_callbacks.py # Late callbacks after GPX/Flickr/SD dialog disposal and queued task disconnection
@@ -198,6 +199,7 @@ tests/
 - **EXIF panel**: Read-only EXIF data display (uses pyexiftool)
 - **Edit panel**: Editable metadata (title, description, keywords, coordinates, time taken)
 - **Filter panel**: Fields to use for filtering the images displayed on the photo grid
+- **Text search**: Title/keyword substring matching ignores capitalization, accents and cedillas, and treats `œ`/`oe` and `æ`/`ae` as equivalent in both directions. Search input and stored metadata retain their original text.
 - **Thumbnail caching**: Multiprocessing pipeline, cached to disk
 - **Status labels**: Configurable colored labels for photo workflow
 - **Sorting**: View menu with sort by Time Taken, File Name, File Name by Folder
@@ -428,6 +430,7 @@ Selection behavior:
 - EXIF panel extraction requests use exiftool `-n` (numeric output); EXIF panel display formatters convert those raw values for user display only.
 - Folder watching uses `watchfiles`; internal create/delete actions suppress watcher events briefly to avoid double-processing.
 - `FilterPanel.set_folders(...)` preserves the selected folder by its full path across list refreshes, including Edit in, Duplicate, and watcher updates. If that folder disappears from the available list, select All folders and emit the updated criteria so the model and grid also drop the old folder restriction. An unchanged folder selection emits no filter change.
+- Text search uses `photo_model._normalize_search_text` on the query, title and keywords: Unicode case folding, explicit `œ`/`æ` expansion, NFD decomposition and removal of nonspacing combining marks. Normalize only for matching; preserve original text in `FilterCriteria`, the search field and metadata. Description and filenames are outside the search scope.
 - Grid memory policy: both embedded and HQ thumbnails are evicted outside their respective buffer ranges. Embedded previews are kept for `RuntimeSettingKey.GRID_EMBEDDED_BUFFER_ROWS` (default 20) rows around the visible area. HQ thumbnails are kept for `RuntimeSettingKey.GRID_THUMB_BUFFER_ROWS` (default 2) rows. If `RuntimeSettingKey.GRID_HQ_THUMB_DELAY_ENABLED` is true, embedded previews are displayed while navigating (scroll/row movement) and HQ is shown after `RuntimeSettingKey.GRID_HQ_THUMB_LOAD_DELAY_MS` of idle time; if false, HQ is preferred immediately in the buffered range. Selection state does not affect which thumbnail quality mode is active. Orientation is pre-applied to `item.pixmap` (the display pixmap) when loaded, not on every paint; rotating invalidates this cache via `item.pixmap = None`.
 - Sort-driven grid refreshes preserve viewport context by path (not index): a visible selection anchor stays on the same viewport row, otherwise the first visible selected item gets that treatment; if no selection is visible, the previous first visible item is only kept in view, and offscreen selections are never revealed. Filter and layout refreshes retain their existing row-aware visible-path fallback behavior.
 - View sort order (`View > Sort By`) is persisted globally in app state via `StateKey.SORT_ORDER` using `SortOrder.name` strings, and is restored before `PhotoListModel.set_photos(...)` on startup and folder loads.

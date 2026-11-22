@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import pytest
+
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.metadata.metadata_db import MetadataDBManager
 from piqopiqo.model import FilterCriteria, ImageItem
@@ -65,6 +67,83 @@ def test_refresh_filters_out_item_after_search_field_change():
 
     assert model.photos == []
     assert first.is_selected is False
+
+
+@pytest.mark.parametrize("field", [DBFields.TITLE, DBFields.KEYWORDS])
+@pytest.mark.parametrize(
+    ("text", "query", "matches"),
+    [
+        ("CAFÉ", "cafe", True),
+        ("CAFE", "café", True),
+        ("garçon", "GARCON", True),
+        ("garcon", "GARÇON", True),
+        ("CŒUR", "coeur", True),
+        ("COEUR", "cœur", True),
+        ("ÆTHER", "aether", True),
+        ("AETHER", "æther", True),
+        ("cafe\u0301", "CAFÉ", True),
+        ("CAFÉ", "cafe\u0301", True),
+        ("garc\u0327on", "GARCON", True),
+        ("café", "afé", True),
+        ("æther", "ether", True),
+        ("café", "coffee", False),
+        ("garçon", "garden", False),
+        ("cœur", "cour", False),
+        ("æther", "other", False),
+    ],
+)
+def test_search_ignores_case_accents_and_ligatures(field, text, query, matches):
+    model = PhotoListModel(MetadataDBManager())
+    first = _item("/photos/a.jpg")
+    first.db_metadata[field] = f"Before {text} after"
+    second = _item("/photos/b.jpg", title="Mountains", keywords="forest")
+    photos = [first, second, _item("/photos/c.jpg")]
+    metadata_before = [dict(photo.db_metadata) for photo in photos]
+    criteria = FilterCriteria(search_text=query)
+    model.set_photos(photos, ["/photos"])
+
+    model.set_filter(criteria)
+
+    assert model.photos == ([first] if matches else [])
+    assert [photo.db_metadata for photo in photos] == metadata_before
+    assert criteria.search_text == query
+    assert model._filter.search_text == query
+
+
+@pytest.mark.parametrize("field", [DBFields.TITLE, DBFields.KEYWORDS])
+def test_refresh_reapplies_normalized_search_after_metadata_change(field):
+    model = PhotoListModel(MetadataDBManager())
+    photo = _item("/photos/a.jpg")
+    model.set_photos([photo], ["/photos"])
+    model.set_filter(FilterCriteria(search_text="cafe et coeur"))
+    assert model.photos == []
+
+    photo.db_metadata[field] = "CAFÉ et CŒUR"
+    model.refresh_after_metadata_update()
+
+    assert model.photos == [photo]
+    assert photo.db_metadata[field] == "CAFÉ et CŒUR"
+
+    photo.is_selected = True
+    photo.db_metadata[field] = "Mountains"
+    model.refresh_after_metadata_update()
+
+    assert model.photos == []
+    assert photo.is_selected is False
+
+
+def test_search_does_not_match_description_or_filename_or_missing_metadata():
+    model = PhotoListModel(MetadataDBManager())
+    description_only = _item("/photos/a.jpg")
+    description_only.db_metadata[DBFields.DESCRIPTION] = "CAFÉ"
+    filename_only = _item("/photos/CAFÉ.jpg")
+    missing_metadata = _item("/photos/c.jpg")
+    missing_metadata.db_metadata = None
+    model.set_photos([description_only, filename_only, missing_metadata], ["/photos"])
+
+    model.set_filter(FilterCriteria(search_text="cafe"))
+
+    assert model.photos == []
 
 
 def test_refresh_resorts_after_time_taken_change():
