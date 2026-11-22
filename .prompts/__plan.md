@@ -1,3 +1,4 @@
+- [Clean folder data](Ee_tasks/Oe_Clean_folder_data.md)
 - [Reorder album](Sd_tasks/De_Reorder_album.md)
 - [reverse cop from sd](Sd_tasks/Vd_reverse_cop_from_sd.md)
 - [Undo label do not record if label not changed](Sd_tasks/Sd_Undo_label_do_not_record_if_label_not_changed.md)
