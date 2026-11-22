@@ -34,7 +34,7 @@ from piqopiqo.metadata.db_fields import (
 from piqopiqo.metadata.metadata_db import MetadataDBManager
 from piqopiqo.metadata.save_workers import MetadataSaveWorker, drain_qthread_pool
 from piqopiqo.model import ImageItem, MapLinkOption
-from piqopiqo.qgis_remote_control import QgisMapStatus
+from piqopiqo.qgis_remote_control import QgisMapResult, QgisMapStatus
 from piqopiqo.ssf.settings_state import UserSettingKey, get_user_setting
 
 from .edit_widgets import (
@@ -665,19 +665,23 @@ class EditPanel(QWidget):
         self._clear_qgis_map_status()
         self._qgis_map_pending = True
 
-    def finish_qgis_map_request(self, status: QgisMapStatus | None) -> None:
+    def finish_qgis_map_request(self, result: QgisMapResult | None) -> None:
         if not self._qgis_map_pending:
             return
         self._qgis_map_pending = False
-        if status is not None:
+        if result is not None:
+            status = result.status
             color = (
                 Qt.GlobalColor.darkYellow
-                if status is QgisMapStatus.ZOOMED_TO_POSITION
+                if status
+                in (QgisMapStatus.ZOOMED_TO_POSITION, QgisMapStatus.LAYER_NOT_FOUND)
                 else Qt.GlobalColor.red
             )
             self.qgis_map_status_label.setStyleSheet(f"color: {QColor(color).name()};")
             self.qgis_map_status_label.setText(status.value)
-            self.qgis_map_status_label.setToolTip(status.value)
+            self.qgis_map_status_label.setToolTip(
+                result.remote_message or "" if status is QgisMapStatus.OPERATION else ""
+            )
             self.qgis_map_status_label.show()
 
     def _on_field_saved(self, field_name: str):

@@ -65,7 +65,7 @@ from .model import (
 from .orientation import rotate_orientation_left, rotate_orientation_right
 from .panels import EditPanel, ExifPanel, FilterPanel
 from .photo_model import PhotoListModel, SortOrder
-from .qgis_remote_control import QgisMapStatus, QgisPhotoWorker
+from .qgis_remote_control import QgisMapResult, QgisPhotoWorker
 from .qt_workers import PythonOwnedRunnable
 from .settings_panel import SettingsDialog
 from .settings_panel.schema import get_settings_tab_title_for_key
@@ -2457,10 +2457,10 @@ class MainWindow(QMainWindow):
         self._qgis_photo_worker = worker
         QThreadPool.globalInstance().start(worker)
 
-    def _on_qgis_map_finished(self, status: QgisMapStatus | None) -> None:
+    def _on_qgis_map_finished(self, result: QgisMapResult | None) -> None:
         self._qgis_photo_worker = None
         if not self._shutdown_started and self.edit_panel is not None:
-            self.edit_panel.finish_qgis_map_request(status)
+            self.edit_panel.finish_qgis_map_request(result)
 
     def _get_grid_num_column_bounds(self) -> tuple[int, int]:
         min_cols = max(

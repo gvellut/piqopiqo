@@ -16,7 +16,7 @@ from piqopiqo.panels.edit_panel import EditPanel
 from piqopiqo.panels.edit_widgets import MULTIPLE_VALUES, KeywordsEdit
 from piqopiqo.panels.keyword.keyword_tree import KeywordTreeManager
 from piqopiqo.panels.keyword.keyword_tree_dialog import KeywordTreeDialog
-from piqopiqo.qgis_remote_control import QgisMapStatus
+from piqopiqo.qgis_remote_control import QgisMapResult, QgisMapStatus
 from piqopiqo.ssf.settings_state import (
     UserSettingKey,
     init_qsettings_store,
@@ -1315,14 +1315,14 @@ def test_qgis_map_error_elides_and_clears_with_selection(qapp):
     status = QgisMapStatus.CONNECTION
     message = status.value
     panel.start_qgis_map_request()
-    panel.finish_qgis_map_request(status)
+    panel.finish_qgis_map_request(QgisMapResult(status))
     qapp.processEvents()
 
     label = panel.qgis_map_status_label
     assert label.isVisible()
     assert label.x() >= panel.map_btn.geometry().right()
     assert label.text().endswith("…")
-    assert label.toolTip() == message
+    assert label.toolTip() == ""
 
     panel.resize(700, 450)
     qapp.processEvents()
@@ -1339,7 +1339,7 @@ def test_qgis_map_error_elides_and_clears_with_selection(qapp):
     assert not label.full_text
 
     panel.start_qgis_map_request()
-    panel.finish_qgis_map_request(QgisMapStatus.ZOOMED_TO_POSITION)
+    panel.finish_qgis_map_request(QgisMapResult(QgisMapStatus.ZOOMED_TO_POSITION))
     panel.update_for_selection([item, other])
     panel.update_for_selection([item])
     assert label.isHidden()
@@ -1348,6 +1348,52 @@ def test_qgis_map_error_elides_and_clears_with_selection(qapp):
     panel.start_qgis_map_request()
     panel.update_for_selection([other])
     panel.update_for_selection([item])
-    panel.finish_qgis_map_request(status)
+    panel.finish_qgis_map_request(QgisMapResult(status))
     assert label.isHidden()
+    panel.close()
+
+
+@pytest.mark.parametrize(
+    ("status", "remote_message", "tooltip", "color"),
+    [
+        (
+            QgisMapStatus.OPERATION,
+            "Exact QGIS error\nwith details",
+            "Exact QGIS error\nwith details",
+            "#ff0000",
+        ),
+        (QgisMapStatus.OPERATION, None, "", "#ff0000"),
+        (QgisMapStatus.CONNECTION, None, "", "#ff0000"),
+        (
+            QgisMapStatus.LAYER_NOT_FOUND,
+            "No available layer matches 'Photos'.",
+            "",
+            "#808000",
+        ),
+        (QgisMapStatus.ZOOMED_TO_POSITION, None, "", "#808000"),
+    ],
+)
+def test_qgis_map_tooltips_only_show_remote_text_for_generic_errors(
+    qapp, status, remote_message, tooltip, color
+):
+    init_qsettings_store(dyn=True)
+    panel = EditPanel(_StubDBManager())
+    panel.start_qgis_map_request()
+    panel.finish_qgis_map_request(QgisMapResult(status, "TEST_CODE", remote_message))
+    label = panel.qgis_map_status_label
+    assert label.full_text == status.value
+    assert label.toolTip() == tooltip
+    assert color in label.styleSheet()
+
+    panel.start_qgis_map_request()
+    assert not label.full_text
+    assert not label.toolTip()
+    panel.finish_qgis_map_request(
+        QgisMapResult(QgisMapStatus.OPERATION, "TEST_CODE", "Old error")
+    )
+    panel.reload_map_links()
+    assert not label.toolTip()
+    panel.finish_qgis_map_request(QgisMapResult(status, "TEST_CODE", remote_message))
+    assert not label.full_text
+    assert not label.toolTip()
     panel.close()

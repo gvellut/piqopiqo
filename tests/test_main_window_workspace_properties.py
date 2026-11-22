@@ -17,7 +17,11 @@ from piqopiqo.main_window import MainWindow
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.model import ImageItem, MapLinkOption, QgisRemoteControlSettings
 from piqopiqo.photo_model import SortOrder
-from piqopiqo.qgis_remote_control import QgisMapStatus, QgisRemoteControlError
+from piqopiqo.qgis_remote_control import (
+    QgisMapResult,
+    QgisMapStatus,
+    QgisRemoteControlError,
+)
 from piqopiqo.ssf.settings_state import (
     APP_NAME,
     StateKey,
@@ -527,10 +531,20 @@ def test_qgis_map_failure_warning_and_retry_update_inline_status(
     click_and_finish()
     assert not label.isHidden()
     assert label.full_text == "Cannot connect to QGIS Remote Control"
+    assert not label.toolTip()
 
     results = iter([
-        QgisRemoteControlError("Technical details"),
-        QgisMapStatus.ZOOMED_TO_POSITION,
+        QgisRemoteControlError(
+            "select failed. Technical details",
+            error_code="INVALID_EXPRESSION",
+            remote_message="Technical details",
+        ),
+        QgisMapResult(QgisMapStatus.ZOOMED_TO_POSITION),
+        QgisMapResult(
+            QgisMapStatus.LAYER_NOT_FOUND,
+            "LAYER_NOT_FOUND",
+            "No available layer matches 'Photos'.",
+        ),
         None,
     ])
 
@@ -546,6 +560,7 @@ def test_qgis_map_failure_warning_and_retry_update_inline_status(
     click_and_finish()
     assert not label.isHidden()
     assert label.full_text == "Error in QGIS Remote Control"
+    assert label.toolTip() == "Technical details"
     red = label.styleSheet()
 
     click_and_finish()
@@ -553,6 +568,13 @@ def test_qgis_map_failure_warning_and_retry_update_inline_status(
     assert label.full_text == "Image not found. Zoomed to position"
     assert label.styleSheet() == f"color: {QColor('olive').name()};"
     assert label.styleSheet() != red
+    assert not label.toolTip()
+
+    click_and_finish()
+    assert not label.isHidden()
+    assert label.full_text == "Layer not found. Zoomed to position."
+    assert label.styleSheet() == f"color: {QColor('olive').name()};"
+    assert not label.toolTip()
 
     click_and_finish()
     assert label.isHidden()

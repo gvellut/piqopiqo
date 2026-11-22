@@ -86,7 +86,7 @@ src/piqopiqo/
 ├── ssf
     ├── settings_state.py # QSettings-backed state + settings registries/accessors
 ├── photo_model.py   # PhotoListModel: filtering, sorting, selection, add/remove photos
-├── qgis_remote_control.py # Map action worker, workspace-relative layer lookup and QGIS local socket commands
+├── qgis_remote_control.py # QGIS socket commands, coded failures, frozen result payloads and missing-layer GPS fallback
 ├── shortcuts.py     # Keyboard shortcut utilities + view and tool shortcut registries
 ├── storage.py       # Qt-free storage write probes + full-volume fault payloads/classification
 ├── model.py         # Data models (ImageItem, FilterCriteria, StatusLabel, ExifField)
@@ -177,7 +177,7 @@ tests/
 ├── test_main_window_fullscreen_sync.py # Live grid/fullscreen selection, Eject/Flush filtering, navigation and shortcut dispatch
 ├── test_unsaved_changes_dialog.py # Shared dirty-dialog dismissal behavior
 ├── test_edit_panel.py # Edit panel UI behavior, including Keywords focus/paste preservation and save normalization
-├── test_qgis_remote_control.py # Workspace-relative layer resolution and acknowledged select, move, and raiseWindow requests
+├── test_qgis_remote_control.py # Layer resolution, coded errors, missing-layer recovery, select/move/raise ordering and result/log payloads
 ├── test_exif_panel.py # EXIF panel formatting, 35 mm focal length fallback, and pending selection summary
 ├── test_photo_grid_shortcuts.py # Grid view-scoped shortcut ownership + text-input guard behavior
 ├── test_photo_grid_selection_refresh.py # Visible-only grid selection highlight refresh path
@@ -319,7 +319,7 @@ The edit panel supports editing metadata fields (title, description, keywords, c
 - **Escape**: Reverts changes and cancels edit
 - Validation is applied for coordinates and datetime fields (red border on invalid input)
 - **Open map** requires a single selected photo with valid coordinates. The grid context menu uses the same activation rules and map providers as the Metadata panel button. QGIS uses the workspace-relative parent folder as the layer label when there is no mapping, with `.` for the workspace root. The Qt worker selects features whose `Name` matches the full filename, then sends `move` with the photo coordinates, configured zoom, and `marker: true`. After the move succeeds, it sends `raiseWindow` on the same connection.
-- The eliding label next to **Open map** shows a yellow **Image not found. Zoomed to position** warning when the move succeeds and `selectedCount` is zero. Errors appear in red. A selection change clears the status and invalidates pending replies for the old selection. Retrying or reloading Map settings also clears the status. The first DEBUG log records the filename, workspace-relative folder, and mapped layer. Later entries identify the mapped layer and record `selectedCount` and `move` parameters at DEBUG, zero matches at WARNING, and failures at ERROR with one record per line.
+- The eliding label next to **Open map** shows a yellow **Image not found. Zoomed to position** warning when the move and raise succeed and `selectedCount` is zero. A `LAYER_NOT_FOUND` error from `select` continues with the same marked move and raise, then shows **Layer not found. Zoomed to position.** Other selection errors stop the sequence; failed move/raise requests override the recovery warning. Warnings have no tooltip. Generic remote errors appear in red with the exact QGIS `error` text as their tooltip; local failures have no tooltip. A selection change clears the status and invalidates pending replies for the old selection. Retrying or reloading Map settings also clears the status and tooltip. The first DEBUG log records the filename, workspace-relative folder, and mapped layer. Later entries identify the mapped layer and record `selectedCount` and `move` parameters at DEBUG, recoverable selection failures and zero matches at WARNING, and failures at ERROR with codes alongside text and one record per line.
 
 ## Save EXIF (Tools Menu)
 
@@ -397,6 +397,7 @@ Selection behavior:
 
 
 ## Considerations
+- QGIS error handling uses the remote `errorCode`, never message matching. Only `LAYER_NOT_FOUND` from `select` is recoverable; invalid layers, unknown/absent codes, transport errors and other command failures stop execution. Keep the connection and original deadline for recovery. `QgisMapResult` is a frozen attrs payload carrying status, code and unmodified remote text through the worker; `None` means complete success.
 - Send photo file URLs to `NSWorkspace.activateFileViewerSelectingURLs_` in one request per containing folder. A separate reveal request for each file can replace the previous selection in that folder.
 - Wrap application-created modal dialogs in `managed_modal_dialog` and consume/copy their results inside that scope. The scope schedules `deleteLater()`; never rely on Python garbage collection to destroy Qt dialogs, since collection can run inside a worker. Keep reusable dialogs (such as storage Retry) in one scope covering their complete retry loop.
 - Detach dialog UI callbacks and cancel unfinished dialog-owned tasks before disposing a modal dialog, including exceptional exits. `ToolTaskHandle.disconnect()` clears its dispatcher so queued callbacks become harmless. GPX completion callbacks outlive the progress dialog to reconcile the model, but skip UI/model work during shutdown. SD eject workers hold only their input and signal objects, never a bound dialog method.
