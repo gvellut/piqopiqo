@@ -250,11 +250,12 @@ class FilterPanel(ScrollableStrip):
             checkbox.setEnabled(enabled)
 
     def set_folders(self, folders: list[str]):
-        """Set the list of folders to filter by.
+        """Refresh folders, preserving the selected folder while it remains available.
 
         Args:
             folders: List of folder paths.
         """
+        selected_folder = self.folder_combo.currentData() or ALL_FOLDERS
         self._folders = folders
         self._updating = True
 
@@ -271,8 +272,8 @@ class FilterPanel(ScrollableStrip):
             idx = self.folder_combo.count() - 1
             self.folder_combo.setItemData(idx, folder, Qt.ToolTipRole)
 
-        # Reset to "All folders"
-        self.folder_combo.setCurrentIndex(0)
+        folder_index = self.folder_combo.findData(selected_folder)
+        self.folder_combo.setCurrentIndex(max(0, folder_index))
 
         # Enable/disable folder combo based on number of folders
         # If only one folder (or none), combobox is inactive
@@ -288,6 +289,9 @@ class FilterPanel(ScrollableStrip):
 
         self.setVisible(True)
         self._updating = False
+
+        if folder_index < 0:
+            self._emit_filter()
 
     def set_no_folders(self):
         """Call this when no folder is open - disables the entire panel."""

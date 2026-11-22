@@ -124,7 +124,7 @@ src/piqopiqo/
 │   ├── edit_panel.py      # Editable metadata panel
 │   ├── edit_widgets.py    # Field editors; Keywords preserves pending edits during temporary focus loss
 │   ├── exif_panel.py      # Read-only EXIF display
-│   ├── filter_panel.py    # Filtering UI
+│   ├── filter_panel.py    # Filtering UI; folder-list refresh preserves the selected folder by path
     └── keyword
         |-- keyword_tree.py    #Hierarchical keyword model
 │       └── keyword_tree_dialog.py # Hierarchical keyword selection dialog with node-specific edits
@@ -181,6 +181,8 @@ tests/
 ├── test_exif_panel.py # EXIF panel formatting, 35 mm focal length fallback, and pending selection summary
 ├── test_photo_grid_shortcuts.py # Grid view-scoped shortcut ownership + text-input guard behavior
 ├── test_photo_grid_selection_refresh.py # Visible-only grid selection highlight refresh path
+├── test_filter_panel_shortcuts.py # Folder-filter preservation/fallback and filter shortcut behavior
+├── test_main_window_watcher_adds.py # Watcher updates, Edit/Duplicate folder-filter preservation and missing-folder fallback
 ├── test_main_window_label_undo.py # Label undo/redo history and selection after filtering
 ├── test_flickr_upload_timeouts.py # Flickr API timeout-class and worker-payload coverage
 ├── test_flickr_upload_reorder.py # New-album early-stop insertion, configurable cutoff, exhaustion and backup behavior
@@ -425,6 +427,7 @@ Selection behavior:
 - `UserSettingKey.CUSTOM_EXIF_FIELDS` changes are applied at runtime: `MainWindow` rebuilds the EXIF panel rows and `MediaManager.refresh_exif_field_keys(...)` incrementally backfills missing EXIF rows (no folder rescan needed).
 - EXIF panel extraction requests use exiftool `-n` (numeric output); EXIF panel display formatters convert those raw values for user display only.
 - Folder watching uses `watchfiles`; internal create/delete actions suppress watcher events briefly to avoid double-processing.
+- `FilterPanel.set_folders(...)` preserves the selected folder by its full path across list refreshes, including Edit in, Duplicate, and watcher updates. If that folder disappears from the available list, select All folders and emit the updated criteria so the model and grid also drop the old folder restriction. An unchanged folder selection emits no filter change.
 - Grid memory policy: both embedded and HQ thumbnails are evicted outside their respective buffer ranges. Embedded previews are kept for `RuntimeSettingKey.GRID_EMBEDDED_BUFFER_ROWS` (default 20) rows around the visible area. HQ thumbnails are kept for `RuntimeSettingKey.GRID_THUMB_BUFFER_ROWS` (default 2) rows. If `RuntimeSettingKey.GRID_HQ_THUMB_DELAY_ENABLED` is true, embedded previews are displayed while navigating (scroll/row movement) and HQ is shown after `RuntimeSettingKey.GRID_HQ_THUMB_LOAD_DELAY_MS` of idle time; if false, HQ is preferred immediately in the buffered range. Selection state does not affect which thumbnail quality mode is active. Orientation is pre-applied to `item.pixmap` (the display pixmap) when loaded, not on every paint; rotating invalidates this cache via `item.pixmap = None`.
 - Sort-driven grid refreshes preserve viewport context by path (not index): a visible selection anchor stays on the same viewport row, otherwise the first visible selected item gets that treatment; if no selection is visible, the previous first visible item is only kept in view, and offscreen selections are never revealed. Filter and layout refreshes retain their existing row-aware visible-path fallback behavior.
 - View sort order (`View > Sort By`) is persisted globally in app state via `StateKey.SORT_ORDER` using `SortOrder.name` strings, and is restored before `PhotoListModel.set_photos(...)` on startup and folder loads.

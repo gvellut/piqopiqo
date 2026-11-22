@@ -11,6 +11,9 @@ from PySide6.QtWidgets import QApplication
 import pytest
 
 from piqopiqo.background.media_man import FolderPrimingResult
+from piqopiqo.cache_paths import set_cache_base_dir
+import piqopiqo.grid.context_menu as context_menu
+from piqopiqo.grid.context_menu import duplicate_photos, edit_in_external_app
 from piqopiqo.main_window import MainWindow
 from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.ssf.settings_state import init_qsettings_store
@@ -125,6 +128,7 @@ def qapp(monkeypatch):
 @pytest.fixture
 def window(qapp, monkeypatch, tmp_path):  # noqa: ARG001
     init_qsettings_store(dyn=True)
+    set_cache_base_dir(tmp_path / "cache")
     _MediaManagerStub.next_priming_result = FolderPrimingResult({}, set())
     monkeypatch.setattr("piqopiqo.main_window.MediaManager", _MediaManagerStub)
     monkeypatch.setattr(
@@ -142,6 +146,83 @@ def window(qapp, monkeypatch, tmp_path):  # noqa: ARG001
     qapp.processEvents()
     yield main_window
     main_window.close()
+
+
+@pytest.mark.parametrize("action", [duplicate_photos, edit_in_external_app])
+def test_duplicate_actions_preserve_folder_filter(
+    window: MainWindow, qapp: QApplication, monkeypatch, tmp_path, action
+):
+    source = window.photo_model.all_photos[0]
+    source.db_metadata = {DBFields.TITLE: "Original"}
+    window.db_manager.get_db_for_image(source.path).save_metadata(
+        source.path, source.db_metadata
+    )
+    other_folder = tmp_path / "other"
+    other_folder.mkdir()
+    other_image = _touch_image(other_folder / "other.JPG")
+    window._on_folder_changes([("added", other_image["path"])])
+    window.filter_panel.folder_combo.setCurrentIndex(
+        window.filter_panel.folder_combo.findData(source.source_folder)
+    )
+    qapp.processEvents()
+    window.select_paths_in_grid([source.path], anchor_path=source.path)
+    opened = []
+    monkeypatch.setattr(
+        context_menu,
+        "open_in_external_app_macos",
+        lambda editor, paths: opened.append((editor, list(paths))),
+    )
+    monkeypatch.setattr(
+        context_menu, "get_user_setting", lambda _key: "/Applications/TestEditor.app"
+    )
+
+    action(window, [source])
+    qapp.processEvents()
+
+    duplicated_path = str(tmp_path / f"{Path(source.path).stem} copy.JPG")
+    assert Path(duplicated_path).exists()
+    assert window.filter_panel.get_current_filter().folder == source.source_folder
+    assert {item.path for item in window.photo_model.get_selected_photos()} == {
+        duplicated_path
+    }
+    assert other_image["path"] not in {item.path for item in window.images_data}
+    expected_opened = (
+        [("/Applications/TestEditor.app", [duplicated_path])]
+        if action is edit_in_external_app
+        else []
+    )
+    assert opened == expected_opened
+
+    window.filter_panel.toggle_label_filter(None)
+    qapp.processEvents()
+
+    assert duplicated_path in {item.path for item in window.images_data}
+    assert {item.source_folder for item in window.images_data} == {source.source_folder}
+
+
+def test_watcher_removing_filtered_folder_applies_all_folders(
+    window: MainWindow, qapp: QApplication, tmp_path
+):
+    subfolder = tmp_path / "sub"
+    subfolder.mkdir()
+    image = _touch_image(subfolder / "only.JPG")
+    window._on_folder_changes([("added", image["path"])])
+    window.filter_panel.folder_combo.setCurrentIndex(
+        window.filter_panel.folder_combo.findData(str(subfolder))
+    )
+    qapp.processEvents()
+    assert [item.path for item in window.images_data] == [image["path"]]
+
+    Path(image["path"]).unlink()
+    subfolder.rmdir()
+    window._on_folder_changes([("deleted", image["path"])])
+    qapp.processEvents()
+
+    assert window.filter_panel.get_current_filter().folder is None
+    assert window.images_data
+    assert {item.path for item in window.images_data} == {
+        item.path for item in window.photo_model.all_photos
+    }
 
 
 def test_watcher_add_batch_refreshes_grid_once_and_registers_media_once(

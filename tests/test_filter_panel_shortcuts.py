@@ -1,4 +1,4 @@
-"""Tests for FilterPanel shortcut action helpers."""
+"""Tests for FilterPanel folder refreshes and shortcut action helpers."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import QApplication
 import pytest
 
-from piqopiqo.panels.filter_panel import FilterPanel
+from piqopiqo.panels.filter_panel import ALL_FOLDERS, FilterPanel
 from piqopiqo.ssf.settings_state import (
     UserSettingKey,
     get_user_setting,
@@ -58,6 +58,68 @@ def test_current_filter_includes_current_explicit_labels(qapp):
     criteria = panel.get_current_filter()
 
     assert criteria.explicit_labels == set(panel._label_checkboxes)
+
+
+@pytest.mark.parametrize(
+    "folders",
+    [
+        ["/root/one/photos", "/root/two/photos"],
+        ["/root/two/photos", "/root/one/photos", "/root/new"],
+        ["/root/two/photos"],
+    ],
+)
+def test_folder_refresh_preserves_selected_folder_and_other_filters(qapp, folders):
+    init_qsettings_store(dyn=True)
+    panel = FilterPanel()
+    panel.set_folders(["/root/one/photos", "/root/two/photos"])
+    panel.folder_combo.setCurrentIndex(2)
+    panel.toggle_label_filter(None)
+    panel.search_field.setText("sunset")
+    before = panel.get_current_filter()
+    emitted_filters = []
+    panel.filter_changed.connect(emitted_filters.append)
+
+    panel.set_folders(folders)
+
+    assert panel.folder_combo.currentData() == "/root/two/photos"
+    assert panel.get_current_filter() == before
+    assert panel.folder_combo.isEnabled() is (len(folders) > 1)
+    assert emitted_filters == []
+
+
+@pytest.mark.parametrize("folders", [["/photos/a", "/photos/c"], []])
+def test_folder_refresh_resets_missing_folder_and_emits_filter(qapp, folders):
+    init_qsettings_store(dyn=True)
+    panel = FilterPanel()
+    panel.set_folders(["/photos/a", "/photos/b"])
+    panel.folder_combo.setCurrentIndex(2)
+    panel.toggle_label_filter(None)
+    panel.search_field.setText("sunset")
+    emitted_filters = []
+    panel.filter_changed.connect(emitted_filters.append)
+
+    panel.set_folders(folders)
+
+    criteria = panel.get_current_filter()
+    assert panel.folder_combo.currentData() == ALL_FOLDERS
+    assert criteria.folder is None
+    assert criteria.include_no_label is True
+    assert criteria.search_text == "sunset"
+    assert emitted_filters == [criteria]
+
+
+def test_folder_refresh_preserves_all_folders_without_emitting_filter(qapp):
+    init_qsettings_store(dyn=True)
+    panel = FilterPanel()
+    panel.set_folders(["/photos/a", "/photos/b"])
+    emitted_filters = []
+    panel.filter_changed.connect(emitted_filters.append)
+
+    panel.set_folders(["/photos/b", "/photos/c"])
+
+    assert panel.folder_combo.currentData() == ALL_FOLDERS
+    assert panel.get_current_filter().folder is None
+    assert emitted_filters == []
 
 
 def test_cycle_folder_filter_skips_all_folders_and_wraps(qapp):
