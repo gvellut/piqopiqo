@@ -77,7 +77,7 @@ When doing refactoring, it is possible the code was changed by the user: config 
 ```
 src/piqopiqo/
 ├── __main__.py      # Entry point, CLI with click, Qt app setup
-├── cache_paths.py   # Cache path helpers (thumb/db dirs) - no Qt imports
+├── cache_paths.py   # Cache path helpers (thumb/db dirs) + source-folder metadata key - no Qt imports
 ├── color_management.py # Shared image/screen color-space extraction + conversion helpers
 ├── config.py        # Reference-only legacy config (kept for migration checks)
 ├── folder_scan.py   # Folder scan (initial image list)
@@ -98,7 +98,7 @@ src/piqopiqo/
 │   ├── media_man.py    # Unified multiprocessing manager (EXIF + thumbs + EXIF write)
 │   ├── media_worker.py # Worker entrypoints (no Qt imports)
 ├── metadata/        # Metadata sqllite database layer
-│   ├── metadata_db.py   # SQLite database for cached metadata
+│   ├── metadata_db.py   # SQLite database for cached metadata and persistent source-folder identity
 │   ├── db_fields.py     # Database field definitions and EXIF mappings
 │   ├── exif_write.py    # Shared DB->EXIF tag builder, including synchronized manual lens ranges
 │   └── save_workers.py  # Background worker to save metadata
@@ -121,7 +121,7 @@ src/piqopiqo/
 │   ├── photo_grid.py    # Grid of photo thumbnails with context menu
 │   └── context_menu.py  # Right-click context menu and file operations (duplicate, trash, external apps)
 ├── panels/          # Side panels and tightly coupled editing dialogs
-│   ├── edit_panel.py      # Editable metadata panel
+│   ├── edit_panel.py      # Editable metadata panel + title/keyword shortcut focus behavior
 │   ├── edit_widgets.py    # Field editors; Keywords preserves pending edits during temporary focus loss
 │   ├── exif_panel.py      # Read-only EXIF display
 │   ├── filter_panel.py    # Filtering UI; folder-list refresh preserves the selected folder by path
@@ -135,9 +135,10 @@ src/piqopiqo/
 │   ├── map_links_editor.py # HTTP template and QGIS layer mapping editors with a shared list dialog
 │   ├── manual_lenses_editor.py
 │   ├── status_labels_editor.py
-│   └── shortcuts_editor.py # Sectioned shortcut editor, including Tool Shortcuts
+│   └── shortcuts_editor.py # Sectioned shortcut editor, including grid metadata editing and Tool Shortcuts
 |-- tools
     ├── archive.py       # Folder archive workflow with plain failure/cancellation labels and separate result/error details
+    ├── clean_cache.py   # Read-only cache discovery, grouped folder selection and confirmed cache-only deletion with progress/counts
     ├── copy_sd.py       # Copy-from-SD workflow (dialogs, scan/copy/eject workers, plain eject status labels)
     ├── manual_lens.py   # Dialog + launcher for applying manual lens presets to selected/visible photos
     ├── save_exif.py    # Dialog + launcher for saving metadata to EXIF
@@ -168,6 +169,7 @@ src/piqopiqo/
     └── macos.py     # macOS utilities (resolution, move_to_trash)
 
 tests/
+├── test_clean_cache.py # Source-path/legacy discovery, missing/Favorite grouping, deletion boundaries/counts and modal progress lifecycle
 ├── test_photo_model_sync.py # Metadata refresh, accent/ligature-insensitive search, filter normalization and path updates
 ├── test_external_apps.py # Finder reveal sends one selection per photo folder
 ├── test_modal_dialog_lifecycle.py # Worker-GC dialog destruction regression and reusable storage Retry ownership
@@ -181,6 +183,7 @@ tests/
 ├── test_qgis_remote_control.py # Layer resolution, coded errors, missing-layer recovery, select/move/raise ordering and result/log payloads
 ├── test_exif_panel.py # EXIF panel formatting, 35 mm focal length fallback, and pending selection summary
 ├── test_photo_grid_shortcuts.py # Grid view-scoped shortcut ownership + text-input guard behavior
+├── test_main_window_sidebar_shortcuts.py # Sidebar layout/focus and configurable title/keyword editing shortcuts
 ├── test_photo_grid_selection_refresh.py # Visible-only grid selection highlight refresh path
 ├── test_filter_panel_shortcuts.py # Folder-filter preservation/fallback and filter shortcut behavior
 ├── test_main_window_watcher_adds.py # Watcher updates, Edit/Duplicate folder-filter preservation and missing-folder fallback
@@ -198,6 +201,7 @@ tests/
 - **Fullscreen keyboard pan**: `Cmd+Arrow` pans by 10% of the viewport width/height; `Cmd+Shift+Arrow` pans by 25%, only when zoomed beyond base view and with the same boundaries as mouse dragging. Arrows reveal more of the image in their direction by default; internal settings configure both percentages and reversed direction.
 - **EXIF panel**: Read-only EXIF data display (uses pyexiftool)
 - **Edit panel**: Editable metadata (title, description, keywords, coordinates, time taken)
+- **Grid metadata shortcuts**: `Cmd+L` focuses Title and selects all text; `Cmd+K` focuses Keywords with the caret at the end and no selection. Repeating the shortcut while its editor is focused preserves the current edit, cursor, and selection. Configure both under Settings > Shortcuts > Grid Shortcuts.
 - **Filter panel**: Fields to use for filtering the images displayed on the photo grid
 - **Text search**: Title/keyword substring matching ignores capitalization, accents and cedillas, and treats `œ`/`oe` and `æ`/`ae` as equivalent in both directions. Search input and stored metadata retain their original text.
 - **Thumbnail caching**: Multiprocessing pipeline, cached to disk
@@ -212,6 +216,7 @@ tests/
 - **External apps**: Open photos in external viewer/editor (configurable via PIQO_EXTERNAL_VIEWER/EDITOR)
 - **Reveal in Finder**: Context menu to show selected files in the system file manager
 - **Clear All Data**: File menu action to wipe cached thumbnails + DB and reload from scratch
+- **Clean cache**: Tools menu action directly below Archive scans all image-folder caches. Missing source folders are checked and bold at the top, then existing folders outside Favorite are checked; each group is alphabetical. Existing folders at or below Favorite are initially hidden; Include ignored appends them unchecked, red, and relative to Favorite. Paths elide on the left and tooltips show full image-folder paths. A second confirmation precedes fixed-height background deletion and a summary of cleaned image folders, deleted files and remaining image-cache directories.
 - **Settings panel**: Descriptor-driven, tabbed settings UI with Save/Cancel or autosave mode
 - **External app paths**: External Viewer/Editor settings use app paths (e.g. `/Applications/Preview.app`) with Browse support
 - **Extract GPS Time shift**: Grid context menu action runs GCP Vision OCR in background for the clicked photo folder and persists computed shift
@@ -445,6 +450,9 @@ Selection behavior:
 - Low res thumnbails means: The thumbnail JPEGs embedded inside the EXIF
 - Settings > External/Workflow uses app-path selectors. On macOS, Browse starts in `/Applications` when empty (or in the parent folder of the currently configured `.app`) and uses an application file picker so `.app` bundles are selectable.
 - Folder DB schema includes `folder_metadata(data, value)` for per-folder workflow values; GPX uses keys `TIME_SHIFT` and `GPX_PATH`.
+- `folder_metadata.SOURCE_FOLDER_PATH` records the absolute source image folder on connection initialization, including when opening older DBs. Clearing metadata retains this cache identity. Clean cache reads DBs directly in SQLite read-only mode without creating or migrating them, falling back to a `photo_metadata.file_path` or `photo_exif_fields.file_path` parent when the key is absent. Unidentifiable caches are kept and reported; Flickr credentials are excluded.
+- Clean cache deletes only discovered immediate cache directories, rejects directory links/outside targets/targets containing their source images, and never follows links inside a cache. When a selected cache belongs to the open workspace, drain metadata saves, stop the watcher and media workers with `discard_results=True`, and unload the workspace before deletion so in-flight writes cannot recreate it. Discarding replaces the old worker result queue so reopening the folder cannot apply stale results. Partial cleanup errors do not stop subsequent folders.
+- `RuntimeSettingKey.CLEAN_CACHE_DIALOG_WIDTH` (default `720`) and `CLEAN_CACHE_LIST_VISIBLE_ROWS` (default `12`) control cleanup dialog width and list height. The running progress reserves one plain-text left-elided path line and a fixed-width counter; path changes must not resize it. All cleanup dialogs follow `managed_modal_dialog` ownership and disconnect worker callbacks before disposal.
 - `Set Lens Info` scope is selected photos; when selection is empty it applies to all currently visible photos.
 - `Set Lens Info` lens picker never remembers the last chosen lens: dialog opens with a placeholder, no preset selected, and `OK` disabled until the user picks one.
 - `Set Lens Info` includes `Clear lens info` in the picker to clear hidden manual lens DB fields (`manual_lens_make`, `manual_lens_model`, `manual_focal_length`, `manual_focal_length_35mm`) for target images.
@@ -497,6 +505,7 @@ Selection behavior:
 - `PhotoGrid` owns grid label shortcuts plus shared grid-view `Space`/`Select All` shortcuts. `FullscreenOverlay` owns fullscreen label shortcuts and zoom/navigation keys. Fullscreen label shortcuts act on the current fullscreen image only; grid label undo/redo is disabled/ignored while fullscreen is active.
 - Preserve the current label undo/redo entry when all target photos already have the requested label. A missing or empty label counts as unlabeled. Undo and Redo both reselect the photos in the entry that pass the current grid filter after the labels are applied.
 - Grid shared-view shortcuts (`Space`, `Select All`) are attached to the central grid+panels scope so they still work after non-text panel interactions, but editable text widgets win focus (search/metadata fields keep normal typing + `Cmd+A` text selection).
+- Grid metadata focus shortcuts (`Shortcut.EDIT_TITLE`, `Shortcut.EDIT_KEYWORDS`) use a separate grid+panels shortcut bucket that stays active in text editors, allowing direct switching between fields. MainWindow flushes pending selection-panel updates and reveals collapsed metadata panels before EditPanel applies focus/selection. Disabled/read-only editors are skipped, and an already focused target is a no-op. Older shortcut mappings receive `Ctrl+L`/`Ctrl+K` defaults (Command on macOS); save explicit empty strings when clearing these bindings so reload does not restore them.
 - `MainWindow` binds menu actions from **Settings > Shortcuts > Tool Shortcuts** and refreshes them after saves. The defaults are `Cmd+Shift+Z` for Undo/Redo Label, `Cmd+Shift+C` for Copy from SD, `Cmd+Shift+G` for Apply GPX, and `Cmd+Shift+U` for Upload to Flickr. Older shortcut mappings receive defaults for missing tool keys. Save cleared tool fields as explicit empty strings to keep them disabled.
 - When fullscreen opens, `MainWindow` disables all menu actions (and their menu shortcuts) except Quit; this prevents `Cmd+O`, `Cmd+,`, and future menu shortcuts from acting on the hidden grid view.
 - Fullscreen exit selection/visibility restoration is path-based and centralized in `MainWindow` (single-image loop vs selected-images loop, `FILTER_IN_FULLSCREEN`, and `ON_FULLSCREEN_EXIT_SELECTION_MODE` all converge there). Hidden/filtered-out loop members are not kept selected in the grid on exit.

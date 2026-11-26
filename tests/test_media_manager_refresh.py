@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import queue
 import uuid
 
 from PySide6.QtCore import QCoreApplication
@@ -62,6 +63,19 @@ def _register_file(manager: MediaManager, image_path: str, thumb_dir: str) -> No
         thumb_dir=thumb_dir,
         base_name="a",
     )
+
+
+def test_cache_cleanup_discards_old_worker_queue_before_reopening(manager):
+    old_queue = manager._result_queue
+    old_queue.put({"kind": "combined", "task_id": 1, "files": []})
+    assert old_queue._reader.poll(1)
+    manager._in_flight[1] = object()
+    manager.stop(discard_results=True)
+    assert manager._in_flight == {}
+    assert manager._result_queue is not old_queue
+    with pytest.raises(queue.Empty):
+        manager._result_queue.get_nowait()
+    assert not manager._tick_timer.isActive()
 
 
 def test_refresh_files_retries_editable_metadata_when_db_row_missing(manager, tmp_path):

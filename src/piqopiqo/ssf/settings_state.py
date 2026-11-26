@@ -161,6 +161,8 @@ class RuntimeSettingKey(StrEnum):
     SHUTDOWN_TIMEOUT_S = "shutdownTimeoutS"
     QGIS_REMOTE_CONTROL_TIMEOUT_MS = "qgisRemoteControlTimeoutMs"
     COPY_SD_EJECT_TIMEOUT_S = "copySdEjectTimeoutS"
+    CLEAN_CACHE_DIALOG_WIDTH = "cleanCacheDialogWidth"
+    CLEAN_CACHE_LIST_VISIBLE_ROWS = "cleanCacheListVisibleRows"
     PADDING = "padding"
     FONT_SIZE = "fontSize"
     GRID_ITEM_TEXT_FIELDS_TOP_PADDING = "gridItemTextFieldsTopPadding"
@@ -504,6 +506,12 @@ def _serialize_shortcuts(value: dict[Shortcut, str] | dict[str, str]) -> dict[st
     return out
 
 
+_DEFAULT_METADATA_EDIT_SHORTCUTS = {
+    Shortcut.EDIT_TITLE: "Ctrl+L",
+    Shortcut.EDIT_KEYWORDS: "Ctrl+K",
+}
+
+
 _DEFAULT_TOOL_SHORTCUTS = {
     Shortcut.UNDO_REDO_LABEL: "Ctrl+Shift+Z",
     Shortcut.COPY_FROM_SD: "Ctrl+Shift+C",
@@ -518,7 +526,11 @@ def _deserialize_shortcuts(data: Any) -> dict[Shortcut, str]:
 
     # Backfill new actions without restoring cleared older view shortcuts.
     # An explicit empty string disables an action.
-    out = {Shortcut.FLUSH_LOOP: "Shift+\\", **_DEFAULT_TOOL_SHORTCUTS}
+    out = {
+        Shortcut.FLUSH_LOOP: "Shift+\\",
+        **_DEFAULT_METADATA_EDIT_SHORTCUTS,
+        **_DEFAULT_TOOL_SHORTCUTS,
+    }
     for raw_key, raw_value in data.items():
         key_str = str(raw_key)
         shortcut = str(raw_value)
@@ -809,6 +821,7 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
             Shortcut.SELECT_ALL: "ctrl+a",
             Shortcut.COLLAPSE_TO_LAST_SELECTED: "Esc",
             Shortcut.TOGGLE_RIGHT_SIDEBAR: "Ctrl+]",
+            **_DEFAULT_METADATA_EDIT_SHORTCUTS,
             **_DEFAULT_TOOL_SHORTCUTS,
         },
         read_type=str,
@@ -920,6 +933,10 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
 # read_type is to deserialize from an env var
 # TODO restrict the env vars to some of the keys ?
 _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
+    RuntimeSettingKey.CLEAN_CACHE_DIALOG_WIDTH: SettingDef(default=720, read_type=int),
+    RuntimeSettingKey.CLEAN_CACHE_LIST_VISIBLE_ROWS: SettingDef(
+        default=12, read_type=int
+    ),
     RuntimeSettingKey.DIALOG_DISCARD_CONFIRMATION_MODE: SettingDef(
         default=DialogDiscardConfirmationMode.ESC_ONLY,
         read_type=str,

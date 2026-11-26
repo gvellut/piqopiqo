@@ -5,13 +5,20 @@ from __future__ import annotations
 import uuid
 
 from PySide6.QtCore import QCoreApplication, Qt
+from PySide6.QtGui import QTextCursor
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 import pytest
 
 from piqopiqo.background.media_man import FolderPrimingResult
 from piqopiqo.main_window import MainWindow
-from piqopiqo.ssf.settings_state import init_qsettings_store
+from piqopiqo.metadata.db_fields import DBFields
+from piqopiqo.shortcuts import Shortcut
+from piqopiqo.ssf.settings_state import (
+    UserSettingKey,
+    init_qsettings_store,
+    set_user_setting,
+)
 
 
 class _SignalStub:
@@ -91,7 +98,8 @@ def qapp(monkeypatch):
 
 
 @pytest.fixture
-def window(qapp, monkeypatch):  # noqa: ARG001
+def window(qapp, monkeypatch, tmp_path):  # noqa: ARG001
+    monkeypatch.setattr("piqopiqo.cache_paths._CACHE_BASE_DIR", tmp_path / "cache")
     init_qsettings_store(dyn=True)
     _MediaManagerStub.next_priming_result = FolderPrimingResult({}, set())
     monkeypatch.setattr("piqopiqo.main_window.MediaManager", _MediaManagerStub)
@@ -117,6 +125,156 @@ def window(qapp, monkeypatch):  # noqa: ARG001
     qapp.processEvents()
     yield main_window
     main_window.close()
+
+
+@pytest.fixture
+def metadata_window(window, qapp):
+    item = window.images_data[0]
+    data = {DBFields.TITLE: "A photo title", DBFields.KEYWORDS: "alpha, beta"}
+    window.db_manager.get_db_for_image(item.path).save_metadata(item.path, data)
+    item.db_metadata = data
+    window.grid.on_cell_clicked(0, False, False)
+    window.activateWindow()
+    window.grid.setFocus()
+    qapp.processEvents()
+    return window
+
+
+@pytest.mark.parametrize("key", [Qt.Key_L, Qt.Key_K])
+def test_metadata_shortcuts_focus_editor_and_receive_typing(metadata_window, qapp, key):
+    panel = metadata_window.edit_panel
+    QTest.keyClick(metadata_window.grid, key, Qt.ControlModifier)
+    qapp.processEvents()
+
+    editor = panel.title_edit if key == Qt.Key_L else panel.keywords_edit
+    assert qapp.focusWidget() is editor
+    if key == Qt.Key_L:
+        assert editor.selectedText() == "A photo title"
+    else:
+        cursor = editor.textCursor()
+        assert not cursor.hasSelection()
+        assert cursor.position() == len("alpha, beta")
+
+    QTest.keyClicks(editor, "new")
+    assert editor.text() == ("new" if key == Qt.Key_L else "alpha, betanew")
+    QTest.keyClick(editor, Qt.Key_Escape)
+    qapp.processEvents()
+
+
+@pytest.mark.parametrize("key", [Qt.Key_L, Qt.Key_K])
+def test_repeated_metadata_shortcut_preserves_pending_edit_and_selection(
+    metadata_window, qapp, key
+):
+    QTest.keyClick(metadata_window.grid, key, Qt.ControlModifier)
+    editor = qapp.focusWidget()
+    QTest.keyClicks(editor, "pending, ")
+    if key == Qt.Key_L:
+        editor.setSelection(1, 3)
+        before = (
+            editor.cursorPosition(),
+            editor.selectionStart(),
+            editor.selectedText(),
+        )
+    else:
+        cursor = editor.textCursor()
+        cursor.setPosition(1)
+        cursor.setPosition(4, QTextCursor.MoveMode.KeepAnchor)
+        editor.setTextCursor(cursor)
+        before = (cursor.position(), cursor.anchor(), cursor.selectedText())
+    text_before = editor.text()
+
+    QTest.keyClick(editor, key, Qt.ControlModifier)
+    qapp.processEvents()
+
+    assert qapp.focusWidget() is editor
+    assert editor.text() == text_before
+    if key == Qt.Key_L:
+        assert (
+            editor.cursorPosition(),
+            editor.selectionStart(),
+            editor.selectedText(),
+        ) == before
+    else:
+        cursor = editor.textCursor()
+        assert (cursor.position(), cursor.anchor(), cursor.selectedText()) == before
+    QTest.keyClick(editor, Qt.Key_Escape)
+    qapp.processEvents()
+
+
+def test_metadata_shortcuts_switch_between_active_editors(metadata_window, qapp):
+    panel = metadata_window.edit_panel
+    QTest.keyClick(metadata_window.grid, Qt.Key_L, Qt.ControlModifier)
+    QTest.keyClick(panel.title_edit, Qt.Key_K, Qt.ControlModifier)
+    qapp.processEvents()
+    assert qapp.focusWidget() is panel.keywords_edit
+    assert panel.keywords_edit.textCursor().position() == len("alpha, beta")
+
+    QTest.keyClick(panel.keywords_edit, Qt.Key_L, Qt.ControlModifier)
+    qapp.processEvents()
+    assert qapp.focusWidget() is panel.title_edit
+    assert panel.title_edit.selectedText() == "A photo title"
+
+
+def test_metadata_shortcut_flushes_pending_selection_refresh(metadata_window, qapp):
+    metadata_window._show_selection_panels_pending(1)
+    metadata_window._schedule_deferred_selection_panel_refresh()
+    assert not metadata_window.edit_panel.title_edit.isEnabled()
+
+    QTest.keyClick(metadata_window.grid, Qt.Key_L, Qt.ControlModifier)
+    qapp.processEvents()
+
+    assert metadata_window._selection_panel_refresh_scheduled_serial is None
+    assert qapp.focusWidget() is metadata_window.edit_panel.title_edit
+    assert metadata_window.edit_panel.title_edit.selectedText() == "A photo title"
+
+
+def test_metadata_shortcut_reveals_collapsed_panels(metadata_window, qapp):
+    metadata_window._toggle_right_sidebar_collapsed()
+    metadata_window._right_splitter.setSizes([0, 500])
+    qapp.processEvents()
+    assert metadata_window._main_splitter.sizes()[1] == 0
+
+    QTest.keyClick(metadata_window.grid, Qt.Key_K, Qt.ControlModifier)
+    qapp.processEvents()
+
+    assert metadata_window._main_splitter.sizes()[1] > 0
+    assert metadata_window._right_splitter.sizes()[0] > 0
+    assert qapp.focusWidget() is metadata_window.edit_panel.keywords_edit
+
+
+def test_metadata_shortcuts_use_updated_settings(metadata_window, qapp):
+    set_user_setting(
+        UserSettingKey.SHORTCUTS,
+        {
+            Shortcut.EDIT_TITLE: "Ctrl+Shift+T",
+            Shortcut.EDIT_KEYWORDS: "",
+        },
+    )
+    metadata_window._setup_shortcuts()
+    qapp.processEvents()
+
+    for key in (Qt.Key_L, Qt.Key_K):
+        QTest.keyClick(metadata_window.grid, key, Qt.ControlModifier)
+        assert qapp.focusWidget() is metadata_window.grid
+
+    QTest.keyClick(
+        metadata_window.grid, Qt.Key_T, Qt.ControlModifier | Qt.ShiftModifier
+    )
+    qapp.processEvents()
+    assert qapp.focusWidget() is metadata_window.edit_panel.title_edit
+
+
+@pytest.mark.parametrize("key", [Qt.Key_L, Qt.Key_K])
+def test_metadata_shortcuts_leave_disabled_editors_unfocused(window, qapp, key):
+    window.edit_panel.update_for_selection([])
+    window.activateWindow()
+    window.grid.setFocus()
+    qapp.processEvents()
+
+    QTest.keyClick(window.grid, key, Qt.ControlModifier)
+    qapp.processEvents()
+
+    assert qapp.focusWidget() is window.grid
 
 
 def _press_toggle_shortcut(window: MainWindow, qapp: QApplication) -> None:

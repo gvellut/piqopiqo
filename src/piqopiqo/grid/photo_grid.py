@@ -64,6 +64,7 @@ class PhotoGrid(QWidget):
     clear_filter_shortcut_requested = Signal()
     focus_filter_search_shortcut_requested = Signal()
     toggle_sidebar_shortcut_requested = Signal()
+    focus_metadata_shortcut_requested = Signal(str)  # DBFields name
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -125,6 +126,7 @@ class PhotoGrid(QWidget):
         self._grid_view_shortcut_scope: QWidget | None = None
         self._label_shortcut_objects: list[QShortcut] = []
         self._shared_grid_view_shortcut_objects: list[QShortcut] = []
+        self._metadata_edit_shortcut_objects: list[QShortcut] = []
         self._shared_shortcuts_focus_connected = False
 
     def set_grid_view_shortcut_scope(self, widget: QWidget) -> None:
@@ -139,6 +141,7 @@ class PhotoGrid(QWidget):
     def refresh_shortcuts(self) -> None:
         self._clear_shortcut_bucket(self._label_shortcut_objects)
         self._clear_shortcut_bucket(self._shared_grid_view_shortcut_objects)
+        self._clear_shortcut_bucket(self._metadata_edit_shortcut_objects)
 
         shortcuts = get_user_setting(UserSettingKey.SHORTCUTS)
         status_labels = get_user_setting(UserSettingKey.STATUS_LABELS)
@@ -159,6 +162,23 @@ class PhotoGrid(QWidget):
         scope = self._grid_view_shortcut_scope
         if scope is None:
             return
+
+        # Metadata focus shortcuts also work while another text field is active.
+        for shortcut_key, field_name in (
+            (Shortcut.EDIT_TITLE, DBFields.TITLE),
+            (Shortcut.EDIT_KEYWORDS, DBFields.KEYWORDS),
+        ):
+            shortcut_str = lookup_shortcut(shortcuts, shortcut_key)
+            if not shortcut_str:
+                continue
+            sc = QShortcut(parse_shortcut(shortcut_str), scope)
+            sc.setContext(Qt.WidgetWithChildrenShortcut)
+            sc.activated.connect(
+                lambda field_name=field_name: (
+                    self.focus_metadata_shortcut_requested.emit(field_name)
+                )
+            )
+            self._metadata_edit_shortcut_objects.append(sc)
 
         # Shared grid-view scope shortcuts should work across grid + side panels.
         select_all_shortcut = lookup_shortcut(shortcuts, Shortcut.SELECT_ALL)

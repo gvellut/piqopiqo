@@ -91,6 +91,8 @@ def test_shortcuts_editor_uses_sectioned_two_column_layout(qapp):
         Shortcut.SELECT_ALL.label,
         Shortcut.COLLAPSE_TO_LAST_SELECTED.label,
         Shortcut.TOGGLE_RIGHT_SIDEBAR.label,
+        Shortcut.EDIT_TITLE.label,
+        Shortcut.EDIT_KEYWORDS.label,
     ]
     assert fullscreen_shortcuts == [
         Shortcut.ZOOM_IN.label,
@@ -137,3 +139,13 @@ def test_flush_shortcut_can_be_customized_and_explicitly_disabled(qapp):
 
     editor._inputs[Shortcut.FLUSH_LOOP].clear()
     assert editor.get_value()[Shortcut.FLUSH_LOOP] == ""
+
+
+@pytest.mark.parametrize("shortcut", [Shortcut.EDIT_TITLE, Shortcut.EDIT_KEYWORDS])
+def test_metadata_shortcuts_can_be_customized_and_explicitly_disabled(qapp, shortcut):
+    editor = ShortcutsEditor()
+    editor.set_value({shortcut.name: "Ctrl+Shift+M"})
+    assert editor.get_value()[shortcut] == "Ctrl+Shift+M"
+
+    editor._inputs[shortcut].clear()
+    assert editor.get_value()[shortcut] == ""

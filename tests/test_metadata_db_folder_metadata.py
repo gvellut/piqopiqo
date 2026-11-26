@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from piqopiqo.cache_paths import set_cache_base_dir
+from piqopiqo.cache_paths import FOLDER_METADATA_SOURCE_PATH, set_cache_base_dir
 from piqopiqo.metadata.metadata_db import MetadataDB
 from piqopiqo.tools.flickr_tools.upload.constants import (
     FOLDER_STATE_LAST_FLICKR_ALBUM_ID,
@@ -87,3 +87,29 @@ def test_folder_metadata_gpx_path_roundtrip(tmp_path) -> None:
     assert db.get_folder_value(FOLDER_STATE_LAST_GPX_PATH) is None
 
     db.close()
+
+
+def test_source_folder_is_recorded_on_first_write_and_retained_when_cleared(tmp_path):
+    set_cache_base_dir(tmp_path / "cache")
+    source = tmp_path / "photos"
+    db = MetadataDB(str(source))
+    assert not db.db_path.exists()
+    db.set_folder_value("TIME_SHIFT", "1h")
+    assert db.get_folder_value(FOLDER_METADATA_SOURCE_PATH) == str(source)
+    db.delete_all_metadata()
+    assert db.get_folder_value("TIME_SHIFT") is None
+    assert db.get_folder_value(FOLDER_METADATA_SOURCE_PATH) == str(source)
+    db.close()
+
+
+def test_source_folder_is_backfilled_when_opening_existing_database(tmp_path):
+    set_cache_base_dir(tmp_path / "cache")
+    source = tmp_path / "photos"
+    db = MetadataDB(str(source))
+    db.set_folder_value("TIME_SHIFT", "1h")
+    db.set_folder_value(FOLDER_METADATA_SOURCE_PATH, None)
+    db.close()
+    reopened = MetadataDB(str(source))
+    assert reopened.get_folder_value(FOLDER_METADATA_SOURCE_PATH) == str(source)
+    assert reopened.get_folder_value("TIME_SHIFT") == "1h"
+    reopened.close()

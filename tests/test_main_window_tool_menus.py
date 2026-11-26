@@ -39,6 +39,16 @@ def test_edit_and_flickr_tool_menu_order(qapp) -> None:  # noqa: ARG001
     ]
     assert edit_labels[-2:] == ["Reload EXIF", "Find && Replace..."]
 
+    tools_menu = menu_actions[4].menu()
+    tools_actions = tools_menu.actions()
+    archive_index = next(
+        index
+        for index, action in enumerate(tools_actions)
+        if action.text() == "Archive..."
+    )
+    assert tools_actions[archive_index + 1].text() == "Clean cache..."
+    assert tools_actions[archive_index + 2].isSeparator()
+
     flickr_menu = menu_actions[5].menu()
     assert flickr_menu is not None
     flickr_actions = flickr_menu.actions()

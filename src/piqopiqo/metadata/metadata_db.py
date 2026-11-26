@@ -13,7 +13,7 @@ from typing import Any
 
 from PySide6.QtCore import QObject, Signal
 
-from piqopiqo.cache_paths import get_cache_dir_for_folder
+from piqopiqo.cache_paths import FOLDER_METADATA_SOURCE_PATH, get_cache_dir_for_folder
 from piqopiqo.storage import storage_full_fault_from_error
 
 from .db_fields import DBFields
@@ -389,6 +389,13 @@ class MetadataDB:
         connection.executescript(self.SCHEMA)
         connection.commit()
         self._check_migration(connection)
+        connection.execute(
+            "INSERT INTO folder_metadata (data, value) VALUES (?, ?) "
+            "ON CONFLICT(data) DO UPDATE SET value = excluded.value "
+            "WHERE value IS NOT excluded.value",
+            (FOLDER_METADATA_SOURCE_PATH, os.path.abspath(self.folder_path)),
+        )
+        connection.commit()
 
     def _open_connection(
         self, create: bool, *, cache_to_thread: bool
@@ -1200,7 +1207,10 @@ class MetadataDB:
         def _delete_all(conn: sqlite3.Connection) -> None:
             conn.execute("DELETE FROM photo_exif_fields")
             conn.execute("DELETE FROM photo_metadata")
-            conn.execute("DELETE FROM folder_metadata")
+            conn.execute(
+                "DELETE FROM folder_metadata WHERE data != ?",
+                (FOLDER_METADATA_SOURCE_PATH,),
+            )
             conn.commit()
             logger.info("Deleted all metadata for folder: %s", self.folder_path)
 

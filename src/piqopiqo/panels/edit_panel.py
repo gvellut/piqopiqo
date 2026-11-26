@@ -4,7 +4,7 @@ import logging
 import webbrowser
 
 from PySide6.QtCore import Qt, QThreadPool, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QTextCursor
 from PySide6.QtWidgets import (
     QDialog,
     QGridLayout,
@@ -321,6 +321,20 @@ class EditPanel(QWidget):
         self._apply_metadata_read_only_state()
         self._update_map_button_state()
         self._sync_hidden_metadata_row_visibility()
+
+    def focus_metadata_field(self, field_name: str) -> None:
+        """Start title/keyword editing without disturbing an active edit."""
+        if field_name not in (DBFields.TITLE, DBFields.KEYWORDS):
+            return
+        editor = self._field_edit_widgets[field_name]
+        if not editor.isEnabled() or editor.isReadOnly() or editor.hasFocus():
+            return
+        editor.setFocus(Qt.FocusReason.ShortcutFocusReason)
+        if field_name == DBFields.TITLE:
+            editor.selectAll()
+        else:
+            editor.moveCursor(QTextCursor.MoveOperation.End)
+            editor.ensureCursorVisible()
 
     def set_description_field_visible(self, visible: bool) -> None:
         self._show_description_field = bool(visible)

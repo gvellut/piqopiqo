@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 _APP_NAME = "PiqoPiqo"
 _CACHE_BASE_DIR: Path | None = None
+FOLDER_METADATA_SOURCE_PATH = "SOURCE_FOLDER_PATH"
 
 
 def _default_support_dir_macos() -> Path:

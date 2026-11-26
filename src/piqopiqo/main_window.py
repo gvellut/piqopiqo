@@ -384,6 +384,9 @@ class MainWindow(QMainWindow):
         self.grid.toggle_sidebar_shortcut_requested.connect(
             self._toggle_right_sidebar_collapsed
         )
+        self.grid.focus_metadata_shortcut_requested.connect(
+            self._on_focus_metadata_shortcut_requested
+        )
 
         # Create photo list model
         self.photo_model = PhotoListModel(
@@ -482,6 +485,18 @@ class MainWindow(QMainWindow):
         if self._fullscreen_overlay is not None:
             return
         self.filter_panel.focus_search_field(select_all=True)
+
+    def _on_focus_metadata_shortcut_requested(self, field_name: str) -> None:
+        if self._fullscreen_overlay is not None or self.edit_panel is None:
+            return
+        self._flush_deferred_selection_panel_refresh()
+        if self._right_sidebar_collapsed or self._main_splitter.sizes()[1] == 0:
+            self._toggle_right_sidebar_collapsed()
+        if self._right_splitter is not None:
+            sizes = self._right_splitter.sizes()
+            if sizes[0] == 0:
+                self._right_splitter.setSizes([1, 1])
+        self.edit_panel.focus_metadata_field(field_name)
 
     def _apply_label_to_fullscreen_current(self, label_name: str | None):
         """Apply a label to only the currently visible fullscreen image."""
@@ -2311,6 +2326,10 @@ class MainWindow(QMainWindow):
         archive_action.triggered.connect(self._on_archive)
         tools_menu.addAction(archive_action)
 
+        clean_cache_action = QAction("Clean cache...", self)
+        clean_cache_action.triggered.connect(self._on_clean_cache)
+        tools_menu.addAction(clean_cache_action)
+
         tools_menu.addSeparator()
 
         save_exif_action = QAction("Save EXIF...", self)
@@ -2695,6 +2714,11 @@ class MainWindow(QMainWindow):
         from .tools.archive import launch_archive
 
         launch_archive(self)
+
+    def _on_clean_cache(self):
+        from .tools.clean_cache import launch_clean_cache
+
+        launch_clean_cache(self)
 
     def _on_apply_gpx(self):
         from .tools.gpx2exif.actions import launch_apply_gpx
@@ -3156,6 +3180,23 @@ class MainWindow(QMainWindow):
         self.media_manager.reset_for_folder([], [])
         self.status_bar.clearMessage()
         self.status_bar.reset()
+
+    def _prepare_workspace_for_cache_cleanup(self) -> None:
+        """Stop cache writers and unload a workspace whose cache will be deleted."""
+        timeout_s = float(get_runtime_setting(RuntimeSettingKey.SHUTDOWN_TIMEOUT_S))
+        timeout_ms = int(max(0.0, timeout_s) * 1000)
+        if not drain_qthread_pool(self._background_db_save_pool, timeout_ms):
+            raise RuntimeError("Metadata saves are still running. Try again shortly.")
+        if (
+            self.edit_panel is not None
+            and not self.edit_panel.shutdown_background_saves(
+                timeout_ms, clear_queued=True
+            )
+        ):
+            raise RuntimeError("Metadata saves are still running. Try again shortly.")
+        self._stop_folder_watcher()
+        self.media_manager.stop(timeout_s=timeout_s, discard_results=True)
+        self._unload_workspace()
 
     def _resume_workspace_after_archive_failure(self) -> None:
         file_paths = [item.path for item in self.photo_model.all_photos]

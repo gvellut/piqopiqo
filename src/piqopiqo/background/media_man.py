@@ -685,8 +685,10 @@ class MediaManager(QObject):
     # Shutdown
     # -------------------------------------------------------------------------
 
-    def stop(self, timeout_s: float | None = None) -> None:
-        """Stop all workers."""
+    def stop(
+        self, timeout_s: float | None = None, *, discard_results: bool = False
+    ) -> None:
+        """Stop workers, optionally retiring their results before cache cleanup."""
         self._tick_timer.stop()
         self._pending_stable_refreshes.clear()
 
@@ -721,6 +723,11 @@ class MediaManager(QObject):
                     pass
 
         self._workers.clear()
+        if discard_results:
+            self._in_flight.clear()
+            self._result_queue.close()
+            self._result_queue.cancel_join_thread()
+            self._result_queue = self._ctx.Queue()
 
     def pause_processing(self) -> None:
         self._processing_paused = True

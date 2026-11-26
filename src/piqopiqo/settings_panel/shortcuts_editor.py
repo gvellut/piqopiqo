@@ -64,6 +64,8 @@ class ShortcutsEditor(QWidget):
                     Shortcut.SELECT_ALL,
                     Shortcut.COLLAPSE_TO_LAST_SELECTED,
                     Shortcut.TOGGLE_RIGHT_SIDEBAR,
+                    Shortcut.EDIT_TITLE,
+                    Shortcut.EDIT_KEYWORDS,
                 ),
             ),
             (
@@ -112,6 +114,11 @@ class ShortcutsEditor(QWidget):
         out: dict[Shortcut, str] = {}
         for key, line_edit in self._inputs.items():
             text = line_edit.text().strip()
-            if text or key == Shortcut.FLUSH_LOOP or key in TOOL_SHORTCUTS:
+            if (
+                text
+                or key
+                in (Shortcut.FLUSH_LOOP, Shortcut.EDIT_TITLE, Shortcut.EDIT_KEYWORDS)
+                or key in TOOL_SHORTCUTS
+            ):
                 out[key] = text
         return out

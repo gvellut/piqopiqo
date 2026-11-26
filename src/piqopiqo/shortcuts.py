@@ -52,6 +52,8 @@ class Shortcut(Enum):
     COPY_FROM_SD = auto(), "Copy from SD"
     APPLY_GPX = auto(), "Apply GPX"
     UPLOAD_TO_FLICKR = auto(), "Upload to Flickr"
+    EDIT_TITLE = auto(), "Edit title"
+    EDIT_KEYWORDS = auto(), "Edit keywords"
 
     def __new__(cls, value, label):
         obj = object.__new__(cls)
@@ -100,6 +102,8 @@ GRID_VIEW_CONFIGURABLE_SHORTCUTS: tuple[Shortcut, ...] = (
     Shortcut.SELECT_ALL,
     Shortcut.COLLAPSE_TO_LAST_SELECTED,
     Shortcut.TOGGLE_RIGHT_SIDEBAR,
+    Shortcut.EDIT_TITLE,
+    Shortcut.EDIT_KEYWORDS,
 )
 
 FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS: tuple[Shortcut, ...] = (

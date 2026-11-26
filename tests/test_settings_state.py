@@ -357,6 +357,8 @@ def test_json_roundtrip_for_complex_user_settings(isolated_settings):
         Shortcut.ZOOM_OUT: "-",
         Shortcut.FLUSH_LOOP: "Shift+\\",
         Shortcut.SELECT_ALL: "ctrl+a",
+        Shortcut.EDIT_TITLE: "Ctrl+L",
+        Shortcut.EDIT_KEYWORDS: "Ctrl+K",
         Shortcut.UNDO_REDO_LABEL: "Ctrl+Alt+Z",
         Shortcut.COPY_FROM_SD: "Ctrl+Shift+C",
         Shortcut.APPLY_GPX: "",
@@ -389,6 +391,8 @@ def test_legacy_shortcuts_get_tool_defaults_without_restoring_disabled_view_shor
         Shortcut.ZOOM_IN: "+",
         Shortcut.FLUSH_LOOP: "Shift+\\",
         Shortcut.UNDO_REDO_LABEL: "Ctrl+Shift+Z",
+        Shortcut.EDIT_TITLE: "Ctrl+L",
+        Shortcut.EDIT_KEYWORDS: "Ctrl+K",
         Shortcut.COPY_FROM_SD: "Ctrl+Shift+C",
         Shortcut.APPLY_GPX: "Ctrl+Shift+G",
         Shortcut.UPLOAD_TO_FLICKR: "Ctrl+Shift+U",
@@ -427,6 +431,18 @@ def test_flush_shortcut_customization_and_disabling_survive_reload(
     init_qsettings_store()
 
     assert get_user_setting(UserSettingKey.SHORTCUTS)[Shortcut.FLUSH_LOOP] == shortcut
+
+
+@pytest.mark.parametrize("key", [Shortcut.EDIT_TITLE, Shortcut.EDIT_KEYWORDS])
+@pytest.mark.parametrize("shortcut", ["Ctrl+Shift+M", ""])
+def test_metadata_shortcut_customization_and_disabling_survive_reload(
+    isolated_settings, key, shortcut
+):
+    set_user_setting(UserSettingKey.SHORTCUTS, {key: shortcut})
+    settings_state.sync_qsettings_store()
+    init_qsettings_store()
+
+    assert get_user_setting(UserSettingKey.SHORTCUTS)[key] == shortcut
 
 
 def test_manual_lenses_roundtrip(isolated_settings):

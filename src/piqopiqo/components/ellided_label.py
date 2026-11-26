@@ -6,12 +6,12 @@ from PySide6.QtWidgets import QLabel
 
 
 class EllidedLabel(QLabel):
-    """QLabel subclass that automatically adds ellipsis on the right
-    when text is too long."""
+    """QLabel subclass that truncates long text in the chosen direction."""
 
-    def __init__(self, text="", parent=None):
+    def __init__(self, text="", parent=None, *, elide_mode=Qt.ElideRight):
         super().__init__(text, parent)
         self._full_text = text
+        self._elide_mode = elide_mode
         self.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
     @property
@@ -28,5 +28,5 @@ class EllidedLabel(QLabel):
 
     def _update_elided_text(self):
         metrics = QFontMetrics(self.font())
-        elided = metrics.elidedText(self._full_text, Qt.ElideRight, self.width())
+        elided = metrics.elidedText(self._full_text, self._elide_mode, self.width())
         super().setText(elided)
