@@ -1,0 +1,4 @@
+I wnat to add a shortcut by default "Meta \" that will set some lables in the filter : "Filter base labels"
+- the shortcut is to be added to the Filter Shortcuts list in the Shortcuts tab of Settings
+- In the Labels tab in settings : add a field below Filter in fullscreen : "Base labels" it will hold a string with number (or numbers with spoce) eg 123 or 1 2 3 or variants The numbers must correspond to defined Status labels (error if not). If a label is removed and that field contains it : no error when removing it but No Save possible with that field as the culprit.
+- When recalled in the grid : it will set the label filter to those in the Base labels list. If recalled, it wont remove them (it will simply sets them again ; normally noop if those labels are already the active ones). It will keep the other filters (like folder or text ; no change).

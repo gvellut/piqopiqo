@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from piqopiqo.components.scrollable_strip import ScrollableStrip
+from piqopiqo.label_utils import parse_base_labels
 from piqopiqo.model import FilterCriteria
 from piqopiqo.ssf.settings_state import UserSettingKey, get_user_setting
 
@@ -417,6 +418,36 @@ class FilterPanel(ScrollableStrip):
             return False
 
         checkbox.setChecked(not checkbox.isChecked())
+        return True
+
+    def apply_base_labels(self) -> bool:
+        """Replace only the label filter with the configured base labels."""
+        if not self.clear_button.isEnabled():
+            return False
+        try:
+            labels, include_no_label = parse_base_labels(
+                get_user_setting(UserSettingKey.BASE_LABELS),
+                get_user_setting(UserSettingKey.STATUS_LABELS),
+            )
+        except ValueError as error:
+            logger.warning("Cannot apply base labels: %s", error)
+            return False
+
+        current = self.get_current_filter()
+        if current.labels == labels and current.include_no_label == include_no_label:
+            return False
+
+        self._updating = True
+        try:
+            if self._no_label_checkbox is not None:
+                self._no_label_checkbox.setChecked(include_no_label)
+            for name, checkbox in self._label_checkboxes.items():
+                checkbox.setChecked(name in labels)
+        finally:
+            self._updating = False
+
+        self._emit_filter()
+        self.interaction_finished.emit()
         return True
 
     def set_all_folders(self) -> bool:

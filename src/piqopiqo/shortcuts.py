@@ -40,6 +40,7 @@ class Shortcut(Enum):
     FILTER_LABEL_8 = auto(), "Filter label 8"
     FILTER_LABEL_9 = auto(), "Filter label 9"
     FILTER_LABEL_NONE = auto(), "Filter no label"
+    FILTER_BASE_LABELS = auto(), "Filter base labels"
     FILTER_FOLDER_ALL = auto(), "Filter all folders"
     FILTER_FOLDER_NEXT = auto(), "Filter next folder"
     FILTER_FOLDER_PREV = auto(), "Filter previous folder"
@@ -94,6 +95,7 @@ FILTER_LABEL_SHORTCUTS: tuple[Shortcut, ...] = (
 GRID_VIEW_CONFIGURABLE_SHORTCUTS: tuple[Shortcut, ...] = (
     *LABEL_SHORTCUTS,
     *FILTER_LABEL_SHORTCUTS,
+    Shortcut.FILTER_BASE_LABELS,
     Shortcut.FILTER_FOLDER_ALL,
     Shortcut.FILTER_FOLDER_NEXT,
     Shortcut.FILTER_FOLDER_PREV,

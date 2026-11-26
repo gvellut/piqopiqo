@@ -51,6 +51,7 @@ class ShortcutsEditor(QWidget):
                     Shortcut.FILTER_LABEL_8,
                     Shortcut.FILTER_LABEL_9,
                     Shortcut.FILTER_LABEL_NONE,
+                    Shortcut.FILTER_BASE_LABELS,
                     Shortcut.FILTER_FOLDER_ALL,
                     Shortcut.FILTER_FOLDER_NEXT,
                     Shortcut.FILTER_FOLDER_PREV,
@@ -117,7 +118,12 @@ class ShortcutsEditor(QWidget):
             if (
                 text
                 or key
-                in (Shortcut.FLUSH_LOOP, Shortcut.EDIT_TITLE, Shortcut.EDIT_KEYWORDS)
+                in (
+                    Shortcut.FLUSH_LOOP,
+                    Shortcut.FILTER_BASE_LABELS,
+                    Shortcut.EDIT_TITLE,
+                    Shortcut.EDIT_KEYWORDS,
+                )
                 or key in TOOL_SHORTCUTS
             ):
                 out[key] = text

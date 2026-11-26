@@ -356,6 +356,7 @@ def test_json_roundtrip_for_complex_user_settings(isolated_settings):
         Shortcut.ZOOM_IN: "=",
         Shortcut.ZOOM_OUT: "-",
         Shortcut.FLUSH_LOOP: "Shift+\\",
+        Shortcut.FILTER_BASE_LABELS: "Meta+\\",
         Shortcut.SELECT_ALL: "ctrl+a",
         Shortcut.EDIT_TITLE: "Ctrl+L",
         Shortcut.EDIT_KEYWORDS: "Ctrl+K",
@@ -390,6 +391,7 @@ def test_legacy_shortcuts_get_tool_defaults_without_restoring_disabled_view_shor
     assert get_user_setting(UserSettingKey.SHORTCUTS) == {
         Shortcut.ZOOM_IN: "+",
         Shortcut.FLUSH_LOOP: "Shift+\\",
+        Shortcut.FILTER_BASE_LABELS: "Meta+\\",
         Shortcut.UNDO_REDO_LABEL: "Ctrl+Shift+Z",
         Shortcut.EDIT_TITLE: "Ctrl+L",
         Shortcut.EDIT_KEYWORDS: "Ctrl+K",
@@ -404,6 +406,7 @@ def test_shortcuts_defaults_include_filter_shortcuts(isolated_settings):
 
     assert shortcuts[Shortcut.EJECT_FROM_LOOP] == "\\"
     assert shortcuts[Shortcut.FLUSH_LOOP] == "Shift+\\"
+    assert shortcuts[Shortcut.FILTER_BASE_LABELS] == "Meta+\\"
     assert shortcuts[Shortcut.FILTER_LABEL_1] == "Alt+1"
     assert shortcuts[Shortcut.FILTER_LABEL_2] == "Alt+2"
     assert shortcuts[Shortcut.FILTER_LABEL_3] == "Alt+3"
@@ -422,15 +425,26 @@ def test_shortcuts_defaults_include_filter_shortcuts(isolated_settings):
     assert shortcuts[Shortcut.TOGGLE_RIGHT_SIDEBAR] == "Ctrl+]"
 
 
-@pytest.mark.parametrize("shortcut", ["Ctrl+Shift+F", ""])
-def test_flush_shortcut_customization_and_disabling_survive_reload(
-    isolated_settings, shortcut
-):
-    set_user_setting(UserSettingKey.SHORTCUTS, {Shortcut.FLUSH_LOOP: shortcut})
+@pytest.mark.parametrize("value", ["1 2 3", "0 1 2 3", "0"])
+def test_base_labels_text_survives_reload(isolated_settings, value):
+    assert get_user_setting(UserSettingKey.BASE_LABELS) == ""
+    set_user_setting(UserSettingKey.BASE_LABELS, value)
     settings_state.sync_qsettings_store()
     init_qsettings_store()
 
-    assert get_user_setting(UserSettingKey.SHORTCUTS)[Shortcut.FLUSH_LOOP] == shortcut
+    assert get_user_setting(UserSettingKey.BASE_LABELS) == value
+
+
+@pytest.mark.parametrize("shortcut", ["Ctrl+Shift+F", ""])
+@pytest.mark.parametrize("key", [Shortcut.FLUSH_LOOP, Shortcut.FILTER_BASE_LABELS])
+def test_shortcut_customization_and_disabling_survive_reload(
+    isolated_settings, shortcut, key
+):
+    set_user_setting(UserSettingKey.SHORTCUTS, {key: shortcut})
+    settings_state.sync_qsettings_store()
+    init_qsettings_store()
+
+    assert get_user_setting(UserSettingKey.SHORTCUTS)[key] == shortcut
 
 
 @pytest.mark.parametrize("key", [Shortcut.EDIT_TITLE, Shortcut.EDIT_KEYWORDS])

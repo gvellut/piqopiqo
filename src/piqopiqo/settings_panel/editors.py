@@ -22,6 +22,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from piqopiqo.label_utils import parse_base_labels
+from piqopiqo.ssf.settings_state import (
+    RuntimeSettingKey,
+    UserSettingKey,
+    get_runtime_setting,
+    get_user_setting,
+)
+
 from .label_transitions_editor import (
     LabelTransitionsEditor,
     StatusLabelComboEditor,
@@ -68,6 +76,53 @@ class TextEditor(BaseEditor):
 
     def get_value(self):
         return self._line_edit.text().strip()
+
+
+class BaseLabelsEditor(TextEditor):
+    def __init__(self):
+        super().__init__()
+        self._status_label_provider: StatusLabelProvider = lambda: get_user_setting(
+            UserSettingKey.STATUS_LABELS
+        )
+        self._line_edit.setPlaceholderText("e.g. 0123")
+        width_digits = max(
+            1,
+            int(
+                get_runtime_setting(
+                    RuntimeSettingKey.SETTINGS_PANEL_BASE_LABELS_WIDTH_DIGITS
+                )
+            ),
+        )
+        self._line_edit.setFixedWidth(
+            self._line_edit.fontMetrics().horizontalAdvance("0" * width_digits)
+            + self._line_edit.minimumSizeHint().width()
+        )
+        layout = self.layout()
+        layout.addWidget(QLabel("0 = No Label", self))
+        layout.addStretch(1)
+        self._line_edit.textChanged.connect(self._on_text_changed)
+
+    def set_status_label_provider(self, provider: StatusLabelProvider) -> None:
+        self._status_label_provider = provider
+        self.refresh_status_labels()
+
+    def refresh_status_labels(self) -> None:
+        self.is_valid()
+
+    def _on_text_changed(self) -> None:
+        self.is_valid()
+        self.value_changed.emit()
+
+    def is_valid(self) -> bool:
+        try:
+            parse_base_labels(self.get_value(), self._status_label_provider())
+        except ValueError as error:
+            self._line_edit.setStyleSheet("QLineEdit { border: 1px solid red; }")
+            self._line_edit.setToolTip(str(error))
+            return False
+        self._line_edit.setStyleSheet("")
+        self._line_edit.setToolTip("")
+        return True
 
 
 class NumberEditor(BaseEditor):
@@ -507,6 +562,8 @@ class StatusLabelComboEditorAdapter(BaseEditor):
 def build_editor(kind: EditorKind, **kwargs) -> BaseEditor:
     if kind == EditorKind.TEXT:
         return TextEditor()
+    if kind == EditorKind.BASE_LABELS:
+        return BaseLabelsEditor()
     if kind == EditorKind.NUMBER:
         return NumberEditor(
             min_value=kwargs.get("min_value"),

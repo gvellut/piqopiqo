@@ -81,6 +81,7 @@ def test_shortcuts_editor_uses_sectioned_two_column_layout(qapp):
         Shortcut.FILTER_LABEL_8.label,
         Shortcut.FILTER_LABEL_9.label,
         Shortcut.FILTER_LABEL_NONE.label,
+        Shortcut.FILTER_BASE_LABELS.label,
         Shortcut.FILTER_FOLDER_ALL.label,
         Shortcut.FILTER_FOLDER_NEXT.label,
         Shortcut.FILTER_FOLDER_PREV.label,
@@ -132,13 +133,14 @@ def test_shortcuts_editor_accepts_enum_and_string_keys(qapp):
     assert set(editor._inputs.keys()) == set(Shortcut)
 
 
-def test_flush_shortcut_can_be_customized_and_explicitly_disabled(qapp):
+@pytest.mark.parametrize("key", [Shortcut.FLUSH_LOOP, Shortcut.FILTER_BASE_LABELS])
+def test_shortcut_can_be_customized_and_explicitly_disabled(qapp, key):
     editor = ShortcutsEditor()
-    editor.set_value({Shortcut.FLUSH_LOOP.name: "Ctrl+Shift+F"})
-    assert editor.get_value()[Shortcut.FLUSH_LOOP] == "Ctrl+Shift+F"
+    editor.set_value({key.name: "Ctrl+Shift+F"})
+    assert editor.get_value()[key] == "Ctrl+Shift+F"
 
-    editor._inputs[Shortcut.FLUSH_LOOP].clear()
-    assert editor.get_value()[Shortcut.FLUSH_LOOP] == ""
+    editor._inputs[key].clear()
+    assert editor.get_value()[key] == ""
 
 
 @pytest.mark.parametrize("shortcut", [Shortcut.EDIT_TITLE, Shortcut.EDIT_KEYWORDS])

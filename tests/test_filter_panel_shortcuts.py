@@ -13,6 +13,7 @@ from piqopiqo.ssf.settings_state import (
     UserSettingKey,
     get_user_setting,
     init_qsettings_store,
+    set_user_setting,
 )
 
 
@@ -58,6 +59,105 @@ def test_current_filter_includes_current_explicit_labels(qapp):
     criteria = panel.get_current_filter()
 
     assert criteria.explicit_labels == set(panel._label_checkboxes)
+
+
+@pytest.mark.parametrize(
+    "value,include_no_label",
+    [
+        ("123", False),
+        ("1 2 3", False),
+        (" 12  3 1 ", False),
+        ("0123", True),
+        ("0 1 2 3", True),
+        (" 012  3 1 0 ", True),
+    ],
+)
+def test_base_labels_replace_labels_preserving_other_filters(
+    qapp, value, include_no_label
+):
+    init_qsettings_store(dyn=True)
+    set_user_setting(UserSettingKey.BASE_LABELS, value)
+    panel = FilterPanel()
+    panel.set_folders(["/photos/a", "/photos/b"])
+    panel.folder_combo.setCurrentIndex(2)
+    panel.search_field.setText("sunset")
+    panel.toggle_label_filter(get_user_setting(UserSettingKey.STATUS_LABELS)[-1].name)
+    panel.toggle_label_filter(None)
+    emitted = []
+    panel.filter_changed.connect(emitted.append)
+
+    assert panel.apply_base_labels() is True
+
+    criteria = panel.get_current_filter()
+    assert criteria.labels == {
+        label.name for label in get_user_setting(UserSettingKey.STATUS_LABELS)[:3]
+    }
+    assert criteria.include_no_label is include_no_label
+    assert criteria.folder == "/photos/b"
+    assert criteria.search_text == "sunset"
+    assert panel.search_field.text() == "sunset"
+    assert emitted == [criteria]
+    assert panel.apply_base_labels() is False
+    assert panel.get_current_filter() == criteria
+    assert emitted == [criteria]
+
+
+@pytest.mark.parametrize("value", ["0", " 0 0 "])
+def test_base_labels_no_label_only_and_empty_have_distinct_filters(qapp, value):
+    init_qsettings_store(dyn=True)
+    set_user_setting(UserSettingKey.BASE_LABELS, value)
+    panel = FilterPanel()
+    panel.set_folders(["/photos/a", "/photos/b"])
+    panel.folder_combo.setCurrentIndex(2)
+    panel.search_field.setText("sunset")
+    panel.toggle_label_filter(get_user_setting(UserSettingKey.STATUS_LABELS)[0].name)
+
+    assert panel.apply_base_labels() is True
+    criteria = panel.get_current_filter()
+    assert criteria.labels == set()
+    assert criteria.include_no_label is True
+    assert criteria.folder == "/photos/b"
+    assert criteria.search_text == "sunset"
+    assert panel.apply_base_labels() is False
+
+    set_user_setting(UserSettingKey.BASE_LABELS, "")
+    assert panel.apply_base_labels() is True
+    criteria = panel.get_current_filter()
+    assert criteria.labels == set()
+    assert criteria.include_no_label is False
+    assert criteria.folder == "/photos/b"
+    assert criteria.search_text == "sunset"
+    assert panel.apply_base_labels() is False
+
+
+def test_empty_base_labels_clear_only_label_filters(qapp):
+    init_qsettings_store(dyn=True)
+    panel = FilterPanel()
+    panel.set_folders(["/photos/a", "/photos/b"])
+    panel.folder_combo.setCurrentIndex(1)
+    panel.search_field.setText("sunset")
+    panel.toggle_label_filter(None)
+
+    assert panel.apply_base_labels() is True
+
+    criteria = panel.get_current_filter()
+    assert criteria.labels == set()
+    assert criteria.include_no_label is False
+    assert criteria.folder == "/photos/a"
+    assert criteria.search_text == "sunset"
+
+
+@pytest.mark.parametrize("value", ["19", "09", "0,1"])
+def test_invalid_base_labels_leave_filters_unchanged(qapp, value):
+    init_qsettings_store(dyn=True)
+    set_user_setting(UserSettingKey.BASE_LABELS, value)
+    panel = FilterPanel()
+    panel.set_folders(["/photos/a"])
+    panel.toggle_label_filter(None)
+    before = panel.get_current_filter()
+
+    assert panel.apply_base_labels() is False
+    assert panel.get_current_filter() == before
 
 
 @pytest.mark.parametrize(

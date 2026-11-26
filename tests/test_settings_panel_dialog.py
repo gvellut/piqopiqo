@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import replace
+import sys
 import uuid
 
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
@@ -261,6 +262,92 @@ def test_settings_dialog_uses_unsaved_status_labels_for_lifecycle_label_validati
 
     assert upload_label_editor.is_valid() is False
     assert dialog._save_btn.isEnabled() is False
+
+
+@pytest.mark.parametrize(
+    "value,valid",
+    [
+        ("123", True),
+        ("1 2 3", True),
+        (" 12  3 1 ", True),
+        ("0", True),
+        ("0123", True),
+        ("0 1 2 3", True),
+        (" 0 0 ", True),
+        ("", True),
+        ("19", False),
+        ("09", False),
+        ("0,1", False),
+        ("1,2", False),
+        ("-1", False),
+        ("one", False),
+    ],
+)
+def test_base_labels_live_validation_controls_save(qapp, monkeypatch, value, valid):
+    monkeypatch.delenv("PIQO_SETTINGS_PANEL_SAVE_MODE", raising=False)
+    init_qsettings_store(dyn=True)
+    dialog = SettingsDialog(initial_tab_title="Labels")
+    editor = dialog._editors[UserSettingKey.BASE_LABELS]
+
+    editor._line_edit.setText(value)
+
+    assert editor.is_valid() is valid
+    assert dialog._save_btn.isEnabled() is valid
+    assert bool(editor._line_edit.styleSheet()) is not valid
+    assert bool(editor._line_edit.toolTip()) is not valid
+
+
+def test_removing_referenced_label_blocks_save_until_base_labels_fixed(
+    qapp, monkeypatch, tmp_path
+):
+    def unexpected_warning(_parent, _title, text):
+        pytest.fail(text)
+
+    monkeypatch.setattr(QMessageBox, "warning", unexpected_warning)
+    monkeypatch.delenv("PIQO_SETTINGS_PANEL_SAVE_MODE", raising=False)
+    init_qsettings_store(dyn=True)
+    set_user_setting(UserSettingKey.CACHE_BASE_DIR, str(tmp_path))
+    set_user_setting(UserSettingKey.EXIFTOOL_PATH, sys.executable)
+    set_user_setting(UserSettingKey.BASE_LABELS, "15")
+    dialog = SettingsDialog(initial_tab_title="Labels")
+    labels = dialog._editors[UserSettingKey.STATUS_LABELS]._editor
+    base = dialog._editors[UserSettingKey.BASE_LABELS]
+
+    labels._remove_row(labels._rows[-1])
+
+    assert len(labels._rows) == 4
+    assert labels.is_valid() is True
+    assert base.get_value() == "15"
+    assert base.is_valid() is False
+    assert "5" in base._line_edit.toolTip()
+    assert dialog._save_btn.isEnabled() is False
+    dialog._on_save()
+    assert len(get_user_setting(UserSettingKey.STATUS_LABELS)) == 5
+    assert get_user_setting(UserSettingKey.BASE_LABELS) == "15"
+
+    base._line_edit.setText("1 4")
+    assert dialog._save_btn.isEnabled() is True
+    dialog._on_save()
+    assert len(get_user_setting(UserSettingKey.STATUS_LABELS)) == 4
+    assert get_user_setting(UserSettingKey.BASE_LABELS) == "1 4"
+
+
+def test_base_labels_autosave_waits_for_valid_labels_and_base_labels(qapp, monkeypatch):
+    monkeypatch.setenv("PIQO_SETTINGS_PANEL_SAVE_MODE", "AUTOSAVE")
+    init_qsettings_store(dyn=True)
+    set_user_setting(UserSettingKey.BASE_LABELS, "15")
+    dialog = SettingsDialog(initial_tab_title="Labels")
+    labels = dialog._editors[UserSettingKey.STATUS_LABELS]._editor
+    base = dialog._editors[UserSettingKey.BASE_LABELS]
+
+    labels._remove_row(labels._rows[-1])
+
+    assert base.is_valid() is False
+    assert len(get_user_setting(UserSettingKey.STATUS_LABELS)) == 5
+    base._line_edit.setText("14")
+    assert base.is_valid() is True
+    assert get_user_setting(UserSettingKey.BASE_LABELS) == "14"
+    assert len(get_user_setting(UserSettingKey.STATUS_LABELS)) == 4
 
 
 def test_settings_dialog_ignores_invalid_transition_rules_for_save(

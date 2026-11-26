@@ -97,6 +97,7 @@ def test_labels_and_shortcuts_tabs_layout_matches_expected_groups_and_fields():
     assert [field.key for field in labels_tab.groups[0].fields] == [
         UserSettingKey.STATUS_LABELS,
         UserSettingKey.FILTER_IN_FULLSCREEN,
+        UserSettingKey.BASE_LABELS,
     ]
 
     shortcuts_tab = next(tab for tab in SETTINGS_TABS if tab.title == "Shortcuts")

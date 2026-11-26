@@ -114,6 +114,7 @@ class UserSettingKey(StrEnum):
     EXTERNAL_EDITOR = "externalEditor"
     SHORTCUTS = "shortcuts"
     FILTER_IN_FULLSCREEN = "filterInFullscreen"
+    BASE_LABELS = "baseLabels"
     COPY_SD_BASE_EXTERNAL_FOLDER = "copySdBaseExternalFolder"
     ARCHIVE_DESTINATION = "archiveDestination"
     SDCARD_NAMES = "sdcardNames"
@@ -143,6 +144,8 @@ class RuntimeSettingKey(StrEnum):
     EXIF_PANEL_COLUMN_STRETCH = "exifPanelColumnStretch"
     EXIF_PANEL_ROW_SPACING = "exifPanelRowSpacing"
     SETTINGS_PANEL_ROW_SPACING = "settingsPanelRowSpacing"
+    SETTINGS_PANEL_BASE_LABELS_EXTRA_SPACING = "settingsPanelBaseLabelsExtraSpacing"
+    SETTINGS_PANEL_BASE_LABELS_WIDTH_DIGITS = "settingsPanelBaseLabelsWidthDigits"
     GRID_ITEM_SHOW_LABEL_SWATCH = "gridItemShowLabelSwatch"
     GRID_ITEM_SWATCH_BORDER_COLOR = "gridItemSwatchBorderColor"
     GRID_ITEM_SWATCH_BORDER_WIDTH = "gridItemSwatchBorderWidth"
@@ -528,6 +531,7 @@ def _deserialize_shortcuts(data: Any) -> dict[Shortcut, str]:
     # An explicit empty string disables an action.
     out = {
         Shortcut.FLUSH_LOOP: "Shift+\\",
+        Shortcut.FILTER_BASE_LABELS: "Meta+\\",
         **_DEFAULT_METADATA_EDIT_SHORTCUTS,
         **_DEFAULT_TOOL_SHORTCUTS,
     }
@@ -813,6 +817,7 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
             Shortcut.FILTER_LABEL_8: "Alt+8",
             Shortcut.FILTER_LABEL_9: "Alt+9",
             Shortcut.FILTER_LABEL_NONE: "Alt+`",
+            Shortcut.FILTER_BASE_LABELS: "Meta+\\",
             Shortcut.FILTER_FOLDER_ALL: "Alt+0",
             Shortcut.FILTER_FOLDER_NEXT: "Alt+=",
             Shortcut.FILTER_FOLDER_PREV: "Alt+-",
@@ -834,6 +839,11 @@ _USER_SETTING_REGISTRY: dict[UserSettingKey, SettingDef] = {
         group=SettingsGroup.SETTINGS,
         default=False,
         read_type=bool,
+    ),
+    UserSettingKey.BASE_LABELS: SettingDef(
+        group=SettingsGroup.SETTINGS,
+        default="",
+        read_type=str,
     ),
     UserSettingKey.COPY_SD_BASE_EXTERNAL_FOLDER: SettingDef(
         group=SettingsGroup.SETTINGS,
@@ -973,6 +983,12 @@ _RUNTIME_SETTING_REGISTRY: dict[RuntimeSettingKey, SettingDef] = {
     ),
     RuntimeSettingKey.EXIF_PANEL_ROW_SPACING: SettingDef(default=5, read_type=int),
     RuntimeSettingKey.SETTINGS_PANEL_ROW_SPACING: SettingDef(default=0, read_type=int),
+    RuntimeSettingKey.SETTINGS_PANEL_BASE_LABELS_EXTRA_SPACING: SettingDef(
+        default=8, read_type=int
+    ),
+    RuntimeSettingKey.SETTINGS_PANEL_BASE_LABELS_WIDTH_DIGITS: SettingDef(
+        default=10, read_type=int
+    ),
     RuntimeSettingKey.GRID_ITEM_SHOW_LABEL_SWATCH: SettingDef(
         default=True, read_type=bool
     ),

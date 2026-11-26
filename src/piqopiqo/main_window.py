@@ -369,6 +369,9 @@ class MainWindow(QMainWindow):
         self.grid.filter_label_shortcut_requested.connect(
             self._on_filter_label_shortcut_requested
         )
+        self.grid.base_labels_shortcut_requested.connect(
+            self._on_base_labels_shortcut_requested
+        )
         self.grid.folder_filter_cycle_requested.connect(
             self._on_folder_filter_cycle_shortcut_requested
         )
@@ -470,6 +473,11 @@ class MainWindow(QMainWindow):
         if self._fullscreen_overlay is not None:
             return
         self.filter_panel.cycle_folder_filter(step)
+
+    def _on_base_labels_shortcut_requested(self) -> None:
+        if self._fullscreen_overlay is not None:
+            return
+        self.filter_panel.apply_base_labels()
 
     def _on_folder_filter_all_shortcut_requested(self) -> None:
         if self._fullscreen_overlay is not None:

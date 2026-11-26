@@ -21,6 +21,7 @@ class EditorKind(Enum):
     BOOL = auto()
     LIST_TEXT = auto()
     STATUS_LABELS = auto()
+    BASE_LABELS = auto()
     SHORTCUTS = auto()
     MANUAL_LENSES = auto()
     MAP_LINKS = auto()
@@ -220,6 +221,11 @@ SETTINGS_TABS: list[TabSpec] = [
                         key=UserSettingKey.FILTER_IN_FULLSCREEN,
                         label="Filter in fullscreen",
                         editor=EditorKind.BOOL,
+                    ),
+                    FieldSpec(
+                        key=UserSettingKey.BASE_LABELS,
+                        label="Base labels",
+                        editor=EditorKind.BASE_LABELS,
                     ),
                 ],
             ),

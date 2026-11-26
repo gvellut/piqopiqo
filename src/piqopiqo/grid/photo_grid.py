@@ -59,6 +59,7 @@ class PhotoGrid(QWidget):
     visible_paths_changed = Signal(list)  # list[str] in display order
     label_shortcut_requested = Signal(object)  # str | None
     filter_label_shortcut_requested = Signal(object)  # str | None
+    base_labels_shortcut_requested = Signal()
     folder_filter_cycle_requested = Signal(int)  # +1 / -1
     folder_filter_all_requested = Signal()
     clear_filter_shortcut_requested = Signal()
@@ -200,6 +201,13 @@ class PhotoGrid(QWidget):
             )
             self._shared_grid_view_shortcut_objects.append(sc)
 
+        base_labels_shortcut = lookup_shortcut(shortcuts, Shortcut.FILTER_BASE_LABELS)
+        if base_labels_shortcut:
+            sc_base_labels = QShortcut(parse_shortcut(base_labels_shortcut), scope)
+            sc_base_labels.setContext(Qt.WidgetWithChildrenShortcut)
+            sc_base_labels.activated.connect(self._activate_base_labels_shortcut)
+            self._shared_grid_view_shortcut_objects.append(sc_base_labels)
+
         folder_filter_all_shortcut = lookup_shortcut(
             shortcuts, Shortcut.FILTER_FOLDER_ALL
         )
@@ -296,6 +304,11 @@ class PhotoGrid(QWidget):
         if not self._shared_grid_view_shortcuts_allowed():
             return
         self.folder_filter_cycle_requested.emit(step)
+
+    def _activate_base_labels_shortcut(self) -> None:
+        if not self._shared_grid_view_shortcuts_allowed():
+            return
+        self.base_labels_shortcut_requested.emit()
 
     def _activate_folder_filter_all_shortcut(self) -> None:
         if not self._shared_grid_view_shortcuts_allowed():

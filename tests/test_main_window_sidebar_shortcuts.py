@@ -16,6 +16,7 @@ from piqopiqo.metadata.db_fields import DBFields
 from piqopiqo.shortcuts import Shortcut
 from piqopiqo.ssf.settings_state import (
     UserSettingKey,
+    get_user_setting,
     init_qsettings_store,
     set_user_setting,
 )
@@ -262,6 +263,47 @@ def test_metadata_shortcuts_use_updated_settings(metadata_window, qapp):
     )
     qapp.processEvents()
     assert qapp.focusWidget() is metadata_window.edit_panel.title_edit
+
+
+@pytest.mark.parametrize(
+    "value,matching_indices,include_no_label",
+    [
+        ("13", [0, 1], False),
+        ("013", [0, 1, 2, 3], True),
+        ("0", [2, 3], True),
+    ],
+)
+def test_base_labels_shortcut_updates_filter_and_preserves_search(
+    window, qapp, value, matching_indices, include_no_label
+):
+    set_user_setting(UserSettingKey.BASE_LABELS, value)
+    labels = get_user_setting(UserSettingKey.STATUS_LABELS)
+    photos = window.photo_model.all_photos[:4]
+    for photo, label in zip(
+        photos, [labels[0].name, labels[2].name, None, "Old label"], strict=True
+    ):
+        photo.db_metadata = {DBFields.TITLE: "sunset", DBFields.LABEL: label}
+    window.filter_panel.search_field.setText("sunset")
+    window.filter_panel.toggle_label_filter(None)
+    window.activateWindow()
+    window.grid.setFocus()
+    qapp.processEvents()
+
+    QTest.keyClick(window.grid, Qt.Key_Backslash, Qt.MetaModifier)
+    qapp.processEvents()
+
+    criteria = window.filter_panel.get_current_filter()
+    assert criteria.labels == (
+        {labels[0].name, labels[2].name} if value != "0" else set()
+    )
+    assert criteria.search_text == "sunset"
+    assert criteria.include_no_label is include_no_label
+    assert window.photo_model._filter == criteria
+    assert window.photo_model.photos == [photos[index] for index in matching_indices]
+
+    QTest.keyClick(window.grid, Qt.Key_Backslash, Qt.MetaModifier)
+    qapp.processEvents()
+    assert window.filter_panel.get_current_filter() == criteria
 
 
 @pytest.mark.parametrize("key", [Qt.Key_L, Qt.Key_K])

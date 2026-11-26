@@ -100,6 +100,7 @@ class _SettingsFormLayout(QGridLayout):
         self._row_spacing = max(0, int(row_spacing))
         self._minimum_center_delta = 0
         self._rows: list[tuple[int, QLabel, QWidget, Qt.AlignmentFlag]] = []
+        self._extra_spacing_before: dict[int, int] = {}
         self._next_row = 0
         self.setProperty("settingsPanelRowSpacing", self._row_spacing)
         self.setColumnStretch(1, 1)
@@ -128,8 +129,10 @@ class _SettingsFormLayout(QGridLayout):
         editor: QWidget,
         *,
         vertical_alignment: Qt.AlignmentFlag,
+        extra_spacing_before: int = 0,
     ) -> None:
         content_row = self._next_row
+        self._extra_spacing_before[content_row] = max(0, int(extra_spacing_before))
         alignment = Qt.AlignmentFlag.AlignLeft | vertical_alignment
         label.setAlignment(alignment)
         self.addWidget(
@@ -213,17 +216,18 @@ class _SettingsFormLayout(QGridLayout):
                 continue
 
             gap_row = previous_row[0] + 1
+            extra_spacing = self._extra_spacing_before.get(current_row[0], 0)
             if previous_row[3] != current_row[3]:
-                self.setRowMinimumHeight(gap_row, self._row_spacing)
+                self.setRowMinimumHeight(gap_row, self._row_spacing + extra_spacing)
                 continue
             if current_row[3] == Qt.AlignmentFlag.AlignTop:
-                self.setRowMinimumHeight(gap_row, self._row_spacing)
+                self.setRowMinimumHeight(gap_row, self._row_spacing + extra_spacing)
                 continue
 
             natural_center_delta = previous_height - previous_center + current_center
             self.setRowMinimumHeight(
                 gap_row,
-                max(0, target_center_delta - natural_center_delta),
+                max(0, target_center_delta - natural_center_delta) + extra_spacing,
             )
 
 
@@ -371,12 +375,20 @@ class SettingsDialog(UnsavedChangesDialog):
                         assert isinstance(qgis, QgisRemoteControlEditorAdapter)
                         qgis.add_zoom_editor(label, editor)
                     else:
+                        extra_spacing = (
+                            get_runtime_setting(
+                                RuntimeSettingKey.SETTINGS_PANEL_BASE_LABELS_EXTRA_SPACING
+                            )
+                            if field.key == UserSettingKey.BASE_LABELS
+                            else 0
+                        )
                         group_layout.add_settings_row(
                             label,
                             editor,
                             vertical_alignment=_settings_label_vertical_alignment(
                                 field
                             ),
+                            extra_spacing_before=extra_spacing,
                         )
 
                     if self._mode == SettingsPanelSaveMode.AUTOSAVE:
@@ -431,12 +443,13 @@ class SettingsDialog(UnsavedChangesDialog):
             UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS
         )
         upload_label_editor = self._editors.get(UserSettingKey.FLICKR_UPLOAD_LABEL)
+        base_labels_editor = self._editors.get(UserSettingKey.BASE_LABELS)
         if labels_editor is not None:
 
             def provider():
                 return list(labels_editor.get_value() or [])
 
-            for editor in (transitions_editor, upload_label_editor):
+            for editor in (transitions_editor, upload_label_editor, base_labels_editor):
                 if editor is None:
                     continue
                 set_provider = getattr(editor, "set_status_label_provider", None)
@@ -536,6 +549,10 @@ class SettingsDialog(UnsavedChangesDialog):
         return True
 
     def _should_validate_editor(self, key: UserSettingKey, value: object) -> bool:
+        if key == UserSettingKey.BASE_LABELS:
+            labels = self._editors[UserSettingKey.STATUS_LABELS].get_value()
+            if labels != self._initial_values.get(UserSettingKey.STATUS_LABELS):
+                return True
         if key == UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS:
             return False
         if key == UserSettingKey.FLICKR_UPLOAD_LABEL:
@@ -566,6 +583,7 @@ class SettingsDialog(UnsavedChangesDialog):
 
     def _refresh_status_label_dependents(self) -> None:
         for key in (
+            UserSettingKey.BASE_LABELS,
             UserSettingKey.FLICKR_UPLOAD_LABEL,
             UserSettingKey.FLICKR_UPLOAD_LABEL_TRANSITIONS,
         ):
@@ -646,6 +664,12 @@ class SettingsDialog(UnsavedChangesDialog):
         if self._loading:
             return
 
+        label_keys = (UserSettingKey.STATUS_LABELS, UserSettingKey.BASE_LABELS)
+        if key in label_keys:
+            self._refresh_status_label_dependents()
+            if not all(self._editors[k].is_valid() for k in label_keys):
+                return
+
         editor = self._editors[key]
         editor.clear_error_hint()
         if not editor.is_valid():
@@ -666,13 +690,18 @@ class SettingsDialog(UnsavedChangesDialog):
             editor.set_value(self._initial_values.get(key))
             return
 
-        if value == self._initial_values.get(key):
-            return
-
-        set_user_setting(key, value)
-        self._initial_values[key] = value
-        self._changed_keys.add(key)
-        self.setting_saved.emit(key)
+        keys_to_save = label_keys if key in label_keys else (key,)
+        saved_keys = []
+        for save_key in keys_to_save:
+            save_value = self._editors[save_key].get_value()
+            if save_value == self._initial_values.get(save_key):
+                continue
+            set_user_setting(save_key, save_value)
+            self._initial_values[save_key] = save_value
+            self._changed_keys.add(save_key)
+            saved_keys.append(save_key)
+        for save_key in saved_keys:
+            self.setting_saved.emit(save_key)
 
     def _on_save(self):
         changed: dict[UserSettingKey, object] = {}

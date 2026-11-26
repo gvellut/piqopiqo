@@ -167,3 +167,4 @@
 ! [fullscreen pan with arrow keys](Ee_tasks/Ne_fullscreen_pan_with_arrow_keys.md)
 ! [Clean folder data](Ee_tasks/Oe_Clean_folder_data.md)
 ! [shortcuts metadata](Ee_tasks/Pe_shortcuts_metadata.md)
+! [set multiple labels](Qe_tasks/Qe_set_multiple_labels.md)

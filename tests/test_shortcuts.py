@@ -31,6 +31,7 @@ def test_shortcut_labels_are_human_readable():
     assert Shortcut.LABEL_NONE.label == "No label"
     assert Shortcut.FILTER_LABEL_1.label == "Filter label 1"
     assert Shortcut.FILTER_LABEL_NONE.label == "Filter no label"
+    assert Shortcut.FILTER_BASE_LABELS.label == "Filter base labels"
     assert Shortcut.FILTER_FOLDER_ALL.label == "Filter all folders"
     assert Shortcut.FILTER_FOLDER_NEXT.label == "Filter next folder"
     assert Shortcut.FILTER_FOLDER_PREV.label == "Filter previous folder"
@@ -69,6 +70,7 @@ def test_configurable_shortcut_registries_cover_all_shortcuts():
         assert filter_label_shortcut not in FULLSCREEN_VIEW_CONFIGURABLE_SHORTCUTS
 
     for grid_filter_shortcut in (
+        Shortcut.FILTER_BASE_LABELS,
         Shortcut.FILTER_FOLDER_ALL,
         Shortcut.FILTER_FOLDER_NEXT,
         Shortcut.FILTER_FOLDER_PREV,
